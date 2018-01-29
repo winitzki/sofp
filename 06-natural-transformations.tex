@@ -1,0 +1,761 @@
+\batchmode
+\makeatletter
+\def\input@path{{/Users/sergei.winitzki/Code/talks/ftt-fp/}}
+\makeatother
+\documentclass[english]{beamer}
+\usepackage[T1]{fontenc}
+\usepackage[latin9]{inputenc}
+\setcounter{secnumdepth}{3}
+\setcounter{tocdepth}{3}
+\usepackage{babel}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\ifx\hypersetup\undefined
+  \AtBeginDocument{%
+    \hypersetup{unicode=true,pdfusetitle,
+ bookmarks=true,bookmarksnumbered=false,bookmarksopen=false,
+ breaklinks=false,pdfborder={0 0 1},backref=false,colorlinks=true}
+  }
+\else
+  \hypersetup{unicode=true,pdfusetitle,
+ bookmarks=true,bookmarksnumbered=false,bookmarksopen=false,
+ breaklinks=false,pdfborder={0 0 1},backref=false,colorlinks=true}
+\fi
+
+\makeatletter
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Textclass specific LaTeX commands.
+ % this default might be overridden by plain title style
+ \newcommand\makebeamertitle{\frame{\maketitle}}%
+ % (ERT) argument for the TOC
+ \AtBeginDocument{%
+   \let\origtableofcontents=\tableofcontents
+   \def\tableofcontents{\@ifnextchar[{\origtableofcontents}{\gobbletableofcontents}}
+   \def\gobbletableofcontents#1{\origtableofcontents}
+ }
+ \newenvironment{lyxcode}
+   {\par\begin{list}{}{
+     \setlength{\rightmargin}{\leftmargin}
+     \setlength{\listparindent}{0pt}% needed for AMS classes
+     \raggedright
+     \setlength{\itemsep}{0pt}
+     \setlength{\parsep}{0pt}
+     \normalfont\ttfamily}%
+    \def\{{\char`\{}
+    \def\}{\char`\}}
+    \def\textasciitilde{\char`\~}
+    \item[]}
+   {\end{list}}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% User specified LaTeX commands.
+\usetheme[secheader]{Boadilla}
+\usecolortheme{seahorse}
+\title[Chapter 6: Functor-lifted computations I]{Chapter 6: Computations lifted to a functor context I}
+\subtitle{Filterable functors, their laws and structure}
+\author{Sergei Winitzki}
+\date{January 29, 2018}
+\institute[ABTB]{Academy by the Bay}
+\setbeamertemplate{headline}{} % disable headline at top
+\setbeamertemplate{navigation symbols}{} % disable navigation bar at bottom
+
+\makeatother
+
+\begin{document}
+\frame{\titlepage}
+\begin{frame}{Computations within a functor context}
+
+\begin{itemize}
+\item Example: 
+\[
+\sum_{x\in\mathbb{Z};\:0\leq x\leq100;\:\cos x>0}\cos^{3}x\approx21.8
+\]
+Scala code:
+
+\texttt{\textcolor{blue}{\footnotesize{}(0 to 100).map(math.cos(\_)).filter(\_
+> 0).map(math.pow(\_, 3)).sum}}{\footnotesize \par}
+\item Using Scala's \texttt{\textcolor{blue}{\footnotesize{}for}}/\texttt{\textcolor{blue}{\footnotesize{}yield}}
+syntax (``functor block'', ``\texttt{\textcolor{blue}{\footnotesize{}for}}
+comprehension'')
+\end{itemize}
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}}%
+\begin{minipage}[t]{0.49\columnwidth}%
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}(for~\{~x~$\leftarrow$~0~to~100}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~~~y~=~math.cos(x)}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~~~if~y~>~0}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~\}~yield~\{~math.pow(y,~3)~\}}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}).sum}{\footnotesize \par}
+\end{lyxcode}
+%
+\end{minipage}\textcolor{blue}{\footnotesize{}}%
+\begin{minipage}[t]{0.49\columnwidth}%
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}(0~to~100).map~\{~x~$\Rightarrow$}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~~math.cos(x)~\}.filter~\{~y~$\Rightarrow$}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~~y~>~0~\}.map~\{~y~$\Rightarrow$}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~~~~math.pow(y,~3)}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~\}.sum}{\footnotesize \par}
+\end{lyxcode}
+%
+\end{minipage}{\footnotesize \par}
+
+\end{lyxcode}
+\begin{itemize}
+\item ``Functor block'' is a syntax for manipulating data within a container
+\begin{itemize}
+\item Container must be a functor (has \texttt{\textcolor{blue}{\footnotesize{}map}}
+such that the laws hold)
+\end{itemize}
+\item A \textbf{filterable functor} is a functor that has a \texttt{\textcolor{blue}{\footnotesize{}withFilter}}
+method
+\item Functor block works if have \texttt{\textcolor{blue}{\footnotesize{}withFilter(p:\ A$\Rightarrow$Boolean):\ F{[}A{]}
+$\Rightarrow$ F{[}A{]}}} 
+\begin{itemize}
+\item What are the required laws for \texttt{\textcolor{blue}{\footnotesize{}withFilter}}?
+\item What data types are filterable functors?
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Filterable functors: Intuitions I}
+
+Intuition: the \texttt{\textcolor{blue}{\footnotesize{}filter}} call
+\emph{may decrease} the number of data items held
+\begin{itemize}
+\item a filterable container can hold \emph{more or fewer} data items of
+type $T$
+\end{itemize}
+Examples:
+\begin{itemize}
+\item \texttt{\textcolor{blue}{\footnotesize{}Option{[}T{]}}} $\equiv1+T$
+\begin{itemize}
+\item \texttt{\textcolor{blue}{\footnotesize{}Some(123).filter(\_ > 0)}}
+returns \texttt{\textcolor{blue}{\footnotesize{}Some(123)}} 
+\item \texttt{\textcolor{blue}{\footnotesize{}Some(123).filter(\_ == 1)}}
+returns \texttt{\textcolor{blue}{\footnotesize{}None}} 
+\item \texttt{\textcolor{blue}{\footnotesize{}Some(123).withFilter(\_ ==
+1).map(identity)}} returns \texttt{\textcolor{blue}{\footnotesize{}None}} 
+\end{itemize}
+\item \texttt{\textcolor{blue}{\footnotesize{}List{[}T{]}}} $\equiv1+T+T\times T+T\times T\times T+...$
+\begin{itemize}
+\item \texttt{\textcolor{blue}{\footnotesize{}List(10, 20, 30).filter(\_
+> 10)}} returns \texttt{\textcolor{blue}{\footnotesize{}List(20, 30)}} 
+\item \texttt{\textcolor{blue}{\footnotesize{}List(10, 20, 30).filter(\_
+== 1)}} returns \texttt{\textcolor{blue}{\footnotesize{}List()}} 
+\end{itemize}
+\end{itemize}
+What we learn from these examples:
+\begin{itemize}
+\item The data type must contain a \emph{disjunction} having different counts
+of $T$
+\item When the predicate \texttt{\textcolor{blue}{\footnotesize{}p}} returns
+\texttt{\textcolor{blue}{\footnotesize{}false}} on some $T$ values,
+the remaining data goes to a part of the disjunction that has fewer
+$T$ values
+\item Values \texttt{\textcolor{blue}{\footnotesize{}x}} are \emph{algebraically}
+replaced by $1$ (a \texttt{\textcolor{blue}{\footnotesize{}Unit}})
+when \texttt{\textcolor{blue}{\footnotesize{}p(x) = false}} 
+\item The container can become ``empty'' as a result of filtering
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Examples of filterable functors I}
+
+\begin{itemize}
+\item Consider these business requirements:
+\begin{itemize}
+\item One order can be placed on Tuesday and/or on Friday
+\item An order is approved if requested amount is less than \$1,000, etc.
+\end{itemize}
+\end{itemize}
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}final~case~class~Orders{[}A{]}(tue:~Option{[}A{]},~fri:~Option{[}A{]})~\{}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~def~withFilter(p:~A~$\Rightarrow$~Boolean):~Orders{[}A{]}~=~}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~~~Orders(tue.filter(p),~fri.filter(p))}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}\}}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}Orders(Some(500),~Some(2000)).withFilter(\_~<~1000)}{\footnotesize \par}
+
+\textrm{\textcolor{darkgray}{\footnotesize{}//~returns~}}\textcolor{darkgray}{\footnotesize{}Orders(Some(500),~None)}{\footnotesize \par}
+\end{lyxcode}
+\begin{itemize}
+\item The functor type is $F^{A}=(1+A)\times(1+A)$
+\begin{itemize}
+\item When a value does not pass the filter, the $A$ is replaced by $1$
+\end{itemize}
+\item Filtering is applied to both parts of the product type independently
+\item What if additional business requirements were given:
+\begin{itemize}
+\item (a) both orders must be approved, or else no orders can be placed\\
+or
+\item (b) both orders can be placed if at least one of them is approved
+\end{itemize}
+\item Does this still qualify as ``filtering''?
+\begin{itemize}
+\item Need some algebraic laws to decide this
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Filterable functors: Intuitions II}
+
+\begin{itemize}
+\item Intuition: computations in the functor block should ``make sense''
+\begin{itemize}
+\item we should be able to reason correctly by looking at the program text
+\end{itemize}
+\item A schematic example of a functor block program using \texttt{\textcolor{blue}{\footnotesize{}map}}
+and \texttt{\textcolor{blue}{\footnotesize{}filter}}:
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}for~\{~}\textrm{\textcolor{darkgray}{\footnotesize{}//~computations~lifted~to~the~}}\textcolor{darkgray}{\footnotesize{}List}\textrm{\textcolor{darkgray}{\footnotesize{}~functor}}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~x~$\leftarrow$~List(...)~}\textrm{\textcolor{darkgray}{\footnotesize{}//~the~first~line~has~``$\leftarrow$'',~other~lines~do~not}}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~y~=~f(x)~}\textrm{\textcolor{darkgray}{\footnotesize{}//~will~become~a~``}}\textcolor{darkgray}{\footnotesize{}map(f)}\textrm{\textcolor{darkgray}{\footnotesize{}''~after~compilation}}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~if~p1(y)~}\textrm{\textcolor{darkgray}{\footnotesize{}//~will~become~a~``}}\textcolor{darkgray}{\footnotesize{}withFilter(p1)}\textrm{\textcolor{darkgray}{\footnotesize{}''}}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~if~p2(y)}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~z~=~g(x,~y)}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~if~q(x,~y,~z)}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}\}~yield~}\textrm{\textcolor{darkgray}{\footnotesize{}//~~for~all~}}\textcolor{darkgray}{\footnotesize{}x}\textrm{\textcolor{darkgray}{\footnotesize{}~in~list,~such~that~conditions~hold,~compute~this:}}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~k(x,~y,~z)}{\footnotesize \par}
+\end{lyxcode}
+\item What we intuitively expect to be true about such programs:
+\begin{enumerate}
+\item \texttt{\textcolor{blue}{\footnotesize{}y = f(x); if p(y);}} is equivalent
+to \texttt{\textcolor{blue}{\footnotesize{}if p(f(x)); y = f(x);}} 
+\item \texttt{\textcolor{blue}{\footnotesize{}if p1(y); if p2(y);}} is equivalent
+to \texttt{\textcolor{blue}{\footnotesize{}if p1(y) \&\& p2(y)}} 
+\item When a filter predicate \texttt{\textcolor{blue}{\footnotesize{}p(x)}}
+returns \texttt{\textcolor{blue}{\footnotesize{}true}} for \emph{all}
+\texttt{\textcolor{blue}{\footnotesize{}x}}, we can delete the line
+``\texttt{\textcolor{blue}{\footnotesize{}if p(x)}}'' from the program
+with no change to the results
+\item When a filter predicate \texttt{\textcolor{blue}{\footnotesize{}p(x)}}
+returns \texttt{\textcolor{blue}{\footnotesize{}false}} for some \texttt{\textcolor{blue}{\footnotesize{}x}}
+then we must exclude\emph{ that} \texttt{\textcolor{blue}{\footnotesize{}x}}
+from computations performed after ``\texttt{\textcolor{blue}{\footnotesize{}if
+p(x)}}''
+\end{enumerate}
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Examples of filterable functors I: Checking the laws}
+
+\begin{itemize}
+\item Properties 1 \textendash{} 4 are expressed as laws for \texttt{\textcolor{blue}{\footnotesize{}filter}}$^{(p\Rightarrow\text{Boolean})\Rightarrow F^{A}\Rightarrow F^{A}}$:
+\begin{enumerate}
+\item {\footnotesize{}$\text{fmap}\,f^{A\Rightarrow B}\circ\text{filter}\,p^{B\Rightarrow\text{Boolean}}=\text{filter}\left(f\circ p\right)\circ\text{fmap}\,f^{A\Rightarrow B}$}{\footnotesize \par}
+\item {\footnotesize{}$\text{filter}\,p_{1}^{A\Rightarrow\text{Boolean}}\circ\text{filter}\,p_{2}^{A\Rightarrow\text{Boolean}}=\text{filter}\left(x\Rightarrow p_{1}(x)\wedge p_{2}(x)\right)$}{\footnotesize \par}
+\item {\footnotesize{}$\text{filter}\left(x^{A}\Rightarrow\text{true}\right)=\text{id}$
+}where the identity is of type {\footnotesize{}$F^{A}\Rightarrow F^{A}$}{\footnotesize \par}
+\item {\footnotesize{}$\text{filter}\,p\circ\text{fmap}\,f^{A\Rightarrow B}=\text{filter}\,p\circ\text{fmap}\left(f_{|p}\right)$
+}where {\footnotesize{}$f_{|p}$} is the \emph{partial function} defined
+as \texttt{\textcolor{blue}{\footnotesize{}x $\Rightarrow$ if (p(x))
+f(x) else ???}} 
+\end{enumerate}
+\item Check the laws for Example I
+\begin{itemize}
+\item ``Orders'' example with / without business rule (a) \textendash{}
+laws hold
+\item see example code
+\end{itemize}
+\item Examples of functors that are \emph{not} filterable:
+\begin{itemize}
+\item $F^{A}$ defining \texttt{\textcolor{blue}{\footnotesize{}filter}}
+in a special way for $A=\text{Int}$ (breaks law 1)
+\item ``Orders'' with additional business rule (b) \textendash{} breaks
+law 2 for some $p_{1,2}$
+\item $F^{A}=1+A$ defining $\text{filter}\left(p\right)\left(x\right)\equiv1+0$
+breaks law 3
+\item $F^{A}\equiv A$ \textendash{} must define $\text{filter}\left(p^{A\Rightarrow\text{Boolean}}\right)\left(x^{A}\right)=x$,
+breaking law 4
+\item $F^{A}\equiv A\times\left(1+A\right)$ \textendash{} unable to remove
+the first $A$, breaking law 4
+\end{itemize}
+\item Can define a type class \texttt{\textcolor{blue}{\footnotesize{}Filterable}},
+method \texttt{\textcolor{blue}{\footnotesize{}withFilter}} 
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Worked examples I: Programming with filterables}
+\begin{enumerate}
+\item John can have up to 3 coupons, and Jill up to 2. All John's coupons
+must be valid on purchase day, while each of Jill's coupons is checked
+independently. Implement the filterable functor describing this setup.
+\item A server receives a sequence of requests. Each request must be authenticated.
+Once a non-authenticated request is found, no further requests are
+accepted. Is this setup described by a filterable functor?\\
+\ \\
+For each of these functors, determine whether they are filterable,
+and if so, implement \texttt{\textcolor{blue}{\footnotesize{}withFilter}}
+via a type class:
+\item \texttt{\textcolor{blue}{\footnotesize{}final case class P{[}T{]}(first:\ Option{[}T{]},
+second:\  Option{[}(T, T){]})}}{\footnotesize \par}
+\item $F^{A}=\text{Int}+\text{Int}\times A+\text{Int}\times A\times A+\text{Int}\times A\times A\times A$
+\item $F^{A}=\text{NonEmptyList}^{A}$ defined recursively as $F^{A}=A+A\times F^{A}$ 
+\item $F^{Z,A}=Z+\text{Int}\times Z\times A\times A$ (with respect to the
+type parameter $A$)
+\item $F^{Z,A}=1+Z+\text{Int}\times Z\times A\times A$ (w.r.t.\ the type
+parameter $A$)
+\item Show that $C^{A}=A\Rightarrow\text{Int}$ is a filterable \emph{contrafunctor}
+(implement \texttt{\textcolor{blue}{\footnotesize{}withFilter}} with
+the same type signature)
+\end{enumerate}
+\end{frame}
+
+\begin{frame}{Exercises I}
+\begin{enumerate}
+\item Confucius gives wisdom on each of the 7 days of the week. Sometimes
+the wise words are hard to remember. If Confucius forgets the wisdom
+he said on a given day, he also forgets what he said on all the previous
+days of the week. Is this setup described by a filterable functor?
+\item Define \texttt{\textcolor{blue}{\footnotesize{}evenFilter(p)}} on
+an \texttt{\textcolor{blue}{\footnotesize{}IndexedSeq{[}T{]}}} such
+that a value \texttt{\textcolor{blue}{\footnotesize{}x:\ T}} is retained
+if \texttt{\textcolor{blue}{\footnotesize{}p(x)=true}} \emph{and}
+only if the sequence has an \emph{even} number of elements \texttt{\textcolor{blue}{\footnotesize{}y}}
+for which \texttt{\textcolor{blue}{\footnotesize{}p(y)=false}}. Does
+this define a filterable functor?\\
+\ \\
+Implement \texttt{\textcolor{blue}{\footnotesize{}filter}} for these
+functors if possible (law checking optional):
+\item $F^{A}=\text{Int}+\text{String}\times A\times A\times A$
+\item \texttt{\textcolor{blue}{\footnotesize{}final case class Q{[}A, Z{]}(id:\ Long,
+user1:\ Option{[}(A, Z){]}, user2:\ Option{[}(A, Z){]}) }}\textendash{}
+with respect to the type parameter $A$
+\item $F^{A}=\text{MyTree}^{A}$ defined recursively as $F^{A}=1+A\times F^{A}\times F^{A}$
+\item \texttt{\textcolor{blue}{\footnotesize{}final case class R{[}A{]}(x:\ Int,\ y: Int,
+z:\ A, data:\ List{[}A{]})}}, where the standard functor $\text{List}$
+already has \texttt{\textcolor{blue}{\footnotesize{}withFilter}} defined
+\item Show that $C^{A}=(\text{Int}\Rightarrow A)\Rightarrow\text{Int}$
+is a filterable contrafunctor
+\end{enumerate}
+\end{frame}
+
+\begin{frame}{Filterable functors: The laws in depth I}
+
+\begin{itemize}
+\item Is there a more elegant formulation of the laws, easier to understand?
+\begin{itemize}
+\item Main intuition: When \texttt{\textcolor{blue}{\footnotesize{}p(x)
+= false}}, replace \texttt{\textcolor{blue}{\footnotesize{}x:\ A}}
+by \texttt{\textcolor{blue}{\footnotesize{}1:\ Unit}} in \texttt{\textcolor{blue}{\footnotesize{}F{[}A{]}}} 
+\begin{itemize}
+\item (1) How to replace \texttt{\textcolor{blue}{\footnotesize{}x}} by
+\texttt{\textcolor{blue}{\footnotesize{}1}} in \texttt{\textcolor{blue}{\footnotesize{}F{[}A{]}}}
+without breaking the types?
+\item (2) How to transform the resulting type back to \texttt{\textcolor{blue}{\footnotesize{}F{[}A{]}}}?
+\end{itemize}
+\item We could do (1) if instead of the type \texttt{\textcolor{blue}{\footnotesize{}F{[}A{]}}}
+we had \texttt{\textcolor{blue}{\footnotesize{}F{[}Option{[}A{]}{]}}} 
+\begin{itemize}
+\item Map $F^{A}$ to $F^{1+A}$ using $\text{fmap}\,(\text{Some}^{A\Rightarrow1+A}):F^{A}\Rightarrow F^{1+A}$ 
+\item Now we can replace $A$ by $1$ in each item of type $1+A$
+\end{itemize}
+\item Doing (2) means \emph{defining} a function \texttt{\textcolor{blue}{\footnotesize{}flatten:\ F{[}Option{[}A{]}{]}
+$\Rightarrow$ F{[}A{]}}} 
+\begin{itemize}
+\item standard library has \texttt{\textcolor{blue}{\footnotesize{}flatten{[}T{]}:\ Seq{[}Option{[}T{]}{]}
+$\Rightarrow$ Seq{[}T{]}}} 
+\end{itemize}
+\item Express \texttt{\textcolor{blue}{\footnotesize{}filter}} through \texttt{\textcolor{blue}{\footnotesize{}flatten}}
+(see example code):
+\begin{itemize}
+\item Note: the $\text{Boolean}$ type is isomorphic to $1+1$ or \texttt{\textcolor{blue}{\footnotesize{}Option{[}Unit{]}}}{\footnotesize \par}
+\item $\text{filter}\left(p\right)=\text{fmap}\left(\text{optB}(p)\right)\circ\text{flatten}$,
+where we defined \texttt{\textcolor{blue}{\footnotesize{}optB}} as
+\end{itemize}
+\end{itemize}
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}def~optB{[}T{]}(p:~T~$\Rightarrow$~Option{[}Unit{]}):~T~$\Rightarrow$~Option{[}T{]}~=}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~x~$\Rightarrow$~p(x).map(\_~$\Rightarrow$~x)}{\footnotesize \par}
+\end{lyxcode}
+\item Express \texttt{\textcolor{blue}{\footnotesize{}flatten}} through
+\texttt{\textcolor{blue}{\footnotesize{}filter}} (using law 4):
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}def~flatten{[}F{[}\_{]},T{]}(c:~F{[}Option{[}T{]}{]}):~F{[}T{]}~=}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~c.filter(\_.nonEmpty).map(\_.get)}{\footnotesize \par}
+
+\textrm{\textcolor{gray}{\footnotesize{}//~for~}}\textcolor{gray}{\footnotesize{}F~=~Seq}\textrm{\textcolor{gray}{\footnotesize{},~this~would~be~}}\textcolor{gray}{\footnotesize{}c.collect~\{~case~Some(x)~$\Rightarrow$~x~\}}{\footnotesize \par}
+\end{lyxcode}
+\item Law 4 is satisfied \emph{automatically} if \texttt{\textcolor{blue}{\footnotesize{}filter}}
+is defined via \texttt{\textcolor{blue}{\footnotesize{}flatten}}! 
+\end{itemize}
+\end{frame}
+
+\begin{frame}{{*} Filterable functors: The laws in depth II}
+
+
+\framesubtitle{Showing that law 4 is satisfied automatically if \texttt{\footnotesize{}filter}
+is defined via \texttt{\footnotesize{}flatten}}
+\begin{itemize}
+\item Denote {\footnotesize{}$\psi^{A\Rightarrow1+A}\equiv\text{optB}\left(p^{A\Rightarrow1+1}\right)=x^{A}\Rightarrow\text{fmap}^{\text{Opt}}\left(\_\Rightarrow x\right)(p(x))$}{\footnotesize \par}
+\begin{itemize}
+\item Have property: {\footnotesize{}$f^{T\Rightarrow A}\circ\text{optB}\left(p^{A\Rightarrow1+1}\right)=\text{optB}\left(f\circ p\right)\circ\text{fmap}^{\text{Opt}}\,f$}{\footnotesize \par}
+\end{itemize}
+\item Law 4: {\footnotesize{}$\text{fmap}\,\psi\circ\text{flatten}^{F,T}\circ\text{fmap}\:f^{T\Rightarrow A}=\text{fmap}\,\psi\circ\text{flatten}^{F,T}\circ\text{fmap}\:f_{|p}$}{\footnotesize \par}
+\begin{itemize}
+\item We would like to interchange \texttt{\textcolor{blue}{\footnotesize{}flatten}}
+and \texttt{\textcolor{blue}{\footnotesize{}fmap}} here. Use Law 1?
+\end{itemize}
+\item Reformulate Law 1 in terms of \texttt{\textcolor{blue}{\footnotesize{}flatten}}:
+{\footnotesize{}
+\begin{align*}
+\text{fmap}\:f^{T\Rightarrow A}\circ\text{fmap}\:\psi\circ\text{flatten}^{F,A} & =\text{filter}\left(f\circ p\right)\circ\text{fmap}\:f\\
+\text{fmap}\,(f^{T\Rightarrow A}\circ\text{optB}(p^{A\Rightarrow1+A}))\circ\text{flatten}^{F,A} & =\text{fmap}\left(\text{optB}\left(f\circ p\right)\right)\circ\text{flatten}^{F,T}\circ\text{fmap}\,f\\
+\text{fmap}^{F}(\text{optB}\left(f\circ p\right))\circ\text{fmap}^{F}(\text{fmap}^{\text{Opt}}\,f) & =\text{fmap}^{F}(\text{optB}\left(f\circ p\right)\circ\text{fmap}^{\text{Opt}}\,f)\\
+{\normalcolor \text{[remove common prefix }} & \text{fmap}\left(\text{optB}\left(f\circ p\right)\right)\circ...\text{ from both sides]}\\
+\text{fmap}\,(\text{fmap}^{\text{Opt}}f^{T\Rightarrow A})\circ\text{flatten}^{F,A} & =\text{flatten}^{F,T}\circ\text{fmap}\,f\ \ -\text{ \textbf{law 1 for flatten}}
+\end{align*}
+}{\footnotesize \par}
+\item We can now interchange \texttt{\textcolor{blue}{\footnotesize{}flatten}}
+and \texttt{\textcolor{blue}{\footnotesize{}fmap}} in $\text{flatten}^{F,T}\circ\text{fmap}\:f_{|p}^{T\Rightarrow A}$:{\footnotesize{}
+\begin{align*}
+\text{fmap}\,\psi\circ\text{flatten}^{F,T}\circ\text{fmap}\:f_{|p} & =\text{fmap}\,\psi\circ\text{fmap}\,(\text{fmap}^{\text{Opt}}f_{|p})\circ\text{flatten}^{F,A}\\
+=\text{fmap}\,(\psi\circ\text{fmap}^{\text{Opt}}f)\circ\text{flatten}^{F,A} & =\text{fmap}\,(\psi\circ\text{fmap}^{\text{Opt}}f_{|p})\circ\text{flatten}^{F,A}\\
+\psi\circ\text{fmap}^{\text{Opt}}f & =\psi\circ\text{fmap}^{\text{Opt}}f_{|p}\ \ -\text{ check this by hand}
+\end{align*}
+}{\footnotesize \par}
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Filterable functors: The laws in depth III}
+
+Maybe $\text{fmap}\circ\text{flatten}$ is easier to handle than \texttt{\textcolor{blue}{\footnotesize{}flatten}}?
+Let us define {\footnotesize{}?
+Let us define {\footnotesize{}
+\[
+\text{fmapOpt}^{F,A,B}(f^{A\Rightarrow1+B}):\left(A\Rightarrow1+B\right)\Rightarrow F^{A}\Rightarrow F^{B}=\text{fmap}\:f\circ\text{flatten}^{F,B}
+\]
+}{\footnotesize \par}
+\begin{itemize}
+\item \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}} and \texttt{\textcolor{blue}{\footnotesize{}flatten}}
+are equivalent: {\footnotesize{}$\text{flatten}^{F,A}=\text{fmapOpt}^{F,1+A,A}(\text{id}^{1+A\Rightarrow1+A})$ }{\footnotesize \par}
+\item Express laws 1 \textendash{} 3 in terms of \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}}
+and {\footnotesize{}$\psi^{A\Rightarrow1+A}\equiv\text{optB}\left(p\right)$}{\footnotesize \par}
+\begin{itemize}
+\item Express \texttt{\textcolor{blue}{\footnotesize{}filter}} through \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}}:
+$\text{filter}\left(p\right)=\text{fmapOpt}^{F,A,A}\left(\psi\right)$
+\item Consider the expression needed for law 2: $x\Rightarrow p_{1}(x)\text{ and }p_{2}(x)$
+\begin{itemize}
+\item Written in terms of $\psi_{1}$ and $\psi_{2}$, this is $x^{A}\Rightarrow\psi_{1}(x)\text{.flatMap}\left(\psi_{2}\right)$
+\end{itemize}
+\item Similar to composition of functions, except the types are $A\Rightarrow1+B$
+\begin{itemize}
+\item This is a particular case of \textbf{Kleisli composition}; the general
+case: $\diamond_{M}:\left(A\Rightarrow M^{B}\right)\Rightarrow\left(B\Rightarrow M^{C}\right)\Rightarrow\left(A\Rightarrow M^{C}\right)$
+; we set $M^{A}\equiv1+A$
+\item The \textbf{Kleisli identity} function: $\text{id}_{\diamond_{\text{Opt}}}^{A\Rightarrow1+A}\equiv x^{A}\Rightarrow\text{Some}\left(x\right)$
+\item Kleisli composition is associative and respects the Kleisli identity!
+\end{itemize}
+\end{itemize}
+\item \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}} lifts a Kleisli
+function $f^{A\Rightarrow1+B}$ into the functor $F$
+\item Only \emph{two} laws are necessary for \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}}!
+\begin{enumerate}
+\item \textbf{Identity law} (covers old law 3): $\text{fmapOpt}\,(\text{id}_{\diamond_{\text{Opt}}}^{A\Rightarrow1+A})=\text{id}^{F^{A}\Rightarrow F^{A}}$
+\item \textbf{Composition law} (covers old laws 1 and 2): $\text{fmapOpt}\left(f^{A\Rightarrow1+B}\right)\circ\text{fmapOpt}\left(g^{B\Rightarrow1+C}\right)=\text{fmapOpt}\left(f\diamond_{\text{\textbf{Opt}}}g\right)$
+\end{enumerate}
+\begin{itemize}
+\item The two laws for \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}}
+are very similar to the two functor laws
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}{{*} Filterable functors: The laws in depth IV}
+
+
+\framesubtitle{Showing that old laws 1 \textendash{} 3 follow from the identity
+and composition laws for \texttt{\footnotesize{}fmapOpt}}
+\begin{itemize}
+\item Old law 3 is \emph{equivalent} to the identity law for \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}}:{\footnotesize{}
+\[
+\text{filter}\,(x^{A}\Rightarrow0+1)=\text{fmap}\,(x^{A}\Rightarrow0+x)\circ\text{flatten}=\text{fmapOpt}\,(\text{id}_{\diamond_{\text{Opt}}})=\text{id}^{F^{A}\Rightarrow F^{A}}
+\]
+}{\footnotesize \par}
+\item Derive old law 2: need to work with{\footnotesize{} $\psi\equiv\text{optB}\left(p\right):A\Rightarrow1+A$ }{\footnotesize \par}
+\begin{itemize}
+\item The Boolean conjunction $x\Rightarrow p_{1}(x)\wedge p_{2}(x)$ corresponds
+to $\psi_{1}\diamond_{\text{\textbf{Opt}}}\psi_{2}$
+\item Apply the composition law to Kleisli functions of types $A\Rightarrow1+A${\footnotesize{}
+}:{\footnotesize{}
+\begin{align*}
+\text{filter}\left(p_{1}\right)\circ\text{filter}\left(p_{2}\right) & =\text{fmapOpt}\left(\psi_{1}\right)\circ\text{fmapOpt}\left(\psi_{2}\right)\\
+=\text{fmapOpt}\left(\psi_{1}\diamond_{\text{\textbf{Opt}}}\psi_{2}\right) & =\text{fmapOpt}\left(\text{optB}\left(x\Rightarrow p_{1}(x)\wedge p_{2}(x)\right)\right)
+\end{align*}
+}{\footnotesize \par}
+\end{itemize}
+\item Derive old law 1: express \texttt{\textcolor{blue}{\footnotesize{}filter}}
+through \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}}, so law
+1 becomes
+\begin{itemize}
+\item {\footnotesize{}$\text{fmap}\:f\circ\text{fmapOpt}\left(\text{optB}\left(p\right)\right)=\text{fmapOpt}\left(\text{optB}\left(f\circ p\right)\right)\circ\text{fmap}\:f$
+\textendash{} eq.\ ({*})}{\footnotesize \par}
+\item denote $k_{f}^{A\Rightarrow1+A}=x^{A}\Rightarrow0+f(x)$; that is,
+$k_{f}=f\circ\text{id}_{\diamond_{\text{\textbf{Opt}}}}$; then we
+have $\text{fmapOpt}\left(k_{f}\right)=\text{fmap}\,k_{f}\circ\text{flatten}=\text{fmap}\:f\circ\text{fmap}\,\text{id}_{\diamond_{\text{\textbf{Opt}}}}\circ\text{flatten}=\text{fmap}\,f$
+\item rewrite ({*}) as {\footnotesize{}$\text{fmapOpt}\left(k_{f}\diamond_{\text{\textbf{Opt}}}\text{optB}\left(p\right)\right)=\text{fmapOpt}\left(\text{optB}\left(f\circ p\right)\diamond_{\text{\textbf{Opt}}}k_{f}\right)$ }{\footnotesize \par}
+\item it remains to show that {\footnotesize{}$k_{f}\diamond_{\text{\textbf{Opt}}}\text{optB}\left(p\right)=\text{optB}\left(f\circ p\right)\diamond_{\text{\textbf{Opt}}}k_{f}$ }{\footnotesize \par}
+\item use the properties {\footnotesize{}$k_{f}\diamond_{\text{\textbf{Opt}}}\psi=f\circ\psi$
+and $\psi\diamond_{\text{\textbf{Opt}}}k_{f}=\psi\circ\text{fmap}^{\text{Opt}}f$,
+and $f\circ\text{optB}\left(p\right)=\text{optB}\left(f\circ p\right)\circ\text{fmap}^{\text{Opt}}\,f$
+(from slide 8)}{\footnotesize \par}
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Summary so far}
+
+\begin{itemize}
+\item Filterable functors can be defined via \texttt{\textcolor{blue}{\footnotesize{}filter}}\texttt{\textbf{\textcolor{blue}{\footnotesize{},
+}}}\texttt{\textcolor{blue}{\footnotesize{}flatten}}, or \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}} 
+\item All three are computationally equivalent but have different roles:
+\begin{itemize}
+\item The easiest to use in program code is \texttt{\textcolor{blue}{\footnotesize{}filter}}
+/ \texttt{\textcolor{blue}{\footnotesize{}withFilter}} 
+\item The easiest type signature to implement is \texttt{\textcolor{blue}{\footnotesize{}flatten}} 
+\item The easiest to use for checking laws is \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}} 
+\end{itemize}
+\item The easiest way to derive the laws is to \emph{begin} with simpler
+laws
+\item {*} The 2 laws for \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}}
+are functor laws with a Kleisli ``twist''
+\begin{itemize}
+\item Category theory accommodates this via a generalized definition of
+functors as liftings between ``twisted'' function types. Compare:
+\begin{itemize}
+\item $\text{fmap}:\left(A\Rightarrow B\right)\Rightarrow F^{A}\Rightarrow F^{B}$
+\textendash{} ordinary container (``endofunctor'')
+\item $\text{fmap}_{\diamond_{M}}:\left(A\Rightarrow M^{B}\right)\Rightarrow F^{A}\Rightarrow F^{B}$
+\textendash{} lifting from Kleisli$_{M}$-functions
+\item $\text{contrafmap}:\left(B\Rightarrow A\right)\Rightarrow F^{A}\Rightarrow F^{B}$
+\textendash{} lifting from reversed functions
+\item $\text{traverse}:\left(A\Rightarrow L^{B}\right)\Rightarrow F^{A}\Rightarrow L^{F^{B}}$ 
+\item etc.
+\end{itemize}
+\item CT gives us an intuition: look for type signatures that look like
+``lifting''
+\begin{itemize}
+\item but CT is abstract, does not directly deliver a good formulation of
+laws
+\end{itemize}
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Structure of filterable functors}
+
+Intuition from \texttt{\textcolor{blue}{\footnotesize{}flatten}}:
+reshuffle data in $F^{A}$ after replacing some $A$'s by $1$
+\begin{itemize}
+\item ``reshuffling'' means reusing different parts of a disjunction
+\end{itemize}
+Construction of exponential-polynomial filterable functors 
+\begin{enumerate}
+\item $F^{A}=Z$ (constant functor) for any type $Z$ (define $\text{fmapOpt}\,f=\text{id}$)
+\begin{itemize}
+\item Note: $F^{A}=A$ (identity functor) is \emph{not} filterable
+\end{itemize}
+\item $F^{A}\equiv G^{A}\times H^{A}$ for any filterable functors $G^{A}$
+and $H^{A}$
+\item $F^{A}\equiv G^{A}+H^{A}$ for any filterable functors $G^{A}$ and
+$H^{A}$
+\item $F^{A}\equiv G^{H^{A}}$ for \emph{any} functor $G^{A}$ and filterable
+functor $H^{A}$
+\item $F^{A}\equiv1+A\times G^{A}$ for a filterable functor $G^{A}$
+\begin{itemize}
+\item Note: \emph{pointed} types $P$ are isomorphic to $1+Z$ for some
+type $Z$
+\begin{itemize}
+\item Example of non-trivial pointed type: $A\Rightarrow A$
+\item Example of non-pointed type: $A\Rightarrow B$ when $A$ is different
+from $B$
+\end{itemize}
+\item So $F^{A}\equiv P+A\times G^{A}$ where $P$ is a pointed type and
+$G^{A}$ is filterable
+\item Also have $F^{A}\equiv P+A\times A\times...\times A\times G^{A}$
+similarly
+\end{itemize}
+\item $F^{A}\equiv G^{A}+A\times F^{A}$ (recursive) for a filterable functor
+$G^{A}$
+\item $F^{A}\equiv G^{A}\Rightarrow H^{A}$ if\emph{ }contrafunctor $G^{A}$
+and functor $H^{A}$ \emph{both} \emph{filterable}
+\begin{itemize}
+\item Note: the functor $F^{A}\equiv G^{A}\Rightarrow A$ is not filterable
+\end{itemize}
+\end{enumerate}
+\end{frame}
+
+\begin{frame}{{*} Worked examples II: Constructions of filterable functors I}
+
+(2) The \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}} laws hold
+for $F^{A}\times G^{A}$ if they hold for $F^{A}$ and $G^{A}$
+\begin{itemize}
+\item For $f^{A\Rightarrow1+B}$, get {\footnotesize{}$\text{fmapOpt}_{F}(f):F^{A}\Rightarrow F^{B}$
+}and {\footnotesize{}$\text{fmapOpt}_{G}(f):G^{A}\Rightarrow G^{B}$}{\footnotesize \par}
+\item Define {\footnotesize{}$\text{fmapOpt}_{F\times G}f\equiv p^{F^{A}}\times q^{G^{A}}\Rightarrow\text{fmapOpt}_{F}(f)(p)\times\text{fmapOpt}_{G}(f)(q)$}{\footnotesize \par}
+\item Identity law: $f=\text{id}_{\diamond}$, so {\footnotesize{}$\text{fmapOpt}_{F}f=\text{id}$}
+and {\footnotesize{}$\text{fmapOpt}_{G}f=\text{id}$}{\footnotesize \par}
+\begin{itemize}
+\item Hence we get $\text{fmapOpt}_{F+G}(f)(p\times q)=\text{id}(p)\times\text{id}(q)=p\times q$
+\end{itemize}
+\item Composition law:{\footnotesize{}
+\begin{align*}
+ & (\text{fmapOpt}_{F\times G}\,f_{1}\circ\text{fmapOpt}_{F+G}\,f_{2})(p\times q)\\
+=\  & \text{fmapOpt}_{F\times G}(f_{2})\left(\text{fmapOpt}_{F}(f_{1})(p)\times\text{fmapOpt}_{G}(f_{1})(q)\right)\\
+=\  & (\text{fmapOpt}_{F}\,f_{1}\circ\text{fmapOpt}_{F}\,f_{2})(p)\times\left(\text{fmapOpt}_{G}\,f_{1}\circ\text{fmapOpt}_{G}\,f_{2}\right)(q)\\
+=\  & \text{fmapOpt}_{F}(f_{1}\diamond f_{2})(p)\times\text{fmapOpt}_{G}(f_{1}\diamond f_{2})(q)\\
+=\  & \text{fmapOpt}_{F\times G}(f_{1}\diamond f_{2})(p\times q)
+\end{align*}
+}{\footnotesize \par}
+\item Exactly the same proof as that for functor property for $F^{A}\times G^{A}$
+\begin{itemize}
+\item this is because \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}}
+corresponds to a generalized functor
+\end{itemize}
+\item New proofs are necessary only when using non-filterable functors
+\begin{itemize}
+\item these are used in constructions 4 \textendash{} 6
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}{{*} Worked examples II: Constructions of filterable functors II}
+
+(5) The \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}} laws hold
+for $F^{A}\equiv1+A\times G^{A}$ if they hold for $G^{A}$
+\begin{itemize}
+\item For $f^{A\Rightarrow1+B}$, get {\footnotesize{}$\text{fmapOpt}_{G}(f):G^{A}\Rightarrow G^{B}$}{\footnotesize \par}
+\item {\footnotesize{}Define $\text{fmapOpt}_{F}(f)(1+a^{A}\times q^{G^{A}})$
+by returning $0+b\times\text{fmapOpt}_{G}(f)(q)$ if the argument
+is $0+a\times q$ and $f(a)=0+b$, and returning $1+0$ otherwise}{\footnotesize \par}
+\item Identity law: {\footnotesize{}$f=\text{id}_{\diamond}$, so $f(a)=0+a$
+and $\text{fmapOpt}_{G}f=\text{id}$}{\footnotesize \par}
+\begin{itemize}
+\item Hence we get{\footnotesize{} $\text{fmapOpt}_{F}(\text{id}_{\diamond})(1+a\times q)=1+a\times q$}{\footnotesize \par}
+\end{itemize}
+\item Composition law: {\footnotesize{}need only to check for arguments
+$0+a\times q$, and only when $f_{1}(a)=0+b$ and $f_{2}(b)=0+c$,
+in which case $(f_{1}\diamond f_{2})(a)=0+c$; then 
+\begin{align*}
+ & (\text{fmapOpt}_{F}\,f_{1}\circ\text{fmapOpt}_{F}\,f_{2})(0+a\times q)\\
+=\  & \text{fmapOpt}_{F}(f_{2})\left(\text{fmapOpt}_{F}(f_{1})(0+a\times q)\right)\\
+=\  & \text{fmapOpt}_{F}(f_{2})\left(0+b\times\text{fmapOpt}_{G}(f_{1})(q)\right)\\
+=\  & 0+c\times(\text{fmapOpt}_{G}\,f_{1}\circ\text{fmapOpt}_{G}\,f_{2})(q)\\
+=\  & 0+c\times\text{fmapOpt}_{G}(f_{1}\diamond f_{2})(q)\\
+=\  & \text{fmapOpt}_{F}(f_{1}\diamond f_{2})(0+a\times q)
+\end{align*}
+}{\footnotesize \par}
+\end{itemize}
+This is a ``greedy filter'': if $f(a)$ is empty, deletes all $G^{A}$
+data
+\end{frame}
+
+\begin{frame}{{*} Worked examples II: Constructions of filterable functors III}
+
+(6) The \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}} laws hold
+for $F^{A}\equiv G^{A}+A\times F^{A}$ if they hold for $G^{A}$
+\begin{itemize}
+\item {\footnotesize{}For $f^{A\Rightarrow1+B}$, get $\text{fmapOpt}_{G}(f):G^{A}\Rightarrow G^{B}$
+and $\text{fmapOpt}_{f}^{\prime}(f):F^{A}\Rightarrow F^{B}$ (for
+use in recursive arguments as the inductive assumption)}{\footnotesize \par}
+\item {\footnotesize{}Define $\text{fmapOpt}_{F}(f)(q^{G^{A}}+a^{A}\times p^{F^{A}})$
+by returning $0+\text{fmapOpt}_{F}^{\prime}(f)(p)$ if $f(a)=1+0$,
+and $\text{fmapOpt}_{G}(f)(q)+b\times\text{fmapOpt}_{F}^{\prime}(f)(p)$
+otherwise}{\footnotesize \par}
+\item Identity law: {\footnotesize{}$f(a)=\text{id}_{\diamond}(a)\neq1+0$},
+so {\footnotesize{}$\text{fmapOpt}_{F}(\text{id}_{\diamond})(q+a\times p)=q+a\times p$ }{\footnotesize \par}
+\item Composition law: {\footnotesize{}$(\text{fmapOpt}_{F}(f_{1})\circ\text{fmapOpt}_{F}(f_{2}))(q+a\times p)=\text{fmapOpt}_{F}(f_{1}\diamond f_{2})(q+a\times p)$}{\footnotesize \par}
+\item {\footnotesize{}For arguments $q+0$, the laws for $G^{A}$ hold;
+so assume arguments $0+a\times p$. When $f_{1}(a)=0+b$ and $f_{2}(b)=0+c$,
+the proof of the previous example will go through. So we need to consider
+the two cases $f_{1}(a)=1+0$ and $f_{1}(a)=0+b$, $f_{2}(b)=1+0$ }{\footnotesize \par}
+\item {\footnotesize{}If $f_{1}(a)=1+0$ then $(f_{1}\diamond f_{2})(a)=1+0$;
+to show $\text{fmapOpt}_{F}^{\prime}(f_{2})(\text{fmapOpt}_{F}^{\prime}(f_{1})(p))$
+$=\text{fmapOpt}_{F}^{\prime}(f_{1}\diamond f_{2})(p)$, use the inductive
+assumption about $\text{fmapOpt}_{F}^{\prime}$ on $p$}{\footnotesize \par}
+\item {\footnotesize{}If $f_{1}(a)=0+b$ and $f_{2}(b)=1+0$ then $(f_{1}\diamond f_{2})(a)=1+0$;
+to show $\text{fmapOpt}_{F}(f_{2})(0+b\times\text{fmapOpt}_{F}^{\prime}(f_{1})(p))$
+$=\text{fmapOpt}_{F}^{\prime}(f_{1}\diamond f_{2})(p)$, rewrite $\text{fmapOpt}_{F}(f_{2})(0+b\times\text{fmapOpt}_{F}^{\prime}(f_{1})(p))$
+$=\text{fmapOpt}_{F}^{\prime}(f_{2})(\text{fmapOpt}_{F}^{\prime}(f_{1})(p))$
+and use the inductive assumption about $\text{fmapOpt}_{F}^{\prime}$
+on $p$}{\footnotesize \par}
+\end{itemize}
+This is a ``list-like filter'': if $f(a)$ is empty, recurses into
+nested $F^{A}$ data
+\end{frame}
+
+\begin{frame}{Worked examples II: Constructions of filterable functors IV}
+
+Use known filterable constructions to show that{\footnotesize{} $F^{A}\equiv(\text{Int}\times\text{String})\Rightarrow\left(1+\text{Int}\times A+A\times\left(1+A\right)+\left(\text{Int}\Rightarrow1+A+A\times A\times\text{String}\right)\right)$
+}is a filterable functor
+\begin{itemize}
+\item Instead of implementing \texttt{\textcolor{blue}{\footnotesize{}Filterable}}
+and verifying laws by hand, we analyze the structure of this data
+type and use known constructions
+\item Define some auxiliary functors that are parts of the structure of
+$F^{A}$,
+\begin{itemize}
+\item $R_{1}^{A}=\left(\text{Int}\times\text{String}\right)\Rightarrow A$
+and $R_{2}^{A}=\text{Int}\Rightarrow A$ 
+\item $G^{A}=1+\text{Int}\times A+A\times\left(1+A\right)$ and $H^{A}=1+A+A\times A\times\text{String}$
+\end{itemize}
+\item Now we can rewrite {\footnotesize{}$F^{A}=R_{1}\left[G^{A}+R_{2}\left[H^{A}\right]\right]$}{\footnotesize \par}
+\begin{itemize}
+\item $G^{A}$ is filterable by construction 5 because it is of the form
+$G^{A}=1+A\times K^{A}$ with filterable functor $K^{A}=1+\text{Int}+A$
+\item $K^{A}$ is of the form $1+A+X$ with constant type $X$, so it is
+filterable by constructions 1 and 3 with the \texttt{\textcolor{blue}{\footnotesize{}Option}}
+functor $1+A$
+\item $H^{A}$ is filterable by construction 5 with $H^{A}=1+A\times\left(1+A\times\text{String}\right)$,
+while $1+A\times\text{String}$ is filterable by constructions 5 and
+1
+\end{itemize}
+\item Constructions 3 and 4 show that $R_{1}\left[G^{A}+R_{2}\left[H^{A}\right]\right]$
+is filterable
+\end{itemize}
+Note that there are more than one way of implementing \texttt{\textcolor{blue}{\footnotesize{}Filterable}}
+here
+\end{frame}
+
+\begin{frame}{{*} Exercises II}
+\begin{enumerate}
+\item Implement a \texttt{\textcolor{blue}{\footnotesize{}Filterable}} instance
+for \texttt{\textcolor{blue}{\footnotesize{}type F{[}T{]} = G{[}H{[}T{]}{]}}}
+assuming that the functor \texttt{\textcolor{blue}{\footnotesize{}H{[}T{]}}}
+already has a \texttt{\textcolor{blue}{\footnotesize{}Filterable}}
+instance. Verify the laws rigorously.
+\item For \texttt{\textcolor{blue}{\footnotesize{}type F{[}T{]} = Option{[}Int
+$\Rightarrow$ Option{[}(T, T){]}{]}}}, implement a \texttt{\textcolor{blue}{\footnotesize{}Filterable}}
+instance. Show that the filterable laws hold by using known filterable
+constructions (avoiding explicit proofs).
+\item Implement a \texttt{\textcolor{blue}{\footnotesize{}Filterable}} instance
+for $F^{A}\equiv G^{A}+\text{Int}\times A\times A\times F^{A}$ (recursive)
+for a filterable functor $G^{A}$. Verify the laws rigorously.
+\item Show that $F^{A}=1+A\times G^{A}$ is in general \emph{not} filterable
+if $G^{A}$ is an arbitrary (non-filterable) functor; it is enough
+to give an example.
+\end{enumerate}
+\end{frame}
+
+\end{document}
