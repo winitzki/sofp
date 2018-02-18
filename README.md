@@ -4,9 +4,14 @@ This is a series of extended tutorials on functional programming.
 
 The tutorials cover both the theory and the practice of functional programming.
 
-**Applied functional type theory** is my designation for the subdomain of computer science that serves the needs of functional programmers who are software engineers.
-
 The code examples are given in Scala, but most of the material will work equally well in Haskell and some other FP languages.
+
+**Applied functional type theory** (AFTT) is what I call the subdomain of computer science that should serve the needs of functional programmers who are software engineers.
+
+Out of a wealth of functional programming inventions in the last 30 years, it needs to be determined which theoretical material belongs to AFTT and which has not demonstrated its pragmatic usefulness and may be tentatively omitted.
+This tutorial series is thus also an attempt to define the proper scope of AFTT.
+
+## Intended audience
 
 The material is presented here at medium to advanced level.
 It is not suitable for people unfamiliar with school-level algebra, or for people who are generally allergic to mathematics, or for people unwilling to learn new and difficult concepts through prolonged mental concentration.
