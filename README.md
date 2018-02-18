@@ -11,6 +11,10 @@ The code examples are given in Scala, but most of the material will work equally
 Out of a wealth of functional programming inventions in the last 30 years, it needs to be determined which theoretical material belongs to AFTT and which has not demonstrated its pragmatic usefulness and may be tentatively omitted.
 This tutorial series is thus also an attempt to define the proper scope of AFTT.
 
+All lecture content is authored by [Sergei Winitzki, Ph.D](https://sites.google.com/site/winitzki).
+
+The lecture materials are released into the public domain under a [CC-0 license, which is an "uncopyright"](https://github.com/winitzki/talks/blob/master/LICENSE).
+
 ## Intended audience
 
 The material is presented here at medium to advanced level.
@@ -55,7 +59,7 @@ This can save you time since the videos are quite long and detailed.
 
 [Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/01-values-types-expressions.pdf)
 
-[YouTube recording - slides + audio](https://www.youtube.com/watch?v=0Ld79Lnzx_o&index=1&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+[YouTube recording: slides + audio](https://www.youtube.com/watch?v=0Ld79Lnzx_o&index=1&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
 Contents in brief:
 
@@ -70,7 +74,7 @@ Contents in brief:
 
 [Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/02-functional-collections.pdf)
 
-[YouTube recording - slides + audio](https://www.youtube.com/watch?v=XFrWZ7QIE2s&index=2&t=7s&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+[YouTube recording: slides + audio](https://www.youtube.com/watch?v=XFrWZ7QIE2s&index=2&t=7s&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
 Contents in brief:
 
@@ -86,7 +90,7 @@ Contents in brief:
 
 [Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/03-logic-of-types-1.pdf)
 
-[YouTube recording - slides + audio](https://www.youtube.com/watch?v=Z_1s36ba4EY&index=3&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+[YouTube recording: slides + audio](https://www.youtube.com/watch?v=Z_1s36ba4EY&index=3&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
 Contents in brief:
 
@@ -104,7 +108,7 @@ Please use the exercises from the current version of the PDF slides.
 
 [Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/03-logic-of-types-2.pdf)
 
-[YouTube recording - slides + audio](https://www.youtube.com/watch?v=MTViank6L24&index=4&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+[YouTube recording: slides + audio](https://www.youtube.com/watch?v=MTViank6L24&index=4&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
 Contents in brief:
 
@@ -121,7 +125,7 @@ Contents in brief:
 
 [Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/03-logic-of-types-3.pdf)
 
-[YouTube recording - slides + audio](https://www.youtube.com/watch?v=sSDGjdfFQ-Y&index=5&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+[YouTube recording: slides + audio](https://www.youtube.com/watch?v=sSDGjdfFQ-Y&index=5&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
 Contents in brief:
 
@@ -139,7 +143,7 @@ Contents in brief:
 
 [Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/curryhoward-2017.pdf)
 
-[YouTube recording - slides + audio](https://www.youtube.com/watch?v=cESdgot_ZxY&index=6&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+[YouTube recording: slides + audio](https://www.youtube.com/watch?v=cESdgot_ZxY&index=6&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
 This optional Addendum to Chapter 3 presents an open-source library `curryhoward` that implements some functions automatically in Scala, given their type signature.
 
@@ -164,7 +168,7 @@ The `curryhoward` library is open-source and available at [this git repository](
 
 [Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/curryhoward-2018-tutorial.pdf)
 
-[YouTube recording - slides + audio](https://www.youtube.com/watch?v=KcfD3Iv--UM&index=7&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+[YouTube recording: slides + audio](https://www.youtube.com/watch?v=KcfD3Iv--UM&index=7&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
 This optional addendum to Chapter 3 explains the Curry-Howard correspondence in more detail than it was done in Chapter 3, part 3. There are no exercises in this tutorial; Chapter 3 already contains exercises covering some of this material.
 
@@ -196,7 +200,7 @@ Contents in brief:
 
 [Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/04-functors.pdf)
 
-[YouTube recording - slides + audio](https://www.youtube.com/watch?v=OGut2iZW0JU&index=8&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+[YouTube recording: slides + audio](https://www.youtube.com/watch?v=OGut2iZW0JU&index=8&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
 Contents in brief:
 
@@ -214,7 +218,7 @@ Contents in brief:
 
 [Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/05-type-classes.pdf)
 
-[YouTube recording - slides + audio](https://www.youtube.com/watch?v=QhqsBgJ8lm8&index=9&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+[YouTube recording: slides + audio](https://www.youtube.com/watch?v=QhqsBgJ8lm8&index=9&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
 Contents in brief:
 
@@ -234,7 +238,7 @@ Contents in brief:
 
 [Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/06-filterable-functors.pdf) (Part 1 covers only slides 1 to 8.)
 
-[YouTube recording - slides + audio](https://www.youtube.com/watch?v=20PYTn_aUqE&index=10&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+[YouTube recording: slides + audio](https://www.youtube.com/watch?v=20PYTn_aUqE&index=10&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
 Contents in brief:
 
@@ -251,7 +255,7 @@ Contents in brief:
 
 [Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/06-filterable-functors.pdf) (Part 2 covers only slides 9 to end.)
 
-[YouTube recording - slides + audio](https://www.youtube.com/watch?v=GO4qq5_v1o0&index=11&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+[YouTube recording: slides + audio](https://www.youtube.com/watch?v=GO4qq5_v1o0&index=11&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
 Contents in brief:
 
@@ -275,3 +279,5 @@ I plan to cover the following further material:
 - from the following list of functional programming concepts, those that appear to be useful in practice will be covered, others omitted:  catamorphisms and other "something-morphisms", comonads and co-applicatives, rigid functors, type-level and functor-level fixpoints, trampolines and monadic tail recursion, cofree comonads, lenses / prisms and other "optics", arrows, Kahn extensions, extensible effects ("types à la carte"), initial vs. final representations of data types ("final tagless" interpreters)
 - interpretation of OO programming from the perspective of AFTT
 - design patterns of FP that replace OO design patterns
+- functional reactive programming
+- an example of a full-stack application implemented in Scala with FP patterns
