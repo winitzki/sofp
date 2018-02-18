@@ -8,7 +8,7 @@ The code examples are given in Scala, but most of the material will work equally
 
 **Applied functional type theory** (AFTT) is what I call the subdomain of computer science that should serve the needs of functional programmers who are software engineers.
 
-Out of a wealth of functional programming inventions in the last 30 years, it needs to be determined which theoretical material belongs to AFTT and which has not demonstrated its pragmatic usefulness and may be tentatively omitted.
+They, the practitioners, rather than the academics, need to examine the incredible wealth of functional programming inventions over the last 30 years, -- such as these ["functional pearls" papers](https://wiki.haskell.org/Research_papers/Functional_pearls) -- and need to determined which theoretical material has demonstrated its pragmatic usefulness and thus belongs to AFTT, and which material may be tentatively omitted.
 This tutorial series is thus also an attempt to define the proper scope of AFTT.
 
 All lecture content is authored by [Sergei Winitzki, Ph.D](https://sites.google.com/site/winitzki).
