@@ -1,15 +1,15 @@
-# Applied functional type theory: The in-depth functional programming tutorial
+# Applied functional type theory: A tutorial on functional programming
 
-This is a series of extended tutorials on functional programming.
+This is a series of extensive tutorials on functional programming.
 
 The tutorials cover both the theory and the practice of functional programming.
 
-**Applied functional type theory** (AFTT) is what I call the subdomain of computer science that should serve the needs of functional programmers who are software engineers.
+**Applied functional type theory** (AFTT) is what I call the subdomain of computer science that should serve the needs of functional programmers who are working as software engineers.
 
-They, the practitioners, rather than the academics, need to examine the incredible wealth of functional programming inventions over the last 30 years, -- such as these ["functional pearls" papers](https://wiki.haskell.org/Research_papers/Functional_pearls) -- and need to determined which theoretical material has demonstrated its pragmatic usefulness and thus belongs to AFTT, and which material may be tentatively omitted.
-This tutorial series is thus also an attempt to define the proper scope of AFTT.
+It is these practitioners, rather than the academic researchers, who need to examine the incredible wealth of functional programming inventions over the last 30 years, -- such as these ["functional pearls" papers](https://wiki.haskell.org/Research_papers/Functional_pearls) -- and to determine which theoretical material has demonstrated its pragmatic usefulness and thus belongs to AFTT, and which material may be tentatively omitted.
+This tutorial series is therefore also an attempt to define the proper scope of AFTT.
 
-The code examples are given in Scala, but most of the material will work equally well in Haskell and some other FP languages.
+I give code examples in Scala, but most of the material will work equally well in Haskell and some other FP languages.
 This is so because AFTT is not specific to Scala or Haskell, -- a serious user of any other functional programming language will have to face the same questions and struggle with the same practical issues.
 
 ## Uncopyright
