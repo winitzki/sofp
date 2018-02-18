@@ -9,7 +9,8 @@ The tutorials cover both the theory and the practice of functional programming.
 It is these practitioners, rather than the academic researchers, who need to examine the incredible wealth of functional programming inventions over the last 30 years, -- such as these ["functional pearls" papers](https://wiki.haskell.org/Research_papers/Functional_pearls) -- and to determine which theoretical material has demonstrated its pragmatic usefulness and thus belongs to AFTT, and which material may be tentatively omitted.
 This tutorial series is therefore also an attempt to define the proper scope of AFTT.
 
-I give code examples in Scala, but most of the material will work equally well in Haskell and some other FP languages.
+In the videos, I demonstrate code examples in Scala using the IntelliJ editor because this is what I am most familiar with.
+However, most of this material will work equally well in Haskell and some other FP languages.
 This is so because AFTT is not specific to Scala or Haskell, -- a serious user of any other functional programming language will have to face the same questions and struggle with the same practical issues.
 
 ## Uncopyright
@@ -281,8 +282,20 @@ I plan tentatively to cover the following further material:
 - a general way of implementing and using "free" constructions (free monoid, free functor, free monad, free applicative etc.)
 - monad transformers, mtl, extensible effects ("types à la carte") - problems and solutions
 - various solutions of the "expression problem"
-- from the following list of functional programming concepts, those that appear to be useful in practice will be covered, others omitted:  catamorphisms and other "something-morphisms", comonads and co-applicatives, rigid functors, type-level and functor-level fixpoints, trampolines and monadic tail recursion, cofree comonads, lenses / prisms and other "optics", arrows, Kahn extensions, , initial vs. final representations of data types ("final tagless" interpreters)
+- from the following list of functional programming concepts, those that appear to be useful in practice will be covered, others omitted: 
+    - catamorphisms and other "something-morphisms"
+    - comonads and co-applicative functors
+    - rigid functors (need better use cases for those)
+    - type-level and functor-level fixpoints
+    - trampolines and monadic tail recursion
+    - cofree comonads
+    - lenses / prisms and other "optics"
+    - arrows
+    - Kahn extensions
+    - initial vs. final representations of data types ("final tagless" interpreters)
+    - type-level constructions, basics of dependent types
 - interpretation of OO programming from the perspective of AFTT
 - design patterns of FP that replace OO design patterns
 - functional reactive programming
 - an example of a full-stack application implemented in Scala with FP patterns
+- browse the recent Scala and Haskell FP books to see if I have missed something important
