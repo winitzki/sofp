@@ -24,12 +24,13 @@ Starting from chapter 4, the material becomes unsuitable for beginners.
 - an emphasis on the mathematical principles that guide the practice of functional programming
 - the presentation is self-contained -- introduces and explains all required concepts and Scala features
 - an emphasis on clarity and understandability of all explanations, derivations, and code
-    - some terminology and notations are non-standard to achieve a clearer and more logically coherent presentation of the material
+    - some terminology and notations are non-standard -- this is in order to achieve a clearer and more logically coherent presentation of the material
 - all mathematical developments are thoroughly motivated by practical programming issues
     - avoid developing abstract theory for theory's sake
     - examples must show how each mathematical construction is used in practice for writing code
     - mathematical generalizations are not pursued beyond either practical usefulness or immediate pedagogical usefulness
 - each new concept or technique has sample code and unit tests to illustrate its usage and check correctness
+    - currently the libraries `cats` and `scalacheck` are used throughout the sample code
 - each new concept or technique is fully explained via "worked examples" and drilled via provided exercises
     - answers to exercises are not provided, but it is verified that the exercises are doable and free of errors
 
@@ -58,12 +59,12 @@ This can save you time since the videos are quite long and detailed.
 
 Contents in brief:
 
-Values, types, and functions in Scala
-Named functions and anonymous functions
-Examples of collections, `map`, `filter`, `sum`, etc.
-Higher-order functions
-How to translate mathematical formulas into Scala code
-Examples and exercises
+- Values, types, and functions in Scala
+- Named functions and anonymous functions
+- Examples of collections, `map`, `filter`, `sum`, etc.
+- Higher-order functions
+- How to translate mathematical formulas into Scala code
+- Examples and exercises
 
 ## Chapter 2: The functional approach to collections in Scala
 
@@ -73,13 +74,13 @@ Examples and exercises
 
 Contents in brief:
 
-Tuples and pattern matching
-Using tuples with `Map[]` and `Seq[]` collections (`zip`, `map`, `flatMap`, etc.)
-Writing functions with type parameters
-Implementing mathematical induction with recursion
-Tail recursion and the accumulator trick
-Using `foldLeft`, `scan`, `iterate` instead of writing recursion by hand
-Worked examples and exercises
+- Tuples and pattern matching
+- Using tuples with `Map[]` and `Seq[]` collections (`zip`, `map`, `flatMap`, etc.)
+- Writing functions with type parameters
+- Implementing mathematical induction with recursion
+- Tail recursion and the accumulator trick
+- Using `foldLeft`, `scan`, `iterate` instead of writing recursion by hand
+- Worked examples and exercises
 
 ## Chapter 3, part 1: The types of higher-order functions
 
@@ -89,12 +90,12 @@ Worked examples and exercises
 
 Contents in brief:
 
-The types of functions that return functions
-"Curried" functions: their syntax e.g. `f(x)(y)` and how they work
-"Curried" type expressions (`A ⇒ B ⇒ C`)
-Scala type inference: how to give the type annotations
-How to infer the most generic (parametric) types for higher-order functions
-Worked examples and exercises
+- The types of functions that return functions
+- "Curried" functions: their syntax e.g. `f(x)(y)` and how they work
+- "Curried" type expressions (`A ⇒ B ⇒ C`)
+- Scala type inference: how to give the type annotations
+- How to infer the most generic (parametric) types for higher-order functions
+- Worked examples and exercises
 
 **Note**: There was an error in the last exercise as shown in the video - it had no solution.
 Please use the exercises from the current version of the PDF slides.
@@ -107,14 +108,14 @@ Please use the exercises from the current version of the PDF slides.
 
 Contents in brief:
 
-Scala's "case classes" understood as tuples with names
-Pattern-matching syntax for case classes
-Motivation for introducing disjunction types
-First example of disjunction type: `Either[A, B]`
-Implementing disjunction types via "sealed traits" and case classes
-Using disjunction types to model complicated domains
-Understanding `Option[T]` as disjunction type and as a collection type
-Worked examples and exercises
+- Scala's "case classes" understood as tuples with names
+- Pattern-matching syntax for case classes
+- Motivation for introducing disjunction types
+- First example of disjunction type: `Either[A, B]`
+- Implementing disjunction types via "sealed traits" and case classes
+- Using disjunction types to model complicated domains
+- Understanding `Option[T]` as disjunction type and as a collection type
+- Worked examples and exercises
 
 ## Chapter 3, part 3: The Curry-Howard correspondence
 
@@ -124,15 +125,15 @@ Worked examples and exercises
 
 Contents in brief:
 
-How types are interpreted using propositional logic
-How to write type expressions in the shorthand notation
-The four-point correspondence between propositions/proofs and types/code
-How to verify or to refute isomorphism (equivalence) relationships between types
-Identities in logic vs. identities in arithmetic: the two sides of the CH correspondence
-Deriving the code of functions based on types of those functions
-Exponential-polynomial types vs. "algebraic" types
-Recursive polynomial type (`List`) and its type formula
-Worked examples and exercises
+- How types are interpreted using propositional logic
+- How to write type expressions in the shorthand notation
+- The four-point correspondence between propositions/proofs and types/code
+- How to verify or to refute isomorphism (equivalence) relationships between types
+- Identities in logic vs. identities in arithmetic: the two sides of the CH correspondence
+- Deriving the code of functions based on types of those functions
+- Exponential-polynomial types vs. "algebraic" types
+- Recursive polynomial type (`List`) and its type formula
+- Worked examples and exercises
 
 ## Chapter 3, addendum 1: Generating code with the Curry-Howard correspondence: Type inhabitation at compile time
 
@@ -144,18 +145,18 @@ This optional Addendum to Chapter 3 presents an open-source library `curryhoward
 
 Abstract:
 
-I implemented a library for compile-time code generation from Scala type signatures. The library uses (compile-time) reflection, the Curry-Howard correspondence, and a theorem prover for the constructive propositional logic. Using this library, I illustrate how the Curry-Howard correspondence maps types into propositions and proofs into code. I will also explain some details of the algorithm I used for automatic code generation from type signatures. As an illustration of using this library for automatic code generation, I demonstrate working examples such as implementing map and flatMap for the Reader and State monads.
+- I implemented a library for compile-time code generation from Scala type signatures. The library uses (compile-time) reflection, the Curry-Howard correspondence, and a theorem prover for the constructive propositional logic. Using this library, I illustrate how the Curry-Howard correspondence maps types into propositions and proofs into code. I will also explain some details of the algorithm I used for automatic code generation from type signatures. As an illustration of using this library for automatic code generation, I demonstrate working examples such as implementing map and flatMap for the Reader and State monads.
 
 Contents in brief:
 
-How types are interpreted using propositional logic
-Deriving the code of functions by hand, based on types of those functions
-Using the `curryhoward` library to do the same automatically
-The features of the `curryhoward` library
-How the theorem prover works: the calculus LJ of Gentzen and the calculus LJT of Vorobieff-Hudelmaier-Dyckhoff
-How to interpret the derivation rules for sequents
-Building the lambda-calculus proof term from the proof tree
-The "obvious" theorem of Vorobieff
+- How types are interpreted using propositional logic
+- Deriving the code of functions by hand, based on types of those functions
+- Using the `curryhoward` library to do the same automatically
+- The features of the `curryhoward` library
+- How the theorem prover works: the calculus LJ of Gentzen and the calculus LJT of Vorobieff-Hudelmaier-Dyckhoff
+- How to interpret the derivation rules for sequents
+- Building the lambda-calculus proof term from the proof tree
+- The "obvious" theorem of Vorobieff
 
 The `curryhoward` library is open-source and available at [this git repository](https://github.com/Chymyst/curryhoward)
 
@@ -174,22 +175,22 @@ The logic of types in functional programming languages
 
 Contents in brief:
 
-The commonality of type constructions in functional programming languages: Scala, OCaml, Haskell
-Defining the propositions that correspond to types
-What are "sequents" and how they are used to describe logical inference from premises
-How logical derivations correspond to expressions in the programming language; how to convert one to the other and back
-What is the "logic of types" defined by the common type constructions in the functional programming languages: it is the intuitionistic propositional logic (IPL)
-Examples that contrast the IPL with the classical Boolean logic
-Example of using Gentzen's calculus LJ to search for a proof
-The advantage of the Vorobieff-Hudelmaier-Dyckhoff's calculus LJT over Gentzen's calculus LJ, and why people are using LJT for proof search
-Example of what mathematicians mean when they say "it is trivial"
-How to transform proofs back to code: proof transformer functions that correspond to derivation rules in LJ/LJT
-Example of deriving code automatically from a proof of a sequent
-How to use the "arithmetical Curry-Howard correspondence" to decide which types are equivalent
-What are polynomial data types and exponential-polynomial data types
-Summary: What are the practical uses of the CH correspondence
-Limitations of the propositional logic: what it can and cannot do
-Using the CH correspondence as a guide in programming language design
+- The commonality of type constructions in functional programming languages: Scala, OCaml, Haskell
+- Defining the propositions that correspond to types
+- What are "sequents" and how they are used to describe logical inference from premises
+- How logical derivations correspond to expressions in the programming language; how to convert one to the other and back
+- What is the "logic of types" defined by the common type constructions in the functional programming languages: it is the intuitionistic propositional logic (IPL)
+- Examples that contrast the IPL with the classical Boolean logic
+- Example of using Gentzen's calculus LJ to search for a proof
+- The advantage of the Vorobieff-Hudelmaier-Dyckhoff's calculus LJT over Gentzen's calculus LJ, and why people are using LJT for proof search
+- Example of what mathematicians mean when they say "it is trivial"
+- How to transform proofs back to code: proof transformer functions that correspond to derivation rules in LJ/LJT
+- Example of deriving code automatically from a proof of a sequent
+- How to use the "arithmetical Curry-Howard correspondence" to decide which types are equivalent
+- What are polynomial data types and exponential-polynomial data types
+- Summary: What are the practical uses of the CH correspondence
+- Limitations of the propositional logic: what it can and cannot do
+- Using the CH correspondence as a guide in programming language design
 
 ## Chapter 4: Functors: their laws and structure
 
@@ -199,15 +200,15 @@ Using the CH correspondence as a guide in programming language design
 
 Contents in brief:
 
-Abstracting the properties of a "data container"
-Motivation for the functor laws
-Examples of functors and non-functors
-Examples of deriving a functor's `fmap` from its type and checking the laws
-Contrafunctors; covariance and contravariance
-How to decide whether a type constructor is a functor, a contrafunctor, or neither
-Building up the structure for exponential-polynomial functor types: functor product, disjunction, implication, composition, recursion
-How to prove the functor laws for each build-up step
-Worked examples and exercises
+- Abstracting the properties of a "data container"
+- Motivation for the functor laws
+- Examples of functors and non-functors
+- Examples of deriving a functor's `fmap` from its type and checking the laws
+- Contrafunctors; covariance and contravariance
+- How to decide whether a type constructor is a functor, a contrafunctor, or neither
+- Building up the structure for exponential-polynomial functor types: functor product, disjunction, implication, composition, recursion
+- How to prove the functor laws for each build-up step
+- Worked examples and exercises
 
 ## Chapter 5: Type-level functions and type classes
 
@@ -217,17 +218,17 @@ Worked examples and exercises
 
 Contents in brief:
 
-Total and partial functions at value level and at type level
-GADTs as partial type-to-type functions
-Using type evidence values to define partial type-to-value functions (PTVFs)
-Type classes understood as PTVFs
-Using Scala's implicit value mechanism to define type classes
-Examples of type classes: `Semigroup`, `Monoid`, `Functor`
-Higher-order type functions; kinds as a "type system for types"
-Using Scala's "implicit method" syntax with type classes
-Using the `cats` library to define type class instances
-Using the `scalacheck` library to verify type class laws
-Worked examples and exercises
+- Total and partial functions at value level and at type level
+- GADTs as partial type-to-type functions
+- Using type evidence values to define partial type-to-value functions (PTVFs)
+- Type classes understood as PTVFs
+- Using Scala's implicit value mechanism to define type classes
+- Examples of type classes: `Semigroup`, `Monoid`, `Functor`
+- Higher-order type functions; kinds as a "type system for types"
+- Using Scala's "implicit method" syntax with type classes
+- Using the `cats` library to define type class instances
+- Using the `scalacheck` library to verify type class laws
+- Worked examples and exercises
 
 ## Chapter 6, part 1: Computations in a functor context I. Filterable functors, their laws and structure. Part 1. Examples. Working with filterable functors
 
@@ -237,14 +238,14 @@ Worked examples and exercises
 
 Contents in brief:
 
-"Functor blocks" (Scala's `for`/`yield` syntax) and filterable functors
-Examples of polynomial filterable functors
-Intuitions behind the notion of "filtering" the data in a container
-Deriving the filterable functor laws from the intuitions
-Examples of functors that are not filterable, and reasons why
-Defining the `Filterable` type class and checking the laws with `scalacheck`
-Example of a filterable contrafunctor
-Worked examples and exercises
+- "Functor blocks" (Scala's `for`/`yield` syntax) and filterable functors
+- Examples of polynomial filterable functors
+- Intuitions behind the notion of "filtering" the data in a container
+- Deriving the filterable functor laws from the intuitions
+- Examples of functors that are not filterable, and reasons why
+- Defining the `Filterable` type class and checking the laws with `scalacheck`
+- Example of a filterable contrafunctor
+- Worked examples and exercises
 
 ## Chapter 6, part 2: Computations in a functor context I. Filterable functors, their laws and structure. Part 2. Filterable functors in depth
 
@@ -254,15 +255,15 @@ Worked examples and exercises
 
 Contents in brief:
 
-Equivalent definition of `Filterable` type class via `deflate` or `mapOption` instead of `withFilter`
-How to simplify the laws of filterable functors by using a Kleisli category
-Detailed derivations of laws for `mapOption`
-Intuitions behind natural transformations and naturality laws
-What category theory does for us, and what it does not do
-Constructions of filterable functors from other functors
-Intuitions behind filterable contrafunctors vs. filterable functors
-Fiilterable contrafunctors: their laws and structure (in brief)
-Worked examples and exercises
+- Equivalent definition of `Filterable` type class via `deflate` or `mapOption` instead of `withFilter`
+- How to simplify the laws of filterable functors by using a Kleisli category
+- Detailed derivations of laws for `mapOption`
+- Intuitions behind natural transformations and naturality laws
+- What category theory does for us, and what it does not do
+- Constructions of filterable functors from other functors
+- Intuitions behind filterable contrafunctors vs. filterable functors
+- Fiilterable contrafunctors: their laws and structure (in brief)
+- Worked examples and exercises
 
 # Roadmap
 
