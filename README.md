@@ -271,12 +271,14 @@ Contents in brief:
 
 # Roadmap
 
-I plan to cover the following further material:
+I plan tentatively to cover the following further material:
 
 - monads, applicative functors, traversable functors, foldable functors -- with full derivations and analysis of the laws
 - possibly, contrafunctors with similar properties
 - a general way of implementing and using "free" constructions (free monoid, free functor, free monad, free applicative etc.)
-- from the following list of functional programming concepts, those that appear to be useful in practice will be covered, others omitted:  catamorphisms and other "something-morphisms", comonads and co-applicatives, rigid functors, type-level and functor-level fixpoints, trampolines and monadic tail recursion, cofree comonads, lenses / prisms and other "optics", arrows, Kahn extensions, extensible effects ("types à la carte"), initial vs. final representations of data types ("final tagless" interpreters)
+- monad transformers, mtl, extensible effects ("types à la carte") - problems and solutions
+- various solutions of the "expression problem"
+- from the following list of functional programming concepts, those that appear to be useful in practice will be covered, others omitted:  catamorphisms and other "something-morphisms", comonads and co-applicatives, rigid functors, type-level and functor-level fixpoints, trampolines and monadic tail recursion, cofree comonads, lenses / prisms and other "optics", arrows, Kahn extensions, , initial vs. final representations of data types ("final tagless" interpreters)
 - interpretation of OO programming from the perspective of AFTT
 - design patterns of FP that replace OO design patterns
 - functional reactive programming
