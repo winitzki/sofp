@@ -46,6 +46,8 @@ Starting from chapter 4, the material becomes unsuitable for beginners.
 
 The tutorials are currently in development and are being uploaded to [this YouTube playlist](https://www.youtube.com/playlist?list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV) as they become ready.
 
+(This [Russian mirror](https://ruvideos.org/c/UCWpjX-z6_oNZhcHPzAAQy6g) that allows you to download the videos more easily.)
+
 See below for the summaries of the finished chapters.
 
 All sample code is available [on github here](https://github.com/winitzki/scala-examples/tree/master/).
