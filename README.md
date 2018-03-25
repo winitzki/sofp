@@ -275,6 +275,32 @@ Contents in brief:
 - Fiilterable contrafunctors: their laws and structure (in brief)
 - Worked examples and exercises
 
+## Chapter 7, part 1: Computations in a functor context II. Monads and semimonads. Part 1: Practical work with monads and semimonads
+
+[Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/07-monads-part1.pdf)
+
+[YouTube recording: slides + audio](https://www.youtube.com/watch?v=20PYTn_aUqE&index=12&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+
+Contents in brief:
+
+- Using "functor blocks" (`for`/`yield` syntax) for nested iteration
+- The difference between semimonads and monads
+- Visual explanation of how `flatMap` operates on sequences
+- Intuitions behind using several generator arrows with sequences
+- The different kinds of monads: list-like, pass/fail, tree-like, single-value
+- Examples of working with list-like monads: permutations, 8 queens, and other tasks
+- Using recursion in a functor block
+- Pass/fail monads: `Option`, `Either`, `Try`, `Future`
+- Examples of working with pass/fail monads to achieve safety and to sequence computations
+- How to make `Future`s parallel even though they are sequenced within a functor block
+- Examples of functor-shaped tree constructions
+- Visual explanation of how `flatMap` grafts subtrees on trees, and what "flattening" means for trees
+- Single-value monads: `Writer`, `Reader`, `Eval`, `Cont`, `State`; representing a "single value with context"
+- Using `Writer` as a semimonad, to keep track of elapsed time
+- Using the continuation monad to avoid "callback hell"
+- A systematic derivation of the `Writer`, `Reader`, `Cont`, `State` type constructors from the type signature of `flatMap`
+- Worked examples and exercises
+
 # Roadmap
 
 I plan tentatively to cover the following further material:
@@ -284,7 +310,7 @@ I plan tentatively to cover the following further material:
 - a general way of implementing and using "free" constructions (free monoid, free functor, free monad, free applicative etc.)
 - monad transformers, mtl, extensible effects ("types à la carte") - problems and solutions
 - various solutions of the "expression problem"
-- from the following list of functional programming concepts, those that appear to be useful in practice will be covered, others omitted: 
+- from the following list of functional programming concepts, those that appear to be useful in practice will be covered, others omitted:
     - catamorphisms and other "something-morphisms" (?)
     - comonads and co-applicative functors (?)
     - rigid functors (need better use cases for those) (?)
