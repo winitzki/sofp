@@ -4,10 +4,10 @@ This is a series of extensive tutorials on functional programming.
 
 The tutorials cover both the theory and the practice of functional programming.
 
-**Applied functional type theory** (AFTT) is what I call the subdomain of computer science that should serve the needs of functional programmers who are working as software engineers.
+**Applied functional type theory** (AFTT) is what I call the area of computer science that should serve the needs of functional programmers who are working as software engineers.
 
-It is these practitioners, rather than the academic researchers, who need to examine the incredible wealth of functional programming inventions over the last 30 years, -- such as these ["functional pearls" papers](https://wiki.haskell.org/Research_papers/Functional_pearls) -- and to determine which theoretical material has demonstrated its pragmatic usefulness and thus belongs to AFTT, and which material may be tentatively omitted.
-This tutorial series is therefore also an attempt to define the proper scope of AFTT.
+It is for these practitioners (I am one myself), rather than for academic researchers, that I set out to examine the incredible wealth of functional programming inventions over the last 30 years, -- such as these ["functional pearls" papers](https://wiki.haskell.org/Research_papers/Functional_pearls) -- and to determine which theoretical material has demonstrated its pragmatic usefulness and thus belongs to AFTT, and which material may be tentatively omitted.
+This tutorial series is therefore also my attempt to define the proper scope of AFTT.
 
 In the videos, I demonstrate code examples in Scala using the IntelliJ editor because this is what I am most familiar with.
 However, most of this material will work equally well in Haskell and some other FP languages.
@@ -29,15 +29,15 @@ Starting from chapter 4, the material becomes unsuitable for beginners.
 
 ## Main features and goals of this tutorial series
 
-- an emphasis on the mathematical principles that guide the practice of functional programming
 - the presentation is self-contained -- introduces and explains all required concepts and Scala features
 - an emphasis on clarity and understandability of all explanations, derivations, and code
     - some terminology and notations are non-standard -- this is in order to achieve a clearer and more logically coherent presentation of the material
-- all mathematical developments are thoroughly motivated by practical programming issues
+- an emphasis on the mathematical principles that guide the practice of functional programming
+- all mathematical developments are thoroughly motivated by practical programming issues:
+    - give examples showing how each mathematical construction is used in practice (i.e. for writing code)
     - avoid developing abstract theory for theory's sake
-    - examples must show how each mathematical construction is used in practice for writing code
-    - mathematical generalizations are not pursued beyond either practical usefulness or immediate pedagogical usefulness
-- each new concept or technique has sample code and unit tests to illustrate its usage and check correctness
+    - do not pursue mathematical generalizations beyond either practical usefulness or immediate pedagogical usefulness
+- each new concept or technique has sample code and passing unit tests to illustrate its usage and check correctness
     - currently the libraries `cats` and `scalacheck` are used throughout the sample code
 - each new concept or technique is fully explained via "worked examples" and drilled via provided exercises
     - answers to exercises are not provided, but it is verified that the exercises are doable and free of errors
@@ -46,13 +46,13 @@ Starting from chapter 4, the material becomes unsuitable for beginners.
 
 The tutorials are currently in development and are being uploaded to [this YouTube playlist](https://www.youtube.com/playlist?list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV) as they become ready.
 
-(This [Russian mirror](https://ruvideos.org/c/UCWpjX-z6_oNZhcHPzAAQy6g) that allows you to download the videos more easily.)
+See also this [Russian mirror](https://ruvideos.org/c/UCWpjX-z6_oNZhcHPzAAQy6g).
 
-See below for the summaries of the finished chapters.
+The table of contents and summaries of the finished chapters are given below.
 
-All sample code is available [on github here](https://github.com/winitzki/scala-examples/tree/master/).
+All sample code is available [on github here](https://github.com/winitzki/scala-examples/).
 
-The PDF slides often need minor corrections after recording the YouTube presentation.
+The PDF slides sometimes need minor corrections after recording the YouTube presentation.
 Please download the current versions of the PDF slides for your reference.
 
 It is generally advisable to take a look at the slides and the sample code first, before watching the video.
@@ -64,6 +64,8 @@ This can save you time since the videos are quite long and detailed.
 ## Chapter 1: Values, types, expressions, functions
 
 [Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/01-values-types-expressions.pdf)
+
+[Code examples](https://github.com/winitzki/scala-examples/tree/master/chapter01/src)
 
 [YouTube recording: slides + audio](https://www.youtube.com/watch?v=0Ld79Lnzx_o&index=1&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
@@ -80,6 +82,8 @@ Contents in brief:
 
 [Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/02-functional-collections.pdf)
 
+[Code examples](https://github.com/winitzki/scala-examples/tree/master/chapter02/src)
+
 [YouTube recording: slides + audio](https://www.youtube.com/watch?v=XFrWZ7QIE2s&index=2&t=7s&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
 Contents in brief:
@@ -95,6 +99,8 @@ Contents in brief:
 ## Chapter 3, part 1: The types of higher-order functions
 
 [Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/03-logic-of-types-1.pdf)
+
+[Code examples](https://github.com/winitzki/scala-examples/tree/master/chapter03/src)
 
 [YouTube recording: slides + audio](https://www.youtube.com/watch?v=Z_1s36ba4EY&index=3&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
@@ -114,6 +120,8 @@ Please use the exercises from the current version of the PDF slides.
 
 [Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/03-logic-of-types-2.pdf)
 
+[Code examples](https://github.com/winitzki/scala-examples/tree/master/chapter03/src)
+
 [YouTube recording: slides + audio](https://www.youtube.com/watch?v=MTViank6L24&index=4&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
 Contents in brief:
@@ -130,6 +138,8 @@ Contents in brief:
 ## Chapter 3, part 3: The Curry-Howard correspondence
 
 [Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/03-logic-of-types-3.pdf)
+
+[Code examples](https://github.com/winitzki/scala-examples/tree/master/chapter03/src)
 
 [YouTube recording: slides + audio](https://www.youtube.com/watch?v=sSDGjdfFQ-Y&index=5&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
@@ -166,7 +176,7 @@ Contents in brief:
 - How the theorem prover works: the calculus LJ of Gentzen and the calculus LJT of Vorobieff-Hudelmaier-Dyckhoff
 - How to interpret the derivation rules for sequents
 - Building the lambda-calculus proof term from the proof tree
-- The "obvious" theorem of Vorobieff
+- The "obvious" lemma of Vorobieff
 
 The `curryhoward` library is open-source and available at [this git repository](https://github.com/Chymyst/curryhoward)
 
@@ -193,7 +203,7 @@ Contents in brief:
 - Examples that contrast the IPL with the classical Boolean logic
 - Example of using Gentzen's calculus LJ to search for a proof
 - The advantage of the Vorobieff-Hudelmaier-Dyckhoff's calculus LJT over Gentzen's calculus LJ, and why people are using LJT for proof search
-- Example of what mathematicians mean when they say "it is trivial"
+- Example of what mathematicians mean when they say "it is trivial": Vorobieff's lemma
 - How to transform proofs back to code: proof transformer functions that correspond to derivation rules in LJ/LJT
 - Example of deriving code automatically from a proof of a sequent
 - How to use the "arithmetical Curry-Howard correspondence" to decide which types are equivalent
@@ -205,6 +215,8 @@ Contents in brief:
 ## Chapter 4: Functors: their laws and structure
 
 [Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/04-functors.pdf)
+
+[Code examples](https://github.com/winitzki/scala-examples/tree/master/chapter04/src)
 
 [YouTube recording: slides + audio](https://www.youtube.com/watch?v=OGut2iZW0JU&index=8&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
@@ -223,6 +235,8 @@ Contents in brief:
 ## Chapter 5: Type-level functions and type classes
 
 [Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/05-type-classes.pdf)
+
+[Code examples](https://github.com/winitzki/scala-examples/tree/master/chapter05/src)
 
 [YouTube recording: slides + audio](https://www.youtube.com/watch?v=QhqsBgJ8lm8&index=9&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
@@ -244,11 +258,13 @@ Contents in brief:
 
 [Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/06-filterable-functors.pdf) (Part 1 covers only slides 1 to 8.)
 
+[Code examples](https://github.com/winitzki/scala-examples/tree/master/chapter06/src)
+
 [YouTube recording: slides + audio](https://www.youtube.com/watch?v=20PYTn_aUqE&index=10&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
 Contents in brief:
 
-- "Functor blocks" (Scala's `for`/`yield` syntax) and filterable functors
+- "Functor block" (Scala's `for`/`yield` syntax) and filterable functors
 - Examples of polynomial filterable functors
 - Intuitions behind the notion of "filtering" the data in a container
 - Deriving the filterable functor laws from the intuitions
@@ -260,6 +276,8 @@ Contents in brief:
 ## Chapter 6, part 2: Computations in a functor context I. Filterable functors, their laws and structure. Part 2. Filterable functors in depth
 
 [Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/06-filterable-functors.pdf) (Part 2 covers only slides 9 to end.)
+
+[Code examples](https://github.com/winitzki/scala-examples/tree/master/chapter06/src)
 
 [YouTube recording: slides + audio](https://www.youtube.com/watch?v=GO4qq5_v1o0&index=11&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
@@ -279,24 +297,26 @@ Contents in brief:
 
 [Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/07-monads-part1.pdf)
 
-[YouTube recording: slides + audio](https://www.youtube.com/watch?v=20PYTn_aUqE&index=12&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+[Code examples](https://github.com/winitzki/scala-examples/tree/master/chapter07/src)
+
+[YouTube recording: slides + audio](https://www.youtube.com/watch?v=3hzb0frNI48&index=12&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
 Contents in brief:
 
-- Using "functor blocks" (`for`/`yield` syntax) for nested iteration
+- Using "functor blocks" (Scala's `for`/`yield` syntax) for nested iteration
 - The difference between semimonads and monads
 - Visual explanation of how `flatMap` operates on sequences
 - Intuitions behind using several generator arrows with sequences
-- The different kinds of monads: list-like, pass/fail, tree-like, single-value
-- Examples of working with list-like monads: permutations, 8 queens, and other tasks
-- Using recursion in a functor block
-- Pass/fail monads: `Option`, `Either`, `Try`, `Future`
+- Overview of the different kinds of monads: list-like, pass/fail, tree-like, single-value
+- Examples of working with list-like monads: permutations, 8 queens, Boolean algebra calculations
+- Using (non-tail) recursion in a functor block
+- Overview of pass/fail monads: `Option`, `Either`, `Try`, `Future`
 - Examples of working with pass/fail monads to achieve safety and to sequence computations
 - How to make `Future`s parallel even though they are sequenced within a functor block
 - Examples of functor-shaped tree constructions
 - Visual explanation of how `flatMap` grafts subtrees on trees, and what "flattening" means for trees
-- Single-value monads: `Writer`, `Reader`, `Eval`, `Cont`, `State`; representing a "single value with context"
-- Using `Writer` as a semimonad, to keep track of elapsed time
+- Single-value monads: `Writer`, `Reader`, `Eval`, `Cont`, `State`, understood as representing a "single value with context"
+- Practical example: Using `Writer` as a semimonad, based on a semigroup
 - Using the continuation monad to avoid "callback hell"
 - A systematic derivation of the `Writer`, `Reader`, `Cont`, `State` type constructors from the type signature of `flatMap`
 - Worked examples and exercises
@@ -308,7 +328,7 @@ I plan tentatively to cover the following further material:
 - semimonads, monads, zippable / applicative functors, traversable functors, foldable functors -- with full derivations and analysis of the laws
 - possibly, contrafunctors with similar properties
 - a general way of implementing and using "free" constructions (free monoid, free functor, free monad, free applicative etc.)
-- monad transformers, mtl, extensible effects ("types à la carte") - problems and solutions
+- monad transformers, mtl (?), extensible effects ("types à la carte") - problems and solutions
 - various solutions of the "expression problem"
 - from the following list of functional programming concepts, those that appear to be useful in practice will be covered, others omitted:
     - catamorphisms and other "something-morphisms" (?)
