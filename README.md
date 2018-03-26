@@ -165,7 +165,7 @@ This optional Addendum to Chapter 3 presents an open-source library `curryhoward
 
 Abstract:
 
-- I implemented a library for compile-time code generation from Scala type signatures. The library uses (compile-time) reflection, the Curry-Howard correspondence, and a theorem prover for the constructive propositional logic. Using this library, I illustrate how the Curry-Howard correspondence maps types into propositions and proofs into code. I will also explain some details of the algorithm I used for automatic code generation from type signatures. As an illustration of using this library for automatic code generation, I demonstrate working examples such as implementing map and flatMap for the Reader and State monads.
+- I implemented a library for compile-time code generation from Scala type signatures. The library uses (compile-time) reflection, the Curry-Howard correspondence, and a theorem prover for the constructive propositional logic. Using this library, I illustrate how the Curry-Howard correspondence maps types into propositions and proofs into code. I will also explain some details of the algorithm I used for automatic code generation from type signatures. As an illustration of using this library for automatic code generation, I demonstrate working examples such as implementing `map` and `flatMap` for the Reader and State monads.
 
 Contents in brief:
 
@@ -178,7 +178,7 @@ Contents in brief:
 - Building the lambda-calculus proof term from the proof tree
 - The "obvious" lemma of Vorobieff
 
-The `curryhoward` library is open-source and available at [this git repository](https://github.com/Chymyst/curryhoward)
+The `curryhoward` library is open-source and available at [this git repository](https://github.com/Chymyst/curryhoward).
 
 ## Chapter 3, addendum 2: A pedagogical introduction to Curry-Howard correspondence and its applications, for programmers
 
@@ -254,9 +254,9 @@ Contents in brief:
 - Using the `scalacheck` library to verify type class laws
 - Worked examples and exercises
 
-## Chapter 6, part 1: Computations in a functor context I. Filterable functors, their laws and structure. Part 1. Examples. Working with filterable functors
+## Chapter 6: Computations in a functor context I. Filterable functors, their laws and structure. Part 1: Examples. Working with filterable functors
 
-[Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/06-filterable-functors.pdf) (Part 1 covers only slides 1 to 8.)
+[Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/06-filterable-functors.pdf) (Part 1 covers slides 1 to 8.)
 
 [Code examples](https://github.com/winitzki/scala-examples/tree/master/chapter06/src)
 
@@ -273,9 +273,9 @@ Contents in brief:
 - Example of a filterable contrafunctor
 - Worked examples and exercises
 
-## Chapter 6, part 2: Computations in a functor context I. Filterable functors, their laws and structure. Part 2. Filterable functors in depth
+## Chapter 6: Computations in a functor context I. Filterable functors, their laws and structure. Part 2: Filterable functors in depth
 
-[Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/06-filterable-functors.pdf) (Part 2 covers only slides 9 to end.)
+[Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/06-filterable-functors.pdf) (Part 2 covers slides 9 to end.)
 
 [Code examples](https://github.com/winitzki/scala-examples/tree/master/chapter06/src)
 
@@ -293,7 +293,7 @@ Contents in brief:
 - Fiilterable contrafunctors: their laws and structure (in brief)
 - Worked examples and exercises
 
-## Chapter 7, part 1: Computations in a functor context II. Monads and semimonads. Part 1: Practical work with monads and semimonads
+## Chapter 7: Computations in a functor context II. Monads and semimonads. Part 1: Examples. Practical work with monads and semimonads
 
 [Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/07-monads-part1.pdf)
 
