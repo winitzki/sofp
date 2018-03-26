@@ -293,7 +293,7 @@ Contents in brief:
 - Fiilterable contrafunctors: their laws and structure (in brief)
 - Worked examples and exercises
 
-## Chapter 7: Computations in a functor context II. Monads and semimonads. Part 1: Examples. Practical work with monads and semimonads
+## Chapter 7: Computations in a functor context II. Monads and semimonads. Part 1: Intuitions, examples, use cases
 
 [Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/07-monads-part1.pdf)
 
