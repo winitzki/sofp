@@ -321,6 +321,8 @@ Contents in brief:
 - A systematic derivation of the `Writer`, `Reader`, `Cont`, `State` type constructors from the type signature of `flatMap`
 - Worked examples and exercises
 
+There was an error in the presentation: The power-of-2 tree _can_ be represented as a recursive type constructor, contrary to what I said. (But it is not naturally monadic in the way other tree-like monads are.) Download the latest slides for the corrected text.
+
 # Roadmap
 
 I plan tentatively to cover the following further material:
