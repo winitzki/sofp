@@ -4,10 +4,38 @@ This is a series of extensive tutorials on functional programming.
 
 The tutorials cover both the theory and the practice of functional programming.
 
+## Scope of this tutorial
+
 **Applied functional type theory** (AFTT) is what I call the area of computer science that should serve the needs of functional programmers who are working as software engineers.
 
 It is for these practitioners (I am one myself), rather than for academic researchers, that I set out to examine the incredible wealth of functional programming inventions over the last 30 years, -- such as these ["functional pearls" papers](https://wiki.haskell.org/Research_papers/Functional_pearls) -- and to determine which theoretical material has demonstrated its pragmatic usefulness and thus belongs to AFTT, and which material may be tentatively omitted.
-This tutorial series is therefore also my attempt to define the proper scope of AFTT.
+
+What exactly is the extent of "theory" that a practicing functional programmer should know in order to be effective at writing code?
+In my view, this question is not yet resolved.
+
+AFTT is a mixture of category theory, formal logic, type theory, and programming language design.
+However, software engineers would not derive much benefit from following traditional academic courses in these subjects, because their choice of material is at once too theoretical and yet lacking specific results relevant to software engineering.
+
+Existing literature tends to be either too abstract or too narrowly practical.
+
+For example, there are now several books intended as presentations of category theory "for computer science" or even "for programmers".
+However, all these books without exception will fail to give examples vitally relevant to everyday programming, but instead emphasize purely theoretical topics such as limits, co-limits, or toposes, with no applications in sight.
+At the same time, a software engineer hoping to understand the foundations of functional programming will find no mention of traversable, foldable, filterable, or applicative functors in books on category theory at any level.
+And yet, these concepts formalize such foundationally important operations as `traverse`, `fold`, `filter`, or `zip` -- operations that functional programmers use every day in their code.
+
+Similarly, books on type theory and formal logic present quite a few intricacies of domain theory and proof theory -- which is a lot of information that practicing programmers will have difficulty assimilating and yet will have no hope of ever applying in their daily work.
+At the same time, these books never mention practical techniques used in many functional programming libraries today, such as higher-order type functions, quantified types, or types parameterized by type constructors.
+These books also do not give practical criteria for deciding type isomorphisms or for detecting valid and invalid recursive types, and do not give algorithms for deriving code from types.
+I give these practical tasks as examples because they are perhaps the only real-world-coding applications of the Curry-Howard correspondence theory, besides programming language design.
+
+On the other hand, books like ["Scala with Cats"](https://underscore.io/books/scala-with-cats/) and ["Functional programming, simplified"](https://alvinalexander.com/scala/functional-programming-simplified-book) are focused on explaining the practical aspects of programming and do not discuss the algebraic laws that support the mathematical structures such as applicative or monadic functors.
+
+The only existing AFTT book aiming at the proper scope is the [Bjarnason-Chiusano book](https://www.manning.com/books/functional-programming-in-scala), which balances practical considerations with theoretical developments such as algebraic laws.
+
+This tutorial series is therefore also my attempt to delineate the proper scope of AFTT and to develop a rigorous yet clear and approachable presentation of the chosen material.
+Eventually I will convert this tutorial into a new AFTT textbook aimed at practicing functional programmers.
+
+### Choice of the programming language
 
 In the videos, I demonstrate code examples in Scala using the IntelliJ editor because this is what I am most familiar with.
 However, most of this material will work equally well in Haskell and some other FP languages.
@@ -52,7 +80,7 @@ The table of contents and summaries of the finished chapters are given below.
 
 All sample code is available [on github here](https://github.com/winitzki/scala-examples/).
 
-The PDF slides sometimes need minor corrections after recording the YouTube presentation.
+The PDF slides sometimes need minor corrections after recording the YouTube presentations.
 Please download the current versions of the PDF slides for your reference.
 
 It is generally advisable to take a look at the slides and the sample code first, before watching the video.
@@ -76,7 +104,7 @@ Contents in brief:
 - Examples of collections, `map`, `filter`, `sum`, etc.
 - Higher-order functions
 - How to translate mathematical formulas into Scala code
-- Examples and exercises
+- Worked examples and exercises
 
 ## Chapter 2: The functional approach to collections in Scala
 
@@ -113,7 +141,7 @@ Contents in brief:
 - How to infer the most generic (parametric) types for higher-order functions
 - Worked examples and exercises
 
-**Note**: There was an error in the last exercise as shown in the video - it had no solution.
+**Note**: There was an error in the last exercise as shown in the video -- it had no solution.
 Please use the exercises from the current version of the PDF slides.
 
 ## Chapter 3, part 2: Disjunction types
