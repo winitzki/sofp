@@ -24,9 +24,9 @@ At the same time, a software engineer hoping to understand the foundations of fu
 And yet, these concepts are necessary to formalize such foundationally important operations as `fold`, `filter`, `zip`, and `traverse` -- operations that functional programmers use every day in their code.
 
 Similarly, books on type theory and formal logic present quite a few intricacies of domain theory and proof theory -- which is a lot of information that practicing programmers will have difficulty assimilating and yet will have no hope of ever applying in their daily work.
-At the same time, these books never mention practical techniques used in many functional programming libraries today, such as higher-order type functions, quantified types, or types parameterized by type constructors.
-These books also do not give practical criteria for deciding type isomorphisms or for detecting valid and invalid recursive types, and do not give algorithms for deriving code from types.
-I give these practical tasks as examples because they are perhaps the only real-world-coding applications of the Curry-Howard correspondence theory, besides programming language design.
+At the same time, these books never mention practical techniques used in many functional programming libraries today, such as quantified types, types parameterized by type constructors, or partial type-level functions (known as "type classes").
+These books also do not give practical criteria for deciding type isomorphisms or for detecting valid and invalid recursive values, and do not give algorithms for deriving code from logic proofs.
+I give these practical tasks as examples because they are perhaps the only real-world-coding applications of domain theory and the Curry-Howard correspondence theory, besides programming language design.
 
 On the other hand, books like ["Scala with Cats"](https://underscore.io/books/scala-with-cats/) and ["Functional programming, simplified"](https://alvinalexander.com/scala/functional-programming-simplified-book) are focused on explaining the practical aspects of programming and do not discuss the algebraic laws that support the mathematical structures such as applicative or monadic functors.
 
