@@ -12,12 +12,23 @@ It is for these practitioners (I am one myself), rather than for academic resear
 
 What exactly is the extent of "theory" that a practicing functional programmer should know in order to be effective at writing code?
 In my view, this question is not yet resolved.
+Once it is resolved, AFTT will be that theory.
 
-AFTT is a mixture of category theory, formal logic, type theory, and programming language design.
+Traditional courses of theoretical computer science (algorithms, formal languages, semantics, compilers, etc.) are largely not relevant to AFTT.
+
+Here is an example: To an academic computer scientist, the "theory behind Haskell" is lambda-calculus and formal semantics.
+These theories helped to design the Haskell language itself, and also "explain" rigorously what Haskell programs do.
+However, a practicing programmer is normally concerned with _using_ a chosen programming language, not with designing it or proving general properties of that language.
+For this reason, neither the theory of lambda-calculus nor models of formal semantics will help a programmer to write programs.
+So these theories are not within the scope of AFTT.
+
+As an example of theoretical matherial that _is_ within the scope of AFTT, consider the equational laws imposed on applicative functors.
+If a programmer wants to use an applicative functor to, say, specify declaratively a set of operations that do not depend on each other, the programmer can begin by designing a data structure that satisfies the laws of applicative functors. The data structure may need to be adjusted in order to fit the definition of an applicative functor. Once this is verified, the programmer proceeds to write code. In this way, theory directly informs the programmer about how to write code.
+
+So far it appears that AFTT should be a mixture of category theory, formal logic, and type theory.
 However, software engineers would not derive much benefit from following traditional academic courses in these subjects, because their choice of material is at once too theoretical and yet lacking specific results relevant to software engineering.
 
-Existing literature tends to be either too abstract or too narrowly practical.
-
+Existing literature on these topics tends to be either too abstract or too narrowly practical.
 For example, there are now several books intended as presentations of category theory "for computer science" or even "for programmers".
 However, all these books without exception will fail to give examples vitally relevant to everyday programming, but instead emphasize purely theoretical topics such as limits, co-limits, or toposes, with no applications in sight.
 At the same time, a software engineer hoping to understand the foundations of functional programming will find no mention of the concepts of foldable, filterable, applicative, or traversable functors in any books on category theory, including books intended for programmers.
