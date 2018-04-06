@@ -20,8 +20,8 @@ Existing literature tends to be either too abstract or too narrowly practical.
 
 For example, there are now several books intended as presentations of category theory "for computer science" or even "for programmers".
 However, all these books without exception will fail to give examples vitally relevant to everyday programming, but instead emphasize purely theoretical topics such as limits, co-limits, or toposes, with no applications in sight.
-At the same time, a software engineer hoping to understand the foundations of functional programming will find no mention of traversable, foldable, filterable, or applicative functors in books on category theory at any level.
-And yet, these concepts formalize such foundationally important operations as `traverse`, `fold`, `filter`, or `zip` -- operations that functional programmers use every day in their code.
+At the same time, a software engineer hoping to understand the foundations of functional programming will find no mention of the concepts of foldable, filterable, applicative, or traversable functors in any books on category theory, including books intended for programmers.
+And yet, these concepts are necessary to formalize such foundationally important operations as `fold`, `filter`, `zip`, and `traverse` -- operations that functional programmers use every day in their code.
 
 Similarly, books on type theory and formal logic present quite a few intricacies of domain theory and proof theory -- which is a lot of information that practicing programmers will have difficulty assimilating and yet will have no hope of ever applying in their daily work.
 At the same time, these books never mention practical techniques used in many functional programming libraries today, such as higher-order type functions, quantified types, or types parameterized by type constructors.
@@ -30,7 +30,8 @@ I give these practical tasks as examples because they are perhaps the only real-
 
 On the other hand, books like ["Scala with Cats"](https://underscore.io/books/scala-with-cats/) and ["Functional programming, simplified"](https://alvinalexander.com/scala/functional-programming-simplified-book) are focused on explaining the practical aspects of programming and do not discuss the algebraic laws that support the mathematical structures such as applicative or monadic functors.
 
-The only existing AFTT book aiming at the proper scope is the [Bjarnason-Chiusano book](https://www.manning.com/books/functional-programming-in-scala), which balances practical considerations with theoretical developments such as algebraic laws.
+The only existing text aiming at the proper scope is the [Bjarnason-Chiusano book](https://www.manning.com/books/functional-programming-in-scala), which balances practical considerations with theoretical developments such as algebraic laws.
+I intend to continue at about the same level but dig deeper into the foundations and at the same time give a wider range of examples.
 
 This tutorial series is therefore also my attempt to delineate the proper scope of AFTT and to develop a rigorous yet clear and approachable presentation of the chosen material.
 Eventually I will convert this tutorial into a new AFTT textbook aimed at practicing functional programmers.
