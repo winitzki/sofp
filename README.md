@@ -383,6 +383,7 @@ Contents in brief:
 - Motivation for full monads and laws for the `pure` method
 - Deriving the laws for `pure` in terms of `flatten`
 - Reformulating the monad laws in terms of Kleisli functions
+- A simplified definition of "category" and "morphism"
 - How category theory provides a conceptual generalization of "lifting"
 - Deriving the laws of `pure`, `flatten`, and `flatMap` from the laws of Kleisli category
 - Structure of semigroups and monoids: how to build up semigroups and monoids from parts
