@@ -389,7 +389,7 @@ Contents in brief:
 - Structure of semimonads and monads: building up new monads from previously given monads and functors
 - Worked examples with full derivations of laws for most of the constructions
 - Why certain constructions can be only semimonads but not full monads
-- Exercises, with examples and counter-examples of monads
+- Exercises, with examples and counter-examples of semimonads and monads
 
 # Roadmap
 
