@@ -363,6 +363,34 @@ Contents in brief:
 
 There was an error in the presentation: The power-of-2 tree _can_ be represented as a recursive type constructor, contrary to what I said. (But it is not naturally monadic in the way other tree-like monads are.) Download the latest slides for the corrected text.
 
+## Chapter 7: Computations in a functor context II. Monads and semimonads. Part 2: Laws and structure of monads
+
+[Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/07-monads-part2.pdf)
+
+[Code examples](https://github.com/winitzki/scala-examples/tree/master/chapter07/src)
+
+[YouTube recording: slides + audio](https://www.youtube.com/watch?v=p0fH_adTCnQ&index=13&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+
+Contents in brief:
+
+- How to derive the laws for flatMap from our intuitions about functor block computations
+- Deriving the laws for flatten from the laws for flatMap
+- Why flatten is equivalent to flatMap, and what it means to be "equivalent"
+- Why flatten has one law fewer than flatMap
+- How parametricity assures naturality laws
+- Worked examples showing how to verify the associativity law for all standard monads
+- Examples of incorrect implementation of flatten that violates the associativity law
+- Motivation for full monads and laws for the `pure` method
+- Deriving the laws for `pure` in terms of `flatten`
+- Reformulating the monad laws in terms of Kleisli functions
+- How category theory provides a conceptual generalization of "lifting"
+- Deriving the laws of `pure`, `flatten`, and `flatMap` from the laws of Kleisli category
+- Structure of semigroups and monoids: how to build up semigroups and monoids from parts
+- Structure of semimonads and monads: building up new monads from previously given monads and functors
+- Worked examples with full derivations of laws for most of the constructions
+- Why certain constructions can be only semimonads but not full monads
+- Exercises, with examples and counter-examples of monads
+
 # Roadmap
 
 I plan tentatively to cover the following further material:
