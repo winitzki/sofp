@@ -387,9 +387,10 @@ Contents in brief:
 - How category theory provides a conceptual generalization of "lifting"
 - Deriving the laws of `pure`, `flatten`, and `flatMap` from the laws of Kleisli category
 - Structure of semigroups and monoids: how to build up semigroups and monoids from parts
-- Structure of semimonads and monads: building up new monads from previously given monads and functors
+- Structure of semimonads and monads: building up new monads from previously given monads, functors, and contrafunctors
 - Worked examples with full derivations of laws for most of the constructions
 - Why certain constructions can be only semimonads but not full monads
+- Why there cannot be a contravariant monad
 - Exercises, with examples and counter-examples of semimonads and monads
 
 # Roadmap
