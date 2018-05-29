@@ -397,16 +397,16 @@ Contents in brief:
 
 I plan tentatively to cover the following further material:
 
-- semimonads, monads, zippable / applicative functors, traversable functors, foldable functors -- with full derivations and analysis of the laws
-- possibly, contrafunctors with similar properties
+- zippable / applicative functors, traversable functors, foldable functors -- with full derivations and analysis of the laws
+- when applicable, contrafunctors with similar properties
 - a general way of implementing and using "free" constructions (free monoid, free functor, free monad, free applicative etc.)
 - monad transformers, mtl (?), extensible effects ("types à la carte") - problems and solutions
-- various solutions of the "expression problem"
+- various solutions for the "expression problem"
 - from the following list of functional programming concepts, those that appear to be useful in practice will be covered, others omitted:
     - catamorphisms and other "something-morphisms" (?)
     - comonads and co-applicative functors (?)
     - rigid functors (need better use cases for those) (?)
-    - type-level and functor-level fixpoints; `matryoshka`
+    - type-level and functor-level fixpoints; `matryoshka`; recursion schemes; recursive types; when is a recursive type well-defined
     - trampolines in the standard library; monadic tail recursion
     - cofree comonads (?)
     - continuations library and "shift/reset programming" (?)
@@ -414,8 +414,8 @@ I plan tentatively to cover the following further material:
     - lenses / prisms and other "optics"
     - arrows and their relationship to functions (?)
     - Kahn extensions, "codensity", other second-order tricks (?)
-    - initial vs. final representations of data types ("final tagless" interpreters)
-    - type-level constructions, basics of dependent types
+- initial vs. final representations of data types ("final tagless" interpreters)
+- type-level constructions, basics of dependent types
 - interpretation of OO programming from the perspective of AFTT
 - design patterns of FP that replace OO design patterns
 - functional reactive programming, temporal logic, and UIs
