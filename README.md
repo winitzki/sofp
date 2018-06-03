@@ -1,14 +1,19 @@
-# Applied functional type theory: A tutorial on functional programming
+# Applied functional type theory: The science of functional programming
 
 This is a series of extensive tutorials on functional programming.
 
-The tutorials cover both the theory and the practice of functional programming.
+The tutorials cover both the theory and the practice of functional programming,
+from the perspective of building theoretical foundations that are valuable to practitioners.
 
 ## Scope of this tutorial
 
 **Applied functional type theory** (AFTT) is what I call the area of computer science that should serve the needs of functional programmers who are working as software engineers.
 
-It is for these practitioners (I am one myself), rather than for academic researchers, that I set out to examine the incredible wealth of functional programming inventions over the last 30 years, -- such as these ["functional pearls" papers](https://wiki.haskell.org/Research_papers/Functional_pearls) -- and to determine which theoretical material has demonstrated its pragmatic usefulness and thus belongs to AFTT, and which material may be tentatively omitted.
+It is for these practitioners (I am one myself), rather than for academic researchers,
+that I set out to examine the incredible wealth of functional programming inventions over the last 30 years,
+-- such as these ["functional pearls" papers](https://wiki.haskell.org/Research_papers/Functional_pearls)
+-- and to determine the scope of theoretical material that has demonstrated its pragmatic usefulness and thus belongs to AFTT,
+as opposed to material that is purely academic and may be tentatively omitted.
 
 What exactly is the extent of "theory" that a practicing functional programmer should know in order to be effective at writing code?
 In my view, this question is not yet resolved.
@@ -18,39 +23,55 @@ Traditional courses of theoretical computer science (algorithms, formal language
 
 Here is an example: To an academic computer scientist, the "theory behind Haskell" is lambda-calculus and formal semantics.
 These theories helped to design the Haskell language itself, and also "explain" rigorously what Haskell programs do.
-However, a practicing programmer is normally concerned with _using_ a chosen programming language, not with designing it or proving general properties of that language.
+However, a practicing programmer is normally concerned with _using_ a chosen programming language, not with designing it or with proving general theoretical properties of that language.
 For this reason, neither the theory of lambda-calculus nor models of formal semantics will help a programmer to write programs.
 So these theories are not within the scope of AFTT.
 
 As an example of theoretical matherial that _is_ within the scope of AFTT, consider the equational laws imposed on applicative functors.
-If a programmer wants to use an applicative functor to, say, specify declaratively a set of operations that do not depend on each other, the programmer can begin by designing a data structure that satisfies the laws of applicative functors. The data structure may need to be adjusted in order to fit the definition of an applicative functor. Once this is verified, the programmer proceeds to write code. In this way, theory directly informs the programmer about how to write code.
+If a programmer wants to use an applicative functor to, say, specify declaratively a set of operations that do not depend on each other,
+the programmer can begin by designing a data structure that satisfies the laws of applicative functors.
+The programmer first writes down the types of data in that data structure and then checks whether the laws hold.
+The data structure may need to be adjusted in order to fit the definition of an applicative functor or its laws.
+Once this is verified, the programmer proceeds to write code.
+In this way, theory directly informs the programmer about how to write code.
 
-So far it appears that AFTT should be a mixture of category theory, formal logic, and type theory.
-However, software engineers would not derive much benefit from following traditional academic courses in these subjects, because their choice of material is at once too theoretical and yet lacking specific results relevant to software engineering.
+So far it appears that AFTT should be a mixture of certain areas of category theory, formal logic, and type theory.
+However, software engineers would not derive much benefit from following traditional academic courses in these subjects,
+because their choice of material is too theoretical and lacks specific results necessary for practical software engineering.
+In other words, the traditional academic courses answer questions that academic computer scientists have, not questions that software engineers have.
 
-Existing literature on these topics tends to be either too abstract or too narrowly practical.
+Existing literature on these theoretical topics tends to be too abstract.
 For example, there are now several books intended as presentations of category theory "for computer science" or even "for programmers".
 However, all these books without exception will fail to give examples vitally relevant to everyday programming, but instead emphasize purely theoretical topics such as limits, co-limits, or toposes, with no applications in sight.
 At the same time, a software engineer hoping to understand the foundations of functional programming will find no mention of the concepts of foldable, filterable, applicative, or traversable functors in any books on category theory, including books intended for programmers.
 And yet, these concepts are necessary to formalize such foundationally important operations as `fold`, `filter`, `zip`, and `traverse` -- operations that functional programmers use every day in their code.
 
-Similarly, books on type theory and formal logic present quite a few intricacies of domain theory and proof theory -- which is a lot of information that practicing programmers will have difficulty assimilating and yet will have no hope of ever applying in their daily work.
-At the same time, these books never mention practical techniques used in many functional programming libraries today, such as quantified types, types parameterized by type constructors, or partial type-level functions (known as "type classes").
+For this reason, programmers have written many online tutorials for each other, trying to explain these concepts.
+There are the infamous "monad tutorials", but also tutorials about applicative functors, traversable functors, and so on.
+These tutorials tend to be very hands-on and narrow in scope, limited to one or two specific questions and specific applications.
+Such tutorials usually do not present a sufficiently broad picture and do not illustrate deeper connections between these mathematical constructions.
+
+Similarly, books on type theory and formal logic present quite a few intricacies of domain theory and proof theory
+-- which is a lot of information that practicing programmers will have difficulty assimilating and yet will have no hope of ever applying in their daily work.
+At the same time, these books never mention practical techniques used in many functional programming libraries today,
+such as quantified types, types parameterized by type constructors, or partial type-level functions (known as "type classes").
+
 These books also do not give practical criteria for deciding type isomorphisms or for detecting valid and invalid recursive values, and do not give algorithms for deriving code from logic proofs.
-I give these practical tasks as examples because they are perhaps the only real-world-coding applications of domain theory and the Curry-Howard correspondence theory, besides programming language design.
+I mention these practical tasks as examples because they are perhaps the only real-world-coding applications of domain theory and the Curry-Howard correspondence theory, besides programming language design.
 
-On the other hand, books like ["Scala with Cats"](https://underscore.io/books/scala-with-cats/) and ["Functional programming, simplified"](https://alvinalexander.com/scala/functional-programming-simplified-book) are focused on explaining the practical aspects of programming and do not discuss the algebraic laws that support the mathematical structures such as applicative or monadic functors.
+On the other hand, books like ["Scala with Cats"](https://underscore.io/books/scala-with-cats/) and ["Functional programming, simplified"](https://alvinalexander.com/scala/functional-programming-simplified-book) are focused on explaining the practical aspects
+of programming and do not discuss the algebraic laws that support the mathematical structures such as applicative or monadic functors.
 
-The only existing text aiming at the proper scope is the [Bjarnason-Chiusano book](https://www.manning.com/books/functional-programming-in-scala), which balances practical considerations with theoretical developments such as algebraic laws.
+The only existing AFTT textbook aiming at the proper scope is the [Bjarnason-Chiusano book](https://www.manning.com/books/functional-programming-in-scala), which balances practical considerations with theoretical developments such as algebraic laws.
 I intend to continue at about the same level but dig deeper into the foundations and at the same time give a wider range of examples.
 
-This tutorial series is therefore also my attempt to delineate the proper scope of AFTT and to develop a rigorous yet clear and approachable presentation of the chosen material.
+This tutorial series is therefore my attempt to delineate the proper scope of AFTT and to develop a rigorous yet clear and approachable presentation of the chosen material.
 Eventually I will convert this tutorial into a new AFTT textbook aimed at practicing functional programmers.
 
 ### Choice of the programming language
 
 In the videos, I demonstrate code examples in Scala using the IntelliJ editor because this is what I am most familiar with.
-However, most of this material will work equally well in Haskell and some other FP languages.
+However, most of this material will work equally well in Haskell, OCaml, and other FP languages.
 This is so because AFTT is not specific to Scala or Haskell, -- a serious user of any other functional programming language will have to face the same questions and struggle with the same practical issues.
 
 ## Uncopyright
@@ -69,16 +90,17 @@ Starting from chapter 4, the material becomes unsuitable for beginners.
 
 ## Main features and goals of this tutorial series
 
-- the presentation is self-contained -- introduces and explains all required concepts and Scala features
+- the presentation is self-contained -- introduces and explains all required concepts and Scala language features
 - an emphasis on clarity and understandability of all explanations, derivations, and code
     - some terminology and notations are non-standard -- this is in order to achieve a clearer and more logically coherent presentation of the material
 - an emphasis on the mathematical principles that guide the practice of functional programming
 - all mathematical developments are thoroughly motivated by practical programming issues:
-    - give examples showing how each mathematical construction is used in practice (i.e. for writing code)
-    - avoid developing abstract theory for theory's sake
-    - do not pursue mathematical generalizations beyond either practical usefulness or immediate pedagogical usefulness
+    - theory is developed only in order to answer specific questions that arise in programming
+    - examples show how each mathematical construction is used for writing code
+    - no developing of abstract theory for theory's sake, without having code written as a result, and without answering a question arising from practical coding
+    - mathematical generalizations are not pursued beyond either practical usefulness or immediate pedagogical usefulness
 - each new concept or technique has sample code and passing unit tests to illustrate its usage and check correctness
-    - currently the libraries `cats` and `scalacheck` are used throughout the sample code
+    - currently the libraries `curryhoward`, `cats`, and `scalacheck` are used throughout the sample code
 - each new concept or technique is fully explained via "worked examples" and drilled via provided exercises
     - answers to exercises are not provided, but it is verified that the exercises are doable and free of errors
 
@@ -86,7 +108,7 @@ Starting from chapter 4, the material becomes unsuitable for beginners.
 
 The tutorials are currently in development and are being uploaded to [this YouTube playlist](https://www.youtube.com/playlist?list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV) as they become ready.
 
-See also this [Russian mirror](https://ruvideos.org/c/UCWpjX-z6_oNZhcHPzAAQy6g).
+See also this [Russian mirror](https://ruvideos.org/c/UCWpjX-z6_oNZhcHPzAAQy6g) and [Bitchute mirror](https://www.bitchute.com/channel/fttfp/).
 
 The table of contents and summaries of the finished chapters are given below.
 
@@ -170,7 +192,7 @@ Contents in brief:
 - Pattern-matching syntax for case classes
 - Motivation for introducing disjunction types
 - First example of disjunction type: `Either[A, B]`
-- Implementing disjunction types via "sealed traits" and case classes
+- Implementing disjunction types in Scala via "sealed traits" and case classes
 - Using disjunction types to model complicated domains
 - Understanding `Option[T]` as disjunction type and as a collection type
 - Worked examples and exercises
@@ -304,7 +326,7 @@ Contents in brief:
 
 Contents in brief:
 
-- "Functor block" (Scala's `for`/`yield` syntax) and filterable functors
+- "Functor block" (Scala's `for`/`yield` block syntax) and filterable functors
 - Examples of polynomial filterable functors
 - Intuitions behind the notion of "filtering" the data in a container
 - Deriving the filterable functor laws from the intuitions
@@ -361,7 +383,8 @@ Contents in brief:
 - A systematic derivation of the `Writer`, `Reader`, `Cont`, `State` type constructors from the type signature of `flatMap`
 - Worked examples and exercises
 
-There was an error in the presentation: The power-of-2 tree _can_ be represented as a recursive type constructor, contrary to what I said. (But it is not naturally monadic in the way other tree-like monads are.) Download the latest slides for the corrected text.
+There was an error in the presentation: The power-of-2 tree _can_ be represented as a recursive type constructor, contrary to what I said in the video.
+(But it is not naturally monadic in the way other tree-like monads are.) Download the latest slides for the corrected text.
 
 ## Chapter 7: Computations in a functor context II. Monads and semimonads. Part 2: Laws and structure of monads
 
@@ -373,13 +396,13 @@ There was an error in the presentation: The power-of-2 tree _can_ be represented
 
 Contents in brief:
 
-- How to derive the laws for flatMap from our intuitions about functor block computations
-- Deriving the laws for flatten from the laws for flatMap
-- Why flatten is equivalent to flatMap, and what it means to be "equivalent"
-- Why flatten has one law fewer than flatMap
+- How to derive the laws for `flatMap` from our intuitions about functor block computations
+- Deriving the laws for `flatten` from the laws for `flatMap`
+- Why `flatten` is equivalent to `flatMap`, and what it means to be "equivalent" here
+- Why `flatten` has one law fewer than `flatMap`
 - How parametricity assures naturality laws
 - Worked examples showing how to verify the associativity law for all standard monads
-- Examples of incorrect implementation of flatten that violates the associativity law
+- Examples of incorrect implementation of `flatten` that violates the associativity law
 - Motivation for full monads and laws for the `pure` method
 - Deriving the laws for `pure` in terms of `flatten`
 - Reformulating the monad laws in terms of Kleisli functions
@@ -398,16 +421,16 @@ Contents in brief:
 I plan tentatively to cover the following further material:
 
 - zippable / applicative functors, traversable functors, foldable functors -- with full derivations and analysis of the laws
-- when applicable, contrafunctors with similar properties
+- when applicable, also cover contrafunctors with similar properties
 - a general way of implementing and using "free" constructions (free monoid, free functor, free monad, free applicative etc.)
 - monad transformers, mtl (?), extensible effects ("types à la carte") - problems and solutions
 - various solutions for the "expression problem"
-- from the following list of functional programming concepts, those that appear to be useful in practice will be covered, others omitted:
+- the following list of functional programming concepts needs to be revisited to exclude concepts that appear to be not very useful in practice:
     - catamorphisms and other "something-morphisms" (?)
     - comonads and co-applicative functors (?)
     - rigid functors (need better use cases for those) (?)
-    - type-level and functor-level fixpoints; `matryoshka`; recursion schemes; recursive types; when is a recursive type well-defined
-    - trampolines in the standard library; monadic tail recursion
+    - type-level and functor-level fixpoints; `matryoshka`; recursion schemes; recursive types; when is a recursive type well-defined, lazy / eager evaluation
+    - trampolines in the standard Scala library; monadic tail recursion and stack safety
     - cofree comonads (?)
     - continuations library and "shift/reset programming" (?)
     - zippers / type derivatives (?)
