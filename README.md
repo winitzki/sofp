@@ -394,6 +394,12 @@ There was an error in the presentation: The power-of-2 tree _can_ be represented
 
 [YouTube recording: slides + audio](https://www.youtube.com/watch?v=p0fH_adTCnQ&index=13&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
+The recording was too long for YouTube to produce subtitles. For convenience, I split the recording into two halves, each now with subtitles.
+
+- [YouTube recording, slides + audio: Part 1 of 2](https://www.youtube.com/watch?v=u_XH7XkvFWM&index=14&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+- [YouTube recording, slides + audio: Part 2 of 2](https://www.youtube.com/watch?v=rKQqdAF9ecA&index=15&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+
+
 Contents in brief:
 
 - How to derive the laws for `flatMap` from our intuitions about functor block computations
@@ -415,6 +421,28 @@ Contents in brief:
 - Why certain constructions can be only semimonads but not full monads
 - Why there cannot be a contravariant monad
 - Exercises, with examples and counter-examples of semimonads and monads
+
+## Chapter 8: Applicative functors and profunctors. Part 1: Practical examples
+
+[Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/08-applicatives-part1.pdf)
+
+[Code examples](https://github.com/winitzki/scala-examples/tree/master/chapter08/src)
+
+[YouTube recording: slides + audio](https://www.youtube.com/watch?v=NVlFZYxgXDw&index=16&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+
+Contents in brief:
+
+- Why monads do not usually describe effects that are independent or commutative
+- Intuitions behind the `map2` function, coming from monads
+- Generalize `map`, `map2`, to `map3` and `mapN`
+- How to implement `map2` and `map3` for `Either` to collect multiple errors from computations
+- Why the Future and the Reader monads already have commutative and independent effects
+- How to transpose a matrix by using `map2` with `List`
+- Profunctors and their distinction from functors and contrafunctors
+- How to use profunctors to combine several `fold` passes into one
+- The distinction between applicative `fold` combinator and the monadic combinator: running average of running average
+- The distinction between applicative parser combinator and the monadic parser combinator: stopping at errors
+- Exercises
 
 # Roadmap
 
