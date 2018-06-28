@@ -1,11 +1,11 @@
 # Applied functional type theory: The science of functional programming
 
-This is a series of extensive tutorials on functional programming.
+This is a series of in-depth tutorials on functional programming.
 
 The tutorials cover both the theory and the practice of functional programming,
-from the perspective of building theoretical foundations that are valuable to practitioners.
+with the goal of building theoretical foundations that are valuable to practitioners.
 
-## Scope of this tutorial
+## Scope of this tutorial series
 
 **Applied functional type theory** (AFTT) is what I call the area of computer science that should serve the needs of functional programmers who are working as software engineers.
 
@@ -22,18 +22,23 @@ Once it is resolved, AFTT will be that theory.
 Traditional courses of theoretical computer science (algorithms, formal languages, semantics, compilers, etc.) are largely not relevant to AFTT.
 
 Here is an example: To an academic computer scientist, the "theory behind Haskell" is lambda-calculus and formal semantics.
-These theories helped to design the Haskell language itself, and also "explain" rigorously what Haskell programs do.
+These theories guided the design the Haskell language itself, and also define rigorously what a Haskell program does.
 However, a practicing programmer is normally concerned with _using_ a chosen programming language, not with designing it or with proving general theoretical properties of that language.
-For this reason, neither the theory of lambda-calculus nor models of formal semantics will help a programmer to write programs.
+For this reason, neither the theory of lambda-calculus nor theories of formal semantics will help a programmer to write programs.
 So these theories are not within the scope of AFTT.
 
 As an example of theoretical matherial that _is_ within the scope of AFTT, consider the equational laws imposed on applicative functors.
-If a programmer wants to use an applicative functor to, say, specify declaratively a set of operations that do not depend on each other,
+If a programmer wants to use an applicative functor to, say, specify declaratively a set of operations that do not depend on each other and combine these operations,
 the programmer can begin by designing a data structure that satisfies the laws of applicative functors.
 The programmer first writes down the types of data in that data structure and then checks whether the laws hold.
 The data structure may need to be adjusted in order to fit the definition of an applicative functor or its laws.
 Once this is verified, the programmer proceeds to write code.
 In this way, theory directly informs the programmer about how to write code.
+
+Applicative functors arose from practical usage of Haskell in applications such as parser combinators or domain-specific languages for parallel computations.
+It is important for a practicing functional programmer to be able to recognize and use applicative functors.
+And yet, one would search in vain for a computer science textbook that explain applicative functors,
+motivates their definition and laws, gives important examples and explores their structure.
 
 So far it appears that AFTT should be a mixture of certain areas of category theory, formal logic, and type theory.
 However, software engineers would not derive much benefit from following traditional academic courses in these subjects,
@@ -51,7 +56,11 @@ There are the infamous "monad tutorials", but also tutorials about applicative f
 These tutorials tend to be very hands-on and narrow in scope, limited to one or two specific questions and specific applications.
 Such tutorials usually do not present a sufficiently broad picture and do not illustrate deeper connections between these mathematical constructions.
 
-Similarly, books on type theory and formal logic present quite a few intricacies of domain theory and proof theory
+Perhpas the best selection of AFFT material can be found in the [Haskell wikibooks](https://en.wikibooks.org/wiki/Haskell).
+However, these tutorials are incomplete and limited to explaining the use of Haskell.
+They are not suitable as a first introduction or as a reference on AFFT.
+
+Existing textbooks on type theory and formal logic present quite a few intricacies of domain theory and proof theory
 -- which is a lot of information that practicing programmers will have difficulty assimilating and yet will have no hope of ever applying in their daily work.
 At the same time, these books never mention practical techniques used in many functional programming libraries today,
 such as quantified types, types parameterized by type constructors, or partial type-level functions (known as "type classes").
@@ -59,8 +68,8 @@ such as quantified types, types parameterized by type constructors, or partial t
 These books also do not give practical criteria for deciding type isomorphisms or for detecting valid and invalid recursive values, and do not give algorithms for deriving code from logic proofs.
 I mention these practical tasks as examples because they are perhaps the only real-world-coding applications of domain theory and the Curry-Howard correspondence theory, besides programming language design.
 
-On the other hand, books like ["Scala with Cats"](https://underscore.io/books/scala-with-cats/) and ["Functional programming, simplified"](https://alvinalexander.com/scala/functional-programming-simplified-book) are focused on explaining the practical aspects
-of programming and do not discuss the algebraic laws that support the mathematical structures such as applicative or monadic functors.
+On the other hand, books such as ["Scala with Cats"](https://underscore.io/books/scala-with-cats/) and ["Functional programming, simplified"](https://alvinalexander.com/scala/functional-programming-simplified-book) are focused on explaining the practical aspects
+of programming and do not explain the algebraic laws that support the mathematical structures (such as applicative or monadic functors).
 
 The only existing AFTT textbook aiming at the proper scope is the [Bjarnason-Chiusano book](https://www.manning.com/books/functional-programming-in-scala), which balances practical considerations with theoretical developments such as algebraic laws.
 I intend to continue at about the same level but dig deeper into the foundations and at the same time give a wider range of examples.
@@ -443,6 +452,21 @@ Contents in brief:
 - The distinction between applicative `fold` combinator and the monadic combinator: running average of running average
 - The distinction between applicative parser combinator and the monadic parser combinator: stopping at errors
 - Exercises
+
+## Chapter 8, part 1, addendum: Combining `fold` operations
+
+[YouTube recording: live coding session](https://www.youtube.com/watch?v=oVxCJ3h_Wqs&index=17&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+
+[Code examples](https://github.com/winitzki/scala-examples/blob/master/chapter08/src/test/scala/example/FoldsPresentation.scala)
+
+The main topic is to illustrate how several `fold` operations can be combined automatically into a single traversal. In Chapter 8, part 1, the central pieces of code were implemented automatically using the `curryhoward` library. This live coding session shows the implementation and explains how it works in more detail.
+
+- Defining a `fold` operation as a data structure and running it afterwards
+- Combining several `fold` operations into one
+- Implementing the applicative `zip` operation is possible on `fold`s despite `fold` not being a functor
+- Adding a final transformation to a `fold`, to make it into a functor
+- Implementing a DSL for `fold`s so that running average and standard deviation can be expressed concisely
+- Illustrating the difference between applicative and monadic combinators for `fold`s
 
 # Roadmap
 
