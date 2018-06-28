@@ -129,6 +129,7 @@ Please download the current versions of the PDF slides for your reference.
 It is generally advisable to take a look at the slides and the sample code first, before watching the video.
 Watch the video when you cannot follow something shown in the slides, or cannot understand the worked examples or solve the exercises.
 This can save you time since the videos are quite long and detailed.
+If you do watch the videos, adjust the video speed could be adjusted to 1.5x since I am a slow speaker.
 
 # Table of contents
 
@@ -470,7 +471,10 @@ The main topic is to illustrate how several `fold` operations can be combined au
 
 # Roadmap
 
-I plan tentatively to cover the following further material:
+1. Finish all videos
+2. Write the book
+
+I plan to cover the following further material:
 
 - zippable / applicative functors, traversable functors, foldable functors -- with full derivations and analysis of the laws
 - when applicable, also cover contrafunctors with similar properties
@@ -488,9 +492,9 @@ I plan tentatively to cover the following further material:
     - zippers / type derivatives (?)
     - lenses / prisms and other "optics"
     - arrows and their relationship to functions (?)
-    - Kahn extensions, "codensity", other second-order tricks (?)
-- initial vs. final representations of data types ("final tagless" interpreters)
-- type-level constructions, basics of dependent types
+    - Kan extensions, "codensity", other second-order tricks (?)
+- initial vs. final representations of data types ("final tagless" vs. "initial tagful" interpreters)
+- type-level constructions, type-level programming à la `shapeless`, basic usage of dependent types
 - interpretation of OO programming from the perspective of AFTT
 - design patterns of FP that replace OO design patterns
 - functional reactive programming, temporal logic, and UIs
