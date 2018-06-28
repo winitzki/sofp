@@ -129,7 +129,7 @@ Please download the current versions of the PDF slides for your reference.
 It is generally advisable to take a look at the slides and the sample code first, before watching the video.
 Watch the video when you cannot follow something shown in the slides, or cannot understand the worked examples or solve the exercises.
 This can save you time since the videos are quite long and detailed.
-If you do watch the videos, adjust the video speed could be adjusted to 1.5x since I am a slow speaker.
+If you do watch the videos, consider adjusting the video speed to 1.5x since I am a slow speaker.
 
 # Table of contents
 
