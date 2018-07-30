@@ -469,6 +469,33 @@ The main topic is to illustrate how several `fold` operations can be combined au
 - Implementing a DSL for `fold`s so that running average and standard deviation can be expressed concisely
 - Illustrating the difference between applicative and monadic combinators for `fold`s
 
+## Chapter 8: Applicative functors and profunctors. Part 2: Laws and structure
+
+[Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/08-applicatives-part2.pdf)
+
+[Code examples](https://github.com/winitzki/scala-examples/tree/master/chapter08/src)
+
+The video for part 2 is very long and will be recorded in 3 portions.
+
+[YouTube recording: slides + audio, portion 1 of 3](https://www.youtube.com/watch?v=xBDkBriX7Uk&index=18&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+
+Portion 1 of 3 covers slides 1 to 15.
+
+Contents in brief:
+
+How to generalize `map2`, `map3`, `map4` to `mapN` in a systematic way
+Motivation behind introducing the `ap` and `zip` methods for applicative functors
+Computational equivalence of `map2`, `ap`, and `zip`
+Motivation for the applicative laws: rewrite the monad laws in terms of `map2`
+Deriving the laws for `zip` to uncover the monoidal structure of the laws
+Defining `pure` through "wrapped unit"
+Recovering the 3rd naturality law for `map2`
+Deriving the laws for the applicative category
+Deriving the laws for `ap` as functor "lifting" laws from category laws
+Overview of applicative functor constructions
+
+
+
 # Roadmap
 
 1. Finish all videos
