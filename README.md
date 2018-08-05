@@ -498,13 +498,13 @@ Overview of applicative functor constructions
 
 # Roadmap
 
+0. Cut the scope
 1. Finish all videos
 2. Write the book
 
 I plan to cover the following further material:
 
-- zippable / applicative functors, traversable functors, foldable functors -- with full derivations and analysis of the laws
-- when applicable, also cover contrafunctors with similar properties
+- traversable functors, foldable functors
 - a general way of implementing and using "free" constructions (free monoid, free functor, free monad, free applicative etc.)
 - monad transformers, mtl (?), extensible effects ("types à la carte") - problems and solutions
 - various solutions for the "expression problem"
@@ -512,10 +512,10 @@ I plan to cover the following further material:
     - catamorphisms and other "something-morphisms" (?)
     - comonads and co-applicative functors (?)
     - rigid functors (need better use cases for those) (?)
-    - type-level and functor-level fixpoints; `matryoshka`; recursion schemes; recursive types; when is a recursive type well-defined, lazy / eager evaluation
+    - recursive types, type-level and functor-level fixpoints; `matryoshka` library, recursion schemes; when is a recursive type well-defined, lazy / eager evaluation
     - trampolines in the standard Scala library; monadic tail recursion and stack safety
     - cofree comonads (?)
-    - continuations library and "shift/reset programming" (?)
+    - coroutines, continuations library and "shift/reset programming" (?)
     - zippers / type derivatives (?)
     - lenses / prisms and other "optics"
     - arrows and their relationship to functions (?)
