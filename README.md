@@ -498,32 +498,32 @@ Overview of applicative functor constructions
 
 # Roadmap
 
-0. Cut the scope
-1. Finish all videos
+0. Cut the scope for volume 1 of the book
+1. Finish all videos for that scope
 2. Write the book
 
-I plan to cover the following further material:
+I plan to cover the following further material or a subset of it:
 
 - traversable functors, foldable functors
 - a general way of implementing and using "free" constructions (free monoid, free functor, free monad, free applicative etc.)
 - monad transformers, mtl (?), extensible effects ("types à la carte") - problems and solutions
 - various solutions for the "expression problem"
-- the following list of functional programming concepts needs to be revisited to exclude concepts that appear to be not very useful in practice:
+- initial vs. final representations of data types ("final tagless" vs. "initial tagful" interpreters)
+- type-level constructions, type-level programming à la `shapeless`, basic usage of dependent types
+- interpretation of OO programming from the perspective of AFTT
+- design patterns of FP that replace OO design patterns
+- functional reactive programming, temporal logic, and UIs
+- an example of a full-stack application implemented in Scala with FP patterns
+- browse the recent Scala and Haskell FP books to see if I have missed something important
+- the following list of functional programming concepts needs to be revisited to select concepts that appear to be both well understood and useful in practice:
     - catamorphisms and other "something-morphisms" (?)
     - comonads and co-applicative functors (?)
     - rigid functors (need better use cases for those) (?)
     - recursive types, row polymorphism / column polymorphism; type-level and functor-level fixpoints; `matryoshka` library, recursion schemes; when is a recursive type well-defined, lazy / eager evaluation
     - trampolines in the standard Scala library; monadic tail recursion and stack safety
-    - cofree comonads (?)
+    - cofree comonads, cofree functors etc. (?)
     - coroutines, continuations library and "shift/reset programming" (?)
     - zippers / type derivatives (?)
     - lenses / prisms and other "optics"
     - arrows and their relationship to functions (?)
     - Kan extensions, "codensity", other second-order tricks (?)
-    - initial vs. final representations of data types ("final tagless" vs. "initial tagful" interpreters)
-    - type-level constructions, type-level programming à la `shapeless`, basic usage of dependent types
-    - interpretation of OO programming from the perspective of AFTT
-    - design patterns of FP that replace OO design patterns
-    - functional reactive programming, temporal logic, and UIs
-    - an example of a full-stack application implemented in Scala with FP patterns
-- browse the recent Scala and Haskell FP books to see if I have missed something important
