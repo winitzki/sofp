@@ -139,7 +139,7 @@ If you do watch the videos, consider adjusting the video speed to 1.5x since I a
 
 [Code examples](https://github.com/winitzki/scala-examples/tree/master/chapter01/src)
 
-[YouTube recording: slides + audio](https://www.youtube.com/watch?v=0Ld79Lnzx_o&index=1&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+[YouTube recording: slides + audio](https://www.youtube.com/watch?v=0Ld79Lnzx_o&index=2&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
 Contents in brief:
 
@@ -150,13 +150,15 @@ Contents in brief:
 - How to translate mathematical formulas into Scala code
 - Worked examples and exercises
 
+[Summary for Chapter 1](https://www.youtube.com/watch?v=rZfAljJdKmI&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV&index=3)
+
 ## Chapter 2: The functional approach to collections in Scala
 
 [Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/02-functional-collections.pdf)
 
 [Code examples](https://github.com/winitzki/scala-examples/tree/master/chapter02/src)
 
-[YouTube recording: slides + audio](https://www.youtube.com/watch?v=XFrWZ7QIE2s&index=2&t=7s&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+[YouTube recording: slides + audio](https://www.youtube.com/watch?v=XFrWZ7QIE2s&index=4&t=7s&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
 Contents in brief:
 
@@ -168,13 +170,15 @@ Contents in brief:
 - Using `foldLeft`, `scan`, `iterate` instead of writing recursion by hand
 - Worked examples and exercises
 
+[Summary for Chapter 2](https://www.youtube.com/watch?v=qrvmxdBletE&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV&index=5)
+
 ## Chapter 3, part 1: The types of higher-order functions
 
 [Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/03-logic-of-types-1.pdf)
 
 [Code examples](https://github.com/winitzki/scala-examples/tree/master/chapter03/src)
 
-[YouTube recording: slides + audio](https://www.youtube.com/watch?v=Z_1s36ba4EY&index=3&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+[YouTube recording: slides + audio](https://www.youtube.com/watch?v=Z_1s36ba4EY&index=6&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
 Contents in brief:
 
@@ -194,7 +198,7 @@ Please use the exercises from the current version of the PDF slides.
 
 [Code examples](https://github.com/winitzki/scala-examples/tree/master/chapter03/src)
 
-[YouTube recording: slides + audio](https://www.youtube.com/watch?v=MTViank6L24&index=4&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+[YouTube recording: slides + audio](https://www.youtube.com/watch?v=MTViank6L24&index=7&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
 Contents in brief:
 
@@ -213,7 +217,7 @@ Contents in brief:
 
 [Code examples](https://github.com/winitzki/scala-examples/tree/master/chapter03/src)
 
-[YouTube recording: slides + audio](https://www.youtube.com/watch?v=sSDGjdfFQ-Y&index=5&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+[YouTube recording: slides + audio](https://www.youtube.com/watch?v=sSDGjdfFQ-Y&index=8&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
 Contents in brief:
 
@@ -227,13 +231,15 @@ Contents in brief:
 - Recursive polynomial type (`List`) and its type formula
 - Worked examples and exercises
 
+[Summary for Chapter 3, parts 1 to 3](https://www.youtube.com/watch?v=RbT3K1Km2NQ&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV&index=9)
+
 ## Chapter 3, addendum 1: Generating code with the Curry-Howard correspondence: Type inhabitation at compile time
 
 [Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/curryhoward-2017.pdf)
 
-[YouTube recording: slides + audio](https://www.youtube.com/watch?v=cESdgot_ZxY&index=6&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+[YouTube recording: slides + audio](https://www.youtube.com/watch?v=cESdgot_ZxY&index=10&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
-This optional Addendum to Chapter 3 presents an open-source library `curryhoward` that implements some functions automatically in Scala, given their type signature.
+This optional Addendum to Chapter 3 presents the open-source library `curryhoward` that implements some functions automatically in Scala, given their type signature.
 
 Abstract:
 
@@ -256,7 +262,7 @@ The `curryhoward` library is open-source and available at [this git repository](
 
 [Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/curryhoward-2018-tutorial.pdf)
 
-[YouTube recording: slides + audio](https://www.youtube.com/watch?v=KcfD3Iv--UM&index=7&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+[YouTube recording: slides + audio](https://www.youtube.com/watch?v=KcfD3Iv--UM&index=11&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
 This optional addendum to Chapter 3 explains the Curry-Howard correspondence in more detail than it was done in Chapter 3, part 3. There are no exercises in this tutorial; Chapter 3 already contains exercises covering some of this material.
 
@@ -284,13 +290,15 @@ Contents in brief:
 - Limitations of the propositional logic: what it can and cannot do
 - Using the CH correspondence as a guide in programming language design
 
+[Summary for Chapter 3, Addenda 1 and 2](https://www.youtube.com/watch?v=ozjWYoqPt4s&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV&index=12)
+
 ## Chapter 4: Functors: their laws and structure
 
 [Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/04-functors.pdf)
 
 [Code examples](https://github.com/winitzki/scala-examples/tree/master/chapter04/src)
 
-[YouTube recording: slides + audio](https://www.youtube.com/watch?v=OGut2iZW0JU&index=8&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+[YouTube recording: slides + audio](https://www.youtube.com/watch?v=OGut2iZW0JU&index=13&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
 Contents in brief:
 
@@ -304,13 +312,15 @@ Contents in brief:
 - How to prove the functor laws for each build-up step
 - Worked examples and exercises
 
+[Summary for Chapter 4](https://www.youtube.com/watch?v=enRrmLVzf4k&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV&index=14)
+
 ## Chapter 5: Type-level functions and type classes
 
 [Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/05-type-classes.pdf)
 
 [Code examples](https://github.com/winitzki/scala-examples/tree/master/chapter05/src)
 
-[YouTube recording: slides + audio](https://www.youtube.com/watch?v=QhqsBgJ8lm8&index=9&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+[YouTube recording: slides + audio](https://www.youtube.com/watch?v=QhqsBgJ8lm8&index=15&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
 Contents in brief:
 
@@ -326,13 +336,15 @@ Contents in brief:
 - Using the `scalacheck` library to verify type class laws
 - Worked examples and exercises
 
+[Summary for Chapter 5](https://www.youtube.com/watch?v=Nyc1A_8fC1M&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV&index=16)
+
 ## Chapter 6: Computations in a functor context I. Filterable functors, their laws and structure. Part 1: Examples. Working with filterable functors
 
 [Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/06-filterable-functors.pdf) (Part 1 covers slides 1 to 8.)
 
 [Code examples](https://github.com/winitzki/scala-examples/tree/master/chapter06/src)
 
-[YouTube recording: slides + audio](https://www.youtube.com/watch?v=20PYTn_aUqE&index=10&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+[YouTube recording: slides + audio](https://www.youtube.com/watch?v=20PYTn_aUqE&index=17&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
 Contents in brief:
 
@@ -351,7 +363,7 @@ Contents in brief:
 
 [Code examples](https://github.com/winitzki/scala-examples/tree/master/chapter06/src)
 
-[YouTube recording: slides + audio](https://www.youtube.com/watch?v=GO4qq5_v1o0&index=11&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+[YouTube recording: slides + audio](https://www.youtube.com/watch?v=GO4qq5_v1o0&index=18&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
 Contents in brief:
 
@@ -365,13 +377,15 @@ Contents in brief:
 - Fiilterable contrafunctors: their laws and structure (in brief)
 - Worked examples and exercises
 
+[Summary for Chapter 6, parts 1 and 2](https://www.youtube.com/watch?v=jateYf0rYZs&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV&index=19)
+
 ## Chapter 7: Computations in a functor context II. Monads and semimonads. Part 1: Intuitions, examples, use cases
 
 [Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/07-monads-part1.pdf)
 
 [Code examples](https://github.com/winitzki/scala-examples/tree/master/chapter07/src)
 
-[YouTube recording: slides + audio](https://www.youtube.com/watch?v=3hzb0frNI48&index=12&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+[YouTube recording: slides + audio](https://www.youtube.com/watch?v=3hzb0frNI48&index=20&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
 Contents in brief:
 
@@ -393,6 +407,8 @@ Contents in brief:
 - A systematic derivation of the `Writer`, `Reader`, `Cont`, `State` type constructors from the type signature of `flatMap`
 - Worked examples and exercises
 
+[Summary for Chapter 7, part 1](https://www.youtube.com/watch?v=HW0Y513yaVM&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV&index=21&)
+
 There was an error in the presentation: The power-of-2 tree _can_ be represented as a recursive type constructor, contrary to what I said in the video.
 (But it is not naturally monadic in the way other tree-like monads are.) Download the latest slides for the corrected text.
 
@@ -402,12 +418,12 @@ There was an error in the presentation: The power-of-2 tree _can_ be represented
 
 [Code examples](https://github.com/winitzki/scala-examples/tree/master/chapter07/src)
 
-[YouTube recording: slides + audio](https://www.youtube.com/watch?v=p0fH_adTCnQ&index=13&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+[YouTube recording: slides + audio](https://www.youtube.com/watch?v=p0fH_adTCnQ&index=22&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
 The recording was too long for YouTube to produce subtitles. For convenience, I split the recording into two halves, each now with subtitles.
 
-- [YouTube recording, slides + audio: Part 1 of 2](https://www.youtube.com/watch?v=u_XH7XkvFWM&index=14&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
-- [YouTube recording, slides + audio: Part 2 of 2](https://www.youtube.com/watch?v=rKQqdAF9ecA&index=15&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+- [YouTube recording, slides + audio: Part 1 of 2](https://www.youtube.com/watch?v=u_XH7XkvFWM&index=23&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+- [YouTube recording, slides + audio: Part 2 of 2](https://www.youtube.com/watch?v=rKQqdAF9ecA&index=24&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
 
 Contents in brief:
@@ -432,13 +448,15 @@ Contents in brief:
 - Why there cannot be a contravariant monad
 - Exercises, with examples and counter-examples of semimonads and monads
 
+[Summary for Chapter 7, part 2](https://www.youtube.com/watch?v=kfggeipFg3g&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV&index=25)
+
 ## Chapter 8: Applicative functors and profunctors. Part 1: Practical examples
 
 [Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/08-applicatives-part1.pdf)
 
 [Code examples](https://github.com/winitzki/scala-examples/tree/master/chapter08/src)
 
-[YouTube recording: slides + audio](https://www.youtube.com/watch?v=NVlFZYxgXDw&index=16&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+[YouTube recording: slides + audio](https://www.youtube.com/watch?v=NVlFZYxgXDw&index=26&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
 Contents in brief:
 
@@ -456,7 +474,7 @@ Contents in brief:
 
 ## Chapter 8, part 1, addendum: Combining `fold` operations
 
-[YouTube recording: live coding session](https://www.youtube.com/watch?v=oVxCJ3h_Wqs&index=17&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+[YouTube recording: live coding session](https://www.youtube.com/watch?v=oVxCJ3h_Wqs&index=27&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
 [Code examples](https://github.com/winitzki/scala-examples/blob/master/chapter08/src/test/scala/example/FoldsPresentation.scala)
 
@@ -469,6 +487,8 @@ The main topic is to illustrate how several `fold` operations can be combined au
 - Implementing a DSL for `fold`s so that running average and standard deviation can be expressed concisely
 - Illustrating the difference between applicative and monadic combinators for `fold`s
 
+[Summary for Chapter 8, part 1](https://www.youtube.com/watch?v=YYi1beb4yiw&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV&index=28)
+
 ## Chapter 8: Applicative functors and profunctors. Part 2: Laws and structure
 
 [Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/08-applicatives-part2.pdf)
@@ -477,7 +497,7 @@ The main topic is to illustrate how several `fold` operations can be combined au
 
 The video for part 2 is very long and will be recorded in 3 portions.
 
-[YouTube recording: slides + audio, portion 1 of 3](https://www.youtube.com/watch?v=xBDkBriX7Uk&index=18&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+[YouTube recording: slides + audio, portion 1 of 3](https://www.youtube.com/watch?v=xBDkBriX7Uk&index=29&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
 Portion 1 of 3 covers slides 1 to 15.
 
@@ -494,7 +514,7 @@ Contents in brief:
 - Deriving the laws for `ap` as functor "lifting" laws from category laws
 - Overview of applicative functor constructions
 
-[YouTube recording: slides + audio, portion 2 of 3](https://www.youtube.com/watch?v=sEaT0vbTnx8&index=19&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+[YouTube recording: slides + audio, portion 2 of 3](https://www.youtube.com/watch?v=sEaT0vbTnx8&index=30&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
 Portion 2 of 3 covers slides 15 to 17.
 
@@ -508,7 +528,7 @@ Contents in brief:
 - Definition and laws of applicative contrafunctors
 - How applicative contrafunctors are different from applicative functors
 
-[YouTube recording: slides + audio, portion 3 of 3](https://www.youtube.com/watch?v=G5Y7sqydEXo&index=18&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+[YouTube recording: slides + audio, portion 3 of 3](https://www.youtube.com/watch?v=G5Y7sqydEXo&index=31&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
 Portion 3 of 3 covers slides 17 to 22.
 
@@ -526,6 +546,7 @@ Contents in brief:
 - How to use this picture to find laws and to discover new type classes, such as the comonads
 - Exercises
 
+[Summary for Chapter 8, part 2](https://www.youtube.com/watch?v=9fjJAc4wOTQ&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV&index=32)
 
 # Roadmap
 
