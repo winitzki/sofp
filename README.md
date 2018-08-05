@@ -483,17 +483,48 @@ Portion 1 of 3 covers slides 1 to 15.
 
 Contents in brief:
 
-How to generalize `map2`, `map3`, `map4` to `mapN` in a systematic way
-Motivation behind introducing the `ap` and `zip` methods for applicative functors
-Computational equivalence of `map2`, `ap`, and `zip`
-Motivation for the applicative laws: rewrite the monad laws in terms of `map2`
-Deriving the laws for `zip` to uncover the monoidal structure of the laws
-Defining `pure` through "wrapped unit"
-Recovering the 3rd naturality law for `map2`
-Deriving the laws for the applicative category
-Deriving the laws for `ap` as functor "lifting" laws from category laws
-Overview of applicative functor constructions
+- How to generalize `map2`, `map3`, `map4` to `mapN` in a systematic way
+- Motivation behind introducing the `ap` and `zip` methods for applicative functors
+- Computational equivalence of `map2`, `ap`, and `zip`
+- Motivation for the applicative laws: rewrite the monad laws in terms of `map2`
+- Deriving the laws for `zip` to uncover the monoidal structure of the laws
+- Defining `pure` through "wrapped unit"
+- Recovering the 3rd naturality law for `map2`
+- Deriving the laws for the applicative category
+- Deriving the laws for `ap` as functor "lifting" laws from category laws
+- Overview of applicative functor constructions
 
+[YouTube recording: slides + audio, portion 2 of 3](https://www.youtube.com/watch?v=sEaT0vbTnx8&index=19&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+
+Portion 2 of 3 covers slides 15 to 17.
+
+Contents in brief:
+
+- Implementing and checking the laws for applicative functor constructions
+- Examples of applicative functors that disagree with their monad instances
+- Examples of non-applicative functors
+- Monoid constructions: why all non-parameterized types are monoids
+- Why all polynomial functors with monoid coefficients are applicative
+- Definition and laws of applicative contrafunctors
+- How applicative contrafunctors are different from applicative functors
+
+[YouTube recording: slides + audio, portion 3 of 3](https://www.youtube.com/watch?v=G5Y7sqydEXo&index=18&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+
+Portion 3 of 3 covers slides 17 to 22.
+
+Contents in brief:
+
+- Implementing and checking the laws for applicative contrafunctor constructions
+- Why all exponential-polynomial contrafunctors with monoid coefficients are applicative
+- Definition and properties of profunctors
+- Why all exponential-polynomial type constructors are profunctors
+- Example of a non-profunctor type constructor: a partial type function
+- Definition and laws of applicative profunctors
+- Constructions of applicative profunctors; verifying the laws
+- Commutative applicative functors, their interpretation, and examples
+- A unified category theory-based picture of "standard" functor classes (functor, contrafunctor, filterable, monad, applicative)
+- How to use this picture to find laws and to discover new type classes, such as the comonads
+- Exercises
 
 
 # Roadmap
