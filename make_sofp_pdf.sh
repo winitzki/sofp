@@ -20,6 +20,6 @@ z="$name-src.tar.bz2"
 "$lyx" --export pdf2 $s
 mv "$p" "1$p"
 "$lyx" --export latex "$s"
-tar jcvf "$z" "$s" "$t" "$0"
+tar jcvf "$z" "$s" "$t" *.jpg "$0"
 "$pdftk" "1$p" attach_files "$z" output "$p"
 rm "1$p"
