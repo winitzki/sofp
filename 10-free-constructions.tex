@@ -383,10 +383,10 @@ run{[}A{]}(prg: Prg{[}A{]}): A = ...}}
 \textcolor{blue}{\footnotesize{}case~class~Ops{[}A{]}(f:~F{[}A{]})~extends~Prg{[}A{]}}\textcolor{darkgray}{\footnotesize{}~//~custom~operations~here}{\footnotesize\par}
 \end{lyxcode}
 \begin{itemize}
-\item Interpreter is parameterized by a ``value extractor'' $ex:\forall A.F^{A}\Rightarrow A$
+\item Interpreter is parameterized by a ``value extractor'' $\text{Ex}^{F}\equiv\forall A.\left(F^{A}\Rightarrow A\right)$
 \end{itemize}
 \begin{lyxcode}
-\textcolor{blue}{\footnotesize{}def~run{[}F{[}\_{]},~A{]}(ex:~Ex{[}F{]})(p:~DSL{[}F,~A{]}):~A~=~...}{\footnotesize\par}
+\textcolor{blue}{\footnotesize{}def~run{[}F{[}\_{]},~A{]}(ex:~Ex{[}F{]})(prg:~DSL{[}F,~A{]}):~A~=~...}{\footnotesize\par}
 \end{lyxcode}
 \begin{itemize}
 \item The constructor \texttt{\textcolor{blue}{\footnotesize{}DSL{[}F{[}\_{]},
@@ -394,16 +394,84 @@ A{]}}} is called a \textbf{free monad} over \texttt{\textcolor{blue}{\footnotesi
 \end{itemize}
 \end{frame}
 
-\begin{frame}{Free}
+\begin{frame}{The interpreter pattern VII. Handling errors}
 \begin{itemize}
-\item Consider 
+\item \vspace{-0.15cm}To handle errors, we want to evaluate \texttt{\textcolor{blue}{\footnotesize{}DSL{[}F{[}\_{]},
+A{]}}} to \texttt{\textcolor{blue}{\footnotesize{}Either{[}Err, A{]}}} 
+\item Suppose we have a value extractor of type $\text{Ex}^{F}\equiv\forall A.\left(F^{A}\Rightarrow\text{Err}+A\right)$
+\item The code of the interpreter is almost unchanged:
+\end{itemize}
+\begin{lyxcode}
+\vspace{-0.4cm}\textcolor{blue}{\footnotesize{}def~run{[}F{[}\_{]},~A{]}(extract:~Ex{[}F{]})(prg:~DSL{[}F,~A{]}):~Either{[}Err,~A{]}~=}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}~~prg~match~\{}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}~~~~case~b:~Bind{[}F,~\_,~A{]}~\ensuremath{\Rightarrow}~b~match~\{~case~Bind(p,~f)~\ensuremath{\Rightarrow}~}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}~~~~~~~~run(extract)(p).flatMap(f~andThen~run(extract))}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}~~~~\}}\textcolor{darkgray}{\footnotesize{}~~~~~//~Here,~the~.flatMap~is~from~Either.}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}~~~~case~Literal(a)~\ensuremath{\Rightarrow}~Right(a)}\textcolor{darkgray}{\footnotesize{}~//~pure:~A~$\Rightarrow$~Err~+~A}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}~~~~case~Ops(f)~\ensuremath{\Rightarrow}~extract(f)~~~~~}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}\}}{\footnotesize\par}
+\end{lyxcode}
+\begin{itemize}
+\item \vspace{-0.15cm}The code of \texttt{\textcolor{blue}{\footnotesize{}run}}
+only uses \texttt{\textcolor{blue}{\footnotesize{}flatMap}} and \texttt{\textcolor{blue}{\footnotesize{}pure}}
+from \texttt{\textcolor{blue}{\footnotesize{}Either}} 
+\item We can generalize to any other monad $M^{A}$ instead of \texttt{\textcolor{blue}{\footnotesize{}Either{[}Err,
+A{]}}} 
+\end{itemize}
+The resulting construction:
+\begin{itemize}
+\item Start with an ``operations type constructor'' $F^{A}$ (often not
+a functor)
+\item Use $\text{DSL}^{F,A}$ and interpreter {\footnotesize{}$\text{run}:\left(\forall X.F^{X}\Rightarrow M^{X}\right)\Rightarrow\text{DSL}^{F,A}\Rightarrow M^{A}$}{\footnotesize\par}
+\item Create a DSL program $\text{prg}:\text{DSL}^{F,A}$ and an extractor
+$\text{ex}^{X}:F^{X}\Rightarrow M^{X}$
+\item Run the program with the extractor: $\text{run}\left(\text{ex}\right)\left(\text{prg}\right)$;
+get a value $M^{A}$
 \end{itemize}
 \end{frame}
 
-\begin{frame}{Free}
+\begin{frame}{Monad laws for DSL programs}
+
+Monad laws hold for DSL programs only after evaluating them
 \begin{itemize}
-\item Consider 
+\item Consider the law $\text{flm}\left(\text{pure}\right)=\text{id}$;
+both functions $\text{DSL}^{F,A}\Rightarrow\text{DSL}^{F,A}$
+\item Apply both sides to some $\text{prg}:\text{DSL}^{F,A}$ and get the
+new value
 \end{itemize}
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}prg.flatMap(pure)~==~Bind(prg,~a~$\Rightarrow$~Literal(a))}{\footnotesize\par}
+\end{lyxcode}
+\begin{itemize}
+\item This new value is \emph{not equal} to \texttt{\textcolor{blue}{\footnotesize{}prg}},
+so this monad law fails!
+\begin{itemize}
+\item Other laws fail as well because operations never reduce anything
+\end{itemize}
+\item After interpreting this program into a target monad $M^{A}$, the
+law holds:
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}run(ex)(prg).flatMap((a~$\Rightarrow$~Literal(a))~andThen~run(ex))~}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}~~==~run(ex)(prg).flatMap(a~$\Rightarrow$~run(ex)(Literal(a))~}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}~~==~run(ex)(prg).flatMap(a~$\Rightarrow$~Right(a))}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}~~==~run(ex)(prg)}{\footnotesize\par}
+\end{lyxcode}
+\begin{itemize}
+\item Here we have assumed that the laws hold for $M^{A}$
+\item All other laws also hold after interpreting into a lawful monad $M^{A}$
+\end{itemize}
+\end{itemize}
+The monad law violations are ``not observable''
 \end{frame}
 
 \begin{frame}{Free constructions in mathematics: Example I}
@@ -425,20 +493,19 @@ A{]}}} is called a \textbf{free monad} over \texttt{\textcolor{blue}{\footnotesi
 \end{itemize}
 \item All these expressions form a \textbf{free semigroup} generated by
 ц and \shui
-\item Example calculation: (\shui$\cdot$\shui)$\cdot$(ц$\cdot$mple calculation: (\shui$\cdot$\shui)$\cdot$(ц$\cdot$\shui)$\cdot$ц
+\item Example calculation: (\shui$\cdot$\shui)$\cdot$(ц$\cdot$\shui)$\cdot$ц
 $=$ \shui$\cdot$\shui$\cdot$ц$\cdot$\shui$\cdot$ц
 \end{itemize}
 How to represent this as a data type:
 \begin{itemize}
-\item Redundant encoding, as the full expression tree: ((\shui,\shui),(ц,\shui)),ц)
+\item Tree encoding: the full expression tree: ((\shui,\shui),(ц,\shui)),ц)
 \begin{itemize}
 \item Implement the operation $a\cdot b$ as pair constructor (easy and
 cheap)
 \end{itemize}
 \item Reduced encoding, as a ``smart'' structure: List(\shui,\shui,ц,\shui,ц)
 \begin{itemize}
-\item Implement the opration $a\cdot b$ by concatenating the lists (more
-expensive)
+\item Implement $a\cdot b$ by concatenating the lists (more expensive)
 \end{itemize}
 \end{itemize}
 \end{frame}
@@ -464,7 +531,7 @@ expensive)
 \begin{itemize}
 \item The result is known as the \textbf{tensor product}
 \end{itemize}
-\item Redundant encoding: unevaluated expression tree
+\item Tree encoding: full unevaluated expression tree
 \begin{itemize}
 \item A list of any number of vector pairs $\sum_{i}\mathbf{u}_{i}\otimes\mathbf{v}_{i}$
 \end{itemize}
@@ -472,6 +539,103 @@ expensive)
 \begin{itemize}
 \item Reduced encoding requires proof and more complex operations
 \end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Worked example: Free semigroup}
+
+{\footnotesize{}\vspace{-0.15cm}}Implement a free semigroup \texttt{\textcolor{blue}{\footnotesize{}FSIS}}
+generated by two types \texttt{\textcolor{blue}{\footnotesize{}Int}}
+and \texttt{\textcolor{blue}{\footnotesize{}String}} 
+\begin{itemize}
+\item A value of \texttt{\textcolor{blue}{\footnotesize{}FSIS}} can be an
+\texttt{\textcolor{blue}{\footnotesize{}Int}}; it can also be a \texttt{\textcolor{blue}{\footnotesize{}String}} 
+\item If \texttt{\textcolor{blue}{\footnotesize{}x}}, \texttt{\textcolor{blue}{\footnotesize{}y}}
+are of type \texttt{\textcolor{blue}{\footnotesize{}FSIS}} then so
+is \texttt{\textcolor{blue}{\footnotesize{}Mul(x, y)}} 
+\end{itemize}
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}sealed~trait~FSIS~}\textcolor{darkgray}{\footnotesize{}//~tree~encoding:~full~expression~tree}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}case~class~Wrap1(x:~Int)~extends~FSIS}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}case~class~Wrap2(x:~String)~extends~FSIS}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}case~class~Mul(x:~FSIS,~y:~FSIS)~extends~FSIS}{\footnotesize\par}
+\end{lyxcode}
+\begin{itemize}
+\item {\footnotesize{}\vspace{-0.15cm}}Short type notation: $\text{FSIS}\equiv\text{Int}+\text{String}+\text{FSIS}\times\text{FSIS}$ 
+\item For a semigroup $S$ and given $\text{Int}\Rightarrow S$ and $\text{String}\Rightarrow S$,
+map $\text{FSIS}\Rightarrow S$
+\item Simplify and generalize this construction by setting $Z=\text{Int}+\text{String}$
+\item The redundant encoding is $\text{FS}^{Z}=Z+\text{FS}^{Z}\times\text{FS}^{Z}$
+\end{itemize}
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}def~mul(x:~FS{[}Z{]},~y:~FS{[}Z{]}):~FS{[}Z{]}~=~Mul(x,~y)}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}def~run{[}S:~Semigroup,~Z{]}(extract:~Z~$\Rightarrow$~S):~FS{[}Z{]}~$\Rightarrow$~S~=~\{}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}~~case~F(z)~$\Rightarrow$~extract(z)}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}~~case~Mul(x,~y)~$\Rightarrow$~run(extract)(x)~|+|~run(extract)(y)}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}\}~}\textcolor{darkgray}{\footnotesize{}//~Semigroup~laws~hold~after~applying~run().}{\footnotesize\par}
+\end{lyxcode}
+\begin{itemize}
+\item {\footnotesize{}\vspace{-0.15cm}}The reduced encoding is $\text{FSR}^{Z}\equiv Z\times\text{List}^{Z}$
+(non-empty list of $Z$'s)
+\begin{itemize}
+\item The multiplication requires concatenating the lists 
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Worked example: Free monoid}
+
+{\footnotesize{}\vspace{-0.15cm}xample: Free monoid}
+
+{\footnotesize{}\vspace{-0.15cm}}Implement a free monoid \texttt{\textcolor{blue}{\footnotesize{}FM{[}Z{]}}}
+generated by type \texttt{\textcolor{blue}{\footnotesize{}Z}} 
+\begin{itemize}
+\item A value of \texttt{\textcolor{blue}{\footnotesize{}FM{[}Z{]}}} can
+be the empty value; it can also be a \texttt{\textcolor{blue}{\footnotesize{}Z}} 
+\item If \texttt{\textcolor{blue}{\footnotesize{}x}}, \texttt{\textcolor{blue}{\footnotesize{}y}}
+are of type \texttt{\textcolor{blue}{\footnotesize{}FM{[}Z{]}}} then
+so is \texttt{\textcolor{blue}{\footnotesize{}Mul(x, y)}} 
+\end{itemize}
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}sealed~trait~FM{[}Z{]}~}\textcolor{darkgray}{\footnotesize{}//~tree~encoding}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}case~class~Empty{[}Z{]}()~extends~FM{[}Z{]}}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}case~class~Wrap{[}Z{]}(z:~Z)~extends~FM{[}Z{]}}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}case~class~Mul{[}Z{]}(x:~FM{[}Z{]},~y:~FM{[}Z{]})~extends~FM{[}Z{]}}{\footnotesize\par}
+\end{lyxcode}
+\begin{itemize}
+\item {\footnotesize{}\vspace{-0.15cm}}Short type notation: $\text{FM}^{Z}\equiv1+Z+\text{FM}^{Z}\times\text{FM}^{Z}$ 
+\item For a monoid $M$ and given $Z\Rightarrow M$, map $\text{FM}^{Z}\Rightarrow M$
+\end{itemize}
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}def~mul(x:~FM{[}Z{]},~y:~FM{[}Z{]}):~FM{[}Z{]}~=~Mul(x,~y)}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}def~run{[}M:~Monoid,~Z{]}(extract:~Z~$\Rightarrow$~M):~FM{[}Z{]}~$\Rightarrow$~M~=~\{}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}~~case~Empty()~$\Rightarrow$~Monoid{[}M{]}.empty}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}~~case~Wrap(z)~$\Rightarrow$~extract(z)}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}~~case~Mul(x,~y)~$\Rightarrow$~run(extract)(x)~|+|~run(extract)(y)}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}\}~}\textcolor{darkgray}{\footnotesize{}//~Monoid~laws~hold~after~applying~run().}{\footnotesize\par}
+\end{lyxcode}
+\begin{itemize}
+\item {\footnotesize{}\vspace{-0.15cm}}The reduced encoding is $\text{FMR}^{Z}\equiv\text{List}^{Z}$
+(list of $Z$'s)
+\begin{itemize}
+\item The multiplication requires concatenating the lists 
+\end{itemize}
+\item Reduced encoding and tree encodings give identical results after \texttt{\textcolor{blue}{\footnotesize{}run()}} 
 \end{itemize}
 \end{frame}
 
