@@ -556,11 +556,8 @@ Contents in brief:
 
 I plan to cover the following further material or a subset of it:
 
-- traversable functors, foldable functors
-- a general way of implementing and using "free" constructions (free monoid, free functor, free monad, free applicative etc.)
 - monad transformers, mtl (?), extensible effects ("types à la carte") - problems and solutions
 - various solutions for the "expression problem"
-- initial vs. final representations of data types ("final tagless" vs. "initial tagful" interpreters)
 - type-level constructions, type-level programming à la `shapeless`, basic usage of dependent types
 - interpretation of OO programming from the perspective of AFTT
 - design patterns of FP that replace OO design patterns
