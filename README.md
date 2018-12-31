@@ -63,7 +63,7 @@ Many of them are suitable neither as a first introduction nor as a reference on 
 Existing textbooks on type theory and formal logic present quite a few intricacies of domain theory and proof theory
 -- which is a lot of information that practicing programmers will have difficulty assimilating and yet will have no hope of ever applying in their daily work.
 At the same time, these books never mention practical techniques used in many functional programming libraries today,
-such as quantified types, types parameterized by type constructors, or partial type-level functions (known as "type classes").
+such as quantified types, types parameterized by type constructors, or partial type-level functions (known as "typeclasses").
 
 These books also do not give practical criteria for deciding type isomorphisms or for detecting valid and invalid recursive values, and do not give algorithms for deriving code from logic proofs.
 I mention these practical tasks as examples because they are perhaps the only real-world-coding applications of domain theory and the Curry-Howard correspondence theory, besides programming language design.
@@ -129,7 +129,8 @@ Please download the current versions of the PDF slides for your reference.
 It is generally advisable to take a look at the slides and the sample code first, before watching the video.
 Watch the video when you cannot follow something shown in the slides, or cannot understand the worked examples or solve the exercises.
 This can save you time since the videos are quite long and detailed.
-If you do watch the videos, consider adjusting the video speed to 1.5x since I am a slow speaker.
+
+If you do watch the videos, consider adjusting the video speed up to 1.5x; I am a slow speaker.
 
 # Table of contents
 
@@ -268,8 +269,7 @@ This optional addendum to Chapter 3 explains the Curry-Howard correspondence in 
 
 Title:
 
-Introduction to the Curry-Howard correspondence:
-The logic of types in functional programming languages
+_Introduction to the Curry-Howard correspondence: The logic of types in functional programming languages_
 
 Contents in brief:
 
@@ -314,7 +314,7 @@ Contents in brief:
 
 [Summary for Chapter 4](https://www.youtube.com/watch?v=enRrmLVzf4k&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV&index=14)
 
-## Chapter 5: Type-level functions and type classes
+## Chapter 5: Type-level functions and typeclasses
 
 [Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/05-type-classes.pdf)
 
@@ -327,13 +327,13 @@ Contents in brief:
 - Total and partial functions at value level and at type level
 - GADTs as partial type-to-type functions
 - Using type evidence values to define partial type-to-value functions (PTVFs)
-- Type classes understood as PTVFs
-- Using Scala's implicit value mechanism to define type classes
-- Examples of type classes: `Semigroup`, `Monoid`, `Functor`
+- typeclasses understood as PTVFs
+- Using Scala's implicit value mechanism to define typeclasses
+- Examples of typeclasses: `Semigroup`, `Monoid`, `Functor`
 - Higher-order type functions; kinds as a "type system for types"
-- Using Scala's "implicit method" syntax with type classes
-- Using the `cats` library to define type class instances
-- Using the `scalacheck` library to verify type class laws
+- Using Scala's "implicit method" syntax with typeclasses
+- Using the `cats` library to define typeclass instances
+- Using the `scalacheck` library to verify typeclass laws
 - Worked examples and exercises
 
 [Summary for Chapter 5](https://www.youtube.com/watch?v=Nyc1A_8fC1M&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV&index=16)
@@ -353,7 +353,7 @@ Contents in brief:
 - Intuitions behind the notion of "filtering" the data in a container
 - Deriving the filterable functor laws from the intuitions
 - Examples of functors that are not filterable, and reasons why
-- Defining the `Filterable` type class and checking the laws with `scalacheck`
+- Defining the `Filterable` typeclass and checking the laws with `scalacheck`
 - Example of a filterable contrafunctor
 - Worked examples and exercises
 
@@ -367,7 +367,7 @@ Contents in brief:
 
 Contents in brief:
 
-- Equivalent definition of `Filterable` type class via `deflate` or `mapOption` instead of `withFilter`
+- Equivalent definition of `Filterable` typeclass via `deflate` or `mapOption` instead of `withFilter`
 - How to simplify the laws of filterable functors by using a Kleisli category
 - Detailed derivations of laws for `mapOption`
 - Intuitions behind natural transformations and naturality laws
@@ -420,7 +420,7 @@ There was an error in the presentation: The power-of-2 tree _can_ be represented
 
 [YouTube recording: slides + audio](https://www.youtube.com/watch?v=p0fH_adTCnQ&index=22&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
-The recording was too long for YouTube to produce subtitles. For convenience, I split the recording into two halves, each now with subtitles.
+The recording was too long for YouTube to produce subtitles. For convenience, I split the recording in two parts, each part has subtitles.
 
 - [YouTube recording, slides + audio: Part 1 of 2](https://www.youtube.com/watch?v=u_XH7XkvFWM&index=23&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 - [YouTube recording, slides + audio: Part 2 of 2](https://www.youtube.com/watch?v=rKQqdAF9ecA&index=24&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
@@ -495,7 +495,7 @@ The main topic is to illustrate how several `fold` operations can be combined au
 
 [Code examples](https://github.com/winitzki/scala-examples/tree/master/chapter08/src)
 
-The video for part 2 is very long and will be recorded in 3 portions.
+The video for part 2 is very long and was recorded in 3 portions.
 
 [YouTube recording: slides + audio, portion 1 of 3](https://www.youtube.com/watch?v=xBDkBriX7Uk&index=29&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 
@@ -543,10 +543,143 @@ Contents in brief:
 - Constructions of applicative profunctors; verifying the laws
 - Commutative applicative functors, their interpretation, and examples
 - A unified category theory-based picture of "standard" functor classes (functor, contrafunctor, filterable, monad, applicative)
-- How to use this picture to find laws and to discover new type classes, such as the comonads
+- How to use this picture to find laws and to discover new typeclasses, such as the comonads
 - Exercises
 
 [Summary for Chapter 8, part 2](https://www.youtube.com/watch?v=9fjJAc4wOTQ&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV&index=32)
+
+## CHapter 9: Traversable functors
+
+[Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/10-free-constructions.pdf)
+
+[Code examples](https://github.com/winitzki/scala-examples/tree/master/chapter10/src)
+
+[YouTube recording: slides + audio](https://www.youtube.com/watch?v=OnaHcVBbCGQ&index=33&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+
+Contents in brief:
+
+- Motivation for the `traverse` operation
+- Deriving the `sequence` operation to simplify `traverse`
+- How to implement `sequence` for any polynomial functor
+- Examples of non-traversable functors: infinite list, and non-polynomial functors
+- Motivation for laws of `traverse` from category theory
+- Deriving the laws for `sequence`
+- Constructions for traversable functors and bitraversable bifunctors, with proofs of laws
+- Why infinite lists fail to satisfy traversable laws
+- Deriving `foldMap` by specializing to a constant applicative functor
+- Reasons to introduce the `Foldable` typeclass
+- Implementing `foldLeft` via `foldMap`
+- Traversable contrafunctors and profunctors exist, but are not useful
+- Examples of using traversable and foldable: decorating trees
+- Implementing `scanLeft` as a traversal with respect to a `State` monad
+- Why breadth-first tree traversal or depth level computation cannot be represented via a traversal with a `State` monad
+- Naturality with respect to an applicative functor
+- Exercises
+
+[Summary for Chapter 9](https://www.youtube.com/watch?v=unGUTDXymMI&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV&index=34)
+
+## Chapter 10: Free type constructions
+
+[Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/10-free-constructions.pdf)
+
+[Code examples](https://github.com/winitzki/scala-examples/tree/master/chapter10/src)
+
+The video for chapter 10 is very long and was recorded in 4 parts.
+
+### Part 1 of 4
+
+[YouTube recording: slides + audio, part 1 of 4](https://www.youtube.com/watch?v=32Rs0xCHiqc&index=35&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+
+Part 1 of 4 covers slides 1 to 15.
+
+Contents in brief:
+
+- The interpreter pattern as translation from program operations in a domain-specific language (DSL) into data structures
+- Using case classes to implement a DSL program as an unevaluated expression tree
+- Why using type parameters makes a DSL type-safe
+- When is it necessary for a DSL to have monadic properties?
+- Free monad obtained as a refactoring a DSL to separate custom code from common (application-independent) code
+- Interpreting ("running") the same DSL program into a different type constructor, to provide error handling
+- Proof that the monad laws hold after running the DSL program (but not necessarily before)
+- Free constructions in mathematics: what it means to have a "free product" or a "free semigroup"
+- Tree encoding vs. reduced encoding of a free construction
+- Examples: free semigroup and free monoid; proofs of the laws
+- Some properties and laws of the free constructions
+
+### Part 2 of 4
+
+[YouTube recording: slides + audio, part 2 of 4](https://www.youtube.com/watch?v=zNx-DORLfNY&index=36&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+
+Part 2 of 4 covers slides 16 to 19.
+
+Contents in brief:
+
+- Motivation for Church encoding
+- How to use the Church encoding for disjunction types
+- Church encoding of a free semigroup as a refactoring of the "interpreter" method `run()`
+- Properties of the universally quantified types
+- Why the Church encoding `∀X.(A ⇒ X) ⇒ X` is equivalent to the underlying type, `A`
+- Tree encoding of the free functor
+- Why a "hidden" type parameter in a disjunction translates into an existential type quantifier
+
+### Part 3 of 4
+
+[YouTube recording: slides + audio, part 3 of 4](https://www.youtube.com/watch?v=m8oNzlbsAjI&index=37&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+
+Part 3 of 4 covers slides 20 to 26.
+
+Contents in brief:
+
+- Properties of existential types; why `∃Z.Z × (Z ⇒ A)` is observationally equivalent to `A`, and why do we need "observational equivalence" of these values
+- Free functor in tree encoding
+- Free functor: Derivation of the reduced encoding from tree encoding
+- Preparation for Church encoding of a free functor
+- Church encoding of types and type constructors, in depth
+- How Church encoding makes recursive types apparently non-recursive
+- What needs to be done for Church encoding of a parameterized type
+- Examples: Church encoding of `List[Int]`, `Option[A]`, and `List[A]`
+- How the Church encoding of typeclasses such as Semigroup gives rise to the notion of "inductive typeclass" 
+- A few general formulas for free typeclass instances in Church encoding
+- What properties we expect from free type constructions
+- Recipes for encoding arbitrary inductive typeclasses
+- Why the product type and the function type are compatible with inductive typeclasses (e.g. product of two monads is a monad), but disjunction type is not (e.g. disjunction of two monads is not a monad)
+- Examples of typeclasses that do not have tree-encoded free instances: non-inductive typeclasses (e.g. traversables)
+- The difference between inductive and co-inductive typeclasses
+- Stack-safe implementations of a free functor in tree and reduced encodings
+- Why the standard Scala library method `andThen` is not stack-safe, and how to fix that
+
+### Part 4 of 4
+
+[YouTube recording: slides + audio, part 4 of 4](https://www.youtube.com/watch?v=BXBv3wOHi1Q&index=38&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+
+Part 4 of 4 covers slides 27 to 35.
+
+Contents in brief:
+
+- Free functor implemented as the Church encoding of the tree encoding is not stack safe
+- Free functor implemented as the Church encoding of the reduced encoding is stack safe, but slower
+- Further examples of free type constructions: free contrafunctor, free pointed functor, free monad, free applicative functor
+- How to simplify a reduced encoding when the generating type constructor is already a functor, in all the above cases
+- Proofs of the laws for the free type constructions, in the tree encoding
+- The identity law, the naturality law, the universal property, and the functor property
+- Definition of a typeclass-preserving map
+- Why the disjunction of generating types yields the solution for a free typeclass instance generated by several types
+- Why the disjunction of typeclass method functors yields the solution for a free typeclass instance when combining typeclasses
+- The universal formula for Church encoding of a free typeclass instance for a combination of any number of typeclasses and any number of generating types at once
+- Why functor composition is not a good solution for combining typeclass instances
+- Example: combined free applicative/free monad, interpreted into the Future monad
+- How the interpreter preserves parallelism when running the applicative `ap` or `zip` methods, while implementing sequential composition when running the `flatMap` method
+- Exercises
+
+### Summary
+
+[Summary for Chapter 10](https://www.youtube.com/watch?v=b7SnVTavhUY&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV&index=39)
+
+## Chapter 11: Computations in a functor context III. Monad transformers
+
+## Chapter 12: Co-inductive typeclasses. Comonads
+
+## Chapter 13: Recursive type and value constructions
 
 # Roadmap
 
