@@ -659,6 +659,7 @@ Contents in brief:
 - Free functor implemented as the Church encoding of the tree encoding is not stack safe
 - Free functor implemented as the Church encoding of the reduced encoding is stack safe, but slower
 - Further examples of free type constructions: free contrafunctor, free pointed functor, free monad, free applicative functor
+- "Final tagless" in plain English (as Church encoding of a free monad)
 - How to simplify a reduced encoding when the generating type constructor is already a functor, in all the above cases
 - Proofs of the laws for the free type constructions, in the tree encoding
 - The identity law, the naturality law, the universal property, and the functor property
