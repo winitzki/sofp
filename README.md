@@ -705,32 +705,41 @@ Contents in brief:
 - The list of all known monad transformer constructions: "composed-inside", "composed-outside", "recursive", "product", "contrafunctor-choice", "free pointed", and "irregular" transformers (StateT,  ContT, SelectorT, CodensityT)
 - Why the continuation monad (as well as Codensity and Selector) do not actually have a full monad transformer (they do not have one of the "liftings" and they do not have any "runners")
 
+
+Material possibly to be covered in the remaining parts of Chapter 11:
+
+- mtl-style programming, extensible effects ("types à la carte") - problems and solutions
+- alternatives to monad transformers: free monads, recursive combination of free pointed monads, "effect systems" 
+
 ## Chapter 12: Recursive type and value constructions
+
+Material possibly to be covered:
+
+- recursive types, row polymorphism / column polymorphism
+- type-level and functor-level fixpoints; `matryoshka` library, recursion schemes; when is a recursive type well-defined, lazy / eager evaluation
+- various solutions for the "expression problem"
+- interpretation of OO programming from the perspective of AFTT
+- trampolines in the standard Scala library; monadic tail recursion and stack safety
 
 # Roadmap
 
 0. Cut the scope for the book
 1. Finish all videos for that scope
-2. Write the book
+2. Finish writing the book
+3. Gather the leftover material for a sequel book devoted to "pragmatics"
 
-I plan to cover the following further material or a subset of it:
+The leftover material may include:
 
-- monad transformers, mtl (?), extensible effects ("types à la carte") - problems and solutions
-- various solutions for the "expression problem"
 - type-level constructions, type-level programming à la `shapeless`, basic usage of dependent types
-- interpretation of OO programming from the perspective of AFTT
 - design patterns of FP that replace OO design patterns
 - functional reactive programming, temporal logic, and UIs
 - an example of a full-stack application implemented in Scala with FP patterns
-- browse the recent Scala and Haskell FP books to see if I have missed something important
 - the following list of functional programming concepts needs to be revisited to select concepts that appear to be both well understood and useful in practice:
     - catamorphisms and other "something-morphisms" (?)
     - comonads and co-applicative functors (?)
-    - recursive types, row polymorphism / column polymorphism; type-level and functor-level fixpoints; `matryoshka` library, recursion schemes; when is a recursive type well-defined, lazy / eager evaluation
-    - trampolines in the standard Scala library; monadic tail recursion and stack safety
     - cofree comonads, cofree functors etc. (?)
     - coroutines, continuations library and "shift/reset programming" (?)
     - zippers / type derivatives (?)
-    - lenses / prisms and other "optics"
+    - lenses / prisms and other "optics", their derivation using profunctor Yoneda (after Milewski)
     - arrows and their relationship to functions (?)
     - Kan extensions, "codensity", other second-order tricks (?)
