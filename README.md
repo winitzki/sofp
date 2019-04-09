@@ -35,15 +35,17 @@ So all these theories are not within the scope of AFTT.
 
 As an example of theoretical material that _is_ within the scope of AFTT, consider the equational laws imposed on applicative functors.
 
-If a programmer wants to use an applicative functor to specify declaratively a set of operations that do not depend on each other's effects and to combine these operations,
-the programmer can begin by designing a data structure that satisfies the laws of applicative functors.
-The programmer first writes down the types of data in that data structure and then checks that the laws hold.
+An applicative functor is a data structure can specify declaratively a set of operations that do not depend on each other's effects.
+Programs can then easily combine these operations, for example, in order to execute them in parallel, or to refactor the program for better maintainability.
+
+To use this functionality, the programmer can begin by designing a data structure that satisfies the laws of applicative functors.
+The programmer first writes down the type of that data structure and the code implementing the required methods, and then checks that the laws hold.
 The data structure may need to be adjusted in order to fit the definition of an applicative functor or its laws.
 
 This work is done using pen and paper, in a mathematical notation.
-Once the data type and its applicative laws are verified, the programmer proceeds to write code.
+Once the applicative laws are verified, the programmer proceeds to write code using that data structure.
 
-Because of the proofs, it is assured that the data type satisfies the known properties of applicative functors, no matter how the rest of the program is written.
+Because of the proofs, it is assured that the data structure satisfies the known properties of applicative functors, no matter how the rest of the program is written.
 So, for example, it is assured that the relevant effects can be automatically parallelized, as is usual with applicative functors.
 
 In this way, AFTT directly guides the programmer and helps to write correct code.
