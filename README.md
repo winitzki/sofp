@@ -81,12 +81,13 @@ There are the infamous "monad tutorials", but also tutorials about applicative f
 These tutorials tend to be very hands-on and narrow in scope, limited to one or two specific questions and specific applications.
 Such tutorials usually do not present a sufficiently broad picture and do not illustrate deeper connections between these mathematical constructions.
 
-For example, free monads became popular in the Scala community around 2015. Many talks about free monads were presented at Scala engineering conferences,
+For example, "free monads" became popular in the Scala community around 2015.
+Many talks about free monads were presented at Scala engineering conferences,
 each giving their own slightly different implementation
-and never really saying what the "free monad" is intended to do and what properties it is required to satisfy.
+but never formulating rigorously the required properties for a piece of code to be a valid implementation of the free monad.
 
-Without knowledge of mathematical principles behind "free monads", a programmer cannot make sure that a given implementation is correct.
-However, books on category theory present "free monads" in a way that is unsuitable for programming applications (a free monad is an adjoint functor to a forgetful functor into the category of sets).
+Without knowledge of mathematical principles behind free monads, a programmer cannot make sure that a given implementation is correct.
+However, books on category theory present free monads in a way that is unsuitable for programming applications (a free monad is an adjoint functor to a forgetful functor into the category of sets).
 This definition is too abstract and cannot be used to verify whether a given implementation of the free monad in Scala is correct.
 
 Perhpas the best selection of AFTT tutorial material can be found in the [Haskell wikibooks](https://en.wikibooks.org/wiki/Haskell).
