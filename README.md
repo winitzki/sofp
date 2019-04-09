@@ -19,26 +19,45 @@ What exactly is the extent of "theory" that a practicing functional programmer s
 In my view, this question is not yet resolved.
 Once it is resolved, AFTT will be that theory.
 
-Traditional courses of theoretical computer science (algorithms, formal languages, semantics, compilers, etc.) are largely not relevant to AFTT.
+Traditional courses of theoretical computer science (algorithms, traditional data structures, complexity theory, formal languages, formal semantics, compiler techniques, databases, networking, operating systems, etc.) are largely not relevant to AFTT.
 
-Here is an example: To an academic computer scientist, the "theory behind Haskell" is lambda-calculus and formal semantics.
-These theories guided the design the Haskell language itself, and also define rigorously what a Haskell program does.
-However, a practicing programmer is normally concerned with _using_ a chosen programming language, not with designing it or with proving general theoretical properties of that language.
-For this reason, neither the theory of lambda-calculus nor theories of formal semantics will help a programmer to write programs.
-So these theories are not within the scope of AFTT.
+Here is an example:
+To an academic computer scientist, the "science behind Haskell" is the theory of lambda-calculus, the type-theoretic "System Fω", and formal semantics.
+These theories guided the design of the Haskell language and define rigorously what a Haskell program "means" in a mathematical sense.
+
+However, a practicing programmer is concerned with _using_ a chosen programming language to _write code_.
+A practicing Haskell or Scala programmer is not concerned with designing Haskell or Scala, or with proving general theoretical properties of those languages.
+
+For this reason, neither the theory of lambda-calculus, nor the proofs of type-theoretical properties of "System Fω",
+nor theories of formal semantics will actually help a programmer to write code.
+
+So all these theories are not within the scope of AFTT.
 
 As an example of theoretical matherial that _is_ within the scope of AFTT, consider the equational laws imposed on applicative functors.
-If a programmer wants to use an applicative functor to, say, specify declaratively a set of operations that do not depend on each other and combine these operations,
-the programmer can begin by designing a data structure that satisfies the laws of applicative functors.
-The programmer first writes down the types of data in that data structure and then checks whether the laws hold.
-The data structure may need to be adjusted in order to fit the definition of an applicative functor or its laws.
-Once this is verified, the programmer proceeds to write code.
-In this way, theory directly informs the programmer about how to write code.
 
-Applicative functors arose from practical usage of Haskell in applications such as parser combinators or domain-specific languages for parallel computations.
+If a programmer wants to use an applicative functor to specify declaratively a set of operations that do not depend on each other's effects and to combine these operations,
+the programmer can begin by designing a data structure that satisfies the laws of applicative functors.
+The programmer first writes down the types of data in that data structure and then checks that the laws hold.
+The data structure may need to be adjusted in order to fit the definition of an applicative functor or its laws.
+
+This work is done using pen and paper, in a mathematical notation.
+Once the data type and its applicative laws are verified, the programmer proceeds to write code.
+
+Because of the proofs, it is assured that the data type satisfies the known properties of applicative functors, no matter how the rest of the program is written.
+So, for example, it is assured that the relevant effects can be automatically parallelized, as is usual with applicative functors.
+
+In this way, AFTT directly guides the programmer and helps to write correct code.
+
+Applicative functors were discovered by people who were using Haskell for writing code,
+in applications such as parser combinators, compilers, or domain-specific languages for parallel computations.
+
 It is important for a practicing functional programmer to be able to recognize and use applicative functors.
-And yet, no standard computer science textbook would explain applicative functors,
-motivates their definition and laws, gives important examples and explores their structure.
+
+Applicative functors are not a feature of Haskell: they are the same in Scala, OCaml, or any other functional programming language.
+And yet, no standard computer science textbook explains applicative functors,
+motivates their definition and laws, gives important examples and explores their structure,
+or gives examples of a data structure that is not an applicative functor and explains why.
+(Neither does any book on category theory or type theory mention applicative functors.)
 
 So far it appears that AFTT should be a mixture of certain areas of category theory, formal logic, and type theory.
 However, software engineers would not derive much benefit from following traditional academic courses in these subjects,
@@ -46,15 +65,27 @@ because their choice of material is too theoretical and lacks specific results n
 In other words, the traditional academic courses answer questions that academic computer scientists have, not questions that software engineers have.
 
 Existing literature on these theoretical topics tends to be too abstract.
+
 For example, there are now several books intended as presentations of category theory "for computer science" or even "for programmers".
-However, all these books without exception will fail to give examples vitally relevant to everyday programming, but instead emphasize purely theoretical topics such as limits, co-limits, or toposes, with no applications in sight.
+However, all these books fail to give examples vitally relevant to everyday programming, such as applicative or traversable functors.
+Instead, these books contain purely theoretical topics such as limits, adjunctions, or toposes, - concepts that have no applications in practical functional programming today.
+
 At the same time, a software engineer hoping to understand the foundations of functional programming will find no mention of the concepts of foldable, filterable, applicative, or traversable functors in any books on category theory, including books intended for programmers.
-And yet, these concepts are necessary to formalize such foundationally important operations as `fold`, `filter`, `zip`, and `traverse` -- operations that functional programmers use every day in their code.
+And yet, these concepts are necessary to obtain a mathematically correct implementation of
+such foundationally important operations as `fold`, `filter`, `zip`, and `traverse` -- operations that functional programmers use every day in their code.
 
 To compensate for the lack of AFTT textbooks, programmers have written many online tutorials for each other, trying to explain the theoretical concepts necessary for practical work.
 There are the infamous "monad tutorials", but also tutorials about applicative functors, traversable functors, free monads, and so on.
 These tutorials tend to be very hands-on and narrow in scope, limited to one or two specific questions and specific applications.
 Such tutorials usually do not present a sufficiently broad picture and do not illustrate deeper connections between these mathematical constructions.
+
+For example, free monads became popular in the Scala community around 2015. Many talks about free monads were presented at Scala engineering conferences,
+each giving their own slightly different implementation
+and never really saying what the "free monad" is intended to do and what properties it is required to satisfy.
+
+Without knowledge of mathematical principles behind "free monads", a programmer cannot make sure that a given implementation is correct.
+However, books on category theory present "free monads" in a way that is unsuitable for programming applications (a free monad is an adjoint functor to a forgetful functor into the category of sets).
+This definition is too abstract and cannot be used to verify whether a given implementation of the free monad in Scala is correct.
 
 Perhpas the best selection of AFTT tutorial material can be found in the [Haskell wikibooks](https://en.wikibooks.org/wiki/Haskell).
 However, those tutorials are incomplete and limited to explaining the use of Haskell.
@@ -69,13 +100,14 @@ These books also do not give practical criteria for deciding type isomorphisms o
 I mention these practical tasks as examples because they are perhaps the only real-world-coding applications of domain theory and the Curry-Howard correspondence theory, besides programming language design.
 
 On the other hand, books such as ["Scala with Cats"](https://underscore.io/books/scala-with-cats/) and ["Functional programming, simplified"](https://alvinalexander.com/scala/functional-programming-simplified-book) are focused on explaining the practical aspects
-of programming and do not explain the algebraic laws that support the mathematical structures (such as applicative or monadic functors).
+of programming and do not explain the algebraic laws that the mathematical structures require (such as the laws for applicative or monadic functors).
 
 The only existing Scala-based AFTT textbook aiming at the proper scope is the [Bjarnason-Chiusano book](https://www.manning.com/books/functional-programming-in-scala), which balances practical considerations with theoretical developments such as algebraic laws.
 I intend to continue at about the same level but dig deeper into the foundations and at the same time give a wider range of examples.
 
-This tutorial series is therefore my attempt to delineate the proper scope of AFTT and to develop a rigorous yet clear and approachable presentation of the chosen material.
-Eventually I will convert this tutorial into a new AFTT textbook aimed at practicing functional programmers.
+This series of tutorial videos is my attempt to delineate the proper scope of AFTT and to develop a rigorous yet clear and approachable presentation of the chosen material.
+Eventually I will convert these videos into a new AFTT textbook aimed at practicing functional programmers.
+The book will teach programmers how to reason mathematically about types and code, in a way that is directly relevant to practical programming.
 
 ### Choice of the programming language
 
@@ -95,11 +127,11 @@ The material is presented here at medium to advanced level.
 It is not suitable for people unfamiliar with school-level algebra, or for people who are generally allergic to mathematics, or for people unwilling to learn new and difficult concepts through prolonged mental concentration.
 
 The first two chapters are introductory and may be suitable for beginners in programming.
-Starting from chapter 4, the material becomes unsuitable for beginners.
+Starting from the middle of chapter 3, the material becomes unsuitable for beginners.
 
 ## Main features and goals of this tutorial series
 
-- the presentation is self-contained -- introduces and explains all required concepts and Scala language features
+- the presentation is self-contained -- introduces and explains all required notations, concepts, and Scala language features
 - an emphasis on clarity and understandability of all explanations, derivations, and code
     - some terminology and notations are non-standard -- this is in order to achieve a clearer and more logically coherent presentation of the material
 - an emphasis on the mathematical principles that guide the practice of functional programming
