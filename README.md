@@ -90,7 +90,7 @@ Without knowledge of mathematical principles behind free monads, a programmer ca
 However, books on category theory present free monads in a way that is unsuitable for programming applications (a free monad is an adjoint functor to a forgetful functor into the category of sets).
 This definition is too abstract and cannot be used to verify whether a given implementation of the free monad in Scala is correct.
 
-Perhpas the best selection of AFTT tutorial material can be found in the [Haskell wikibooks](https://en.wikibooks.org/wiki/Haskell).
+Perhaps the best selection of AFTT tutorial material can be found in the [Haskell wikibooks](https://en.wikibooks.org/wiki/Haskell).
 However, those tutorials are incomplete and limited to explaining the use of Haskell.
 Many of them are suitable neither as a first introduction nor as a reference on AFTT.
 
