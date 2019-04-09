@@ -33,7 +33,7 @@ nor theories of formal semantics will actually help a programmer to write code.
 
 So all these theories are not within the scope of AFTT.
 
-As an example of theoretical matherial that _is_ within the scope of AFTT, consider the equational laws imposed on applicative functors.
+As an example of theoretical material that _is_ within the scope of AFTT, consider the equational laws imposed on applicative functors.
 
 If a programmer wants to use an applicative functor to specify declaratively a set of operations that do not depend on each other's effects and to combine these operations,
 the programmer can begin by designing a data structure that satisfies the laws of applicative functors.
