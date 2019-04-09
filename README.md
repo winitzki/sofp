@@ -678,13 +678,38 @@ Contents in brief:
 
 ## Chapter 11: Computations in a functor context III. Monad transformers
 
-## Chapter 12: Co-inductive typeclasses. Comonads
+[Slides (PDF)](https://github.com/winitzki/talks/blob/master/ftt-fp/11-monad-transformers.pdf)
 
-## Chapter 13: Recursive type and value constructions
+[Code examples](https://github.com/winitzki/scala-examples/tree/master/chapter11/src)
+
+### Part 1 of 4
+
+[YouTube recording: slides + audio, part 1 of 4](https://www.youtube.com/watch?v=OiIddxiywTQ&index=40&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+
+Part 1 of 4 covers slides 1 to 11.
+
+Contents in brief:
+
+- Combining Future and Option as an example of combining monadic effects "by hand" (without transformers)
+- Deriving the desired laws for lifting monads into a combined monad
+- Difficulties in combining monads in general: what does and what does not work
+- Examples of monads that compose and that do not compose with other monads
+- Simplifying the two identity laws of a monad into a single identity law for "lifting"
+- Deriving the composition law for "lifting" in terms of `flatten`, `flatMap`, and  in terms of the Kleisli composition
+- Definition of "monadic morphism" and a proof that monadic morphisms are always natural transformations
+- Monad transformers as a way of reducing the programmer's work as opposed to combining monads by hand
+- What is a "monad transformer stack" and how it is different from a stack of nested type constructors
+- Formal requirements for a monad transformer: it must have two "liftings" and two "runners"
+- First examples: the monad constructions that lead to monad transformers (EitherT, ReaderT, WriterT)
+- The "zoology" of monad transformers: to each monad its own transformer
+- The list of all known monad transformer constructions: "composed-inside", "composed-outside", "recursive", "product", "contrafunctor-choice", "free pointed", and "irregular" transformers (StateT,  ContT, SelectorT, CodensityT)
+- Why the continuation monad (as well as Codensity and Selector) do not actually have a full monad transformer (they do not have one of the "liftings" and they do not have any "runners")
+
+## Chapter 12: Recursive type and value constructions
 
 # Roadmap
 
-0. Cut the scope for volume 1 of the book
+0. Cut the scope for the book
 1. Finish all videos for that scope
 2. Write the book
 
@@ -701,7 +726,6 @@ I plan to cover the following further material or a subset of it:
 - the following list of functional programming concepts needs to be revisited to select concepts that appear to be both well understood and useful in practice:
     - catamorphisms and other "something-morphisms" (?)
     - comonads and co-applicative functors (?)
-    - rigid functors (need better use cases for those) (?)
     - recursive types, row polymorphism / column polymorphism; type-level and functor-level fixpoints; `matryoshka` library, recursion schemes; when is a recursive type well-defined, lazy / eager evaluation
     - trampolines in the standard Scala library; monadic tail recursion and stack safety
     - cofree comonads, cofree functors etc. (?)
