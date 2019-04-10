@@ -94,13 +94,21 @@ Perhaps the best selection of AFTT tutorial material can be found in the [Haskel
 However, those tutorials are incomplete and limited to explaining the use of Haskell.
 Many of them are suitable neither as a first introduction nor as a reference on AFTT.
 
-Existing textbooks on type theory and formal logic present quite a few intricacies of domain theory and proof theory
--- which is a lot of information that practicing programmers will have difficulty assimilating and yet will have no hope of ever applying in their daily work.
+Apart from referring to some notions from category theory, AFTT also uses some concepts from type theory and formal logic.
+However, existing textbooks on type theory and formal logic focus on domain theory and proof theory
+-- which is a lot of information that practicing programmers will have difficulty assimilating and yet will have no chance of ever applying in their daily work.
 At the same time, these books never mention practical techniques used in many functional programming libraries today,
 such as quantified types, types parameterized by type constructors, or partial type-level functions (known as "typeclasses").
 
-These books also do not give practical criteria for deciding type isomorphisms or for detecting valid and invalid recursive values, and do not give algorithms for deriving code from logic proofs.
+Type theory and formal logic can, in principle, help the programmer with certain practical tasks, such as:
+
+- deciding whether two data structures are equivalent as types, and implementing the isomorphism transformation; for example, `(A, Either[B, C])` is equivalent to `Either[(A, B), (A, C)]`
+- detecting whether a definition of a recursive type is "valid", i.e. does not lead to a useless infinite recursion; an example of an "invalid" recursive type definition in Scala is `case class Bad(x: Bad)`
+- deriving an implementation of a function from its type signature and required laws; for example, deriving the `flatMap` function for the `Reader` monad using the type signature `def flatMap[Z, A, B](r: Z ⇒ A)(f: A ⇒ Z ⇒ B): Z ⇒ B`
+- deciding whether a generic pure function with a given signature can be implemented; for example, `def f[A, B]: (A ⇒ B) ⇒ A` cannot be implemented but `def g[A, B]: A ⇒ (B ⇒ A)` can be implemented
+
 I mention these practical tasks as examples because they are perhaps the only real-world-coding applications of domain theory and the Curry-Howard correspondence theory, besides programming language design.
+However, existing books on type theory and logic do not give practical recipes for resolving these questions.
 
 On the other hand, books such as ["Scala with Cats"](https://underscore.io/books/scala-with-cats/) and ["Functional programming, simplified"](https://alvinalexander.com/scala/functional-programming-simplified-book) are focused on explaining the practical aspects
 of programming and do not explain the algebraic laws that the mathematical structures require (such as the laws for applicative or monadic functors).
