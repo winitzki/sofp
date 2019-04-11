@@ -8,7 +8,7 @@
 \usepackage{helvet}
 \renewcommand{\ttdefault}{cmtt}
 \usepackage{newtxmath}
-\usepackage[LGR,T1]{fontenc}
+\usepackage[T1]{fontenc}
 \usepackage[latin9]{inputenc}
 \usepackage[paperwidth=7in,paperheight=9in]{geometry}
 \setcounter{secnumdepth}{3}
@@ -19,6 +19,7 @@
 \makeindex
 \usepackage{graphicx}
 \usepackage{wasysym}
+\usepackage[all]{xy}
 \usepackage[unicode=true,
  bookmarks=true,bookmarksnumbered=true,bookmarksopen=true,bookmarksopenlevel=2,
  breaklinks=true,pdfborder={0 0 0},pdfborderstyle={},backref=page,colorlinks=true]
@@ -32,11 +33,6 @@
 \makeatletter
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%% LyX specific LaTeX commands.
-\DeclareRobustCommand{\greektext}{%
-  \fontencoding{LGR}\selectfont\def\encodingdefault{LGR}}
-\DeclareRobustCommand{\textgreek}[1]{\leavevmode{\greektext #1}}
-\ProvideTextCommand{\~}{LGR}[1]{\char126#1}
-
 %% Because html converters don't know tabularnewline
 \providecommand{\tabularnewline}{\\}
 
@@ -19746,7 +19742,7 @@ luck with the exercises
 \end{comment}
 
 
-\chapter{Applicative functors, contrafunctors, and profunctors}
+\chapter{Applicative functors, contrafunctors, and profunctors\label{chap:Applicative-functors,-contrafunc}}
 
 \section{Practical use}
 
@@ -23723,7 +23719,7 @@ concludes the tutorial in Chapter eight
 \end{comment}
 
 
-\chapter{Traversable functors and profunctors}
+\chapter{Traversable functors and profunctors\label{chap:Traversable-functors-and}}
 
 \section{Discussion}
 
@@ -23744,6 +23740,122 @@ concludes the tutorial in Chapter eight
 \section{Practical use}
 
 \section{Laws and structure}
+
+\section{Monad transformers from functor composition}
+
+We have seen examples of monad transformers that work as functor composition,
+either from inside or from outside. The simplest such examples are
+the \texttt{OptionT} transformer,
+\[
+L^{A}\triangleq1+A,\quad\quad T_{L}^{M,A}\triangleq M^{L^{A}}=M^{1+A}\quad,
+\]
+which places the base monad $L$ \emph{inside} the foreign monad $M$,
+and the \texttt{ReaderT} transformer, 
+\[
+L^{A}\triangleq R\Rightarrow A,\quad\quad T_{L}^{M,A}\triangleq L^{M^{A}}=R\Rightarrow M^{A}\quad,
+\]
+which places the base monad $L$ \emph{outside} the foreign monad
+$M$. 
+
+We can obtain the properties of both kinds of monad transformers at
+once from a single derivation if we temporarily drop the distinction
+between the base monad and the foreign monad. We simply assume that
+we are given two different monads, $L$ and $M$, whose functor composition
+$L^{M^{\bullet}}$ is also required to be a monad. Since the assumptions
+on the monads $L$ and $M$ are the same, the resulting properties
+of the composed monad will apply equally to both kinds of monad transformers.
+(For the composed-inside transformer, we will just need to interchange
+the symbols $L$ and $M$.)
+
+\subsection{Motivation for the \texttt{switch} function}
+
+The required methods for the composed monad $T^{\bullet}\triangleq L^{M^{\bullet}}$
+are $\text{pure}$ (short notation ``$\text{pu}$'') and \texttt{flatten}
+(short notation ``$\text{ftn}$'') with the type signatures
+\[
+\text{pu}_{T}:A\Rightarrow L^{M^{A}}\quad,\quad\text{ftn}_{T}:L^{M^{L^{M^{A}}}}\Rightarrow L^{M^{A}}\quad.
+\]
+All we know about $L$ and $M$ is that they are monads with their
+own methods $\text{pu}_{L}$, $\text{ftn}_{L}$, $\text{pu}_{M}$,
+and $\text{ftn}_{M}$. We can easily implement 
+\[
+\text{pu}_{T}\triangleq\text{pu}_{M}\bef\text{pu}_{L}\quad.
+\]
+We could also implement $\text{ftn}_{T}$ if we could somehow bring
+the nested layers of the functor $L$ together; however, they are
+separated by a layer of the functor $M$. To show this layered structure
+in a perhaps more visual way, let us employ another notation for the
+functor composition, 
+\[
+L\circ M\triangleq L^{M^{\bullet}}\quad.
+\]
+In this notation, the type signature for \texttt{flatten} is written
+as
+\[
+\text{ftn}_{T}:L\circ M\circ L\circ M\leadsto L\circ M\quad.
+\]
+If we had $L\circ L\circ...$ here, we would have applied $\text{ftn}_{L}$
+and flattened the two layers of the functor $L$. Then we would have
+flattened the remaining two layers of the functor $M$. How can we
+achieve this? The trick is to assume that we can switch the order
+of the layers in the middle, using a function I call \texttt{switch}
+(short notation ``$\text{sw}$''), with the type signature
+\[
+\text{sw}:M\circ L\leadsto L\circ M\quad,
+\]
+which is written in the short type notation as
+\[
+\text{sw}:M^{L^{A}}\Rightarrow L^{M^{A}}\quad.
+\]
+If this operation were \emph{somehow} defined for the two monads $L$
+and $M$, we could implement $\text{ftn}_{T}$ by first switching
+the order of the inner layers $M$ and $L$ as $L\circ M\circ L\circ M\leadsto L\circ L\circ M\circ M$,
+and then applying the flatten methods of the monads $L$ and $M$.
+The resulting code for the function $\text{ftn}_{T}$ and the corresponding
+type diagram are
+\[
+\text{ftn}_{T}\triangleq\text{sw}^{\uparrow L}\bef\text{ftn}_{L}\bef\text{ftn}_{M}^{\uparrow L}\quad.
+\]
+{\footnotesize{}
+\[
+\xymatrix{\xyScaleY{2pc}\xyScaleX{4pc}L^{M^{L^{M^{A}}}}\ar[r]\sp(0.5){\text{sw}^{\uparrow L}}\ar[rd]\sb(0.5){\text{ftn}_{T}} & L^{L^{M^{M^{A}}}}\ar[r]\sp(0.5){\text{ftn}_{L}} & L^{M^{M^{A}}}\ar[ld]\sp(0.5){\text{ftn}_{M}^{\uparrow L}}\\
+ & L^{M^{A}}
+}
+\]
+}{\footnotesize\par}
+
+It turns out that in \emph{both} cases (the composed-inside and the
+composed-outside transformers), the new monad's \texttt{flatten} method
+can be defined through the \texttt{switch} operation. For the two
+kinds of transformers, the type signatures of these functions are
+\begin{align*}
+\text{composed-inside}:\quad\text{ftn}_{T}:M^{L^{M^{L^{A}}}}\Rightarrow M^{L^{A}}\quad, & \quad\text{sw}:L^{M^{A}}\Rightarrow M^{L^{A}}\quad,\\
+\text{composed-outside}:\quad\text{ftn}_{T}:L^{M^{L^{M^{A}}}}\Rightarrow L^{M^{A}}\quad, & \quad\text{sw}:M^{L^{A}}\Rightarrow L^{M^{A}}\quad.
+\end{align*}
+
+An astute reader will notice the similarity between the \texttt{switch}
+operation introduced here and the \texttt{sequence} operation introduced
+in Chapter~\ref{chap:Traversable-functors-and}. Indeed, the type
+signature of the sequence operation is the same (for the composed-inside
+transformers),
+\[
+\text{seq}:L^{F^{A}}\Rightarrow F^{L^{A}}\quad,
+\]
+where $F$ is an arbitrary applicative functor and $L$ is a traversable
+functor. However, the similarity ends here: the laws required for
+the \texttt{switch} operation to yield a monad $T$ are much stronger
+than the laws of traversable functors. In particular, if we wish $L^{M^{\bullet}}$
+to be a monad, it is far insufficient to require a monad $L$ to be
+a traversable functor.
+
+For this reason, I use a different name, ``switch'', to be used
+in the context of monad transformers. We will now find out what laws
+are required for the \texttt{switch} operation.
+
+\subsection{Deriving \texttt{switch} from \texttt{flatten}}
+
+Given a \texttt{flatten} function for the monad $T^{\bullet}=L^{M^{\bullet}}$,
+can we establish whether a suitable switch function exists? 
 
 \section{Composed-outside transformers: Rigid monads}
 
@@ -25449,7 +25561,7 @@ not very useful
 
 \chapter{What is ``applied functional type theory''}
 
-\section{The scope of this book}
+\section{The import and scope of AFTT}
 
 \textbf{\index{Applied functional type theory}Applied functional
 type theory} (AFTT) is what I call the area of computer science that
@@ -25477,24 +25589,24 @@ are largely not relevant to AFTT.
 
 Here is an example: To an academic computer scientist, the ``science
 behind Haskell'' is the theory of lambda-calculus, the type-theoretic
-``System F\textgreek{w}'', and formal semantics. These theories
-guided the design of the Haskell language and define rigorously what
-a Haskell program ``means'' in a mathematical sense.
+``System $F\omega$'', and formal semantics. These theories guided
+the design of the Haskell language and define rigorously what a Haskell
+program ``means'' in a mathematical sense. Academic computer science
+courses teach these theories.
 
-However, a practicing programmer is mainly concerned with \emph{using}
-a chosen programming language to \emph{write code}. A practicing Haskell
-or Scala programmer is not concerned with designing Haskell or Scala,
-or with proving general theoretical properties of those languages.
+However, a practicing Haskell or Scala programmer is not concerned
+with designing Haskell or Scala, or with proving any theoretical properties
+of those languages. A practicing programmer is mainly concerned with
+\emph{using} a chosen programming language to \emph{write code}.
 
-For this reason, neither the theory of lambda-calculus, nor the proofs
-of type-theoretical properties of ``System F\textgreek{w}'', nor
-theories of formal semantics will actually help a programmer to write
-code.
-
-So all these theories are not within the scope of AFTT.
+Neither the theory of lambda-calculus, nor proofs of type-theoretical
+properties of ``System $F\omega$'', nor theories of formal semantics
+will actually help a programmer to write code. So all these theories
+are not within the scope of AFTT.
 
 As an example of theoretical material that \emph{is} within the scope
-of AFTT, consider the equational laws imposed on applicative functors.
+of AFTT, consider the equational laws imposed on applicative functors
+(see Chapter~\ref{chap:Applicative-functors,-contrafunc}).
 
 It is essential for a practicing functional programmer to be able
 to recognize and use applicative functors. An applicative functor
@@ -25530,40 +25642,46 @@ Haskell for writing code, in applications such as parser combinators,
 compilers, and domain-specific languages for parallel computations.
 However, applicative functors are not a feature of Haskell: they are
 the same in Scala, OCaml, or any other functional programming language.
-And yet, no standard computer science textbook explains applicative
-functors, motivates their definition and laws, gives important examples
-and explores their structure, or gives examples of a data structure
-that is not an applicative functor and explains why. (For that matter,
-no book on category theory or type theory mentions applicative functors
-either.)
+And yet, no standard computer science textbook defines applicative
+functors, motivates their laws, explores their structure on basic
+examples, or shows data structures that are \emph{not} applicative
+functors and explains why. (For that matter, no book on category theory
+or type theory mentions applicative functors either.)
 
-So far it appears that AFTT should be a mixture of certain areas of
+So far it appears that AFTT will be a mixture of certain areas of
 category theory, formal logic, and type theory. However, software
 engineers would not derive much benefit from following traditional
 academic courses in these subjects, because their choice of material
-is too theoretical and lacks specific results necessary for practical
+is too abstract and lacks specific results necessary for practical
 software engineering. In other words, the traditional academic courses
 answer questions that academic computer scientists have, not questions
 that software engineers have.
 
-Existing literature on these theoretical topics tends to be too abstract.
-
-For example, there are now several books intended as presentations
-of category theory ``for computer scientists'' or ``for programmers''.
-However, these books fail to give examples vitally relevant to everyday
-programming, such as applicative or traversable functors. Instead,
-these books contain purely theoretical topics such as limits, adjunctions,
-or toposes, \textendash{} concepts that have no applications in practical
+There exist several books intended as presentations of category theory
+``for computer scientists'' or ``for programmers''. However, these
+books fail to give examples vitally relevant to everyday programming,
+such as applicative or traversable functors. Instead, these books
+contain purely theoretical topics such as limits, adjunctions, or
+toposes, \textendash{} concepts that have no applications in practical
 functional programming today.
 
+Typical questions in academic books: ``is this an introduction or
+an elimination rule'' and ``does this property hold in non-small
+categories, or are we limited to the category $\mathbb{S}et$''.
+Typical questions a Scala programmer might have: ``can we compute
+a value of type \texttt{Either{[}Z, R $\Rightarrow$ A{]}} from a
+value of type \texttt{R $\Rightarrow$ Either{[}Z, A{]}}'' and ``is
+the type constructor \texttt{F{[}A{]} = Option{[}(A, A, A){]}} a monad''.
+The proper scope of AFTT includes answering the last two questions,
+but not the first two.
+
 A software engineer hoping to understand the foundations of functional
-programming will find no mention of the concepts of foldable, filterable,
-applicative, or traversable functors in any books on category theory,
-including books intended for programmers. And yet, these concepts
-are necessary to obtain a mathematically correct implementation of
-such foundationally important operations as fold, filter, zip, and
-traverse \textendash{} operations that functional programmers use
-every day in their code.
+programming will not find the concepts of foldable, filterable, applicative,
+or traversable functors in any books on category theory, including
+books intended for programmers. And yet, these concepts are necessary
+to obtain a mathematically correct implementation of such foundationally
+important operations as fold, filter, zip, and traverse \textendash{}
+operations that functional programmers use every day in their code.
 
 To compensate for the lack of AFTT textbooks, programmers have written
 many online tutorials for each other, trying to explain the theoretical
@@ -25585,7 +25703,7 @@ Without knowledge of mathematical principles behind free monads, a
 programmer cannot make sure that a given implementation is correct.
 However, books on category theory present free monads in a way that
 is unsuitable for programming applications: a free monad is just an
-adjoint functor to a forgetful functor into the category of sets.\footnote{``What's your problem?''}
+adjoint functor to a forgetful functor into the category of sets.\footnote{``What's your problem?'' as the joke goes.}
 This definition is too abstract and cannot be used to verify whether
 a given implementation of the free monad in Scala is correct.
 
@@ -25643,13 +25761,13 @@ require (such as the laws for applicative or monadic functors).
 The only existing Scala-based AFTT textbook aiming at the proper scope
 is the \href{https://www.manning.com/books/functional-programming-in-scala}{Bjarnason-Chiusano book},
 which balances practical considerations with theoretical developments
-such as algebraic laws. I intend to write at about the same level
-but dig deeper into the foundations and at the same time give a wider
-range of examples.
+such as algebraic laws. This book is written at about the same level
+but goes deeper into the mathematical foundations and at the same
+time gives a wider range of examples.
 
-This book is my attempt to delineate the proper scope of AFTT and
+This book is an attempt to delineate the proper scope of AFTT and
 to develop a rigorous yet clear and approachable presentation of the
-chosen material. The book will teach programmers how to reason mathematically
+chosen material. The goal is to teach programmers how to reason mathematically
 about types and code, in a way that is directly relevant to practical
 programming.
 
@@ -25672,20 +25790,30 @@ for readers not familiar with the theoretical literature.
 
 The main content of AFTT is to expose mathematical principles that
 guide the practice of functional programming \textendash{} that is,
-help us write code. Therefore, all mathematical developments in this
-book are thoroughly motivated by practical programming issues. Each
-mathematical construction is accompanied by code examples and unit
-tests to illustrate its usage and check correctness. I do not develop
-abstract theory for theory's sake.\footnote{That is, to demonstrate the author's cleverness.}
-All theory is developed in order to write some new code as a result,
-and in order to answer a question arising from programming practice.
-I do not pursue mathematical generalizations beyond either practical
-usefulness or immediate pedagogical usefulness. For instance, I never
-mention an ``introduction/elimination rule'', ``strong normalization'',
-``complete partial order domain'', ``adjoint functor'', ``pullback'',
-``pushout'', ``limit'', ``co-limit'', or the word ``algebra'',
-because using these concepts will not help a functional programmer
-to write code. 
+help people to write code. Therefore, all mathematical developments
+in this book are thoroughly motivated by practical programming issues.
+
+Each mathematical construction is accompanied by code examples and
+unit tests to illustrate its usage and check correctness. For example,
+the equational laws for every standard typeclass (functor, applicative,
+monad, etc.) are first motivated heuristically before deriving a set
+of mathematical equations and formulating the laws in terms of axioms
+of a category. In this book, all theory is developed in order to write
+some new code as a result, and in order to answer a question arising
+from programming practice. Theoretical material from category theory,
+type theory, and formal logic is kept to the absolute minimum necessary.
+Mathematical generalizations are not pursued beyond either practical
+usefulness or immediate pedagogical usefulness. This limits the scope
+of required mathematical knowledge to bare rudiments of category theory,
+type theory, and formal logic. For instance, I never mention ``introduction/elimination
+rules'', ``strong normalization'', ``complete partial order domain'',
+``adjoint functor'', ``pullback'', ``pushout'', ``limit'',
+``co-limit'', or the word ``algebra'', because using these concepts
+will not help a functional programmer to write code. Instead, I focus
+on practically useful material \textendash{} including some little-known
+but useful constructions such as the ``partial type function'',
+``filterable'' and ``applicative contrafunctor'' typeclasses,
+and ``free pointed'' monad. 
 
 Each new concept or technique is fully explained via ``worked examples''
 and drilled via provided exercises. Answers to exercises are not provided,
