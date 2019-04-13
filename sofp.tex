@@ -52,6 +52,10 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%% User specified LaTeX commands.
 \usepackage[all]{xy} % xypic
 
+% Fix the numbering of exercises: subsubsections appear as paragraphs but are numbered.
+\usepackage{titlesec}
+\titleformat{\subsubsection}[runin]{\normalfont\normalsize\bfseries}{}{0pt}{}
+
 % Scala syntax highlighting. See https://tex.stackexchange.com/questions/202479/unable-to-define-scala-language-with-listings
 %\usepackage[T1]{fontenc}
 %\usepackage[utf8]{inputenc}
@@ -129,7 +133,7 @@
 morekeywords={{scala}},
 otherkeywords={=,=>,<-,<\%,<:,>:,\#,@,:,[,],.,???},
 keywordstyle={\color{scalakeyword}},
-morekeywords={[2]{String,Int,Char,Boolean,Double,Float,Long,Seq,Map,List,Option,Either,Future,Vector,IndexedSeq,Try,true,false,None,Some,Left,Right,Nothing,Any,Array}},
+morekeywords={[2]{String,Int,Char,Boolean,Double,Float,Long,Seq,Map,List,Option,Either,Future,Vector,IndexedSeq,Try,true,false,None,Some,Left,Right,Nothing,Any,Array,Unit}},
 keywordstyle={[2]{\color{scalatype}}},
 frame=tb,
 aboveskip=2mm,
@@ -1603,213 +1607,615 @@ both in speech and in writing.
 
 \chapter{Mathematical induction\label{chap:2-Mathematical-induction}}
 
+In this chapter, we will see more functionality that Scala gives us
+to treat collections in a functional way \textendash{} that is, in
+a way that is more suitable for mathematical thinking. In particular,
+the Scala standard library has methods for performing quite general
+iterative computations \textendash{} including those that represent
+mathematical quantities defined by induction. Translating mathematical
+induction into code is the main topic of this chapter.
+
+Before we begin, we need to become fluent with some of the types used
+by the Scala collections library.
+
+\section{Tuple types}
+
+\subsection{First examples}
+
+Many standard library methods in Scala require working with \textbf{\index{tuple}tuple
+}\textbf{\emph{types}}. What are tuple types? The easiest example
+of a tuple is a \emph{pair} of values, for example, a pair of an integer
+and a string. The Scala syntax for this type of pair is
+\begin{lstlisting}
+val a: (Int, String) = (123, "xyz")
+\end{lstlisting}
+The type expression \lstinline!(Int, String)! denotes this tuple
+type.
+
+We can also have a \emph{triple} of values:
+\begin{lstlisting}
+val b: (Boolean, Int, Int) = (true, 3, 4)
+\end{lstlisting}
+Pairs and triples are examples of tuples. A tuple can contain any
+fixed number of values, which I call \textbf{parts\index{tuple!parts}}
+of a tuple. The parts of a tuple can have different types, but the
+type of each part is fixed once and for all. It is a type error to
+use incorrect types in a tuple, or an incorrect number of parts of
+a tuple:
+\begin{lstlisting}
+scala> val bad: (Int, String) = (1,2)
+<console>:11: error: type mismatch;
+ found   : Int(2)
+ required: String
+       val bad: (Int, String) = (1,2)
+                                   ^
+scala> val bad: (Int, String) = (1,"a",3) <console>:11: error: type mismatch;  found   : (Int, String, Int)  required: (Int, String)        val bad: (Int, String) = (1,"a",3)                                 ^
+\end{lstlisting}
+
+Parts of a tuple can be accessed by number, starting from $1$. The
+Scala syntax for tuple access methods looks like this,
+\begin{lstlisting}
+scala> val a = (123, "xyz")
+a: (Int, String) = (123,xyz)
+
+scala> a._1
+res0: Int = 123
+
+scala> a._2
+res1: String = xyz 
+\end{lstlisting}
+It is a type error to access a part that does not exist:
+\begin{lstlisting}
+scala> a._0
+<console>:13: error: value _0 is not a member of (Int, String)
+       a._0
+         ^
+
+scala> a._5
+<console>:13: error: value _5 is not a member of (Int, String)
+       a._5
+         ^
+\end{lstlisting}
+These \textbf{type errors\index{type error}} are detected at compile
+time, \textendash{} before any computations begin.
+
+Tuples can be \textbf{nested}\index{tuple!nested}: any part of a
+tuple can itself be of a tuple type.
+\begin{lstlisting}
+scala> val c: (Boolean, (String, Int), Boolean) = (true, ("abc", 3), false)
+c: (Boolean, (String, Int), Boolean) = (true,(abc,3),false)
+
+scala> c._1
+res2: Boolean = true
+
+scala> c._2
+res3: (String, Int) = (abc,3)
+\end{lstlisting}
+
+To define functions whose arguments are tuples, use the syntax
+\begin{lstlisting}
+def f(p: (Boolean, Int), q: Int): Boolean = p._1 && (p._2 > q) 
+\end{lstlisting}
+The first argument, \lstinline!p!, of this function, has a tuple
+type. The function body uses access methods to compute its result
+value. Note that the second part of the tuple \lstinline!p! is of
+type \lstinline!Int!, so it is valid to compare it with an integer
+\lstinline!q!. It would be a type error to compare the \emph{tuple}
+\lstinline!p! with an integer using the expression \lstinline!p > q!.
+It would be also a type error to apply \lstinline!f! to an argument
+\lstinline!p! that has a wrong type, e.g.~ type \lstinline!(Int, Int)!
+instead of \lstinline!(Boolean, Int)!.
+
+\subsection{Pattern matching on tuples}
+
+Instead of using access methods when working with tuples, it is more
+convenient to use \textbf{pattern matching\index{pattern matching}}.
+Scala performs pattern matching in two situations:
+\begin{itemize}
+\item destructuring definition: \lstinline!val $pattern$ = ...!
+\item partial function: \lstinline!case $pattern$ => ...!
+\end{itemize}
+An example of a \textbf{destructuring\index{destructuring} definition}
+is
+\begin{lstlisting}
+scala> val g = (1, 2, 3)
+g: (Int, Int, Int) = (1,2,3)
+
+scala> val (x, y, z) = g
+x: Int = 1
+y: Int = 2
+z: Int = 3
+\end{lstlisting}
+The value \lstinline!g! is a tuple. After defining \lstinline!g!,
+we define the three variables \lstinline!x!, \lstinline!y!, \lstinline!z!
+\emph{at once} in a single \lstinline!val! definition. We can imagine
+that this definition ``destructures'' the data structure contained
+in \lstinline!g! in order to decompose it into parts, and then assigns
+the names \lstinline!x!, \lstinline!y!, \lstinline!z! to these
+parts. The types of each of the new values are also assigned automatically.
+
+The left-hand side of the destructuring definition contains the tuple
+pattern \lstinline!(x, y, z)! that looks like a tuple except that
+its parts are so far undefined names \lstinline!x!, \lstinline!y!,
+\lstinline!z!. The destructuring definition \emph{matches} the three
+\textbf{\index{pattern variables}pattern variables} to the value
+of \lstinline!g!. If \lstinline!g! does not contain a tuple with
+exactly three parts, this definition will fail. This computation is
+called \textbf{pattern matching}\index{pattern matching}.
+
+Pattern matching is also used in defining functions on tuples. An
+example of such a function is
+\begin{lstlisting}
+def s(p: (Int, Int, Int)): Int = p match { case (x, y, z) => x + y + z }
+scala> s(g)
+res0: Int = 6
+\end{lstlisting}
+The \textbf{case expression\index{case expression}} \lstinline!case (x, y, z) => x + y + z!
+performs pattern matching on the tuple argument \lstinline!p!. The
+pattern matching process will ``destructure'' (i.e.~decompose)
+the tuple and try to match it to the given pattern \lstinline!(x, y, z)!.
+In this pattern, \lstinline!x!, \lstinline!y!, \lstinline!z! are
+as yet undefined new variables, called the \textbf{\index{pattern variables}pattern
+variables}. Once the pattern matching succeeds, the pattern variables
+\lstinline!x!, \lstinline!y!, \lstinline!z! are assigned their
+values, and the function body can proceed to perform its computation.
+In this example, \lstinline!x!, \lstinline!y!, \lstinline!z! will
+be assigned values $1$, $2$, and $3$, so the final result is $6$.
+
+Pattern matching is especially convenient when working with nested
+tuples. Here is an example of such code:
+\begin{lstlisting}
+def t(p: (Int, (String, Int))): String = p match {
+  case (x, (s, y)) => s + (x + y).toString
+}
+
+scala> t((10, ("result is ", 2)))
+res0: String = result is 12
+\end{lstlisting}
+The type structure of the argument is visually repeated in the pattern.
+It is easy to see that \lstinline!x! and \lstinline!y! become integers
+and \lstinline!s! becomes a string after pattern matching. This code
+would become difficult to read and to maintain if we used tuple access
+methods instead of pattern matching:
+\begin{lstlisting}
+def t1(p: (Int, (String, Int))): String = {
+  p._2._1 + (p._1 + p._2._2).toString
+}
+\end{lstlisting}
+
+
+\subsection{Using tuples with collections}
+
+Tuples can be combined with any other types without restrictions.
+For instance, we can have a tuple of functions,
+\begin{lstlisting}
+val q: (Int => Int, Int => Int) = (x => x + 1, x => x - 1)
+\end{lstlisting}
+We can have a list of tuples,
+\begin{lstlisting}
+val r: List[(String, Int)] = List(
+  ("apples", 3), ("oranges", 2), ("pears", 0))
+\end{lstlisting}
+We can have a tuple of lists of tuples of functions, or any other
+combination of types.
+
+Here is an example of using the standard method \lstinline!.map!
+to transform a list of tuples. The argument of \lstinline!.map! must
+be a function taking a tuple as its argument. It is convenient to
+use pattern matching for writing such functions:
+\begin{lstlisting}
+scala> val basket: List[(String, Int)] = List(
+  ("apples", 3), ("pears", 2), ("lemons", 0))
+basket: List[(String, Int)] = List((apples,3), (pears,2), (lemons,0))
+
+scala> basket.map { case (fruit, count) => count *2 }
+res0: List[Int] = List(6, 4, 0)
+
+scala> basket.map { case (fruit, count) => count *2 }.sum
+res1: Int = 10
+\end{lstlisting}
+In this way, we can use the standard methods such as \lstinline!.map!,
+\lstinline!.filter!, \lstinline!.max!, \lstinline!.sum! to manipulate
+sequences of tuples. Note how the chosen names ``fruit'', ``count''
+help us remember the meaning of the parts of tuples.
+
+We can easily transform a list of tuples into a list of tuples of
+different type:
+\begin{lstlisting}
+scala> basket.map { case (fruit, count) =>
+  val isAcidic = fruit == "lemons"
+  (fruit, isAcidic)
+}
+res2: List[(String, Boolean)] = List((apples,false), (pears,false), (lemons,true)) 
+\end{lstlisting}
+In the Scala syntax, a nameless function written with braces \lstinline!{ ... }!
+can define local values in its body. The return value of the function
+is the last expression written in the function body. In this example,
+the return value of the nameless function is the tuple \lstinline!(fruit, isAcidic)!.
+
+\subsection{Using dictionaries (\lstinline!Map!s) as collections}
+
+In the Scala standard library, tuples are frequently used as types
+of intermediate values. For instance, the Scala type \lstinline!Map[K, V]!
+represents a dictionary with keys of type \lstinline!K! and values
+of type \lstinline!V!. Here \lstinline!K! and \lstinline!V! are
+\textbf{type parameters\index{type parameters}}; they represent unknown
+types that will be chosen later. 
+
+In order to create a dictionary with given keys and values, we can
+write
+\begin{lstlisting}
+Map(("apples", 3), ("oranges", 2), ("pears", 0))
+\end{lstlisting}
+This is equivalent to taking a sequence of key/value pairs and converting
+it to a dictionary.
+
+Pairs are used so often that the Scala library defines a special infix
+syntax for pairs, using the arrow symbol \lstinline!->!. the expression
+\lstinline!x -> y! is equivalent to the pair \lstinline!(x, y)!:
+\begin{lstlisting}
+scala> "apples" -> 3
+res0: (String, Int) = (apples,3)
+\end{lstlisting}
+With this syntax, the code for creating a dictionary looks visually
+clearer:
+\begin{lstlisting}
+Map("apples" -> 3, "oranges" -> 2, "pears" -> 0)
+\end{lstlisting}
+A list of pairs can be converted to a dictionary using the method
+\lstinline!.toMap!. The same method works for other list-like collection
+types such as \lstinline!Seq!, \lstinline!Vector!, \lstinline!Iterator!,
+or \lstinline!Array!. 
+
+The method \lstinline!.toSeq! converts a dictionary into a sequence
+of pairs:
+\begin{lstlisting}
+scala> Map("apples" -> 3, "oranges" -> 2, "pears" -> 0).toSeq
+res20: Seq[(String, Int)] = ArrayBuffer((apples,3), (oranges,2), (pears,0))
+\end{lstlisting}
+The \lstinline!ArrayBuffer! is one of the many list-like data structures
+defined in the Scala library. All of these data structures are gathered
+under the common ``sequence'' type, \lstinline!Seq!, and the Scala
+standard library may change the implementation of the ``sequence''
+for reasons of performance.
+
+The standard library has several useful methods that work with tuple
+types, such as
+\begin{itemize}
+\item \lstinline!.map! for dictionaries
+\item \lstinline!.filter! for dictionaries
+\item \lstinline!.zip! and \lstinline!.zipWithIndex! 
+\item \lstinline!.flatten! and \lstinline!.flatMap!
+\item \lstinline!.groupBy!
+\item \lstinline!.sliding!
+\end{itemize}
+It is important to familiarize yourself with these methods, because
+it will make programming with sequences and dictionaries much easier.
+
+We have seen in Chapter~\ref{chap:1-Values,-types,-expressions,}
+how the \lstinline!.map! method works on sequences: it applies a
+given function to each element of the sequence, and gathers the results
+into a new sequence. The \lstinline!.map! method works similarly
+on dictionaries, except that a dictionary of type \lstinline!Map[K, V]!
+is automatically converted to a sequence of pairs, \lstinline!Seq[(K, V)]!,
+before applying \lstinline!.map!. For this reason, the argument of
+\lstinline!.map! must be a function operating on tuples of type \lstinline!(K, V)!.
+Typically, such functions are written using \lstinline!case! expressions.
+Here is an example: 
+\begin{lstlisting}
+scala> val m1 = Map("apples" -> 3, "pears" -> 2, "lemons" -> 0)
+
+scala> m1.map { case (fruit, count) => count*2 }
+res0: Seq[Int] = ArrayBuffer(6, 4, 0)
+\end{lstlisting}
+If we want to transform a dictionary into another dictionary, we can
+first create a sequence of pairs and then convert it to dictionary
+with the \lstinline!.toMap! method:
+\begin{lstlisting}
+scala> m1.map { case (fruit, count) => (fruit, count*2) }.toMap
+res1: scala.collection.immutable.Map[String,Int] = Map(apples -> 6, pears -> 4, lemons -> 0)
+\end{lstlisting}
+
+The \lstinline!.filter! method works similarly on dictionaries; the
+predicate needs to be a function of type \lstinline!(K, V) => Boolean!.
+\begin{lstlisting}
+scala> m1.filter { case (fruit, count) => count > 0 }.toMap
+res2: scala.collection.immutable.Map[String,Int] = Map(apples -> 6, pears -> 4)
+\end{lstlisting}
+
+The \lstinline!.zip! method takes two sequences and produces a sequence
+of pairs, taking one element from each sequence:
+\begin{lstlisting}
+scala> val s = List(1, 2, 3)
+s: List[Int] = List(1, 2, 3)
+
+scala> val t = List(true, false, true)
+t: List[Boolean] = List(true, false, true)
+
+scala> s.zip(t)
+res3: List[(Int, Boolean)] = List((1,true), (2,false), (3,true))
+
+scala> s zip t
+res4: List[(Int, Boolean)] = List((1,true), (2,false), (3,true)) 
+\end{lstlisting}
+In the last line, the infix syntax (\lstinline!s zip t!) is used,
+to illustrate the flexibility of the syntax conventions in Scala.
+
+The \lstinline!.zip! method works equally well on dictionaries, since
+dictionaries are automatically converted to sequences of pairs.
+
+The \lstinline!.zipWithIndex! method transforms a sequence into a
+sequence of pairs, where the second part of the pair is the zero-based
+index:
+\begin{lstlisting}
+scala> List("a", "b", "c").zipWithIndex
+res5: List[(String, Int)] = List((a,0), (b,1), (c,2)) 
+\end{lstlisting}
+
+The \lstinline!.flatten! method converts nested sequences to ``flattened''
+ones:
+\begin{lstlisting}
+scala> List(List(1, 2), List(2, 3), List(3, 4)).flatten
+res6: List[Int] = List(1, 2, 2, 3, 3, 4)
+\end{lstlisting}
+Keep in mind that this removes \emph{only one} level of nesting:
+\begin{lstlisting}
+scala> List(List(List(1), List(2)), List(List(2), List(3))).flatten
+res7: List[List[Int]] = List(List(1), List(2), List(2), List(3))
+\end{lstlisting}
+
+The \lstinline!.flatMap! method is closely related to \lstinline!.flatten!
+and can be seen as a shortcut to doing first \lstinline!.map! and
+then \lstinline!.flatten! on a sequence:
+\begin{lstlisting}
+scala> List(1,2,3,4).flatMap(n => (1 to n).toList)
+res8: List[Int] = List(1, 1, 2, 1, 2, 3, 1, 2, 3, 4)
+
+scala> List(1,2,3,4).map(n => (1 to n).toList)
+res9: List[List[Int]] = List(List(1), List(1, 2), List(1, 2, 3), List(1, 2, 3, 4))
+
+scala> List(1,2,3,4).map(n => (1 to n).toList).flatten
+res10: List[Int] = List(1, 1, 2, 1, 2, 3, 1, 2, 3, 4)
+\end{lstlisting}
+It transforms a sequence by mapping each element to a potentially
+variable number of new elements. At first sight, it is probably not
+clear why \lstinline!.flatMap! is useful. However, the use of \lstinline!.flatMap!
+(which is related to monads) turns out to be one of the most versatile
+and powerful design patterns in functional programming.
+
+The \lstinline!.groupBy! method rearranges data into a dictionary,
+grouped by a key. The key is computed by a function supplied as the
+argument to \lstinline!.groupBy!. For example, we can group together
+all numbers from a given sequence that have the same remainder after
+division by 3:
+\begin{lstlisting}
+scala> List(1,2,3,4).flatMap(n => (1 to n).toList).groupBy(k => k % 3)
+res11: scala.collection.immutable.Map[Int,List[Int]] = Map(2 -> List(2, 2, 2), 1 -> List(1, 1, 1, 1, 4), 0 -> List(3, 3))
+\end{lstlisting}
+The result is a dictionary that maps each key to the sequence of values
+that have that key. The order of elements in the sequences remains
+unchanged.
+
+The \lstinline!.sliding! method creates a sliding window of a given
+width and returns a nested sequence:
+\begin{lstlisting}
+scala> (1 to 10).sliding(4).toList
+res12: List[scala.collection.immutable.IndexedSeq[Int]] = List(Vector(1, 2, 3, 4), Vector(2, 3, 4, 5), Vector(3, 4, 5, 6), Vector(4, 5, 6, 7), Vector(5, 6, 7, 8), Vector(6, 7, 8, 9), Vector(7, 8, 9, 10))
+\end{lstlisting}
+
+
+\section{Worked examples: Tuples and collections}
+\begin{enumerate}
+\item for a given sequence $a_{i}$, compute the sequence of pairs $b_{i}=\left(\cos a_{i},\sin a_{i}\right)$
+\textendash{} use \texttt{\textcolor{blue}{\footnotesize{}.map}},
+assume \texttt{\textcolor{blue}{\footnotesize{}a:\ Seq{[}Double{]}}}{\footnotesize\par}
+\item in a given sequence $a_{i}$, count how many times $\cos a_{i}>\sin a_{i}$
+occurs\\
+\textendash{} use \texttt{\textcolor{blue}{\footnotesize{}.count}},
+assume \texttt{\textcolor{blue}{\footnotesize{}a:\ Seq{[}Double{]}}}{\footnotesize\par}
+\item for given sequences $a_{i}$ and $b_{i}$, compute the sequence of
+differences\\
+ $c_{i}=a_{i}-b_{i}$ (use \texttt{\textcolor{blue}{\footnotesize{}.zip}},
+\texttt{\textcolor{blue}{\footnotesize{}.map}}, assume \texttt{\textcolor{blue}{\footnotesize{}a,
+b:\ Seq{[}Double{]}}})
+\item in a given sequence $a_{i}$, count how many times $a_{i}>a_{i+1}$
+occurs
+\item for a given $k>0$, compute the sequence $b_{i}=\max(a_{i-k},...,a_{i+k})$\\
+ \textendash{} use \texttt{\textcolor{blue}{\footnotesize{}.sliding}} 
+\item create a multiplication table as a value of type \texttt{\textcolor{blue}{\footnotesize{}Map{[}(Int,
+Int), Int{]}}}~\\
+ \textendash{} use \texttt{\textcolor{blue}{\footnotesize{}.flatMap}}{\footnotesize\par}
+\item for a given sequence $a_{i}$, compute the combined set of the numbers
+$a_{i}$, $\cos a_{i}$ $\sin a_{i}$ and find its maximum value \textendash{}
+use \texttt{\textcolor{blue}{\footnotesize{}.map, .flatMap, .max}}{\footnotesize\par}
+\item from a \texttt{\textcolor{blue}{\footnotesize{}Map{[}String, String{]}}}
+mapping names to addresses, and assuming that the addresses do not
+repeat, compute a \texttt{\textcolor{blue}{\footnotesize{}Map{[}String,
+String{]}}} mapping addresses to names \textendash{} use \texttt{\textcolor{blue}{\footnotesize{}.toMap}},
+\texttt{\textcolor{blue}{\footnotesize{}.map}}{\footnotesize\par}
+\begin{itemize}
+\item Write this as a function with type parameters \texttt{\textcolor{blue}{\footnotesize{}Name}}
+and \texttt{\textcolor{blue}{\footnotesize{}Address}} instead of the
+fixed type \texttt{\textcolor{blue}{\footnotesize{}String}}{\footnotesize\par}
+\end{itemize}
+\end{enumerate}
+
+\section{Exercises: Tuples and collections}
+\begin{enumerate}
+\item Find all $i,j$ within $\left(0,1,...,9\right)$ such that $i+4*j>i*j$
+(use \texttt{\textcolor{blue}{\footnotesize{}.flatMap}})
+\begin{itemize}
+\item Same task for $i,j,k$ and the condition $i+4*j+9*k>i*j*k$
+\end{itemize}
+\item Given two sequences \texttt{\textcolor{blue}{\footnotesize{}a:}}~\texttt{\textcolor{blue}{\footnotesize{}Seq{[}String{]}}}
+and \texttt{\textcolor{blue}{\footnotesize{}b:}}~\texttt{\textcolor{blue}{\footnotesize{}Seq{[}Boolean{]}}}
+of equal length, compute a \texttt{\textcolor{blue}{\footnotesize{}Seq{[}String{]}}}
+with those elements of \texttt{\textcolor{blue}{\footnotesize{}a}}
+for which the corresponding element of \texttt{\textcolor{blue}{\footnotesize{}b}}
+is \texttt{\textcolor{blue}{\footnotesize{}true}} \textendash{} use
+\texttt{\textcolor{blue}{\footnotesize{}.zip}}, \texttt{\textcolor{blue}{\footnotesize{}.map}},
+\texttt{\textcolor{blue}{\footnotesize{}.filter}}{\footnotesize\par}
+\item Convert a \texttt{\textcolor{blue}{\footnotesize{}Seq{[}Int{]}}} into
+a \texttt{\textcolor{blue}{\footnotesize{}Seq{[}(Int, Boolean){]}}}
+where the Boolean value is \texttt{\textcolor{blue}{\footnotesize{}true}}
+when the element is followed by a larger value; e.g. \texttt{\textcolor{blue}{\footnotesize{}Seq(1,3,2,4)}}
+is to be converted into \texttt{\textcolor{blue}{\footnotesize{}Seq((1,true),(3,false),(2,true))}}{\footnotesize\par}
+\item Given \texttt{\textcolor{blue}{\footnotesize{}a:}}~\texttt{\textcolor{blue}{\footnotesize{}Seq{[}String{]}}}
+and \texttt{\textcolor{blue}{\footnotesize{}b:}}~\texttt{\textcolor{blue}{\footnotesize{}Seq{[}Int{]}}}
+of equal length, and assuming that elements of \texttt{\textcolor{blue}{\footnotesize{}b}}
+do not repeat, compute a \texttt{\textcolor{blue}{\footnotesize{}Map{[}Int,
+String{]}}} that maps numbers from \texttt{\textcolor{blue}{\footnotesize{}b}}
+to their corresponding strings from \texttt{\textcolor{blue}{\footnotesize{}a}}{\footnotesize\par}
+\begin{itemize}
+\item Write this as a function with type parameters \texttt{\textcolor{blue}{\footnotesize{}S}}
+and \texttt{\textcolor{blue}{\footnotesize{}I}} instead of the fixed
+types \texttt{\textcolor{blue}{\footnotesize{}String}} and \texttt{\textcolor{blue}{\footnotesize{}Int}};
+test it with \texttt{\textcolor{blue}{\footnotesize{}S=Boolean}} and
+\texttt{\textcolor{blue}{\footnotesize{}I=Set{[}Int{]}}}{\footnotesize\par}
+\end{itemize}
+\item Given \texttt{\textcolor{blue}{\footnotesize{}a:}}~\texttt{\textcolor{blue}{\footnotesize{}Seq{[}String{]}}}
+and \texttt{\textcolor{blue}{\footnotesize{}b:}}~\texttt{\textcolor{blue}{\footnotesize{}Seq{[}Int{]}}}
+of equal length, compute a \texttt{\textcolor{blue}{\footnotesize{}Seq{[}String{]}}}
+that contains the strings from \texttt{\textcolor{blue}{\footnotesize{}a}}
+ordered according to the corresponding numbers from \texttt{\textcolor{blue}{\footnotesize{}b}}
+\textendash{} use \texttt{\textcolor{blue}{\footnotesize{}.sortBy}}{\footnotesize\par}
+\begin{itemize}
+\item Write this as a function with type parameter \texttt{\textcolor{blue}{\footnotesize{}S}}
+instead of \texttt{\textcolor{blue}{\footnotesize{}String}}{\footnotesize\par}
+\end{itemize}
+\item Given a \texttt{\textcolor{blue}{\footnotesize{}Seq{[}(String, Int){]}}}
+showing a list of purchased items (names may repeat), compute \texttt{\textcolor{blue}{\footnotesize{}Map{[}String,
+Int{]}}} showing the total counts: e.g.~given a \texttt{\textcolor{blue}{\footnotesize{}Seq((``apple'',
+2), (``pear'', 3), (``apple'', 5))}}, compute \texttt{\textcolor{blue}{\footnotesize{}Map(``apple''
+$\rightarrow$ 7, ``pear'' $\rightarrow$ 3)}} \textendash{} use
+\texttt{\textcolor{blue}{\footnotesize{}.groupBy}}, \texttt{\textcolor{blue}{\footnotesize{}.map}},
+\texttt{\textcolor{blue}{\footnotesize{}.sum}}{\footnotesize\par}
+\begin{itemize}
+\item Write this as a function with type parameter \texttt{\textcolor{blue}{\footnotesize{}S}}
+instead of \texttt{\textcolor{blue}{\footnotesize{}String}}{\footnotesize\par}
+\end{itemize}
+\item Given a \texttt{\textcolor{blue}{\footnotesize{}Seq{[}List{[}Int{]}{]}}},
+compute a \texttt{\textcolor{blue}{\footnotesize{}Seq{[}List{[}Int{]}{]}}}
+where each new inner list contains the three largest elements from
+the initial inner list \textendash{} use \texttt{\textcolor{blue}{\footnotesize{}.sortBy}},
+\texttt{\textcolor{blue}{\footnotesize{}.take}}, \texttt{\textcolor{blue}{\footnotesize{}.map}}{\footnotesize\par}
+\item Given two sets \texttt{\textcolor{blue}{\footnotesize{}a}}, \texttt{\textcolor{blue}{\footnotesize{}b}}
+of type \texttt{\textcolor{blue}{\footnotesize{}Set{[}Int{]}}}, compute
+a \texttt{\textcolor{blue}{\footnotesize{}Set{[}(Int, Int){]}}} representing
+the Cartesian product of the sets \texttt{\textcolor{blue}{\footnotesize{}a}}
+and \texttt{\textcolor{blue}{\footnotesize{}b}} \textendash{} use
+\texttt{\textcolor{blue}{\footnotesize{}.flatMap}}{\footnotesize\par}
+\begin{itemize}
+\item Write this as a function with type parameters \texttt{\textcolor{blue}{\footnotesize{}I}},
+\texttt{\textcolor{blue}{\footnotesize{}J}} instead of \texttt{\textcolor{blue}{\footnotesize{}Int}}{\footnotesize\par}
+\end{itemize}
+\item {*} Given a \texttt{\textcolor{blue}{\footnotesize{}Seq{[}Map{[}Person,
+Amount{]}{]}}}, showing the amounts various people paid on each day,
+compute a \texttt{\textcolor{blue}{\footnotesize{}Map{[}Person, Seq{[}Amount{]}{]}}},
+showing the sequence of payments for each person (assume \texttt{\textcolor{blue}{\footnotesize{}Person}}
+and \texttt{\textcolor{blue}{\footnotesize{}Amount}} are type parameters;
+use \texttt{\textcolor{blue}{\footnotesize{}.flatMap}}, \texttt{\textcolor{blue}{\footnotesize{}.toSeq}},
+\texttt{\textcolor{blue}{\footnotesize{}.groupBy}})
+\end{enumerate}
+
 \section{Discussion}
 
+\subsection{Total and partial functions}
+
+In Scala, functions can be total or partial. A \textbf{\index{total function}total}
+function will always compute a result value, while a \textbf{\index{partial function}partial}
+function may fail to compute its result for certain values of its
+arguments. A partial function is only well-defined on a subset of
+possible argument values. Functions that use pattern matching are
+sometimes partial because pattern matching may fail. In most cases,
+programs can be written to avoid match errors completely.
+
+If the pattern matching fails, the code will throw an exception and
+stop running. In functional programming, we usually want to avoid
+this situation because it makes it much harder to reason about program
+correctness. An example of a potentially fallible pattern matching
+is
+\begin{lstlisting}
+def h(p: (Int, Int)): Int = p match { case (x, 0) => x }
+
+scala> h( (1, 0) )
+res0: Int = 1
+
+scala> h( (1, 2) )
+ scala.MatchError: (1,2) (of class scala.Tuple2$mcII$sp)
+  at .h(<console>:12)
+  ... 32 elided 
+\end{lstlisting}
+In this case, the pattern contains a pattern variable \lstinline!x!
+and a constant \lstinline!0!. This pattern only matches tuples whose
+second part is equal to \lstinline!0!. If the second argument is
+nonzero, a match error occurs and the program crashes. Therefore,
+\lstinline!h! is a partial function.
+
+Pattern matching failures never happen if we match a tuple of correct
+size with a pattern such as \lstinline!(x, y, z)!, because the pattern
+variables will always match whatever values the tuple has. On the
+other hand, the compiler will generate a compile-time error if a function
+is applied to a tuple of incorrect type. For this reason, pattern
+matching will a pattern such as \lstinline!(x, y, z)! is \textbf{infallible}\index{pattern matching!infallible}
+(never fails).
+
+\subsection{Scope of pattern matching variables}
+
+Pattern matching constructions introduce locally scoped variables.
+Consider this code,
+\begin{lstlisting}
+def f(x: (Int, Int)): Int = x match {
+  case (x, y) => x + y
+}
+\end{lstlisting}
+
 \begin{comment}
-in this tutorial I will talk about more tricks and more functionality
-that Scala gives you to treat collections in a functional way that
-is in a way that is more suitable for mathematical thinking but first
-we need to talk a little bit about a data type called a tuple the
-easiest example a tuple is a pair of values so for example a pair
-of an integer in the string in this way this is the syntax in which
-Scala can define this you can also have triple of values or any number
-of values a fixed number and the values can be of different types
-but fixed types you can have a tuple whose second element is itself
-a tuple and so on there is a syntax that allows you to access the
-parts of a tuple so for example if c is defined like this of this
-type and the value of c is this tuple then the second element of the
-tuple c is accessed as c period underscore two and that is giving
-you this in other words if you define x as c period underscore two
-x will be defined of type tuple of string and integer and X will have
-value string ABC and integer three you can define in this way functions
-that take tuples as arguments for example this function f takes p
-the first argument of type a tuple of boolean an integer and Q the
-second argument of type integer and then it computes a boolean expression
-which is the first element of P which is a boolean type and the second
-element of P compared with Q so this is a boolean type and this expression
-is a boolean type because P is a tuple of boolean an integer and P
-dot underscore two is integer so now we are comparing two integers
-that's a boolean and then we have a boolean and blue so in this way
-you can define functions on tuples however this is usually not the
-way we work with tuples in Scala because it's not very convenient
-pattern matching is much more convenient so let me talk about pattern
-matching one case where pattern matching happens is on the left hand
-side of eval and another case is on the left hand side of a case expression
-so here are examples suppose a is a tuple of three integers then if
-you define this expression the tuple is on the left hand side over
-Val so this is understood as a pattern matching in other words a is
-this tuple and this is matched against the tuple so X becomes 1 Y
-becomes 2 Z becomes 3 similarly in the case expression suppose I want
-to define a function of type tuple of 3 integers going to integer
-and I can say case and on the left hand side of a case expression
-I specify this pattern X Y Z it will be matched against the argument
-of the function so if I call F of a having defined this F I can call
-F of a and then a the tuple 3 integers will be matched here the variables
-XY and Z will get defined automatically to be one two and three and
-then finally we compute the value which is six let us see how this
-is done using a scalar worksheet here so I'm going to say a equals
-one two three I'm not going to say what type a is but Scala knows
-what type that is one two and three are integers so I ease of this
-type when I define a function type the integer integer integer tuple
-and returning an integer and the way I define it is going to be using
-a pattern matching so I'm going to pattern match on X the syntax for
-that is to say X match and then open brace and then I can do a case
-expression so now I can do this case expression that we saw before
-and I have my function you see Scala define this function as going
-from integer integer integer to integer now I can say f of n I expect
-six yes now you see this yellow here intellij shows me there is something
-that's not quite on it although things work the code works but there
-is a warning what is this warning suspicious shadowing by variable
-pattern the text variable pattern is shadows a stable identifier so
-this is a warning basically telling me that this egg is shadowed by
-this X now notice here in the outer expression X is of type tuple
-of three integers in the here in the inner expression the case expression
-X is a pattern variable that is a variable defined automatically when
-you declare a pattern so X here is a very different variable from
-here it's just by coincidence has the same name this X is of type
-integer I will press now control shift P to see that X is of type
-integer and here if I press control shift really it's going to be
-of type int int end so this is a little confusing if you write code
-like this so one way of fixing this is to rename so for example here
-I select this X I press shift f6 and I can rename this let's say coalesce
-IntelliJ tells me to call it tuple or to the call it X so let's call
-it tuple so now you see IntelliJ automatically renamed this and this
-but it did not rename this X because this X is actually a different
-variable that just happens to be named X and it could be named anything
-else I could rename this to whoever I want IntelliJ knows that this
-variable is here defined in the scope of this expression only and
-that's how you see that this is a variable that's different from that
-X that used to be there now tuple types are just types you can use
-any kind of other type with them you can have a tuple of any other
-types or you can have a sequence of two poles or anything like this
-there is no restriction on how you can combine tuple types and other
-types generally Scala does not have any restrictions of that sort
-so for instance you can have a tuple of functions you can have a sequence
-of two poles like this you can have a tuple of sequences of two poles
-of whatever you want and especially pairs are used a lot in the standard
-library there are functions like zip map and to map and to seek defined
-on different data structures these are used a lot with tuples especially
-with pairs so now let us look at some examples how those functions
-are used so one function is zip so let us define a sequence of some
-integers let us define another sequence let's say a sequence of some
-boolean now you see that Scala knows what types should be assigned
-to these variables so integer and boolean are automatically derived
-from what I typed I did not say explicitly I could say I could have
-typed this here but I didn't have to so as a rule we don't type these
-things these are called type and notations or type ascriptions we
-don't type them we don't write them except when the types become quite
-complicated and not obvious and then it's helpful so we will see how
-that works so what is the zip function so the zip function is defined
-like this s dot zip of T so when you do s dot zip of T you get a list
-of tuples where each tuple has the first element from the first sequence
-and the second element from the second sequence so you have a sequence
-so list is just a specific kind of sequence that is used by default
-there are other kinds of sequences like indexed sequence and iterator
-and so on but right now we'll just use list I could have I could have
-said list here it's exactly the same thing but it's more kind of more
-obvious but I don't really care about whether it's a list or not I
-care that it's a sequence so let me say it's a sequence just for this
-example so zip is a function defined on sequences and the result is
-a sequence of tuples one with true - with false three with Q let us
-define a map so I take this s dot zip T and then I say to map and
-the result {[}Music{]} will probably need to say it's a map or int
-yes so if I say that then there is a data structure called map which
-is like a dictionary that takes a key and the value and you see there
-is a transparent conversion between sequences of tuples and maps so
-I can say m dot to seek and I convert it back to a sequence of tuples
-which is now a vector so a vector is another kind of sequence like
-a list but at this point I don't I don't worry about which kind of
-sequences scala chooses it's automatic so for whatever convenience
-you can use list or vector in these examples so you see for yeah we
-have seen zip to map and to seek the types of these functions could
-be understood as converting from a sequence of pairs into a map converting
-from a map to a sequence of pairs in a zip converts from pair of two
-sequences into sequence of pairs now here a B R type parameters these
-stands for arbitrary types these functions work on maps and sequences
-with arbitrary types so map with type travelers K and V that stand
-for key and value so these can be any types of cake of the integer
-and v can be string or K can be string and V can be boolean anything
-so R can be any other type so here's a map function so how does a
-map function work so let's take this M which is this milk from integer
-to boolean let's say map so intellij tells me what I can do with with
-the sequence I can do map I can do map values I can do to map I can
-do flat map so what does map so the argument of map is a function
-from a tuple from integer boolean to some other type B so here I can
-say any function let's say from XY going through something and here
-usually one needs a case in other words a pattern match so remember
-how we pattern match tuples in functions here we need a function that
-takes a tuple so let's say we have here some expression let's read
-this again so M is a map from integer to boolean when we do m dot
-map now look this is lowercase map this is not the same as the uppercase
-map that's a type and that is a function the work is map now that
-map has an argument which is a function from a tuple into Julian to
-some other type b to any type b so let's map this two strings how
-do we do that we need to specify a function here so the argument of
-map is a function we write a function by saying this is a pattern
-match if case matches then this works now what are the types why is
-the boolean x is integer so transparently we converted this this dictionary
-or map into a sequence of tuples and for each tuple we now compute
-something so let's say we compute a string which is if Y is true then
-we take X and otherwise we say no so let's see if Y x2 string else
-no so the result of this calculation let me just reformat it a little
-bit to be more clear the result of this calculation is a sequence
-1 which is a string no and 3 so although all those things are strings
-and we see this is an iterable string iterable is another kind of
-sequence Scala substitutes whatever is convenient for for you for
-further calculation if you want specific sequence you can always convert
-for example I can say here to list and then it becomes a list that
-type becomes a list so so here's how it works I have this map and
-one was preserved because it's about its other element was true then
-two wasn't replaced by no and three was converted to string so in
-this way we can run map operation on on a dictionary word or the map
-president Scala calls it we can ran the map operation on a sequence
-as well for example on when this sequence can run the map operation
-so in the map operation has an argument which is a function I I can
-say here for example I say X X the result of that would be a sequence
-of tuples this is something is not refreshed yes right so now I have
-a sequence of tuples so in this way I can perform computations on
-sequences and on dictionaries and also on sets sets are similar I'll
-say the set is different from a sequence because it cannot have coincident
-elements so there's a little they out here if you use a set and you
-do map on it the result could be a set of fewer elements for example
-here's a set of one two three the same as what I had before not doing
-map X goes to let's say the remainder of X dividing by two so that
-would be either 0 or 1 so now I have a set of two elements as a result
-which might be not what I expected but that's how cells work so that's
-a little maybe counterintuitive in certain cases you could have bugs
-if you have set and you do map on a set so that's not always a good
-thing to do but you can do it that's what you want so let's make some
-now let's let's do some examples the way I do examples is I write
-tests what we did just now was just was a worksheet Scala worksheet
-is an interactive session where whatever you type is being evaluated
-and this is OK for a quick exploration but for writing code that is
-maintained code that is extended and modified and and used for a long
-time worksheets are not a great idea it's better to write actual code
-and the best ways to start with tests so I'm using a Scala test framework
-and in that framework here's what you do to write a test you say class
-extends this so this is just some library and it doesn't matter what
-it means behavior is just a function we've defined in the library
-{[}Music{]} but this is useful if you can write it in this format
-because you can read run your tests and maintain your code once you
-change your code you can run tests again to make sure that nothing
-got broken so let us work through these examples using test-driven
-development first example is that we are given a sequence of double
-numbers and we would need to compute the sequence of pairs consisting
-of cosine and sine of these double numbers so I have written hints
-here about what we want to use so how do we do that so this is example
-1 so let me just say run example 1 so this is the syntax for this
-testing library example 1 must be a function that takes a sequence
-and returns this sequence so let's see example 1 will be in this function
-which is defined which we will define it takes a sequence of doubles
-let's say 0 0 point 1 0 2 and this should equal a sequence of what
-of pairs of cosine and sine let us format it a little easier so a
-sequence of three tuples that's what we want {[}Music{]} let me just
-write down what we want here so here I want to compute a sequence
-of these three tuples alright so now it's of course red because we
-have not implemented this function so let's implement that function
-the argument should be called let's say I hold a and so that was a
-sequence a has type sequence of double in the result a sequence of
-double double which is a sequence of tuples so how do we implement
+I can say here for example I say X X the result of that would be a
+sequence of tuples this is something is not refreshed yes right so
+now I have a sequence of tuples so in this way I can perform computations
+on sequences and on dictionaries and also on sets sets are similar
+I'll say the set is different from a sequence because it cannot have
+coincident elements so there's a little they out here if you use a
+set and you do map on it the result could be a set of fewer elements
+for example here's a set of one two three the same as what I had before
+not doing map X goes to let's say the remainder of X dividing by two
+so that would be either 0 or 1 so now I have a set of two elements
+as a result which might be not what I expected but that's how cells
+work so that's a little maybe counterintuitive in certain cases you
+could have bugs if you have set and you do map on a set so that's
+not always a good thing to do but you can do it that's what you want
+so let's make some now let's let's do some examples the way I do examples
+is I write tests what we did just now was just was a worksheet Scala
+worksheet is an interactive session where whatever you type is being
+evaluated and this is OK for a quick exploration but for writing code
+that is maintained code that is extended and modified and and used
+for a long time worksheets are not a great idea it's better to write
+actual code and the best ways to start with tests so I'm using a Scala
+test framework and in that framework here's what you do to write a
+test you say class extends this so this is just some library and it
+doesn't matter what it means behavior is just a function we've defined
+in the library {[}Music{]} but this is useful if you can write it
+in this format because you can read run your tests and maintain your
+code once you change your code you can run tests again to make sure
+that nothing got broken so let us work through these examples using
+test-driven development first example is that we are given a sequence
+of double numbers and we would need to compute the sequence of pairs
+consisting of cosine and sine of these double numbers so I have written
+hints here about what we want to use so how do we do that so this
+is example 1 so let me just say run example 1 so this is the syntax
+for this testing library example 1 must be a function that takes a
+sequence and returns this sequence so let's see example 1 will be
+in this function which is defined which we will define it takes a
+sequence of doubles let's say 0 0 point 1 0 2 and this should equal
+a sequence of what of pairs of cosine and sine let us format it a
+little easier so a sequence of three tuples that's what we want {[}Music{]}
+let me just write down what we want here so here I want to compute
+a sequence of these three tuples alright so now it's of course red
+because we have not implemented this function so let's implement that
+function the argument should be called let's say I hold a and so that
+was a sequence a has type sequence of double in the result a sequence
+of double double which is a sequence of tuples so how do we implement
 this well we say any so we can do map and then each element X goes
 into the pair math cosine of X sine of X all right so that seems to
 be just easy implementation so map will apply apply this function
@@ -28771,14 +29177,13 @@ is generic only in $F$.
 To avoid confusion, I use the name ``swap'' for the function $M^{L^{\bullet}}\leadsto L^{M^{\bullet}}$
 in the context of monad transformers. Let us now find out what laws
 are required for the \texttt{}\lstinline!swap! operation.\footnote{The ``swap'' operation was first introduced in a \href{http://web.cecs.pdx.edu/~mpj/pubs/RR-1004.pdf}{1993 paper}
-``Composing monads'' by M.~P.~Jones and L.~Duponcheel. They also
-studied other functions that make monads compose; however, ``swap''
-seems to be the only practically useful one. They also attempted to
-prove that monads cannot be composed via a generic type constructor
-that works for all monads $L$, $M$. The impossibility of a generic
-monad composition is demonstrated by the \lstinline!State! monad
-that, as I show in this chapter, does not compose with arbitrary other
-monads $M$ \textendash{} either from inside or from outside.}
+``Composing monads'' by M.~P.~Jones and L.~Duponcheel. They studied
+various ways of composing monads and also gave some arguments to show
+that monads cannot be composed via a generic transformer that works
+for all monads $L$, $M$. The impossibility of a generic monad composition
+is demonstrated by the \lstinline!State! monad that, as I show in
+this chapter, does not compose with arbitrary other monads $M$ \textendash{}
+either from inside or from outside.}
 
 \subsection{Laws for \texttt{swap}}
 
@@ -28809,8 +29214,8 @@ We substitute Eq.~(\ref{eq:define-flatten-via-switch}) into the
 left identity law for $\text{ftn}_{T}$ and simplify:
 \begin{align}
 \text{id} & =\text{pu}_{T}\bef\underline{\text{ftn}_{T}}\nonumber \\
-\text{replace }\text{ftn}_{T}\text{ using Eq.~(\ref{eq:define-flatten-via-switch})}:\quad & =\text{pu}_{T}\bef\underline{\text{sw}^{\uparrow L}\bef\text{ftn}_{L}\bef\text{ftn}_{M}^{\uparrow L}}\nonumber \\
-\text{replace }\text{pu}_{T}\text{ using Eq.~(\ref{eq:def-of-pure-T})}:\quad & =\underline{\text{pu}_{M}\bef\text{pu}_{L}}\bef\text{sw}^{\uparrow L}\bef\text{ftn}_{L}\bef\text{ftn}_{M}^{\uparrow L}\nonumber \\
+\text{replace }\text{ftn}_{T}\text{ using Eq.~(\ref{eq:define-flatten-via-switch})}:\quad & =\text{pu}_{T}\bef\text{sw}^{\uparrow L}\bef\text{ftn}_{L}\bef\text{ftn}_{M}^{\uparrow L}\nonumber \\
+\text{replace }\text{pu}_{T}\text{ using Eq.~(\ref{eq:def-of-pure-T})}:\quad & =\text{pu}_{M}\bef\underline{\text{pu}_{L}\bef\text{sw}^{\uparrow L}}\bef\text{ftn}_{L}\bef\text{ftn}_{M}^{\uparrow L}\nonumber \\
 \text{naturality of }\text{pu}_{L}:\quad & =\text{pu}_{M}\bef\text{sw}\bef\underline{\text{pu}_{L}\bef\text{ftn}_{L}}\bef\text{ftn}_{M}^{\uparrow L}\nonumber \\
 \text{left identity law for }L:\quad & =\text{pu}_{M}\bef\text{sw}\bef\text{ftn}_{M}^{\uparrow L}\quad.\label{eq:left-identity-ftn-T}
 \end{align}
@@ -28866,10 +29271,10 @@ Assuming this law, we can derive the right identity law for $T$:
 \begin{align*}
  & \text{pu}_{T}^{\uparrow T}\bef\text{ftn}_{T}\\
 \left(\text{note that }f^{\uparrow T}\triangleq f^{\uparrow M\uparrow L}\right):\quad & =\left(\text{pu}_{T}\right)^{\uparrow M\uparrow L}\bef\text{ftn}_{T}\\
-\text{definitions of }\text{pu}_{T}\text{ and }\text{ftn}_{T}:\quad & =\underline{\text{pu}_{M}^{\uparrow M\uparrow L}\bef\text{pu}_{L}^{\uparrow M\uparrow L}}\bef\underline{\text{sw}^{\uparrow L}\bef\text{ftn}_{L}\bef\text{ftn}_{M}^{\uparrow L}}\\
-L\text{-identity law for }\text{sw},\text{ under }^{\uparrow L}:\quad & =\text{pu}_{M}^{\uparrow M\uparrow L}\bef\underline{\text{pu}_{L}^{\uparrow L}}\bef\text{ftn}_{L}\bef\text{ftn}_{M}^{\uparrow L}\\
-\text{right identity law for }L:\quad & =\text{pu}_{M}^{\uparrow M\uparrow L}\bef\text{ftn}_{M}^{\uparrow L}=\left(\text{pu}_{M}^{\uparrow M}\bef\text{ftn}_{M}\right)^{\uparrow L}\\
-\text{right identity law for }M,\text{ under }^{\uparrow L}:\quad & =\text{id}^{\uparrow L}=\text{id}\quad.
+\text{definitions of }\text{pu}_{T}\text{ and }\text{ftn}_{T}:\quad & =\text{pu}_{M}^{\uparrow M\uparrow L}\bef\underline{\text{pu}_{L}^{\uparrow M\uparrow L}\bef\text{sw}^{\uparrow L}}\bef\text{ftn}_{L}\bef\text{ftn}_{M}^{\uparrow L}\\
+L\text{-identity law for }\text{sw},\text{ under }^{\uparrow L}:\quad & =\text{pu}_{M}^{\uparrow M\uparrow L}\bef\underline{\text{pu}_{L}^{\uparrow L}\bef\text{ftn}_{L}}\bef\text{ftn}_{M}^{\uparrow L}\\
+\text{right identity law for }L:\quad & =\text{pu}_{M}^{\uparrow M\uparrow L}\bef\text{ftn}_{M}^{\uparrow L}=\underline{\left(\text{pu}_{M}^{\uparrow M}\bef\text{ftn}_{M}\right)}^{\uparrow L}\\
+\text{right identity law for }M:\quad & =\text{id}^{\uparrow L}=\text{id}\quad.
 \end{align*}
 
 Deriving the monad associativity law for $T$,
@@ -28879,10 +29284,10 @@ Deriving the monad associativity law for $T$,
 turns out to require \emph{two} further laws for \lstinline!swap!.
 Substituting the definition of $\text{ftn}_{T}$ into the associativity
 law, we get
-\begin{align*}
- & \left(\text{sw}^{\uparrow L}\bef\text{ftn}_{L}\bef\text{ftn}_{M}^{\uparrow L}\right)^{\uparrow M\uparrow L}\bef\text{sw}^{\uparrow L}\bef\text{ftn}_{L}\bef\text{ftn}_{M}^{\uparrow L}\\
- & \quad=\text{sw}^{\uparrow L}\bef\text{ftn}_{L}\bef\text{ftn}_{M}^{\uparrow L}\bef\text{sw}^{\uparrow L}\bef\text{ftn}_{L}\bef\text{ftn}_{M}^{\uparrow L}\quad.
-\end{align*}
+\begin{align}
+ & \left(\text{sw}^{\uparrow L}\bef\text{ftn}_{L}\bef\text{ftn}_{M}^{\uparrow L}\right)^{\uparrow M\uparrow L}\bef\text{sw}^{\uparrow L}\bef\text{ftn}_{L}\bef\text{ftn}_{M}^{\uparrow L}\nonumber \\
+ & \quad=\text{sw}^{\uparrow L}\bef\text{ftn}_{L}\bef\text{ftn}_{M}^{\uparrow L}\bef\text{sw}^{\uparrow L}\bef\text{ftn}_{L}\bef\text{ftn}_{M}^{\uparrow L}\quad.\label{eq:t-assoc-law-expanded}
+\end{align}
 The only hope of proving this law is being able to interchange $\text{ftn}_{L}$
 as well as $\text{ftn}_{M}$ with $\text{sw}$. In other words, the
 \texttt{}\lstinline!swap! function should be in some way adapted
@@ -28925,6 +29330,111 @@ At this point, we have simply written down these two interchange laws,
 hoping that they will help us derive the associativity law for $T$.
 It remains to prove that this is indeed so.
 
+Both sides of the law in Eq.~(\ref{eq:t-assoc-law-expanded}) involve
+compositions of several \lstinline!flatten!s and \lstinline!swap!s.
+The heuristic idea of the proof is to use various laws to move all
+\lstinline!flatten!s to right of the composition, and all \lstinline!swap!s
+to the left. In this way we will transform both sides of Eq.~(\ref{eq:t-assoc-law-expanded})
+into a similar form, hoping to prove that they are equal.
+
+We begin with the right-hand side of Eq.~(\ref{eq:t-assoc-law-expanded})
+since it is simpler than the left-hand side, and look for ways of
+using the interchange laws. At every step of the calculation, there
+happens to be only one place where some law can be applied:
+\begin{align*}
+ & \text{sw}^{\uparrow L}\bef\text{ftn}_{L}\bef\underline{\text{ftn}_{M}^{\uparrow L}\bef\text{sw}^{\uparrow L}}\bef\text{ftn}_{L}\bef\text{ftn}_{M}^{\uparrow L}\\
+\text{composition for }L:\quad & =\text{sw}^{\uparrow L}\bef\text{ftn}_{L}\bef\underline{\left(\text{ftn}_{M}\bef\text{sw}\right)}^{\uparrow L}\bef\text{ftn}_{L}\bef\text{ftn}_{M}^{\uparrow L}\\
+M\text{-interchange for }\text{sw}:\quad & =\text{sw}^{\uparrow L}\bef\text{ftn}_{L}\bef\underline{\left(\text{sw}^{\uparrow M}\bef\text{sw}\bef\text{ftn}_{M}^{\uparrow L}\right)}^{\uparrow L}\bef\text{ftn}_{L}\bef\text{ftn}_{M}^{\uparrow L}\\
+\text{composition for }L:\quad & =\text{sw}^{\uparrow L}\bef\text{ftn}_{L}\bef\underline{\text{sw}^{\uparrow M\uparrow L}\bef\text{sw}^{\uparrow L}}\bef\underline{\text{ftn}_{M}^{\uparrow L\uparrow L}\bef\text{ftn}_{L}}\bef\text{ftn}_{M}^{\uparrow L}\\
+\text{naturality of }\text{ftn}_{L}:\quad & =\text{sw}^{\uparrow L}\bef\underline{\text{ftn}_{L}\bef\left(\text{sw}^{\uparrow M}\bef\text{sw}\right)^{\uparrow L}}\bef\text{ftn}_{L}\bef\text{ftn}_{M}^{\uparrow L}\bef\text{ftn}_{M}^{\uparrow L}\\
+\text{naturality of }\text{ftn}_{L}:\quad & =\text{sw}^{\uparrow L}\bef\underline{\left(\text{sw}^{\uparrow M}\bef\text{sw}\right)^{\uparrow L\uparrow L}\bef\text{ftn}_{L}}\bef\text{ftn}_{L}\bef\text{ftn}_{M}^{\uparrow L}\bef\text{ftn}_{M}^{\uparrow L}\quad.
+\end{align*}
+Now all \lstinline!swap!s are on the left and all \lstinline!flatten!s
+on the right of the expression.
+
+Transform the right-hand side of Eq.~(\ref{eq:t-assoc-law-expanded})
+in the same way as
+\begin{align*}
+ & \left(\text{sw}^{\uparrow L}\bef\text{ftn}_{L}\bef\underline{\text{ftn}_{M}^{\uparrow L}}\right)^{\uparrow M\uparrow L}\underline{\bef\text{sw}^{\uparrow L}}\bef\text{ftn}_{L}\bef\text{ftn}_{M}^{\uparrow L}\\
+\text{functor composition}: & =\left(\text{sw}^{\uparrow L}\bef\text{ftn}_{L}\right)^{\uparrow M\uparrow L}\bef\underline{\left(\text{ftn}_{M}^{\uparrow L\uparrow M}\bef\text{sw}\right)}^{\uparrow L}\bef\text{ftn}_{L}\bef\text{ftn}_{M}^{\uparrow L}\\
+\text{naturality of }\text{sw}: & =\left(\text{sw}^{\uparrow L}\bef\text{ftn}_{L}\right)^{\uparrow M\uparrow L}\bef\big(\text{sw}\bef\underline{\text{ftn}_{M}^{\uparrow M\uparrow L}}\big)^{\uparrow L}\underline{\bef\text{ftn}_{L}}\bef\text{ftn}_{M}^{\uparrow L}\\
+\text{naturality of }\text{ftn}_{L}:\quad & =\text{sw}^{\uparrow L\uparrow M\uparrow L}\bef\text{ftn}_{L}^{\uparrow M\uparrow L}\bef\text{sw}^{\uparrow L}\bef\text{ftn}_{L}\bef\underline{\text{ftn}_{M}^{\uparrow M\uparrow L}\bef\text{ftn}_{M}^{\uparrow L}}\\
+\text{associativity of }\text{ftn}_{M}:\quad & =\text{sw}^{\uparrow L\uparrow M\uparrow L}\bef\underline{\left(\text{ftn}_{L}^{\uparrow M}\bef\text{sw}\right)}^{\uparrow L}\bef\text{ftn}_{L}\bef\text{ftn}_{M}^{\uparrow L}\bef\text{ftn}_{M}^{\uparrow L}\\
+L\text{-interchange for }\text{sw}:\quad & =\text{sw}^{\uparrow L\uparrow M\uparrow L}\bef\big(\text{sw}\bef\text{sw}^{\uparrow L}\bef\underline{\text{ftn}_{L}}\big)^{\uparrow L}\underline{\bef\text{ftn}_{L}}\bef\text{ftn}_{M}^{\uparrow L}\bef\text{ftn}_{M}^{\uparrow L}\\
+\text{associativity of }\text{ftn}_{L}:\quad & =\big(\text{sw}^{\uparrow L\uparrow M}\bef\text{sw}\bef\text{sw}^{\uparrow L}\big)^{\uparrow L}\bef\underline{\text{ftn}_{L}\bef\text{ftn}_{L}}\bef\text{ftn}_{M}^{\uparrow L}\bef\text{ftn}_{M}^{\uparrow L}\quad.
+\end{align*}
+We have again managed to move all \lstinline!swap!s to the left and
+all \lstinline!flatten!s to the right of the expression. 
+
+Comparing now the two sides of the associativity law, we see that
+the \lstinline!flatten!s occur in the same combination: $\text{ftn}_{L}\bef\text{ftn}_{L}\bef\text{ftn}_{M}^{\uparrow L}\bef\text{ftn}_{M}^{\uparrow L}$.
+It remains to show that 
+\[
+\text{sw}^{\uparrow L}\bef\left(\text{sw}^{\uparrow M}\bef\text{sw}\right)^{\uparrow L\uparrow L}=\big(\text{sw}^{\uparrow L\uparrow M}\bef\text{sw}\bef\text{sw}^{\uparrow L}\big)^{\uparrow L}\quad.
+\]
+or equivalently
+\[
+\left(\text{sw}\bef\text{sw}^{\uparrow M\uparrow L}\bef\text{sw}^{\uparrow L}\right)^{\uparrow L}=\big(\text{sw}^{\uparrow L\uparrow M}\bef\text{sw}\bef\text{sw}^{\uparrow L}\big)^{\uparrow L}\quad.
+\]
+The two sides are equal due to the naturality law of \texttt{}\lstinline!swap!,
+\[
+\text{sw}\bef\text{sw}^{\uparrow M\uparrow L}=\text{sw}^{\uparrow L\uparrow M}\bef\text{sw}.
+\]
+This completes the proof of the following theorem:
+
+\subsubsection{Theorem \label{par:Theorem-swap-laws-to-monad-t}\ref{par:Theorem-swap-laws-to-monad-t}}
+
+If two monads $L$ and $M$ are such that there exists a natural transformation
+\[
+\text{sw}:M^{L^{A}}\Rightarrow L^{M^{A}}
+\]
+(``\lstinline!swap!'') satisfying the four laws
+\begin{align*}
+L\text{-identity}:\quad & \text{pu}_{L}^{\uparrow M}\bef\text{sw}=\text{pu}_{L}\quad,\\
+M\text{-identity}:\quad & \text{pu}_{M}\bef\text{sw}=\text{pu}_{M}^{\uparrow L}\quad,\\
+L\text{-interchange:}\quad & \text{ftn}_{L}^{\uparrow M}\bef\text{sw}=\text{sw}\bef\text{sw}^{\uparrow L}\bef\text{ftn}_{L}\quad,\\
+M\text{-interchange:}\quad & \text{ftn}_{M}\bef\text{sw}=\text{sw}^{\uparrow M}\bef\text{sw}\bef\text{ftn}_{M}^{\uparrow L}\quad,
+\end{align*}
+then the functor composition
+\[
+T^{A}\triangleq L^{M^{A}}
+\]
+is a monad with the methods \lstinline!pure! and \lstinline!flatten!
+defined by
+\begin{align*}
+\text{pu}_{T} & \triangleq\text{pu}_{M}\bef\text{pu}_{L}\quad,\\
+\text{ftn}_{T} & \triangleq\text{sw}^{\uparrow L}\bef\text{ftn}_{L}\bef\text{ftn}_{M}^{\uparrow L}\quad.
+\end{align*}
+
+
+\subsection{Intuition behind the laws of \lstinline!swap!}
+
+The interchange laws for \lstinline!swap! guarantee that in any functor
+composition built up from $L$ and $M$, e.g.~like this,
+\[
+M\circ M\circ L\circ M\circ L\circ L\circ M\circ M\circ L\quad,
+\]
+we can flatten the layers using $\text{ftn}_{L}$, or $\text{ftn}_{M}$,
+$\text{ftn}_{T}$, or interchange the layers with \lstinline!swap!,
+in any order. We will always get the same final value, which we can
+transform to the monad type $T=L\circ M$. 
+
+In other words, the monadic effects of the monads $L$ and $M$ can
+be arbitrarily interleaved, swapped, and flattened in any order, with
+no change to the final results. The programmer is free to refactor
+a monadic program, say, by computing some $L$-effects in a separate
+functor block of $L$-\lstinline!flatMap!s and only then combining
+the result with the rest of the computation in the monad $T$. Regardless
+of the refactoring, the monad $T$ computes all the effects correctly.
+This is what programmers would certainly expect of the monad $T$,
+if it is to be a useful monad transformer.
+
+We will now derive the properties of $\text{ftn}_{T}$ that correspond
+to the interchange laws. We will find that it is easier to formulate
+these laws in terms of \lstinline!swap!. In practice, all known examples
+of compositional monad transformers (the ``linear-valued'' and the
+``rigid'' monads) are defined via \lstinline!swap!.
+
 \subsection{Deriving \texttt{swap} from \texttt{flatten}}
 
 We have seen that the \texttt{}\lstinline!flatten! method for the
@@ -28932,11 +29442,12 @@ monad $T^{\bullet}=L^{M^{\bullet}}$ can be defined via the \texttt{swap}
 method. However, we have seen examples of some composable monads (such
 as \texttt{Reader} and \texttt{Option}) where we already know the
 definitions of the \texttt{}\lstinline!flatten! method for $T$.
-Does a suitable \texttt{swap} function exist for these examples? In
-other words, if a \texttt{}\lstinline!flatten! function for the
-monad $T^{\bullet}=L^{M^{\bullet}}$ is already given, can we establish
-whether a \texttt{swap} function exists such that the given \texttt{}\lstinline!flatten!
-function is expressed via Eq.~(\ref{eq:define-flatten-via-switch})? 
+How do we know whether a suitable \texttt{swap} function exist for
+these examples? In other words, if a \texttt{}\lstinline!flatten!
+function for the monad $T^{\bullet}=L^{M^{\bullet}}$ is already given,
+can we establish whether a \texttt{swap} function exists such that
+the given \texttt{}\lstinline!flatten! function is expressed via
+Eq.~(\ref{eq:define-flatten-via-switch})? 
 
 To answer this question, let us look at the type signature of \texttt{}\lstinline!flatten!
 for $T$:
@@ -28968,12 +29479,196 @@ to answer two questions:
 \item If we first define $\text{ftn}_{T}$ using Eq.~(\ref{eq:define-flatten-via-switch})
 through a given implementation of $\text{sw}$, and then substitute
 that $\text{ftn}_{T}$ into Eq.~(\ref{eq:define-switch-via-flatten}),
-will we recover the initially given function $\text{sw}$?
+will we always recover the initially given function $\text{sw}$?
+(Yes.)
 \item If we first define $\text{sw}$ using Eq.~(\ref{eq:define-switch-via-flatten})
 through a given implementation of $\text{ftn}_{T}$, and then substitute
 that $\text{sw}$ into Eq.~(\ref{eq:define-flatten-via-switch}),
-will we recover the initially given function $\text{ftn}_{T}$?
+will we always recover the initially given function $\text{ftn}_{T}$?
+(No, not without additional assumptions for $\text{ftn}_{T}$.)
 \end{enumerate}
+To answer the first question, substitute $\text{ftn}_{T}$ from Eq.~(\ref{eq:define-flatten-via-switch})
+into Eq.~(\ref{eq:define-switch-via-flatten}):
+\begin{align*}
+ & \text{pu}_{M}^{\uparrow L\uparrow M}\bef\text{pu}_{L}\bef\text{ftn}_{T}\\
+\text{substitute }\text{ftn}_{T}:\quad & =\text{pu}_{M}^{\uparrow L\uparrow M}\bef\underline{\text{pu}_{L}\bef\text{sw}^{\uparrow L}}\bef\text{ftn}_{L}\bef\text{ftn}_{M}^{\uparrow L}\\
+\text{naturality of }\text{pu}_{L}:\quad & =\text{pu}_{M}^{\uparrow L\uparrow M}\bef\text{sw}\bef\underline{\text{pu}_{L}\bef\text{ftn}_{L}}\bef\text{ftn}_{M}^{\uparrow L}\\
+\text{left identity law for }L:\quad & =\underline{\text{pu}_{M}^{\uparrow L\uparrow M}\bef\text{sw}}\bef\text{ftn}_{M}^{\uparrow L}\\
+\text{naturality of }\text{sw}:\quad & =\text{sw}\bef\underline{\text{pu}_{M}^{\uparrow M\uparrow L}\bef\text{ftn}_{M}^{\uparrow L}}\\
+\text{functor composition for }L:\quad & =\text{sw}\bef\underline{\left(\text{pu}_{M}^{\uparrow M}\bef\text{ftn}_{M}\right)}^{\uparrow L}\\
+\text{right identity law for }M:\quad & =\text{sw}\quad.
+\end{align*}
+So, yes, we do always recover the initial \lstinline!swap! function.
+
+To answer the second question, substitute $\text{sw}$ from Eq.~(\ref{eq:define-switch-via-flatten})
+into Eq.~(\ref{eq:define-flatten-via-switch}):
+\begin{align}
+ & \text{sw}^{\uparrow L}\bef\text{ftn}_{L}\bef\text{ftn}_{M}^{\uparrow L}\nonumber \\
+\text{substitute }\text{sw}:\quad & =\left(\text{pu}_{M}^{\uparrow L\uparrow M}\bef\text{pu}_{L}\bef\text{ftn}_{T}\right)^{\uparrow L}\bef\text{ftn}_{L}\bef\text{ftn}_{M}^{\uparrow L}\nonumber \\
+\text{functor composition }:\quad & =\text{pu}_{M}^{\uparrow L\uparrow M\uparrow L}\bef\text{pu}_{L}^{\uparrow L}\bef\text{ftn}_{T}^{\uparrow L}\bef\text{ftn}_{L}\bef\text{ftn}_{M}^{\uparrow L}\quad.\label{eq:deriv-sw-from-ftn-a}
+\end{align}
+At this point, we are stuck: no laws can be applied to transform the
+last expression any further. Without additional assumptions, it does
+not follow that this expression is equal to $\text{ftn}_{T}$. Let
+us derive the necessary additional assumptions. 
+
+A simplification of Eq.~(\ref{eq:deriv-sw-from-ftn-a}) clearly requires
+a law involving the function 
+\[
+\text{ftn}_{T}^{\uparrow L}\bef\text{ftn}_{L}\quad:L\circ L\circ M\circ L\circ M\leadsto L\circ M\quad.
+\]
+This function flattens the two layers of $\left(L\circ M\right)$
+and then flattens the remaining two layers of $L$. An alternative
+transformation with the same type signature is to first flatten the
+two outside layers of $L$ and then to flatten the two remaining layers
+of $\left(L\circ M\right)$:
+\[
+\text{ftn}_{L}\bef\text{ftn}_{T}\quad:L\circ L\circ M\circ L\circ M\leadsto L\circ M\quad.
+\]
+So we conjecture that a possibly useful additional law for $\text{ftn}_{T}$
+is 
+\[
+\text{ftn}_{L}\bef\text{ftn}_{T}=\text{ftn}_{T}^{\uparrow L}\bef\text{ftn}_{L}\quad.
+\]
+\[
+\xymatrix{\xyScaleY{2pc}\xyScaleX{3pc}L^{L^{M^{L^{M^{A}}}}}\ar[r]\sp(0.5){\text{ftn}_{L}}\ar[d]\sb(0.5){\text{ftn}_{T}^{\uparrow L}} & L^{M^{L^{M^{A}}}}\ar[d]\sp(0.5){\text{ftn}_{T}}\\
+L^{L^{M^{A}}}\ar[r]\sb(0.5){\text{ftn}_{L}} & L^{M^{A}}
+}
+\]
+This law shows a kind of ``compatibility'' between the monads $L$
+and $T$.
+
+With this law, the right-hand side of Eq.~(\ref{eq:deriv-sw-from-ftn-a})
+becomes
+\begin{align*}
+ & \text{pu}_{M}^{\uparrow L\uparrow M\uparrow L}\bef\underline{\text{pu}_{L}^{\uparrow L}\bef\text{ftn}_{L}}\bef\text{ftn}_{T}\bef\text{ftn}_{M}^{\uparrow L}\\
+\text{right identity law of }L:\quad & =\text{pu}_{M}^{\uparrow L\uparrow M\uparrow L}\bef\text{ftn}_{T}\bef\text{ftn}_{M}^{\uparrow L}\quad.
+\end{align*}
+Again, we cannot proceed unless we have a law involving the function
+\[
+\text{ftn}_{T}\bef\text{ftn}_{M}^{\uparrow L}\quad:L\circ M\circ L\circ M\circ M\leadsto L\circ M\quad.
+\]
+This function first flattens the two layers of $\left(L\circ M\right)$
+and then flattens the remaining two layers of $M$. An alternative
+order of flattenings is to first flatten the innermost two layers
+of $M$:
+\[
+\text{ftn}_{M}^{\uparrow L\uparrow M\uparrow L}\bef\text{ftn}_{T}\quad:L\circ M\circ L\circ M\circ M\leadsto L\circ M\quad.
+\]
+The second conjectured law is therefore
+\[
+\text{ftn}_{T}\bef\text{ftn}_{M}^{\uparrow L}=\text{ftn}_{M}^{\uparrow L\uparrow M\uparrow L}\bef\text{ftn}_{T}\quad.
+\]
+\[
+\xymatrix{\xyScaleY{2pc}\xyScaleX{3pc}L^{M^{L^{M^{M^{A}}}}}\ar[r]\sp(0.5){\text{ftn}_{T}}\ar[d]\sb(0.5){\text{ftn}_{M}^{\uparrow L\uparrow M\uparrow L}} & L^{M^{M^{A}}}\ar[d]\sp(0.5){\text{ftn}_{M}^{\uparrow L}}\\
+L^{M^{L^{M^{A}}}}\ar[r]\sb(0.5){\text{ftn}_{T}} & L^{M^{A}}
+}
+\]
+This law expresses ``compatibility'' between the \lstinline!flatten!
+methods of $M$ and $T$.
+
+With this law, we can finally complete the derivation:
+\begin{align*}
+ & \text{pu}_{M}^{\uparrow L\uparrow M\uparrow L}\bef\text{ftn}_{T}\bef\text{ftn}_{M}^{\uparrow L}\\
+\text{substitute the second conjecture}:\quad & =\underline{\text{pu}_{M}^{\uparrow L\uparrow M\uparrow L}\bef\text{ftn}_{M}^{\uparrow L\uparrow M\uparrow L}}\bef\text{ftn}_{T}\\
+\text{functor composition }:\quad & =\left(\text{pu}_{M}\bef\text{ftn}_{M}\right)^{\uparrow L\uparrow M\uparrow L}\bef\text{ftn}_{T}\\
+\text{left identity law of }M:\quad & =\text{ftn}_{T}\quad.
+\end{align*}
+We recover the initial $\text{ftn}_{T}$ only if the two additional
+laws are assumed.
+
+It turns out that these additional laws will always hold when $\text{ftn}_{T}$
+is defined via \lstinline!swap! (see Exercise~\ref{par:Exercise-1-interchange-laws-for-ftn-T}).
+
+\subsubsection{Exercise \label{par:Exercise-1-interchange-laws-for-ftn-T}\ref{par:Exercise-1-interchange-laws-for-ftn-T} }
+
+Assuming that
+\begin{itemize}
+\item $L$ and $M$ are monads,
+\item the method \lstinline!swap! is a natural transformation $M\circ L\leadsto L\circ M$,
+\item the method $\text{ftn}_{T}$ of the monad $T=L\circ M$ is defined
+via \lstinline!swap! by Eq.~(\ref{eq:define-flatten-via-switch}),
+\end{itemize}
+show that the two interchange laws hold for $T$:
+\begin{align*}
+L\text{-interchange }:\quad & \text{ftn}_{L}\bef\text{ftn}_{T}=\text{ftn}_{T}^{\uparrow L}\bef\text{ftn}_{L}\quad,\\
+M\text{-interchange }:\quad & \text{ftn}_{T}\bef\text{ftn}_{M}^{\uparrow L}=\text{ftn}_{M}^{\uparrow L\uparrow M\uparrow L}\bef\text{ftn}_{T}\quad.
+\end{align*}
+
+
+\subsubsection{Exercise \label{par:Exercise-2-prove-compat-laws-for-T-from-swap}\ref{par:Exercise-2-prove-compat-laws-for-T-from-swap}}
+
+With the same assumptions as Exercise~\ref{par:Exercise-1-interchange-laws-for-ftn-T}
+and additionally assuming the $L$-identity and the $M$-identity
+laws for \lstinline!swap! (see Theorem~\ref{par:Theorem-swap-laws-to-monad-t}),
+show that the monad $T^{\bullet}\triangleq L^{M^{\bullet}}$ satisfies
+two ``pure compatibility'' laws,
+\begin{align*}
+L\text{-pure-compatibility}:\quad & \text{ftn}_{L}=\text{pu}_{M}^{\uparrow L}\bef\text{ftn}_{T}\quad:L^{L^{M^{A}}}\Rightarrow L^{M^{A}}\quad,\\
+M\text{-pure-compatibility}:\quad & \text{ftn}_{M}^{\uparrow L}=\text{pu}_{L}^{\uparrow T}\bef\text{ftn}_{T}\quad:L^{M^{M^{A}}}\Rightarrow L^{M^{A}}\quad.
+\end{align*}
+
+For given monads $L$ and $M$, it is cumbersome to verify the associativity
+and the interchange laws for $T$ because of the deeply nested type
+constructors. The \lstinline!swap! method has a simpler type signature,
+and its two interchange laws entail both the associativity and the
+interchange laws for $T$. So, we will use the \lstinline!swap! method
+to define compositional monad transformers and to verify their laws.
+
+\subsection{Laws of monad transformer liftings}
+
+We will derive the laws of liftings from the laws of \lstinline!swap!.
+To be specific, let us assume that $L$ is the base monad of the transformer.
+Only names will need to change for the other choice of the base monad.
+
+The lifting morphisms of a compositional monad transformer are defined
+by
+\begin{align*}
+\text{lift} & =\text{pu}_{L}:M^{A}\Rightarrow L^{M^{A}}\quad,\\
+\text{blift} & =\text{pu}_{M}^{\uparrow L}:L^{A}\Rightarrow L^{M^{A}}\quad.
+\end{align*}
+Their laws of liftings (the identity and the composition laws) are
+\begin{align*}
+\text{pu}_{M}\bef\text{lift}=\text{pu}_{T}\quad,\quad & \quad\text{pu}_{L}\bef\text{blift}=\text{pu}_{T}\quad,\\
+\text{ftn}_{M}\bef\text{lift}=\text{lift}^{\uparrow M}\bef\text{lift}\bef\text{ftn}_{T}\quad,\quad & \quad\text{ftn}_{L}\bef\text{blift}=\text{blift}^{\uparrow L}\bef\text{blift}\bef\text{ftn}_{T}\quad.
+\end{align*}
+The identity laws are verified quickly,
+\begin{align*}
+\text{expect to equal }\text{pu}_{T}:\quad & \text{pu}_{M}\bef\text{lift}=\text{pu}_{M}\bef\text{pu}_{L}\\
+\text{definition of }\text{pu}_{T}:\quad & =\text{pu}_{T}\quad,\\
+\text{expect to equal }\text{pu}_{T}:\quad & \text{pu}_{L}\bef\text{blift}=\text{pu}_{L}\bef\text{pu}_{M}^{\uparrow L}\\
+\text{naturality of }\text{pu}_{L}:\quad & =\text{pu}_{M}\bef\text{pu}_{L}=\text{pu}_{T}\quad.
+\end{align*}
+To verify the composition laws, we need to start from their right-hand
+sides because the left-hand sides cannot be simplified, and we substitute
+the definition of $\text{ftn}_{T}$ in terms of \lstinline!swap!.
+The composition law for $\text{lift}$:
+\begin{align*}
+\text{expect to equal }\text{ftn}_{M}\bef\text{pu}_{L}:\quad & \text{lift}^{\uparrow M}\bef\text{lift}\bef\text{ftn}_{T}\\
+\text{definitions of }\text{lift}\text{ and }\text{ftn}_{T}:\quad & =\text{pu}_{L}^{\uparrow M}\bef\underline{\text{pu}_{L}\bef\text{sw}^{\uparrow L}}\bef\text{ftn}_{L}\bef\text{ftn}_{M}^{\uparrow L}\\
+\text{naturality of }\text{pu}_{L}:\quad & =\text{pu}_{L}^{\uparrow M}\bef\text{sw}\bef\underline{\text{pu}_{L}\bef\text{ftn}_{L}}\bef\text{ftn}_{M}^{\uparrow L}\\
+\text{left identity law of }L:\quad & =\underline{\text{pu}_{L}^{\uparrow M}\bef\text{sw}}\bef\text{ftn}_{M}^{\uparrow L}\\
+L\text{-identity law of }\text{sw}:\quad & =\text{pu}_{L}\bef\text{ftn}_{M}^{\uparrow L}\\
+\text{naturality of }\text{pu}_{L}:\quad & =\text{ftn}_{M}\bef\text{pu}_{L}\quad.
+\end{align*}
+The composition law for $\text{blift}$:
+\begin{align*}
+\text{expect to equal }\text{ftn}_{L}\bef\text{pu}_{M}^{\uparrow L}:\quad & \text{blift}^{\uparrow L}\bef\text{blift}\bef\text{ftn}_{T}\\
+\text{definitions of }\text{blift}\text{ and }\text{ftn}_{T}:\quad & =\text{pu}_{M}^{\uparrow L\uparrow L}\bef\underline{\text{pu}_{M}^{\uparrow L}\bef\text{sw}^{\uparrow L}}\bef\text{ftn}_{L}\bef\text{ftn}_{M}^{\uparrow L}\\
+\text{functor composition in }L:\quad & =\text{pu}_{M}^{\uparrow L\uparrow L}\bef\underline{\left(\text{pu}_{M}\bef\text{sw}\right)}^{\uparrow L}\bef\text{ftn}_{L}\bef\text{ftn}_{M}^{\uparrow L}\\
+M\text{-identity law of }\text{sw}:\quad & =\left(\text{pu}_{M}^{\uparrow L\uparrow L}\bef\text{pu}_{M}^{\uparrow L\uparrow L}\right)\bef\text{ftn}_{L}\bef\text{ftn}_{M}^{\uparrow L}\\
+\text{naturality of }\text{ftn}_{L}:\quad & =\text{ftn}_{L}\bef\left(\text{pu}_{M}^{\uparrow L}\bef\text{pu}_{M}^{\uparrow L}\right)\bef\text{ftn}_{M}^{\uparrow L}\\
+\text{right identity law of }M:\quad & =\text{ftn}_{L}\bef\text{pu}_{M}^{\uparrow L}\quad.
+\end{align*}
+In this way, the laws of \lstinline!swap! entail the lifting laws
+for $T$.
+
+\subsection{Laws of monad transformer runners}
+
+The laws of runners are not symmetric with respect to the base monad
+and the foreign monad: the runner is generic in the foreign monad,
+but not in the base monad. So here we need to make a choice as to
+whether $L$ or $M$ is the base monad. {*}{*}{*}
 
 \section{Composed-outside transformers: Rigid monads}
 
