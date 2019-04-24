@@ -15,6 +15,7 @@
 \usepackage{color}
 \usepackage{babel}
 \usepackage{verbatim}
+\usepackage{mathdots}
 \usepackage{makeidx}
 \makeindex
 \usepackage{graphicx}
@@ -29133,7 +29134,235 @@ cases this concludes chapter tune
 
 \section{Laws and structure}
 
-\section{Monad transformers from functor composition}
+A monad transformer $T_{L}^{M,A}$ is a type constructor with a type
+parameter $A$ and a monad parameter $M$, such that the following
+five laws hold:
+\begin{enumerate}
+\item \textbf{Monad construction law}: $T_{L}^{M,\bullet}$ is a monad for
+any monad $M$.
+\item \textbf{Identity law}: $T_{L}^{\text{Id},\bullet}\cong L^{\bullet}$
+via a monadic isomorphism, where $\text{Id}$ is the identity monad,
+$\text{Id}^{A}\triangleq A$.
+\item \textbf{Lifting law}: for any monad $M$, the function $\text{lift}:M^{A}\Rightarrow T_{L}^{M,A}$
+is a monadic morphism.
+\item \textbf{Runner law}: for any monads $M$, $N$ and any monadic morphism
+$\phi:M\leadsto N$, the runner $\text{mrun}\,\phi:T_{L}^{M}\leadsto T_{L}^{N}$
+is a monadic morphism. Moreover, the function \lstinline!mrun! is
+a lawful lifting of monadic morphisms from $M\leadsto N$ to $T_{L}^{M}\leadsto T_{L}^{N}$:
+\[
+\text{mrun}\,\text{id}=\text{id}\quad,\quad\quad\text{mrun}\,\phi\bef\text{mrun}\,\chi=\text{mrun}\left(\phi\bef\chi\right)\quad.
+\]
+\item \textbf{Base runner law}: for any monadic morphism $\theta:L\leadsto\text{Id}$
+and for any monad $M$, the base runner $\text{brun}\,\theta:T_{L}^{M}\leadsto M$
+is a monadic morphism. (Since it is not possible to transform the
+base monad $L$ into an arbitrary other monad, there are no further
+laws for \lstinline!brun!.)
+\end{enumerate}
+
+\section{Composition of monad transformers (``monad stacks'')}
+
+\subsection{Stacking two monads}
+
+Suppose we know the transformers $T_{P}$ and $T_{Q}$ for some given
+monads $P$ and $Q$. We can transform $Q$ with $P$ and obtain a
+monad $R^{A}\triangleq T_{P}^{Q,A}$. What would be the monad transformer
+$T_{R}$ for the monad $R$?
+
+A simple solution is to first transform the foreign monad $M$ with
+$T_{Q}$, obtaining a new monad $T_{Q}^{M,\bullet}$, and then to
+transform that new monad with $T_{P}$. So the formula for the transformer
+$T_{R}$ is
+\[
+T_{R}^{M,A}=T_{P}^{T_{Q}^{M,\bullet},A}\quad.
+\]
+Here the monad $T_{Q}^{M,\bullet}$ was substituted into $T_{P}^{M,A}$
+as the foreign monad $M$ (not as the type parameter $A$). This way
+of composition is called \textbf{stacking\index{monad transformers!stacking}}
+the monad transformers. 
+
+In Scala code, this ``stacking'' composition is written as
+\begin{lstlisting}
+type RT[M, A] = PT[QT[M, ?], A]
+\end{lstlisting}
+The resulting monad is a \textbf{stack\index{monads!stack of}} of
+three monads $P$, $Q$, and $M$. The order of monads in the stack
+is significant since, in general, there will be no monadic isomorphism
+between monads stacked in a different order.
+
+We will now show that the transformer $T_{R}$ is lawful (satisfies
+all five monad transformer laws), as long as the same five laws are
+satisfied by both $T_{P}$ and $T_{Q}$. To shorten the notation,
+I will talk about a ``monad $T_{P}^{M}$'' meaning the monad defined
+as $T_{P}^{M,\bullet}$ or, more verbosely, the monad $G^{A}\triangleq T_{P}^{M,A}$.
+
+\paragraph{Monad construction law}
+
+We need to show that $T_{P}^{T_{Q}^{M}}$ is a monad for any monad
+$M$. The monad law for $T_{Q}$ says that $T_{Q}^{M}$ is a monad.
+Denote this monad temporarily by $S\triangleq T_{Q}^{M}$. The monad
+law for $T_{P}$ says that $T_{P}^{M}$ is a monad for any monad $M$;
+in particular, for $M=S$. Therefore, $T_{P}^{S}$ is a monad, as
+required.
+
+\paragraph{Identity law}
+
+We need to show that $T_{P}^{T_{Q}^{\text{Id}}}\cong T_{P}^{Q}$ via
+a monadic isomorphism. The identity law for $T_{Q}$ says that $T_{Q}^{\text{Id}}\cong Q$
+via a monadic isomorphism. So, we have a monadic morphism $\phi:Q\leadsto T_{Q}^{\text{Id}}$
+and its inverse, $\chi:T_{Q}^{\text{Id}}\leadsto Q$. The runner law
+for $T_{P}$ can be applied to both $\phi$ and $\chi$ since they
+are monadic morphisms. So we obtain two new monadic morphisms,
+\[
+\text{mrun}_{P}\,\phi:T_{P}^{Q}\leadsto T_{P}^{T_{Q}^{\text{Id}}}\quad;\quad\quad\text{mrun}_{P}\,\chi:T_{P}^{T_{Q}^{\text{Id}}}\leadsto T_{P}^{Q}\quad.
+\]
+Are these two monadic morphisms inverses of each other? Since $\text{mrun}_{P}$
+is a lifting of monadic morphisms, it lifts identity into identity
+and composition into composition. So the composition $\phi\bef\chi=\text{id}$
+is lifted into
+\[
+\text{mrun}\,\phi\bef\text{mrun}\,\chi=\text{id}\quad,
+\]
+and similarly for the composition $\chi\bef\phi$. Thus we obtain
+a monadic isomorphism between monads $T_{P}^{Q}$ and $T_{P}^{T_{Q}^{\text{Id}}}$.
+
+\paragraph{Lifting law}
+
+We need to show that there exists a monadic morphism $M\leadsto T_{P}^{T_{Q}^{M}}$
+for any monad $M$. The lifting law for $T_{Q}$ gives a monadic morphism
+$\text{lift}_{Q}:M\leadsto T_{Q}^{M}$. The lifting law for $T_{P}$
+can be applied to the monad $T_{Q}^{M}$, which gives a monadic morphism
+\[
+\text{lift}_{P}:T_{Q}^{M}\leadsto T_{P}^{T_{Q}^{M}}\quad.
+\]
+The composition of this with $\text{lift}_{Q}$ is a monadic morphism
+of the required type $M\leadsto T_{P}^{T_{Q}^{M}}$. (We use the fact
+that a composition of monadic morphisms is again a monadic morphism.)
+
+\paragraph{Runner law}
+
+We need to show that there exists a lawful lifting 
+\[
+\text{mrun}_{R}:\left(M\leadsto N\right)\Rightarrow T_{P}^{T_{Q}^{M}}\leadsto T_{P}^{T_{Q}^{N}}\quad.
+\]
+First, we have to define $\text{mrun}_{R}\phi$ for any given $\phi:M\leadsto N$.
+We use the lifting law for $T_{Q}$ to get a monadic morphism
+\[
+\text{lift}_{Q}\phi:T_{Q}^{M}\leadsto T_{Q}^{N}\quad.
+\]
+Now we can apply the lifting law for $T_{P}$ to this monadic morphism
+and obtain
+\[
+\text{lift}_{P}\left(\text{lift}_{Q}\phi\right):T_{P}^{T_{Q}^{M}}\leadsto T_{P}^{T_{Q}^{N}}\quad.
+\]
+This function has the correct type signature. So we can define
+\[
+\text{lift}_{R}\triangleq\text{lift}_{P}\circ\text{lift}_{Q}\quad.
+\]
+It remains to prove that $\text{lift}_{R}$ is a lawful lifting. We
+use the fact that both $\text{lift}_{P}$ and $\text{lift}_{Q}$ are
+lawful liftings; we need to show that their composition is also a
+lawful lifting. To verify the identity law of lifting, apply $\text{lift}_{R}$
+to an identity function $\text{id}:M\leadsto M$,
+\begin{align*}
+ & \text{lift}_{R}\left(\text{id}^{:M\leadsto M}\right)=\text{lift}_{P}\left(\text{lift}_{Q}\text{id}^{:M\leadsto M}\right)\\
+\text{identity law for }\text{lift}_{Q}:\quad & =\text{lift}_{P}\big(\text{id}^{:T_{Q}^{M}\leadsto T_{Q}^{M}}\big)\\
+\text{identity law for }\text{lift}_{P}:\quad & =\text{id}\quad.
+\end{align*}
+To verify the composition law of lifting, apply $\text{lift}_{R}$
+to a composition of two monadic morphisms $\phi:L\leadsto M$ and
+$\chi:M\leadsto N$,
+\begin{align*}
+ & \text{lift}_{R}\left(\phi\bef\chi\right)=\text{lift}_{P}\left(\text{lift}_{Q}\left(\phi\bef\chi\right)\right)\\
+\text{composition law for }\text{lift}_{Q}:\quad & =\text{lift}_{P}\left(\text{lift}_{Q}\phi\bef\text{lift}_{Q}\chi\right)\\
+\text{composition law for }\text{lift}_{P}:\quad & =\text{lift}_{P}\left(\text{lift}_{Q}\phi\right)\bef\text{lift}_{P}\left(\text{lift}_{Q}\phi\right)\\
+ & =\text{lift}_{R}\phi\bef\text{lift}_{R}\chi\quad.
+\end{align*}
+
+
+\paragraph{Base runner law}
+
+We need to show that for any monadic morphism $\theta:T_{P}^{Q}\leadsto\text{Id}$
+and for any monad $M$, there exists a monadic morphism $\text{brun}_{R}\theta:T_{P}^{T_{Q}^{M}}\leadsto M$.
+To define this morphism for a given $\theta$, we clearly need to
+use the base runners for $T_{P}$ and $T_{Q}$. The base runner for
+$T_{Q}$ has the type signature
+\[
+\text{brun}_{Q}:\left(Q\leadsto\text{Id}\right)\Rightarrow T_{Q}^{M}\leadsto M\quad.
+\]
+We can apply the base runner for $T_{P}$ to $T_{Q}^{M}$ as the foreign
+monad,
+\[
+\text{brun}_{P}:\left(P\leadsto\text{Id}\right)\Rightarrow T_{P}^{T_{Q}^{M}}\leadsto T_{Q}^{M}\quad.
+\]
+It is now clear that we could obtain a monadic morphism $T_{P}^{T_{Q}^{M}}\leadsto M$
+if we had some monadic morphisms $\phi:P\leadsto\text{Id}$ and $\chi:Q\leadsto\text{Id}$,
+\[
+\text{brun}_{P}\phi\bef\text{brun}_{Q}\chi:T_{P}^{T_{Q}^{M}}\leadsto M\quad.
+\]
+However, we are only given a single monadic morphism $\theta:T_{P}^{Q}\leadsto\text{Id}$.
+How can we compute $\phi$ and $\chi$ out of $\theta$? We can use
+the liftings $\text{blift}_{P}:P\leadsto T_{P}^{Q}$ and $\text{lift}_{P}:Q\leadsto T_{P}^{Q}$,
+which are both monadic morphisms, and compose them with $\theta$:
+\[
+\text{blift}_{P}\bef\theta:P\leadsto\text{Id}\quad;\quad\quad\text{lift}_{P}\bef\theta:Q\leadsto\text{Id}\quad.
+\]
+So it follows that we can define a monadic morphism
+\[
+\text{brun}_{R}\theta=\text{brun}_{P}\left(\text{blift}_{P}\bef\theta\right)\bef\text{brun}_{Q}\left(\text{lift}_{P}\bef\theta\right):T_{P}^{T_{Q}^{M}}\leadsto M\quad.
+\]
+Since we have defined $\text{brun}_{R}\theta$ as a composition of
+monadic morphisms, it is itself a monadic morphism.
+
+\subsection{Stacking multiple monads}
+
+The monad transformer for $T_{P}^{Q}$ can be applied to another monad
+$K$; the result is the transformed monad
+\[
+S^{A}\triangleq T_{P}^{T_{Q}^{K},A}.
+\]
+What is the monad transformer for the monad $S$? Assuming that we
+know the monad transformer $T_{K}$, we could stack the transformers
+one level higher:
+\[
+T_{S}^{M,A}\triangleq T_{P}^{T_{Q}^{T_{K}^{M}},A}\quad.
+\]
+This looks like a stack of four monads $P$, $Q$, $K$, and $M$.
+Note that the type parameter $A$ is used as $T_{P}^{(...),A}$, that
+is, it belongs to the outer transformer $T_{P}$.
+
+We can define a transformer stack for any number of monads $P$, $Q$,
+..., $Z$ in the same way,
+\begin{equation}
+T_{S}^{M,A}\triangleq T_{P}^{T_{Q}^{\iddots^{T_{Z}^{M}}},A}\quad.\label{eq:general-transformer-stack}
+\end{equation}
+The type parameter $A$ will always remain at the outer transformer
+level, while the foreign monad $M$ will be in the innermost nested
+position.
+
+It appears plausible that $T_{S}$ is a lawful monad transformer for
+\emph{any} number of stacked monads. We can prove this by induction
+on the number of monads. In the previous section, we have derived
+the transformer laws for any \emph{three} stacked monads (two monads
+$P$, $Q$ within the transformer and one foreign monad $M$). Now
+we need to derive the same laws for a general transformer stack, such
+as that in Eq.~(\ref{eq:general-transformer-stack}). Let us temporarily
+denote by $J$ the monad 
+\[
+J\triangleq T_{Q}^{\iddots^{T_{Z}^{\text{Id}}}}\quad,
+\]
+where we replaced the foreign monad $M$ by the identity monad. The
+monad $J$ is a shorter transformer stack than $S$, so the inductive
+assumption tells us that the transformer laws already hold for the
+transformer $T_{J}$ defined by
+\[
+T_{J}^{M}\triangleq T_{Q}^{\iddots^{T_{Z}^{M}}}\quad.
+\]
+Since both $T_{P}$ and $T_{J}$ are lawful transformers, their stacking
+composition $T_{P}^{T_{J}^{M},A}$ is also a lawful transformer (this
+was shown in the previous section). In our notation, $T_{S}^{M,A}=T_{P}^{T_{J}^{M},A}$,
+and so we have shown that $T_{S}^{M,A}$ is a lawful transformer.
+
+\section{Monad transformers that use functor composition}
 
 We have seen examples of monad transformers that work via functor
 composition, either from inside or from outside. The simplest such
@@ -29152,33 +29381,39 @@ We can obtain many properties of both kinds of monad transformers
 at once from a single derivation if we temporarily drop the distinction
 between the base monad and the foreign monad. We simply assume that
 we are given two different monads, $L$ and $M$, whose functor composition
-$L^{M^{\bullet}}$ is also required to be a monad. Since the assumptions
-on the monads $L$ and $M$ are the same, the resulting properties
-of the composed monad will apply equally to both kinds of monad transformers.
-(For the composed-inside transformer, we will just need to interchange
-the names $L$ and $M$.)
+$T^{\bullet}\triangleq L^{M^{\bullet}}$ also happens to be a monad.
+Since the assumptions on the monads $L$ and $M$ are the same, the
+resulting properties of the composed monad $T$ will apply equally
+to both kinds of monad transformers.
+
+To interpret the results, we will assume that $L$ is the base monad
+for the composed-outside transformers, and that $M$ is the base monad
+for the composed-inside transformers. For instance, we will be able
+to prove the laws of liftings $L\leadsto T$ and $M\leadsto T$ regardless
+of the choice of the base monad.
 
 What properties of monad transformers will \emph{not} be derivable
 in this way? Monad transformers depend on the structure on the base
 monad, but not on the structure of the foreign monad; the transformer's
 methods \lstinline!pure! and \lstinline!flatten! are generic in
 the foreign monad. This is expressed via the monad transformer laws
-for the runner \lstinline!mrun!, which we will need to derive separately
-for each of the two kinds of transformers, for which the foreign monad
-will be either $L$ or $M$. 
+for the runners \lstinline!mrun! and \lstinline!brun!, which we
+will need to derive separately for each of the two kinds of transformers.
 
 \subsection{Motivation for the \texttt{swap} function}
 
-The required methods for the composed monad $T^{\bullet}\triangleq L^{M^{\bullet}}$
-are \lstinline!pure! (short notation ``$\text{pu}_{T}$'') and
-\texttt{}\lstinline!flatten! (short notation ``$\text{ftn}_{T}$'')
+The first task is to show that the composed monad $T^{\bullet}\triangleq L^{M^{\bullet}}$
+obeys the monad laws. For this, we need to define the methods for
+the monad $T$, namely \lstinline!pure! (short notation ``$\text{pu}_{T}$'')
+and \texttt{}\lstinline!flatten! (short notation ``$\text{ftn}_{T}$''),
 with the type signatures
 \[
 \text{pu}_{T}:A\Rightarrow L^{M^{A}}\quad,\quad\text{ftn}_{T}:L^{M^{L^{M^{A}}}}\Rightarrow L^{M^{A}}\quad.
 \]
-\emph{All we know} about $L$ and $M$ is that they are monads with
-their own methods $\text{pu}_{L}$, $\text{ftn}_{L}$, $\text{pu}_{M}$,
-and $\text{ftn}_{M}$. We can easily implement 
+How can we implement these methods? \emph{All we know} about $L$
+and $M$ is that they are monads with their own methods $\text{pu}_{L}$,
+$\text{ftn}_{L}$, $\text{pu}_{M}$, and $\text{ftn}_{M}$. We can
+easily implement 
 \begin{equation}
 \text{pu}_{T}\triangleq\text{pu}_{M}\bef\text{pu}_{L}\quad.\label{eq:def-of-pure-T}
 \end{equation}
@@ -29187,13 +29422,13 @@ and $\text{ftn}_{M}$. We can easily implement
  & L^{M^{A}}
 }
 \]
-How to implement $\text{ftn}_{T}$? In the type $L^{M^{L^{M^{A}}}}$,
+It remains to implement $\text{ftn}_{T}$. In the type $L^{M^{L^{M^{A}}}}$,
 we have two layers of the functor $L$ and two layers of the functor
 $M$. We could use the available method $\text{ftn}_{L}$ to flatten
-the two layers of $L$ if we could somehow bring these nested layers
-together. However, they are separated by a layer of the functor $M$.
-To show this layered structure in a perhaps more visual way, let us
-employ another notation for the functor composition, 
+the two layers of $L$ if we could \emph{somehow} bring these nested
+layers together. However, these layers are separated by a layer of
+the functor $M$. To show this layered structure in a more visual
+way, let us employ another notation for the functor composition, 
 \[
 L\circ M\triangleq L^{M^{\bullet}}\quad.
 \]
@@ -29205,13 +29440,13 @@ is written as
 If we had $L\circ L\circ...$ here, we would have applied $\text{ftn}_{L}$
 and flattened the two layers of the functor $L$. Then we would have
 flattened the remaining two layers of the functor $M$. How can we
-achieve this? The trick is to assume that we can interchange the order
-of the layers in the middle, using a function I call \texttt{swap}
+achieve this? The trick is to \emph{assume} that we can interchange
+the order of the layers in the middle, using a function called \texttt{swap}
 (short notation ``$\text{sw}$''), with the type signature
 \[
 \text{sw}:M\circ L\leadsto L\circ M\quad,
 \]
-which is written in the short type notation as
+which is equivalently written in the short type notation as
 \[
 \text{sw}:M^{L^{A}}\Rightarrow L^{M^{A}}\quad.
 \]
@@ -29243,6 +29478,9 @@ are
 \text{composed-outside}:\quad\text{ftn}_{T}:L^{M^{L^{M^{A}}}}\Rightarrow L^{M^{A}}\quad, & \quad\text{sw}:M^{L^{A}}\Rightarrow L^{M^{A}}\quad.
 \end{align*}
 
+
+\subsubsection{The operations \lstinline!swap! and \lstinline!sequence!}
+
 There is a certain similarity between the \texttt{}\lstinline!swap!
 operation introduced here and the \texttt{sequence} operation introduced
 in Chapter~\ref{chap:9-Traversable-functors-and} for traversable
@@ -29255,15 +29493,32 @@ since monads are applicative functors) and $L$ is a traversable functor.
 However, the similarity ends here. The laws required for the \texttt{}\lstinline!swap!
 operation to yield a monad $T$ are much stronger than the laws of
 traversable functors. In particular, if we wish $M^{L^{\bullet}}$
-to be a monad, it is far insufficient to require the monad $L$ to
-be a traversable functor. Also, the \texttt{}\lstinline!swap! operation
-needs to be generic in the foreign monad, which may be either $L$
-or $M$ according to the type of the monad transformer; whereas \lstinline!sequence!
-is generic only in $F$.
+to be a monad, it is insufficient to require the monad $L$ to be
+a traversable functor. A simple counterexample is found with $L^{A}\triangleq A\times A$
+and $M^{A}\triangleq1+A$. Both $L$ and $M$ are traversable (since
+they are polynomial); but their composition $Q^{A}\triangleq1+A\times A$
+is not a monad.
 
-To avoid confusion, I use the name ``swap'' for the function $M^{L^{\bullet}}\leadsto L^{M^{\bullet}}$
-in the context of monad transformers. Let us now find out what laws
-are required for the \texttt{}\lstinline!swap! operation.\footnote{The ``swap'' operation was first introduced in a \href{http://web.cecs.pdx.edu/~mpj/pubs/composing.html}{1993 paper}
+Another difference between \lstinline!swap! and \lstinline!sequence!
+is that the \texttt{}\lstinline!swap! operation needs to be generic
+in the foreign monad, which may be either $L$ or $M$ according to
+the type of the monad transformer; whereas \lstinline!sequence! is
+always generic in $F$. To denote more clearly the monad with respect
+to which \lstinline!swap! is generic, we may write
+\begin{align*}
+\text{sw}_{L}^{M}:L^{M^{A}}\Rightarrow M^{L^{A}}\quad & \text{for the composed-inside transformers,}\\
+\text{sw}_{L}^{M}:M^{L^{A}}\Rightarrow L^{M^{A}}\quad & \text{for the composed-inside transformers.}
+\end{align*}
+The superscript $M$ in $\text{sw}_{L}^{M}$ shows that $M$ is a
+\emph{type parameter} in \lstinline!swap!; that is, \lstinline!swap!
+is generic in the monad $M$. The subscript $L$ in $\text{sw}_{L}^{M}$
+shows that the implementations of \lstinline!swap! may need to use
+completely different code for different monads $L$.
+
+To avoid confusion, I use the name ``swap'' rather than ``sequence''
+for the function $M^{L^{\bullet}}\leadsto L^{M^{\bullet}}$ in the
+context of monad transformers. Let us now find out what laws are required
+for the \texttt{}\lstinline!swap! operation.\footnote{The ``swap'' operation was first introduced in a \href{http://web.cecs.pdx.edu/~mpj/pubs/composing.html}{1993 paper}
 ``Composing monads'' by M.~P.~Jones and L.~Duponcheel. They studied
 various ways of composing monads and also gave some arguments to show
 that no generic transformer could compose all monads $L$, $M$. The
@@ -29277,9 +29532,9 @@ inside or from outside.}
 The first law is that \texttt{}\lstinline!swap! must be a natural
 transformation. Since \texttt{}\lstinline!swap! has only one type
 parameter, there is one naturality law: for any function $f:A\Rightarrow B$,
-\[
-f^{\uparrow L\uparrow M}\bef\text{sw}=\text{sw}\bef f^{\uparrow M\uparrow L}\quad.
-\]
+\begin{equation}
+f^{\uparrow L\uparrow M}\bef\text{sw}=\text{sw}\bef f^{\uparrow M\uparrow L}\quad.\label{eq:swap-law-0-naturality}
+\end{equation}
 \[
 \xymatrix{\xyScaleY{2pc}\xyScaleX{3pc}M^{L^{A}}\ar[r]\sp(0.5){f^{\uparrow L\uparrow M}}\ar[d]\sb(0.45){\text{sw}} & M^{L^{B}}\ar[d]\sp(0.45){\text{sw}}\\
 L^{M^{A}}\ar[r]\sp(0.5){f^{\uparrow M\uparrow L}} & L^{M^{B}}
@@ -29307,27 +29562,27 @@ left identity law for $\text{ftn}_{T}$ and simplify:
 \text{left identity law for }L:\quad & =\text{pu}_{M}\bef\text{sw}\bef\text{ftn}_{M}^{\uparrow L}\quad.\label{eq:left-identity-ftn-T}
 \end{align}
 How could the last expression in Eq.~(\ref{eq:left-identity-ftn-T})
-be equal to $\text{id}$? We know nothing about the \texttt{}\lstinline!pur!\texttt{e}
+be equal to $\text{id}$? We know nothing about the \texttt{}\lstinline!pure!
 and \texttt{}\lstinline!flatten! methods of the monads $L$ and
-$M$, except that they satisfy their monad laws. We could satisfy
-the law in Eq.~(\ref{eq:left-identity-ftn-T}) if we somehow reduce
-that expression to
+$M$, except that these methods satisfy their monad laws. We could
+satisfy the law in Eq.~(\ref{eq:left-identity-ftn-T}) if we somehow
+reduce that expression to
 \[
-\left(\text{pu}_{M}\bef\text{ftn}_{M}\right)^{\uparrow L}=\text{id}\quad.
+\text{pu}_{M}^{\uparrow L}\bef\text{ftn}_{M}^{\uparrow L}=\left(\text{pu}_{M}\bef\text{ftn}_{M}\right)^{\uparrow L}=\text{id}\quad.
 \]
 This will be possible only if we are able to interchange the order
 of function compositions with $\text{sw}$ and eliminate \lstinline!swap!
 from the expression. So, we must require the ``$M$-identity law''
 for \lstinline!swap!,
-\[
-\text{pu}_{M}\bef\text{sw}=\text{pu}_{M}^{\uparrow L}\quad.
-\]
+\begin{equation}
+\text{pu}_{M}\bef\text{sw}=\text{pu}_{M}^{\uparrow L}\quad.\label{eq:swap-law-1-M-identity}
+\end{equation}
 \[
 \xymatrix{\xyScaleY{1pc}\xyScaleX{3pc}L^{A}\ar[r]\sp(0.5){\text{pu}_{M}}\ar[rd]\sb(0.4){\text{pu}_{M}^{\uparrow L}} & M^{L^{A}}\ar[d]\sp(0.4){\text{sw}}\\
  & L^{M^{A}}
 }
 \]
-Intuitively, this law says that a pure layer of the functor $M$ remains
+Intuitively, this law says that a pure layer of the monad $M$ remains
 pure after interchanging the order of layers with \lstinline!swap!.
 
 With this law, we can finish the derivation in Eq.~(\ref{eq:left-identity-ftn-T})
@@ -29343,9 +29598,9 @@ So, the $M$-identity law for \texttt{swap} entails the left identity
 law for $T$.
 
 In the same way, we motivate the ``$L$-identity'' law for \texttt{swap},
-\[
-\text{pu}_{L}^{\uparrow M}\bef\text{sw}=\text{pu}_{L}\quad.
-\]
+\begin{equation}
+\text{pu}_{L}^{\uparrow M}\bef\text{sw}=\text{pu}_{L}\quad.\label{eq:swap-law-2-L-identity}
+\end{equation}
 \[
 \xymatrix{\xyScaleY{1pc}\xyScaleX{3pc}M^{A}\ar[r]\sp(0.5){\text{pu}_{L}^{\uparrow M}}\ar[rd]\sb(0.45){\text{pu}_{L}} & M^{L^{A}}\ar[d]\sp(0.4){\text{sw}}\\
  & L^{M^{A}}
@@ -29378,8 +29633,8 @@ law, we get
 The only hope of proving this law is being able to interchange $\text{ftn}_{L}$
 as well as $\text{ftn}_{M}$ with $\text{sw}$. In other words, the
 \texttt{}\lstinline!swap! function should be in some way adapted
-to the \texttt{}\lstinline!flatten! methods of both monads $L$
-and $M$.
+to the \texttt{}\lstinline!flatten! methods of \emph{both} monads
+$L$ and $M$.
 
 Let us look for such interchange laws. One possibility is to have
 a law involving $\text{ftn}_{M}\bef\text{sw}$, which is a function
@@ -29387,14 +29642,15 @@ of type $M^{M^{L^{A}}}\Rightarrow L^{M^{A}}$ or, in another notation,
 $M\circ M\circ L\leadsto L\circ M$. This function first flattens
 the two adjacent layers of $M$, obtaining $M\circ L$, and then swaps
 the two remaining layers, moving the $L$ layer outside. Let us think
-about what we could do with this kind of transformation. It is plausible
-that we may obtain the same result if we first swap the layers \emph{twice},
-so that the $L$ layer moves to the outside, obtaining $L\circ M\circ M$,
-and then flatten the two inner $M$ layers. Writing this assumption
-as an ``$M$-interchange'' law, we get
-\[
-\text{ftn}_{M}\bef\text{sw}=\text{sw}^{\uparrow M}\bef\text{sw}\bef\text{ftn}_{M}^{\uparrow L}\quad.
-\]
+about what law could exist for this kind of transformation. It is
+plausible that we may obtain the same result if we first swap the
+layers \emph{twice}, so that the $L$ layer moves to the outside,
+obtaining $L\circ M\circ M$, and then flatten the two inner $M$
+layers. Writing this assumption in code, we obtain the ``$M$-interchange''
+law
+\begin{equation}
+\text{ftn}_{M}\bef\text{sw}=\text{sw}^{\uparrow M}\bef\text{sw}\bef\text{ftn}_{M}^{\uparrow L}\quad.\label{eq:swap-law-3-M-interchange}
+\end{equation}
 \[
 \xymatrix{\xyScaleY{1pc}\xyScaleX{3pc} & M^{M^{L^{A}}}\ar[r]\sp(0.5){\text{ftn}_{M}}\ar[ld]\sb(0.45){\text{sw}^{\uparrow M}} & M^{L^{A}}\ar[d]\sp(0.4){\text{sw}}\\
 M^{L^{M^{A}}}\ar[r]\sb(0.5){\text{sw}} & L^{M^{M^{A}}}\ar[r]\sb(0.5){\text{ftn}_{M}^{\uparrow L}} & L^{M^{A}}
@@ -29404,9 +29660,9 @@ M^{L^{M^{A}}}\ar[r]\sb(0.5){\text{sw}} & L^{M^{M^{A}}}\ar[r]\sb(0.5){\text{ftn}_
 The analogous ``$L$-interchange'' law involving two layers of $L$
 and a transformation $M\circ L\circ L\leadsto L\circ M$ is written
 as
-\[
-\text{ftn}_{L}^{\uparrow M}\bef\text{sw}=\text{sw}\bef\text{sw}^{\uparrow L}\bef\text{ftn}_{L}\quad.
-\]
+\begin{equation}
+\text{ftn}_{L}^{\uparrow M}\bef\text{sw}=\text{sw}\bef\text{sw}^{\uparrow L}\bef\text{ftn}_{L}\quad.\label{eq:swap-law-4-L-interchange}
+\end{equation}
 \[
 \xymatrix{\xyScaleY{1pc}\xyScaleX{3pc} & M^{L^{L^{A}}}\ar[r]\sp(0.5){\text{ftn}_{L}^{\uparrow M}}\ar[ld]\sb(0.45){\text{sw}} & M^{L^{A}}\ar[d]\sp(0.4){\text{sw}}\\
 L^{M^{L^{A}}}\ar[r]\sb(0.5){\text{sw}^{\uparrow L}} & L^{L^{M^{A}}}\ar[r]\sb(0.5){\text{ftn}_{L}} & L^{M^{A}}
@@ -29420,9 +29676,10 @@ It remains to prove that this is indeed so.
 Both sides of the law in Eq.~(\ref{eq:t-assoc-law-expanded}) involve
 compositions of several \lstinline!flatten!s and \lstinline!swap!s.
 The heuristic idea of the proof is to use various laws to move all
-\lstinline!flatten!s to right of the composition, and all \lstinline!swap!s
-to the left. In this way we will transform both sides of Eq.~(\ref{eq:t-assoc-law-expanded})
-into a similar form, hoping to prove that they are equal.
+\lstinline!flatten!s to right of the composition, while moving all
+\lstinline!swap!s to the left. In this way we will transform both
+sides of Eq.~(\ref{eq:t-assoc-law-expanded}) into a similar form,
+hoping to prove that they are equal.
 
 We begin with the right-hand side of Eq.~(\ref{eq:t-assoc-law-expanded})
 since it is simpler than the left-hand side, and look for ways of
@@ -29454,7 +29711,7 @@ We have again managed to move all \lstinline!swap!s to the left and
 all \lstinline!flatten!s to the right of the expression. 
 
 Comparing now the two sides of the associativity law, we see that
-the \lstinline!flatten!s occur in the same combination: $\text{ftn}_{L}\bef\text{ftn}_{L}\bef\text{ftn}_{M}^{\uparrow L}\bef\text{ftn}_{M}^{\uparrow L}$.
+all the \lstinline!flatten!s occur in the same combination: $\text{ftn}_{L}\bef\text{ftn}_{L}\bef\text{ftn}_{M}^{\uparrow L}\bef\text{ftn}_{M}^{\uparrow L}$.
 It remains to show that 
 \[
 \text{sw}^{\uparrow L}\bef\left(\text{sw}^{\uparrow M}\bef\text{sw}\right)^{\uparrow L\uparrow L}=\big(\text{sw}^{\uparrow L\uparrow M}\bef\text{sw}\bef\text{sw}^{\uparrow L}\big)^{\uparrow L}\quad.
@@ -29475,7 +29732,7 @@ If two monads $L$ and $M$ are such that there exists a natural transformation
 \[
 \text{sw}:M^{L^{A}}\Rightarrow L^{M^{A}}
 \]
-(``\lstinline!swap!'') satisfying the four laws
+(called ``\lstinline!swap!'') satisfying the four additional laws,
 \begin{align*}
 L\text{-identity}:\quad & \text{pu}_{L}^{\uparrow M}\bef\text{sw}=\text{pu}_{L}\quad,\\
 M\text{-identity}:\quad & \text{pu}_{M}\bef\text{sw}=\text{pu}_{M}^{\uparrow L}\quad,\\
@@ -29518,23 +29775,23 @@ if it is to be a useful monad transformer.
 
 We will now derive the properties of $\text{ftn}_{T}$ that correspond
 to the interchange laws. We will find that it is easier to formulate
-these laws in terms of \lstinline!swap!. In practice, all known examples
-of compositional monad transformers (the ``linear-valued'' and the
-``rigid'' monads) are defined via \lstinline!swap!.
+these laws in terms of \lstinline!swap! than in terms of $\text{ftn}_{T}$.
+In practice, all known examples of compositional monad transformers
+(the ``linear'' and the ``rigid'' monads) are defined via \lstinline!swap!.
 
 \subsection{Deriving \texttt{swap} from \texttt{flatten}}
 
 We have seen that the \texttt{}\lstinline!flatten! method for the
-monad $T^{\bullet}=L^{M^{\bullet}}$ can be defined via the \texttt{swap}
+monad $T^{\bullet}=L^{M^{\bullet}}$ can be defined via the \texttt{}\lstinline!swap!
 method. However, we have seen examples of some composable monads (such
-as \texttt{Reader} and \texttt{Option}) where we already know the
-definitions of the \texttt{}\lstinline!flatten! method for $T$.
-How do we know whether a suitable \texttt{swap} function exist for
-these examples? In other words, if a \texttt{}\lstinline!flatten!
+as \texttt{}\lstinline!Reader! and \lstinline!Option!) where we
+already know the definitions of the \texttt{}\lstinline!flatten!
+method for $T$. How do we know whether a suitable \texttt{}\lstinline!swap!
+function exist for these examples? In other words, if a \texttt{}\lstinline!flatten!
 function for the monad $T^{\bullet}=L^{M^{\bullet}}$ is already given,
-can we establish whether a \texttt{swap} function exists such that
-the given \texttt{}\lstinline!flatten! function is expressed via
-Eq.~(\ref{eq:define-flatten-via-switch})? 
+can we establish whether a \texttt{}\lstinline!swap! function exists
+such that the given \texttt{}\lstinline!flatten! function is expressed
+via Eq.~(\ref{eq:define-flatten-via-switch})? 
 
 To answer this question, let us look at the type signature of \texttt{}\lstinline!flatten!
 for $T$:
@@ -29607,8 +29864,8 @@ a law involving the function
 This function flattens the two layers of $\left(L\circ M\right)$
 and then flattens the remaining two layers of $L$. An alternative
 transformation with the same type signature is to first flatten the
-two outside layers of $L$ and then to flatten the two remaining layers
-of $\left(L\circ M\right)$:
+two \emph{outside} layers of $L$ and then to flatten the two remaining
+layers of $\left(L\circ M\right)$:
 \[
 \text{ftn}_{L}\bef\text{ftn}_{T}\quad:L\circ L\circ M\circ L\circ M\leadsto L\circ M\quad.
 \]
@@ -29637,8 +29894,8 @@ Again, we cannot proceed unless we have a law involving the function
 \]
 This function first flattens the two layers of $\left(L\circ M\right)$
 and then flattens the remaining two layers of $M$. An alternative
-order of flattenings is to first flatten the innermost two layers
-of $M$:
+order of flattenings is to first flatten the \emph{innermost} two
+layers of $M$:
 \[
 \text{ftn}_{M}^{\uparrow L\uparrow M\uparrow L}\bef\text{ftn}_{T}\quad:L\circ M\circ L\circ M\circ M\leadsto L\circ M\quad.
 \]
@@ -29666,6 +29923,14 @@ laws are assumed.
 
 It turns out that these additional laws will always hold when $\text{ftn}_{T}$
 is defined via \lstinline!swap! (see Exercise~\ref{par:Exercise-1-interchange-laws-for-ftn-T}).
+
+Given some monads $L$ and $M$, it is cumbersome to verify the associativity
+and the interchange laws for $T$ directly because of the deeply nested
+type constructors, such as $L\circ M\circ L\circ M\circ L\circ M$.
+If the monad $T$ is defined via a suitable \lstinline!swap! method
+(in practice, this is always the case), it is simpler to verify the
+laws of $T$ by checking the laws of \lstinline!swap!. This is what
+we will do next.
 
 \subsubsection{Exercise \label{par:Exercise-1-interchange-laws-for-ftn-T}\ref{par:Exercise-1-interchange-laws-for-ftn-T} }
 
@@ -29695,16 +29960,10 @@ L\text{-pure-compatibility}:\quad & \text{ftn}_{L}=\text{pu}_{M}^{\uparrow L}\be
 M\text{-pure-compatibility}:\quad & \text{ftn}_{M}^{\uparrow L}=\text{pu}_{L}^{\uparrow T}\bef\text{ftn}_{T}\quad:L^{M^{M^{A}}}\Rightarrow L^{M^{A}}\quad.
 \end{align*}
 
-For given monads $L$ and $M$, it is cumbersome to verify the associativity
-and the interchange laws for $T$ because of the deeply nested type
-constructors. The \lstinline!swap! method has a simpler type signature,
-and its two interchange laws entail both the associativity and the
-interchange laws for $T$. So, we will use the \lstinline!swap! method
-to define compositional monad transformers and to verify their laws.
 
 \subsection{Laws of monad transformer liftings}
 
-We will derive the laws of liftings from the laws of \lstinline!swap!.
+We will now derive the laws of liftings from the laws of \lstinline!swap!.
 To be specific, let us assume that $L$ is the base monad of the transformer.
 Only names will need to change for the other choice of the base monad.
 
@@ -29747,15 +30006,30 @@ M\text{-identity law of }\text{sw}:\quad & =\left(\text{pu}_{M}^{\uparrow L\upar
 \text{naturality of }\text{ftn}_{L}:\quad & =\text{ftn}_{L}\bef\left(\text{pu}_{M}^{\uparrow L}\bef\text{pu}_{M}^{\uparrow L}\right)\bef\text{ftn}_{M}^{\uparrow L}\\
 \text{right identity law of }M:\quad & =\text{ftn}_{L}\bef\text{pu}_{M}^{\uparrow L}\quad.
 \end{align*}
-In this way, the laws of \lstinline!swap! entail the lifting laws
-for $T$.
+So, the lifting laws for $T$ follow from the laws of \lstinline!swap!.
 
 \subsection{Laws of monad transformer runners}
 
 The laws of runners are not symmetric with respect to the base monad
-and the foreign monad: the runner is generic in the foreign monad,
-but not in the base monad. So here we need to make a choice as to
-whether $L$ or $M$ is the base monad. {*}{*}{*}
+and the foreign monad: the runner, $\text{mrun}$, is generic in the
+foreign monad but not in the base monad. So we need to consider separately
+the cases when either $L$ or $M$ is the base monad.
+
+If the base monad is $L$, the runners are
+\begin{align*}
+\text{mrun}\,\phi^{:M^{\bullet}\leadsto N^{\bullet}} & :L^{M^{\bullet}}\leadsto L^{N^{\bullet}}\quad,\\
+\text{brun}\,\theta^{L^{\bullet}\leadsto\bullet} & :L^{M^{\bullet}}\leadsto M^{\bullet}\quad.
+\end{align*}
+The laws of runners require that $\text{mrun}\,\phi$ and $\text{brun}\,\theta$
+should be monadic morphisms:
+\begin{align*}
+\text{mrun}\,\phi\,\text{pu}_{L\circ M} & =\text{pu}_{L\circ N}\quad,\\
+\text{ftn}_{L\circ M}\bef\text{mrun}\,\phi & =\left(\text{mrun}\,\phi\right)^{\uparrow M\uparrow L}\bef\text{mrun}\,\phi\bef\text{ftn}_{L\circ N}\quad,
+\end{align*}
+
+{*}{*}{*}
+
+\section{Composed-inside transformers: Linear monads }
 
 \section{Composed-outside transformers: Rigid monads}
 
@@ -31255,11 +31529,12 @@ explained and then applied to help us write code.
 
 Knuth's books provide many algorithms, including mathematical ones.
 But algorithms are similar to patented inventions: They can be used
-immediately without further study. Algorithms are not similar to theory.
-Knowing one algorithm does not make it easier to develop another algorithm
-in an unrelated domain. In comparison, knowing how to solve differential
-equations will be applicable to thousands of different areas of science
-and engineering.
+immediately without further study. Understanding an algorithm is not
+similar to understanding a mathematical theory. Knowing one algorithm
+does not make it easier to develop another algorithm in an unrelated
+domain. In comparison, knowing how to solve differential equations
+will be applicable to thousands of different areas of science and
+engineering.
 
 A book exists with the title ``\href{https://www.amazon.com/Science-Programming-Monographs-Computer/dp/0387964800}{Science of Programming}'',
 but the title is misleading. The author does not propose a science,
@@ -31686,10 +31961,11 @@ laws of typeclasses.
 \begin{description}
 \item [{$F^{A}$}] type constructor $F$ with type argument $A$
 \item [{$x^{:A}$}] value $x$ has type $A$
-\item [{$A+B$}] a disjunctive type; in Scala, \texttt{Either{[}A, B{]}} 
-\item [{$A\times B$}] a product type; in Scala, \texttt{(A,B)} 
+\item [{$A+B$}] a disjunctive type; in Scala, this type is \lstinline!Either[A, B]! 
+\item [{$A\times B$}] a product type; in Scala, this type is \lstinline!(A,B)! 
 \item [{$A\Rightarrow B$}] the function type, mapping from $A$ to $B$
-\item [{$x^{:A}\Rightarrow f$}] a nameless function (as a value)
+\item [{$x^{:A}\Rightarrow f$}] a nameless function (as a value); in Scala,
+\lstinline!{x:A => f}!
 \item [{$\text{id}$}] the identity function
 \item [{$1$}] the unit type or its value; in Scala, \lstinline!Unit!
 and \lstinline!()!
@@ -31697,14 +31973,13 @@ and \lstinline!()!
 \item [{$\triangleq$}] ``equal by definition'' 
 \item [{$\cong$}] ``equivalent'' according to an established isomorphism
 of types
-\item [{$\left(A\right)^{:F^{B}}$}] type indices for defining unfunctors
-(GADTs) 
+\item [{$A^{:F^{B}}$}] type annotation, used for defining unfunctors (GADTs) 
 \item [{$\text{fmap}_{F}$}] the standard method $\text{fmap}$ pertaining
 to a functor $F$ 
 \item [{$\text{pu}_{F}$}] the standard method \lstinline!pure! of a monad
 $F$ 
 \item [{$F^{\bullet}$}] the type constructor $F$ understood as a type-level
-function; in Scala, \texttt{F{[}\_{]}} 
+function; in Scala, \lstinline!F[_]! 
 \item [{$F^{\bullet}\leadsto G^{\bullet}$}] or $F^{A}\leadsto G^{A}$
 a natural transformation between functors $F$ and $G$ 
 \item [{$\forall A.P^{A}$}] a universally quantified type expression 
@@ -31716,7 +31991,7 @@ $x\Rightarrow f(g(x))$.
 \item [{$f^{\uparrow G}$}] a function $f$ lifted to a functor $G$; same
 as $\text{fmap}_{G}f$
 \item [{$f^{\uparrow G\uparrow H}$}] a function lifted first to $G$ and
-then to $H$; In Scala, \texttt{h.map(\_.map(f))} 
+then to $H$; In Scala, \lstinline!h.map(_.map(f))! 
 \item [{$f^{\downarrow H}$}] a function $f$ lifted to a contrafunctor 
 \item [{$\diamond_{M}$}] the Kleisli product operation for the monad $M$ 
 \end{description}
@@ -31728,8 +32003,9 @@ In Scala, this is \lstinline!F[A]!.
 
 $x^{:A}$ means a value $x$ that has type $A$. The colon, $:$,
 in the superscript is to show that it is not a type argument. In Scala,
-this is \lstinline!x : A!. The notation $x:A$ is used as well, but
-$x^{:A}$ is easier to read when $x$ is inside a code expression. 
+this is \lstinline!x : A!. The notation $x:A$ can be used as well,
+but $x^{:A}$ is easier to read when $x$ is inside a larger code
+expression. 
 
 $A+B$ means the disjunctive type made of types $A$ and $B$ (or,
 a disjunction of $A$ and $B$). In Scala, this is the type \texttt{}\lstinline!Either[A, B]!.
@@ -31773,16 +32049,17 @@ that needs to be established in the text. For example, if we have
 established the equivalence that allows nested tuples to be reordered
 whenever needed, we can write $\left(a\times b\right)\times c\cong a\times\left(b\times c\right)$.
 
-$\left(A\right)^{:F^{B}}$ in type expressions means that the type
-constructor $F^{\bullet}$ assigns the type $F^{B}$ to the type expression
-$A$. This is used in defining unfunctors (GADTs) such as $F^{A}\triangleq1^{:F^{\text{Int}}}+A^{:F^{A\times\text{String}}}$.
-In Scala, this is
+$A^{:F^{B}}$ in type expressions means that the type constructor
+$F^{\bullet}$ assigns the type $F^{B}$ to the type expression $A$.
+This notation is used for defining unfunctors (GADTs). For example,
+the Scala code
 
 \begin{lstlisting}
 sealed trait F[A]
 case class F1() extends F[Int]
-case class F2(a: A) extends F[(A, String)]
+case class F2[A](a: A) extends F[(A, String)]
 \end{lstlisting}
+ defines an unfunctor, which is denoted by $F^{A}\triangleq1^{:F^{\text{Int}}}+A^{:F^{A\times\text{String}}}$.
 
 $\text{fmap}_{F}$ means the standard method $\text{fmap}$ pertaining
 to the functor $F$. In Scala, this is typically implemented as \texttt{}\lstinline!Functor[F].fmap!.
@@ -31790,16 +32067,18 @@ Since each functor $F$ has its own specific definition of $\text{fmap}$,
 the subscript ``$F$'' is not a type parameter of $\text{fmap}_{F}$.
 The method $\text{fmap}_{F}$ actually has \emph{two} type parameters,
 and its type signature written in full is $\text{fmap}_{F}^{A,B}:\left(A\Rightarrow B\right)\Rightarrow F^{A}\Rightarrow F^{B}$.
-For clarity, one may write explicitly the type parameters $A,B$ in
-the expression $\text{fmap}_{F}^{A,B}$, but in most cases these type
-parameters $A$, $B$ may be omitted. As another example, a monad's
-standard method \lstinline!pure! is denoted as $\text{pu}_{F}$ with
-the subscript referring to its monad $F$. This function has type
-signature $A\Rightarrow F^{A}$ that contains a type parameter $A$.
-If we are using this method with a complicated type, e.g. $1+P^{A}$,
-instead of the type parameter $A$, we might want to indicate this
-type for clarity as a type parameter value and write $\text{pu}_{F}^{1+P^{A}}$.
-The type signature of that function is then 
+For clarity, one may sometimes write explicitly the type parameters
+$A,B$ in the expression $\text{fmap}_{F}^{A,B}$, but in most cases
+these type parameters $A$, $B$ can be omitted without loss of clarity.
+As another example, a monad's standard method \lstinline!pure! is
+denoted by $\text{pu}_{F}$, where the subscript refers to the monad
+$F$. This function has type signature $A\Rightarrow F^{A}$ that
+contains a type parameter $A$. In the short notation, this is denoted
+by $\text{pu}_{F}^{A}$. If we are using the \lstinline!pure! method
+with a complicated type, e.g. $1+P^{A}$, instead of the type parameter
+$A$, we might want to indicate this type for clarity as a type parameter
+value and write $\text{pu}_{F}^{1+P^{A}}$. The type signature of
+that function is then 
 \[
 \text{pu}_{F}^{1+P^{A}}:1+P^{A}\Rightarrow F^{1+P^{A}}\quad.
 \]
@@ -31872,27 +32151,26 @@ terminology is designed to help readers understand and remember the
 concepts behind the terms. 
 \begin{description}
 \item [{\index{nameless function}Nameless~function}] An expression of
-function type, representing a function. For example, \texttt{x $\Rightarrow$
-x {*} 2}. Also known as function expression, function literal, anonymous
-function, closure, lambda-function, lambda-expression, or simply a
-``lambda''.
+function type, representing a function. For example, \lstinline!x  x * 2!.
+Also known as function expression, function literal, anonymous function,
+closure, lambda-function, lambda-expression, or simply a ``lambda''.
 \item [{\index{product type}Product~type}] A type representing several
 values given at once. In Scala, product types are the tuple types,
-for example \texttt{(Int, String)}, and case classes. Also known as
-\textbf{tuple} type, \textbf{struct} (in C and C++), and \textbf{record}.
-\item [{\index{disjunction type}Disjunction~type}] A type representing
+for example \lstinline!(Int, String)!, and case classes. Also known
+as \textbf{tuple} type, \textbf{struct} (in C and C++), and \textbf{record}.
+\item [{\index{disjunctive type}Disjunctive~type}] A type representing
 one of several distinct possibilities. In Scala, this is usually implemented
 as a sealed trait extended by several case classes. The standard Scala
-disjunction types are \texttt{Option{[}A{]}} and \texttt{Either{[}A,
-B{]}}. Also known as \textbf{sum }type, \textbf{co-product\index{co-product}}
-type, and variant type (in OCaml and in Object Pascal). It is shorter
-to say ``sum type,'' but the English word ``sum'' is more ambiguous
-to the ear than ``disjunction''.
+disjunction types are \lstinline!Option[A]! and \lstinline!Either[A, B]!.
+Also known as \textbf{sum }type, \textbf{tagged union\index{tagged union}}
+type, \textbf{co-product\index{co-product}} type, and variant type
+(in OCaml and in Object Pascal). It is shorter to say ``sum type,''
+but the English word ``sum'' is more ambiguous to the ear than ``disjunction''.
 \item [{\index{polynomial functor}Polynomial~functor}] A type constructor
 built using disjunctions (sums), products (tuples), type parameters
-and fixed types. For example, in Scala, \texttt{type F{[}A{]} = Either{[}(Int,
-A), A{]}} is a polynomial functor with respect to the type parameter
-$A$, while \texttt{Int} is a fixed type (not a type parameter). Polynomial
+and fixed types. For example, in Scala, \lstinline!type F[A] = Either[(Int, A), A]!
+is a polynomial functor with respect to the type parameter $A$, while
+\lstinline!Int! is a fixed type (not a type parameter). Polynomial
 functors are also called \textbf{algebraic data types}\index{algebraic data type}.
 A polynomial type constructor is always a functor with respect to
 any of its type parameters, hence I use the shorter name ``polynomial
@@ -31905,33 +32183,34 @@ Also called a \textbf{\index{GADT (generalized algebraic data type)}GADT}
 (generalized algebraic data type).
 \item [{Functor~block}] \index{functor block} A short syntax for composing
 various \texttt{map}, \texttt{flatMap}, and \texttt{filter} operations
-on a functor value. The \texttt{Functor} typeclass instance must be
+on a functor value. The \texttt{Func}tor typeclass instance must be
 fixed for the entire functor block. For example, in Scala the code
-\\
-\texttt{for \{ x $\leftarrow$ List(1,2,3); y $\leftarrow$ List(10,
-x); if y > 2 \}}~\\
-\texttt{~ ~ yield 2 {*} y} \\
-is equivalent to the code \\
-\texttt{List(1,2,3).flatMap(x $\rightarrow$ List(10, x))}~\\
-\texttt{~ ~ .filter(y $\Rightarrow$ y > 1).map(y $\Rightarrow$
-2 {*} y)}\\
- and computes the value \texttt{List(20, 20, 20, 6)}. Similar syntax
+\begin{lstlisting}
+for { x <- List(1,2,3); y <- List(10, x); if y > 2 }
+  yield 2 * y
+\end{lstlisting}
+is equivalent to the code
+\begin{lstlisting}
+List(1, 2, 3).flatMap(x => List(10, x))
+  .filter(y => y > 1).map(y => 2 * y)
+\end{lstlisting}
+and computes the value \lstinline!List(20, 20, 20, 6)!. Similar syntax
 exists in a number of languages and is called a \textbf{for-comprehension\index{for-comprehension}}
-or \textbf{list comprehension} (in Python), \textbf{do-notation\index{do-notation (Haskell)}}
-or do-block (in Haskell), and \textbf{computation expressions\index{computation expressions (F##)@computation expressions (F\#\#)}}
-(in F\#). I use the name ``functor block'' in this book because
-it is shorter and more descriptive.
+or \textbf{list comprehension} in Python, \textbf{do-notation\index{do-notation (Haskell)}}
+or do-block in Haskell, and \textbf{computation expressions\index{computation expressions (F##)@computation expressions (F\#\#)}}
+in F\#. I use the name ``functor block'' in this book because it
+is shorter and more descriptive.
 \item [{Method\index{method}}] 1) A function defined as a member of a
-typeclass. For example, \texttt{flatMap} is a method defined in the
-\texttt{Monad} typeclass. 2) In Scala, a function defined as a member
-of a data type declared as a Java-compatible \texttt{class} or \texttt{trait}.
-Trait methods are necessary in Scala when implementing functions whose
-arguments have type parameters (because ordinary Scala function values
-cannot have type parameters). So, many type classes such as \texttt{Functor}
-or \texttt{Monad}, whose methods$_{1}$ require type parameters, will
-use Scala \texttt{trait}s with methods\emph{$_{2}$} for their implementation.
-The same applies to type constructions with quantified types, such
-as Church encoding. 
+typeclass. For example, \lstinline!flatMap! is a method defined in
+the \lstinline!Monad! typeclass. 2) In Scala, a function defined
+as a member of a data type declared as a Java-compatible \lstinline!class!
+or \lstinline!trait!. Trait methods are necessary in Scala when implementing
+functions whose arguments have type parameters (because ordinary Scala
+function values cannot have type parameters). So, many type classes
+such as \lstinline!Functor! or \lstinline!Monad!, whose methods$_{1}$
+require type parameters, will use Scala \lstinline!traits! with methods\emph{$_{2}$}
+for their implementation. The same applies to type constructions with
+quantified types, such as the Church encoding. 
 \item [{\index{Kleisli function}Kleisli~function}] Also called a Kleisli
 morphism\index{Kleisli morphism} or a \index{Kleisli arrow}Kleisli
 arrow. A function with type signature $A\Rightarrow M^{B}$ for some
@@ -31944,9 +32223,9 @@ into a new Kleisli function (of type $A\Rightarrow M^{C}$).
 \item [{\index{exponential-polynomial type}Exponential-polynomial~type}] A
 type constructor built using disjunctions (sums), products, and function
 types, as well as type parameters or fixed types. For brevity, I call
-them ``exp-poly'' types. For example, in Scala, \texttt{type F{[}A{]}
-= Either{[}(A, A), Int $\Rightarrow$ A{]}} is an exp-poly type constructor.
-Such type constructors can be functors, contrafunctors, or profunctors.
+them ``exp-poly'' types. For example, in Scala, \lstinline!type F[A] = Either[(A, A), Int  A]!
+is an exp-poly type constructor. Such type constructors can be functors,
+contrafunctors, or profunctors.
 \item [{\index{short type notation}Short~type~notation}] A mathematical
 notation for type expressions developed in this book for the purpose
 of quicker and more practical reasoning about types in functional
@@ -31955,15 +32234,14 @@ $\times$, and function types by $\Rightarrow$. The unit type is
 denoted by $1$, and the void type by $0$. The function arrow $\Rightarrow$
 has weaker precedence than $+$, which is in turn weaker than $\times$.
 Type parameters are denoted by superscripts. As an example of using
-these conventions, the Scala definition
-\begin{lyxcode}
-type~F{[}A{]}~=~Either{[}(A,~A~$\Rightarrow$~Option{[}Int{]}),~String~$\Rightarrow$~List{[}A{]}{]}
-\end{lyxcode}
+these conventions, the Scala definition\texttt{}
+\begin{lstlisting}
+type F[A] = Either[(A, A  Option[Int]), String  List[A]]
+\end{lstlisting}
 is written in the short type notation as 
 \[
 F^{A}\triangleq A\times\left(A\Rightarrow1+\text{Int}\right)+\left(\text{String}\Rightarrow\text{List}^{A}\right)\quad.
 \]
-
 \end{description}
 
 \section{On the current misuse of the term ``algebra''}
@@ -32006,9 +32284,9 @@ about their properties does not give much help in practical work.
 Polynomial functors are often called \textquotedblleft algebraic data
 types\textquotedblright . However, they are not \textquotedblleft algebraic\textquotedblright{}
 in the sense of Definition~0 or 1. For example, consider the \textquotedblleft algebraic
-data type\textquotedblright{} \texttt{Either{[}Option{[}A{]}, Int{]},}
-or $F^{A}\triangleq1+A+\text{Int}$ in the short type notation. The
-set of all values of the type $F^{A}$ does not admit the addition
+data type\textquotedblright{} \lstinline!Either[Option[A], Int]!,
+which is $F^{A}\triangleq1+A+\text{Int}$ in the short type notation.
+The set of all values of the type $F^{A}$ does not admit the addition
 and multiplication operations required by the mathematical definition
 of ``algebra''. The type $F^{A}$ may admit some binary or unary
 operations (e.g.~that of a monoid), but these operations will not
@@ -32017,23 +32295,23 @@ type $F^{A}\Rightarrow A$, as required for Definition~1. It seems
 that the usage of the word ``algebra'' here is to refer to ``school-level
 algebra'' with polynomials; these data types are built from sums
 and products of types. In this book, I call such types ``polynomial''.
-However, if the data type contains a function type, e.g.~\texttt{Option{[}Int
-$\Rightarrow$ A{]}}, the type is no longer polynomial. So I use the
-more precise terms \textquotedblleft polynomial type\textquotedblright{}
-and \textquotedblleft exponential-polynomial type\textquotedblright .
+However, if the data type contains a function type, e.g.~\lstinline!Option[Int => A]!,
+the type is no longer polynomial. So I use the more precise terms
+\textquotedblleft polynomial type\textquotedblright{} and \textquotedblleft exponential-polynomial
+type\textquotedblright .
 
 \paragraph{Definition 3.}
 
 People talk about the \textquotedblleft algebra\textquotedblright{}
-of properties of functions such as \texttt{map} or \texttt{flatMap},
-referring to the fact that these functions must satisfy certain equational
-laws (e.g.~the identity, composition, or associativity laws). But
-these laws do not form an ``algebra'' in the sense of Definition
-0, nor do the functions such as \texttt{map} or \texttt{flatMap} themselves
-(there are no binary operations on them). Neither do they form an
-algebra in the sense of Definition~1. The laws for \texttt{map} or
-\texttt{flatMap} are in no way related to \textquotedblleft algebraic
-data types\textquotedblright{} of Definition 2. So here the word \textquotedblleft algebra\textquotedblright{}
+of properties of functions such as map or \lstinline!flatMap!, referring
+to the fact that these functions must satisfy certain equational laws
+(e.g.~the identity, composition, or associativity laws). But these
+laws do not form an ``algebra'' in the sense of Definition 0, nor
+do the functions such as map or \lstinline!flatMap! themselves (there
+are no binary operations on them). Neither do they form an algebra
+in the sense of Definition~1. The laws for \texttt{map} or \lstinline!flatMap!
+are in no way related to \textquotedblleft algebraic data types\textquotedblright{}
+of Definition 2. So here the word \textquotedblleft algebra\textquotedblright{}
 is used in a way that is unrelated to the three previous definitions.
 To me, it does not seem helpful to say the word ``algebra'' or ``algebraic''
 when talking about equational laws. These laws are ``algebraic''
@@ -32057,9 +32335,9 @@ of type $F^{A}\Rightarrow A$, which I call a ``runner'' for the
 type constructor $F$, is not usually called an ``algebra'' in discussions
 of the ``final tagless'' encoding.) Definition 2 seems to be the
 most closely related meaning, since $F$ is \emph{sometimes} a polynomial
-type in practical usage (although in most cases $F$ will be an unfunctor).
-However, it is not helpful to call the polynomial functor $F$ an
-``algebraic data type'' and, at the same time, an ``algebra''.
+functor in practical usage (although in most cases $F$ will be an
+unfunctor). However, it is not helpful to call the polynomial functor
+$F$ an ``algebraic data type'' and, at the same time, an ``algebra''.
 Definition 3 does not apply since the free monad construction does
 not assume that any laws hold about $F$, nor has any means of imposing
 such laws. The type constructor $F$ is used to parameterize the effects
