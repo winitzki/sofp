@@ -30,6 +30,6 @@ else
 	mv "1$t" "$t"
 	tar jcvf "$z" "$s" "$t" *.jpg "$0"
 	"$pdftk" "1$p" attach_files "$z" output "$p"
-	rm "$t" "1$name".*
+	rm "1$name".*
 
 fi
