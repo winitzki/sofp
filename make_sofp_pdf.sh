@@ -2,17 +2,17 @@
 
 # Make a PDF package with embedded source archive.
 
-function runLatexManyTimes {
+function run_latex_many_times {
 	local base="$1"
 	echo "LaTeX Warning - Rerun" > "$base.log"
-	while grep -q 'LaTeX Warning.*Rerun' "$base.log"; do pdflatex --interaction=batchmode "$base.tex"; done 
+	while grep -q '\(LaTeX Warning.*Rerun\|^(rerunfilecheck).*Rerun\)' "$base.log"; do pdflatex --interaction=batchmode "$base.tex"; done 
 }
 
-function makePdfWithIndex {
+function make_pdf_with_index {
 	local base="$1"
-	runLatexManyTimes "$base"
+	run_latex_many_times "$base"
 	makeindex "$base.idx"
-	runLatexManyTimes "$base"
+	run_latex_many_times "$base"
 }
 
 # This requires pdftk to be installed on the path. Edit the next line as needed.
@@ -39,7 +39,7 @@ else
 	"$lyx" --export pdflatex "$s"
 # Example of inserted color: \scalebox{0.8}{\color{greenunder}\text{outer-identity}:}\quad &
 	LC_ALL=C sed -e 's|^\(.*\\text{.*}.*:\)\( *\\quad \& \)|{\\color{greenunder}\1}\2|' < "$t" > "1$t"
-	runLatexManyTimes "1$name"
+	make_pdf_with_index "1$name"
 	mv "1$t" "$t"
 	tar jcvf "$z" "$s" "$t" *.jpg "$0"
 	"$pdftk" "1$p" attach_files "$z" output "$p"
