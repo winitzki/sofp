@@ -15,6 +15,14 @@ function make_pdf_with_index {
 	run_latex_many_times "$base"
 }
 
+function add_color {
+	local base="$1"
+	# Insert color comments into displayed equation arrays.
+	# Example of inserted color: {\color{greenunder}\text{outer-interchange law for }M:}\quad &
+	LC_ALL=C sed -e 's|^\(.*\\text{.*}.*:\)\( *\\quad \& \)|{\\color{greenunder}\1}\2|' < "$base" > "1$base"
+	mv "1$base" "$base"
+}
+
 # This requires pdftk to be installed on the path. Edit the next line as needed.
 pdftk=`which pdftk`
 
@@ -25,24 +33,12 @@ echo "Info: Using pdftk as '$pdftk' and lyx as '$lyx'"
 
 name="sofp"
 
-s="$name.lyx"
-t="$name.tex"
-p="$name.pdf"
-z="$name-src.tar.bz2"
-
-if false; then
-	"$lyx" --export pdf2 $s
-	"$lyx" --export latex "$s"
-	mv "$p" "1$p"
-
-else
-	"$lyx" --export pdflatex "$s"
-# Example of inserted color: \scalebox{0.8}{\color{greenunder}\text{outer-identity}:}\quad &
-	LC_ALL=C sed -e 's|^\(.*\\text{.*}.*:\)\( *\\quad \& \)|{\\color{greenunder}\1}\2|' < "$t" > "1$t"
-	make_pdf_with_index "1$name"
-	mv "1$t" "$t"
-	tar jcvf "$z" "$s" "$t" *.jpg "$0"
-	"$pdftk" "1$p" attach_files "$z" output "$p"
-	rm "1$name".*
-
-fi
+"$lyx" --export pdflatex $name.lyx # Exports LaTeX for all child documents as well.
+for f in $name*tex; do add_color "$f"; done
+make_pdf_with_index "$name" # Output is $name.pdf, main file is $name.tex, and other .tex files are \include'd.
+tar jcvf "$name-src.tar.bz2" $name*lyx $name*tex `fgrep includegraphics $name*tex | sed -e 's,[^{]*{\([^}]*\)},\1.*,' |while read f; do ls $f ; done` "$0"
+"$pdftk" "$name.pdf" attach_files "$name-src.tar.bz2" output "1$name.pdf"
+mv "1$name.pdf" "$name.pdf"
+echo Result is "$name.pdf" having `pdftk "$name.pdf" dump_data | fgrep NumberOfPages | sed -e 's,^.* ,,'` pages.
+# Cleanup.
+rm -f $name*{idx,ind,aux,dvi,ilg,out,toc,log}
