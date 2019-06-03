@@ -33,6 +33,8 @@ echo "Info: Using pdftk as '$pdftk' and lyx as '$lyx'"
 
 name="sofp"
 
+rm -f $name*tex
+
 "$lyx" --export pdflatex $name.lyx # Exports LaTeX for all child documents as well.
 for f in $name*tex; do add_color "$f"; done
 make_pdf_with_index "$name" # Output is $name.pdf, main file is $name.tex, and other .tex files are \include'd.
