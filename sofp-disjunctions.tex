@@ -1,339 +1,788 @@
 
-\chapter{The formal logic of types. I. Disjunctive types}
+\chapter{The formal logic of types I. Disjunctive types}
+
+Disjunctive types describe values that belong to a disjoint set of
+alternatives. 
+
+To see how Scala implements disjunctive types, we need to begin by
+looking at ``case classes''.
+
+\section{Scala's case classes}
+
+\subsection{Case classes as ``named tuple'' types}
+
+It is often helpful to use names for the different parts of a tuple.
+Suppose that some program represents the size and the color of socks
+with the tuple type \lstinline!(Double, String)!. What if the same
+tuple type \lstinline!(Double, String)! is used in another place
+in the program to mean the amount paid and the name of the payee?
+A programmer could mix the two values by mistake, and it would be
+hard to find out why the program incorrectly computes, say, the total
+amount paid.
+\begin{lstlisting}
+def totalAmountPaid(ps: Seq[(Double, String)]): Double = ps.map(_._1).sum
+val x = (10.5, "white") // Sock size and color.
+val y = (25.0, "friend") // Payment amount and payee.
+
+scala> totalAmountPaid(List(x, y)) // Nonsense.
+res0: Double = 35.5
+\end{lstlisting}
+
+We would prevent this kind of mistake if we could use two \emph{different}
+types, with names such as \lstinline!MySock! and \lstinline!Payment!,
+for the two kinds of data. There are  three basic ways of defining
+a new named type in Scala that replaces a tuple: using a type alias,
+using a case class, and using an \index{opaque type}opaque type. 
+
+Opaque types (hiding a given type under a new name) is a feature that
+will become standard in a future version of Scala 3; so let us focus
+on type aliases and case classes.
+
+A \textbf{type alias}\index{type alias} is an alternative name for
+an existing (already defined) type. We could use type aliases in our
+example to add clarity to the code:
+\begin{lstlisting}
+type MySockTuple = (Double, String)
+type PaymentTuple = (Double, String)
+
+scala> val s: MySockTuple = (10.5, "white")
+s: MySockTuple = (10.5,white)
+
+scala> val p: PaymentTuple = (25.0, "friend")
+p: PaymentTuple = (25.0,friend)
+\end{lstlisting}
+But the mix-up error is not prevented:
+\begin{lstlisting}
+scala> totalAmountPaid(List(s, p)) // Nonsense again.
+res1: Double = 35.5
+\end{lstlisting}
+
+Scala's \textbf{case classes}\index{case class} can be seen as ``tuples
+with names''. A case class is equivalent to a tuple type that has
+a name that we choose when we define the case class. Also, each part
+of the case class will have a separate name that we must choose. This
+is how to define case classes for the example with socks and payments:
+\begin{lstlisting}
+case class MySock(size: Double, color: String)
+case class Payment(amount: Double, name: String)
+
+scala> val sock = MySock(10.5, "white")
+sock: MySock = MySock(10.5,white)
+
+scala> val paid = Payment(25.0, "friend")
+paid: Payment = Payment(25.0,friend)                                  ^ 
+\end{lstlisting}
+The new types \lstinline!MySock! and \lstinline!Payment! were defined.
+Values of type \lstinline!MySock! are written as \lstinline!MySock(10.5, "white")!,
+which is similar to writing the tuple \lstinline!(10.5, "white")!
+except for adding the name \lstinline!MySock!.
+
+To access the parts of a case class, we use the part names:
+\begin{lstlisting}
+scala> sock.size
+res2: Double = 10.5
+
+scala> paid.amount
+res3: Double = 25.0
+\end{lstlisting}
+The mix-up error is now a type error flagged by the compiler:
+\begin{lstlisting}
+def totalAmountPaid(ps: Seq[Payment]): Double = ps.map(_.amount).sum
+
+scala> totalAmountPaid(List(paid, paid))
+res4: Double = 50.0
+
+scala> totalAmountPaid(List(sock, paid))
+<console>:19: error: type mismatch;
+ found   : MySock
+ required: Payment
+       totalAmountPaid(List(sock, paid))
+                            ^
+\end{lstlisting}
+A function whose argument is of type \lstinline!MySock! cannot be
+applied to an argument of type \lstinline!Payment! or of type \lstinline!(Double, String)!.
+Case classes with different names are \emph{different types}, even
+if they contain the same types of parts. 
+
+Just as tuples can have any number of parts, case classes can have
+any number of parts, but the part names must be distinct, for example:
+\begin{lstlisting}
+case class Person(firstName: String, lastName: String, age: Int)
+
+scala> val einstein = Person("Albert", "Einstein", 140)
+einstein: Person = Person(Albert,Einstein,140)
+
+scala> einstein.firstName
+res5: String = Albert
+
+scala> einstein.age
+res6: Int = 140
+\end{lstlisting}
+This data type carries the same information as a tuple \lstinline!(String, String, Int)!.
+However, the declaration of a \lstinline!case class Person! gives
+the programmer several methods that make working with the tuple's
+data more convenient.
+
+Some (or all) part names may be specified when creating a case class
+value:
+\begin{lstlisting}
+scala> val poincare = Person(firstName = "Henri", lastName = "Poincaré", 165)
+poincare: Person = Person(Henri,Poincaré,165)
+\end{lstlisting}
+It is a type error to use wrong types with a case class:
+\begin{lstlisting}
+scala> val p = Person(140, "Einstein", "Albert")
+<console>:13: error: type mismatch;
+ found   : Int(140)
+ required: String
+       val p = Person(140, "Einstein", "Albert")
+                      ^
+<console>:13: error: type mismatch;
+ found   : String("Albert")
+ required: Int
+       val p = Person(140, "Einstein", "Albert")
+                                       ^
+\end{lstlisting}
+Here, the error is due to an incorrect order of parts when creating
+a case class value. However, parts can be specified in any order when
+using part names:
+\begin{lstlisting}
+scala> val p = Person(age = 140, lastName = "Einstein", firstName = "Albert")
+p: Person = Person(Albert,Einstein,140)
+\end{lstlisting}
+A part of a case class can have the type of another case class, creating
+a ``nested'' type:
+\begin{lstlisting}
+case class BagOfSocks(sock: MySock, count: Int)
+val bag = BagOfSocks(MySock(10.5, "white"), 6)
+
+scala> bag.socks.size
+res7: Double = 10.5
+\end{lstlisting}
+
+
+\subsection{Case classes with type parameters}
+
+Generally, type classes can be defined with \index{type parameter}type
+parameters. As an example, consider a generalization of \lstinline!MySock!
+where, in addition to the size and color, a ``sock'' may hold another
+value. We could define several specialized case classes,
+\begin{lstlisting}
+case class MySockInt(size: Double, color: String, value: Int)
+case class MySockBoolean(size: Double, color: String, value: Boolean)
+\end{lstlisting}
+but it is better to define a single parameterized case class
+\begin{lstlisting}
+case class MySockX[A](size: Double, color: String, value: A)
+\end{lstlisting}
+that works for every type \lstinline!A!. When we create values of
+\lstinline!MySockX!, we will use a specific type, for instance
+\begin{lstlisting}
+scala> val s = MySockX(10.5, "white", 123)
+s: MySockX[Int] = MySockX(10.5,white,123) 
+\end{lstlisting}
+Here, the type variable \lstinline!A! was automatically set to a
+specific type, \lstinline!Int!. 
+
+Specific types \lstinline!A! will be used by each specific value
+of type \lstinline!MySockX[A]!, but we can write code working with
+\lstinline!MySockX[A]! \textbf{parametrically}\index{parametric code},
+that is, keeping the type parameter \lstinline!A! in the code. For
+example, a function that checks whether a sock of type \lstinline!MySockX[A]!
+fits my foot can be written as
+\begin{lstlisting}
+def fitsMe[A](sock: MySockX[A]): Boolean = sock.size >= 10.5 && sock.size <= 11.0
+\end{lstlisting}
+This function is defined for all types \lstinline!A! at once, because
+its code works in the same way regardless of the type \lstinline!A!.
+Scala will set the type parameter automatically:
+\begin{lstlisting}
+scala> fitsMe(MySockX(10.5, "blue", List(1,2,3))) // Parameter A = List[Int]
+res0: Boolean = true
+\end{lstlisting}
+In this case it is clear that the type parameter \lstinline!A! must
+be set to \lstinline!List[Int]!, and we may omit the type parameter
+when calling \lstinline!fitsMe!. When types become more complicated,
+it may be helpful to avoid type errors by specifying the values of
+type parameters. For example, here is a type error due to a mismatch
+between the type parameter \lstinline!A! used in the ``sock'' value,
+which is \lstinline!List[Int]!, and the type parameter in the function
+\lstinline!fitsMe!, specified as \lstinline!Int!:
+\begin{lstlisting}
+scala> fitsMe[Int](MySockX(10.5, "blue", List(1,2,3)))
+<console>:15: error: type mismatch;
+ found   : List[Int]
+ required: Int
+       fitsMe[Int](MySockX(10.5, "blue", List(1,2,3)))
+                                             ^ 
+\end{lstlisting}
+
+Case classes may have several type parameters, and the types of the
+parts may use these type parameters. Here is an artificial example
+of a case class using type parameters in different ways,
+\begin{lstlisting}
+case class Complicated[A,B,C,D](x: (A, A), y: (B, Int) => A, z: C => C)
+\end{lstlisting}
+This case class contains parts of different types that use the type
+parameters \lstinline!A!, \lstinline!B!, \lstinline!C! in tuples
+and functions. The type parameter \lstinline!D! is not used at all;
+this is allowed as well.
+
+\subsection{Tuples with one part and with zero parts}
+
+Let us compare tuples and case classes more systematically.
+
+Parts of a case class are accessed by name with a dot syntax, for
+example \lstinline!sock.color!. Parts of a tuple are accessed with
+the accessors such as \lstinline!x._1!. This syntax is the same as
+that for a case class whose parts have names \lstinline!_1!, \lstinline!_2!,
+etc. So, it appears that tuple parts \emph{do} have names in Scala,
+although those names are always automatically assigned as \lstinline!_1!,
+\lstinline!_2!, etc. It turns out that tuple types also have automatically
+assigned names in Scala; these names are \lstinline!Tuple2!, \lstinline!Tuple3!,
+etc., and they correspond to parameterized types, since each part
+of the tuple may be of any type. So, a tuple type expression such
+as \lstinline!(Int, String)! is just a special syntax for the parameterized
+type \lstinline!Tuple2[Int, String]!. One could define the tuple
+types as case classes like this,
+\begin{lstlisting}
+case class Tuple2[A, B](_1: A, _2: B)
+case class Tuple3[A, B, C](_1: A, _2: B, _3: C)
+// And so on with Tuple4, Tuple5, ...
+\end{lstlisting}
+if these types were not already defined in the Scala library.
+
+Proceeding systematically, we ask whether tuple types can have just
+one part or even no parts. Indeed, Scala defines \lstinline!Tuple1[A]!
+as a tuple with a single part. (This type is occasionally useful in
+practice.) 
+
+The tuple with zero parts exists as well, and is called \lstinline!Unit!
+(rather than ``\lstinline!Tuple0!''). At first sight, the \lstinline!Unit!
+type may appear to be completely useless; it is a tuple that contains
+\emph{no} values. The syntax for the value of the \lstinline!Unit!
+type is the empty tuple, \lstinline!()!. It is clear that there is
+\emph{only one} value, \lstinline!()!, of this type; this explains
+the name ``unit''. It turns out, however, that the \lstinline!Unit!
+type is important in functional programming, and it is used as a type
+guaranteed to have only a single distinct value. This chapter will
+show some examples of using the \lstinline!Unit! type.
+
+Case classes can be defined similarly to the one-part and zero-part
+tuples like this:
+\begin{lstlisting}
+case class B(z: Int) // Tuple with one part.
+case class C() // Tuple with no parts.
+\end{lstlisting}
+Let us summarize the correspondence between tuples and case classes:
+\begin{center}
+\begin{tabular}{|c|c|}
+\hline 
+\textbf{Tuples} & \textbf{Case classes}\tabularnewline
+\hline 
+\hline 
+\lstinline!(123, "xyz"): Tuple2[Int, String]! & \lstinline!case class A(x: Int, y: String)!\tabularnewline
+\hline 
+\lstinline!(123,): Tuple1[Int]! & \lstinline!case class B(z: Int)!\tabularnewline
+\hline 
+\lstinline!(): Unit! & \lstinline!case class C()!\tabularnewline
+\hline 
+\end{tabular}
+\par\end{center}
+
+Scala has a special syntax for case classes without parts:
+\begin{lstlisting}
+case object C // Similar to `case class C()`.
+\end{lstlisting}
+There are two main differences between \lstinline!case class C()!
+and \lstinline!case object C!:
+\begin{itemize}
+\item A \lstinline!case object! cannot have type parameters, while we may
+define a \lstinline!case class C[X, Y, Z]()! if needed.
+\item A \lstinline!case object! is allocated in memory only once, while
+new values of a \lstinline!case class C()! will be allocated in memory
+each time \lstinline!C()! is evaluated.
+\end{itemize}
+Other than that, \lstinline!case class C()! and \lstinline!case object C!
+have the same meaning: a named tuple with zero parts, which we may
+also call a ``named \lstinline!Unit!\index{named Unit}'' type. 
+
+\subsection{Pattern matching for case classes}
+
+Scala performs pattern matching in two situations:
+\begin{itemize}
+\item destructuring definition: \lstinline[mathescape=true]!val $pattern$ = ...!
+\item \lstinline!case! expression: \lstinline[mathescape=true]!case $pattern$ => ...!
+\end{itemize}
+Case classes can be used in both situations. Here is an example of
+a destructuring definition, used to implement a function whose argument
+is of case class type \lstinline!BagOfSocks!:
+\begin{lstlisting}
+case class MySock(size: Double, color: String)
+case class BagOfSocks(sock: MySock, count: Int)
+
+def printBag(bag: BagOfSocks): String = {
+  val BagOfSocks(MySock(size, color), count) = bag // Destructure the `bag`.
+  s"Bag has $count $color socks of size $size"
+}
+
+val bag = BagOfSocks(MySock(10.5, "white"), 6)
+
+scala> printBag(bag)
+res0: String = Bag has 6 white socks of size 10.5
+\end{lstlisting}
+
+An example of using the \lstinline!case! expression:
+\begin{lstlisting}
+def fitsMe(bag: BagOfSocks): Boolean = bag match {
+  case BagOfSocks(MySock(size, _), _) => size >= 10.5 && size <= 11.0
+}
+\end{lstlisting}
+In the implementation of this function, we match the \lstinline!bag!
+value against the pattern \lstinline!BagOfSocks(MySock(size, _), _)!.
+This pattern will always match and will define \lstinline!size! as
+the pattern variable of type \lstinline!Double!.
+
+The syntax for pattern matching expressions that use case classes
+is similar to the syntax for pattern matching of tuples, except for
+the presence of the \emph{names} of the case classes. For example,
+if we remove the type names from the pattern
+\begin{lstlisting}
+case BagOfSocks(MySock(size, _), _) => ...
+\end{lstlisting}
+we obtain the nested tuple pattern 
+\begin{lstlisting}
+case ((size, _), _) => ...
+\end{lstlisting}
+that could be used for values of type \lstinline!((Double, String), Int)!.
+We see that case classes behave in many ways exactly as named tuple
+types. 
+
+Scala's ``case classes'' got their name from their use in \lstinline!case!
+expressions. It is usually more convenient to use \lstinline!match!
+/ \lstinline!case! expressions with case classes than to use destructuring.
+
+\section{Disjunctive types}
+
+\subsection{Motivation and first examples}
+
+In many situations, it is useful to have several different shapes
+of data within the same type. As a first example, suppose we are looking
+for real roots of a quadratic equation $x^{2}+ax+b=0$. There are
+three cases: no real roots, one real root, and two real roots. It
+would be convenient if we had a type, such as \lstinline!RootsOfQ!,
+that means ``the real roots of a quadratic equation''. Inside that
+type, we can distinguish between the three cases, but outside it looks
+like a single type, so that it is easier to work with.
+
+Another example is the binary search algorithm that looks for an integer
+$x$ in a sorted array. There are two cases: the algorithm either
+finds the index of $x$ or determines that the array does not contain
+$x$. It is convenient if the algorithm could return a single value
+of a type, say, \lstinline!SearchResult!, that represents \emph{either}
+an index at which $x$ is found, \emph{or} the absence of an index.
+
+More generally, we may have computations that \emph{either} return
+a value \emph{or} generate an error and fail to produce a result.
+It is then convenient to return a value of type, say, \lstinline!Result!,
+that could represent \emph{either} a correct result \emph{or} an error
+message. 
+
+In certain computer games, one has different types of ``rooms'',
+each room having certain properties depending on its type, \textendash{}
+some rooms are dangerous because of monsters, other rooms contain
+useful objects, certain rooms allow you to finish the game, and so
+on. We want to represent all the different kinds of rooms uniformly,
+as a type \lstinline!Room!, so that each ``room value'' automatically
+stores the correct properties in each case.
+
+In all these situations, data comes in several mutually exclusive
+shapes. This data can be represented by a single type only if that
+type is able to describe a mutually exclusive set of cases:
+\begin{itemize}
+\item \lstinline!RootsOfQ! must be either the empty tuple \lstinline!()!
+or \lstinline!Double! or a tuple \lstinline!(Double, Double)!
+\item \lstinline!SearchResult! must be either \lstinline!Int! or the empty
+tuple \lstinline!()!
+\item \lstinline!Result! must be either an \lstinline!Int! value or a
+\lstinline!String! message
+\end{itemize}
+We see that the empty tuple, also known as the \lstinline!Unit! type,
+is convenient to use in this representation! It is also helpful to
+assign names to each of the cases:
+\begin{itemize}
+\item \lstinline!RootsOfQ! is ``empty'' with value \lstinline!()!, or
+``single root'' with value \lstinline!Double!, or ``double root''
+with value \lstinline!(Double, Double)!
+\item \lstinline!SearchResult! is ``index'' with value \lstinline!Int!,
+or ``not found'' with value \lstinline!()!
+\item \lstinline!Result! is ``value'' of type \lstinline!Int! or ``error
+message'' of type \lstinline!String!
+\end{itemize}
+Scala's case classes provide exactly what we need here \textendash{}
+\emph{named tuples} with zero, one, two and more elements, and so
+it is natural to use case classes instead of tuples:
+\begin{itemize}
+\item \lstinline!RootsOfQ! is of type \lstinline!case class Empty()!,
+or or type \lstinline!case class SingleRoot(x: Double)!, or of type
+\lstinline!case class DoubleRoot(x: Double, y: Double)!
+\item \lstinline!SearchResult! is of type \lstinline!case class Index(Int)!,
+or of type \lstinline!case class None()!
+\item \lstinline!Result! is of type \lstinline!case class Value(x: Int)!
+or of type \lstinline!case class Error(message: String)!
+\end{itemize}
+The only remaining question is how to define these types. We somehow
+need to indicate that the case classes \lstinline!Empty!, \lstinline!SingleRoot!,
+and \lstinline!DoubleRoot! are the three alternative cases described
+by the type \lstinline!RootsOfQ!. The Scala syntax for these definitions
+looks like this:
+\begin{lstlisting}
+sealed trait RootsOfQ
+case class Empty() extends RootsOfQ
+case class SingleRoot(x: Double) extends RootsOfQ
+case class DoubleRoot(x: Double, y: Double) extends RootsOfQ
+\end{lstlisting}
+
+We may use \lstinline!case object! for the named \lstinline!Unit!
+cases:
+\begin{lstlisting}
+sealed trait SearchResult
+case class Index(i: Int) extends SearchResult
+case object NotFound extends SearchResult
+\end{lstlisting}
+The definition of the \lstinline!Result! type can be parameterized,
+so that we can describe results of any type (but error messages are
+always of type \lstinline!String!):
+\begin{lstlisting}
+sealed trait Result[A]
+case class Value[A](x: A) extends Result[A]
+case class Error[A](message: String) extends Result[A]
+\end{lstlisting}
+
+The ``\lstinline!sealed trait! / \lstinline!case class!'' syntax
+defines a type that represents a choice of one case class from a fixed
+set of case classes. This kind of type is called the \textbf{\index{disjunctive type}disjunctive
+type} in this book. 
+
+\subsection{Pattern matching with disjunctive types}
+
+Our first examples of disjunctive types were \lstinline!RootsOfQ!,
+\lstinline!SearchResult!, and \lstinline!Result[A]!. Let us see
+how we can write code that works with these types.
+
+\subsection{Disjunctive types as mathematical sets}
+
+To understand more deeply the meaning of disjunctive types, let us
+look at at the mathematical point of view usually the type means madam
+ethically that the function has an arguments let's say f of X has
+an argument X the type of X let's say X is a real number then the
+type of X represent the domain of the function so now we would like
+to represent disjoint domains so for example X is either a point on
+the line or as a point on the surface completely different surface
+and from a line and so in mathematics this is not often used but in
+functional programming it is used quite a lot because it looks it
+appears that real life situations and tasks require a lot of this
+coming of this disjoint domains I just gave you examples on the previous
+slide so how would we do a disjoint domain between line and surface
+let's say line is the real numbers and surfaces are part two the real
+plane so in functional programming the way it's done is that the domains
+are labeled so we introduce some fixed special set of symbols with
+which are labels like left Android's say these are just symbols that
+come from a fixed set of symbols and then we first make two sets the
+first set will be a set of pairs where the first element of the pair
+is the symbol left and the second element of the pair is some real
+number so this set is a set of all such pairs and this set is a set
+of all different pairs where the first element is a symbol right and
+the second element is some point from a surface from r2 and then make
+union of these two sets now this is a labeled union because each set
+has this label and so there's no way that any even if this were our
+and this were also our there will be no way to confuse an element
+from the left part of the union and lanolin from the right part of
+the Union and so the disjoint union is always an exclusive or it's
+never inclusive or it could be couldn't be both from here and from
+here because the symbols are different so given any such X from this
+set from this entire set we can always determine by looking at the
+first element of the pair from which side it comes and we therefore
+can obtain and know what is the type of the corresponding other value
+in each case so there is no confusion if we label the two parts of
+the Union even if all these types are worth the same with this where
+artists were also her will still be no confusion whereas a ordinary
+mathematical Union you would be confused you would think well our
+union ours just are so but disjoint Union is labeled and allows you
+to always know from which part you come from that from which parts
+the value comes so in Scala this kind of type is disjoint Union or
+exclusive or between two domains it's denoted like this so it's special
+library you find a special type defined in the library called either
+it has two type parameters describing the two domains the first let's
+say double that's a describing this and second is a tuple of two doubles
+which describes the so this was a very close analogy with a mathematical
+disjunctive between the two domains and as I just said domains in
+mathematics corresponds to types of variables in programming in functions
+so types of variables is exactly the same as a set from which the
+variable comes so like X comes from the set of real numbers and here
+double is a type that approximately represents real numbers and pattern
+matching is used to define expressions with such types so let's look
+at examples with either so we were looking before at a situation when
+we wanted to generate error messages with computation and so let's
+suppose we have a function that needs to return an integer but may
+actually have an error and so it turns this type either of string
+and integer which is a disjunctive between two domains the first is
+the set of all strings the second is the set of all integers and it
+is labeled by symbols left and right these symbols also come from
+the skull a standard library now if we have a function let's say log
+error we want to write this function that takes an argument of this
+type how can we construct an expression using this type and here's
+how we say X match this is keyword match so say X match and then you
+write this partial function which matches against possible values
+of X and there are two cases the left having an error value which
+is of type string and the right having a result value which is of
+type integer in both cases we can specify what needs to be done or
+rather the expression that needs to be computed well we can print
+of course but we need to return a value and this function must return
+integer value so let's return some integer value or not and then the
+result now this is just an example now how can we interpret this code
+what does it mean case left error case right result it means these
+are actually possible values of this type so this and this are specific
+possible values of this type remember that we have this labeled disjunctive
+so this is a possible value with symbol left and a number and so similarly
+here a symbol left which is the name of the case class this is just
+a symbol it is not itself a value it's it does not give you a value
+until you give it this the the string and so left of blah is actually
+a value of type either string int and similarly right of one two three
+is also a possible value of this type so in this for in this code
+we enumerate the possible cases the disjunctive there are only two
+cases in this disjunctive the left and the right and so we enumerate
+them and each time we have a pattern variable of a different type
+because if we are in the left case of disjunctive when the error is
+of string type this pattern variable we could have called it X or
+Y or whatever it's just a pattern variable and it's introduced right
+here and it only is visible within the scope of this expression so
+here we cannot have access to error if you want to here if I cannot
+make a mistake 
+
+The type of the function's argument represents the function's \emph{domain}
+
+For example: $f(x)$ where $x\in\mathbb{R}$ 
+
+We would like to be able to represent arbitrary \emph{disjoint} domains
+
+For example: $x$ is either a point on a line or a point on a surface
+
+In functional programming, the disjoint domains are always \textbf{labeled}
+
+For example: $x\in\left(\text{left},\mathbb{R}\right)\cup\left(\text{right},\mathbb{R}^{2}\right)$
+
+The disjoint union is always an \emph{exclusive-or}
+
+Labels come from a fixed, special set of symbols
+
+Given any such $x$, we can determine its ``side'' of the union
+
+We can obtain the corresponding value in each case
+
+In Scala, this type is denoted \lstinline!Either[Double, (Double, Double)]!
+
+Pattern-matching is used to define expressions with such types
+
+\subsection{Disjunctive type: \texttt{Either{[}A, B{]}}}
+
+Example: Either{[}String, Int{]} (may be used for error reporting)
+
+Represents a value that is either a String or an Int (but not both)
+
+Example values: Left(\textquotedbl blah\textquotedbl ) or Right(123)
+
+Use pattern matching to distinguish ``left'' from ``right'':
+
+def logError(x: Either{[}String, Int{]}): Int = x match \{
+
+  case Left(error) $\Rightarrow$ println(s\textquotedbl Got error:
+\$error\textquotedbl ); -1
+
+  case Right(res) $\Rightarrow$ res
+
+\} // Left(``blah'') and Right(123) are possible values of type
+Either{[}String, Int{]}
+
+Now logError(Right(123)) returns 123 while logError(Left(\textquotedbl bad
+result\textquotedbl )) prints the error and returns -1
+
+The case expression chooses among possible values of a given type
+
+Note the similarity with this code:
+
+def f(x: Int): Int = x match \{
+
+  case 0 $\Rightarrow$ println(s\textquotedbl error: must be nonzero\textquotedbl );
+-1
+
+  case 1 $\Rightarrow$ println(s\textquotedbl error: must be greater
+than 1\textquotedbl ); -1
+
+  case res $\Rightarrow$ res
+
+\} // 0 and 1 are possible values of type Int
+
+
+\subsection{General disjunctive types in Scala: trait + case classes}
+
+A future version of Scala 3 has a short syntax for disjunctive3 types:
+
+type MyIntOrStr = Int | String
+
+more generally, type MyType = List{[}Int{]} | (Int, Boolean) | MySocks
+
+Some libraries (scalaz, cats, shapeless) also provide shorter syntax
+
+For now, in Scala 2, we use the ``long syntax'':
+
+(specify names for each case and for each part, use ``trait'' /
+``extends'')
+
+sealed trait MyType
+
+final case class HaveListInt(x: List{[}Int{]}) extends MyType
+
+final case class HaveIntBool(s: Int, b: Boolean) extends MyType
+
+final case class HaveSocks(socks: MySocks) extends MyType
+
+Pattern-matching example:
+
+val x: MyType = if (...) HaveSocks(...) else HaveListInt(...)
+
+... // some other code here
+
+x match \{
+
+  case HaveListInt(lst) $\Rightarrow$ ...
+
+  case HaveIntBool(p, q) $\Rightarrow$ ...
+
+case HaveSocks(s) $\Rightarrow$ ...
+
+\}
+
+
+\subsection{The most often used disjunctive type: \texttt{Option{[}T{]}}}
+
+A simple implementation: 
+
+sealed trait Option{[}T{]}
+
+final case class Some{[}T{]}(t: T) extends Option{[}T{]}
+
+final case object None extends Option{[}Nothing{]}
+
+Pattern-matching example:
+
+def saveDivide(x: Double, y: Double): Option{[}Double{]} = \{
+
+  if (y == 0) None else Some(x / y)
+
+// Example usage:
+
+val result = safeDivide(1.0, q) match \{
+
+  case Some(x) $\Rightarrow$ previousResult {*} x
+
+  case None $\Rightarrow$ previousResult // provide a default value
+
+\}
+
+Many Scala library functions return an Option{[}T{]}
+
+find, headOption, reduceOption, get (for Map{[}K, V{]}), lift for
+Array{[}T{]}
+
+Note: Option{[}T{]} is ``collection-like'': has map, flatMap, filter,
+exists...
+
+\section{Summary}
+
+What problems can we solve now?
+
+Represent values from disjoint domains as a single type
+
+Use such values in collections safely
+
+\subsection{Solved examples}
+
+Define a disjunctive type DayOfWeek representing the seven days.
+
+Modify DayOfWeek so that the values additionally represent a restaurant
+name and total amount for Fridays and a wake-up time on Saturdays.
+
+Define a disjunctive type RootsOfQuadratic that represents real-valued
+roots of the equation $x^{2}+bx+c=0$ for arbitrary real $b$, $c$.
+(The cases of interest are: no real roots; two equal roots; two unequal
+roots.) Implement solve2:\ ((Double, Double)) => RootsOfQuadratic.
+
+Define a function rootAverage:\ RootsOfQuadratic $\Rightarrow$ Option{[}Double{]}
+that computes the average value of all real roots, returning None
+if the average is undefined.
+
+Generate 100 random coefficients $b$, $c$ (uniformly distributed
+between $-1$ and $1$) and compute the mean of rootAverage for them.
+
+Implement def f{[}A, B{]}:\ ((Option{[}A{]}, Option{[}B{]})) $\Rightarrow$
+Option{[}(A, B){]}
+
+\subsection{Exercises}
+
+Define a disjunctive type CellState representing the visual state
+of one cell in the ``\href{https://en.wikipedia.org/wiki/Minesweeper_(video_game)}{Minesweeper}''
+game: A cell can be either closed, or display a bomb, or be open and
+display the number of neighbor bombs.
+
+Define a function from Seq{[}Seq{[}CellState{]}{]} to Int, counting
+the total number of cells with $0$ neighbor bombs shown.
+
+Define a disjunctive type RootOfLinear representing all possibilities
+for the solution of the equation $ax+b=0$ for arbitrary real $a$,
+$b$. (The possibilities are: no roots; one root; all $x$ are roots.)
+Implement the solution as a function solve1:\ ((Double, Double))
+$\Rightarrow$ RootOfLinear.
+
+Given a Seq{[}(Double, Double){]} containing pairs $\left(a,b\right)$
+of the coefficients of $ax+b=0$, use solve1 to produce a Seq{[}Double{]}
+containing the roots of that equation when a unique root exists.
+
+Define functions having these type signatures: 
+
+def f1{[}A, B{]}:\ Option{[}(A, B){]} $\Rightarrow$ (Option{[}A{]},
+Option{[}B{]})
+
+def f2{[}A, B{]}:\ Either{[}A,B{]} $\Rightarrow$ (Option{[}A{]},
+Option{[}B{]})
+
+def f3{[}A,B,C{]}:\ Either{[}A, Either{[}B,C{]}{]} $\Rightarrow$
+Either{[}Either{[}A,B{]}, C{]}
 
 \section{Discussion}
 
 \begin{comment}
- I will talk about disjunction types to introduce that topic I will
-have to talk about these classes in Scala this is a feature of Scala
-that is also present in most other programming languages but uninstaller
-there cold case classes and this can be understood by recalling the
-tuple so recall we have tuple types that look like this tuple types
-such as this one represents a pair values or generally a certain fixed
-set of values of different types possibly now in this notation there
-are no names associated with these values or with this entire type
-and for convenience we can define names both for the type and for
-each of the values each of the parts of the tuple we can define a
-name now this is convenient to remind ourselves what is the reason
-we are introducing this tuple what are the meanings of each part so
-here's an example we can say this is a name of the type my pair we
-could say that and then we would do this but this doesn't give us
-a lot because my pair would not be different from any other tuple
-of int and string maybe with very different interpretation for example
-here's a much better way of defining to polis names which in Scala
-is called a case class but it's just a tuple with names we put a name
-on the tuple itself and on each part so it's still quite the same
-as a tuple of double and string but now it is not confused with they're
-tuples of the balloon string so for example if I have in some other
-part of my code I have a tuple of double and string it represents
-the amount I paid and the name of the person I paid to and here it
-represents my socks so if I did both of this with a tuple of double
-and string then by mistake I could have mixed it up and instead of
-using socks I would have used the amount paid which would be a total
-disaster because it will in in the in the code that it looks just
-like a tuple so we don't know where it came from and introducing this
-type with these names helps to prevent this problem so once we wrote
-this line this line here this defines a name for the entire tuple
-type it defines a new type called my socks and it also defines names
-for the two parts of the tuple and once I have defined this I can
-use this definition later in the code by writing things like this
-I introduced it here a value of type my socks and the value is equal
-to this so I can write it like this and the type annotation here is
-optional it is not necessary to write it actually in my code I usually
-don't write it because it's already obvious it's of type my socks
-it is a value whose type is named right here so there is no need to
-repeat it next to it so I typed it here for clarity only now case
-classes can use other case classes as types of their parts as we have
-seen before you could have tuples whose parts are themselves also
-tuples so here you can have a definition like this bag of socks is
-representing a certain number of identical sock so I'll use this type
-I defined here by name so I don't have to say that this is double
-pair of double string I just say this is my socks I use the type by
-name and here I would say well bag equals bag of socks and then I
-would say well the first part I would have to give an any second part
-so it's just like a tuple except with name so I have to say you see
-if you cross this out if you cross out the names then it won't be
-just like a tuple with a nested tuple but this in this way you prevent
-a possible errors so it will not let you write a tuple here it says
-it's wrong type so in this way I define values of these types which
-are called case classes but what they actually mean is named tuples
-once you have defined this you can access each part by name and that's
-also very convenient I mean remember that with tuples you have to
-access parts of them by index so this is number one this is number
-two you have to remember you have to remember which which one has
-which number and if you want to change this let's say with socks I
-want to also say when I bought them with a date so I add another field
-here so now I have to remember which one is number one number two
-with case classes their names so you access by name you just say bag
-dot socks which gives you this and that dot color which gives you
-this so then C will be of type string and it will have the value white
-now now as before this type annotation is not necessary now another
-convenience that Scala provides with its type its case questions is
-that the parts of case classes can be specified in any order as long
-as you use names if you don't use name you have to do it in this order
-otherwise you can do it in any order so if you say to me so here's
-an example where I define my socks first specifying the color and
-then the size final convenience is that I can specify the default
-values for parts and then I for example by default almost shirts are
-blue and by default none of them have holes so I define this case
-class shirt with two parts which is string and boolean in the first
-part is called color and second is called has holes and I gender I
-specify default values for both so when I generate values of this
-I don't have to specify all fields I can just specify some of them
-and the other fields will be generated automatically using the default
-values so these are just the features of Scala that make tuples more
-convenient and this is the first time I mentioned case classes however
-not the last time so here's a comparison of tuples and case classes
-in a more systematic way so actually in Scala tuples are just syntax
-for this kind of type with two type parameters and this is actually
-like a case class so I will give you this table to look at so on the
-left are tuples and right there the case classes that have the same
-values inside the same types of values inside but with names and there
-are very they're different types so you could not in the same program
-you could not put this instead of that or vice versa it's just impossible
-won't compile so case classes are safe in this sense a case class
-that has no parts exists - it's called a case object which is useful
-in certain cases so tuples with one element or tuples with zero element
-exist in Scala a tuple with zero element is not called two plus zero
-is called the unit tuple with one element looks like this it's called
-tuple one to pull with two elements looks like this is called tuple
-- certainly I don't yet know why I would use this maybe there are
-some situations when this is helpful but I just wanted to call your
-attention to the system here so everything is systematic so you can
-have two pools with zero elements tuples with one element tuple with
-two element ins - almonds and so on and corresponding to that if you
-want to put names of these tuples what do you do well you put names
-so for a tuple with zero elements you put a name on it which is this
-and let's call the case object so these are keywords of Scala that
-you need to use if you want to put a name on an empty tuple if you
-want to put a name on a tuple with one element that's what you do
-it's a case class with one part this is already quite useful you you
-distinguish this from other kinds of values and this is a case class
-with two parts so case classes can have also type parameters as type
-so type parameters on a case class means that for each value of this
-type variable which could be any type like integer or boolean string
-any other case class or anything function it can be any type for any
-of these values of a type variable a and values of type variable B
-you have a tuple with names and the names are here left right and
-count and the first part is of type a in a second of type B and the
-third is of type int so the third type is always the same but the
-first and the second types could be different whenever you use this
-case class you can use it with different types and so obviously you
-could define the tuple types like this like tuple to with two type
-parameters and names underscore one and underscore two and then the
-syntax would be value dot underscore one that will give you the first
-value and this value dot underscore two will give you the second value
-which is just like this syntax so you say value value dot name and
-that gives you the part of the tuple and so here you you'll do the
-same so this is the syntax we saw before which will take parts of
-a tuple but this is the system so this could be considered as case
-class defined like this so for case classes there is another major
-convenience which is this pattern matching syntax so before we have
-seen pattern matching syntax for tuples a very similar one exists
-for case classes you just specify the name of the case class and that's
-otherwise the same syntax as with tuples so again if you cross out
-the names then you have the same syntax as we had before when we did
-pattern matching on tuples so there are two cases where Scala will
-do pattern matching one is the value assignment well and then you
-can do a pattern and then equal something the second is the partial
-function where you have the case expression on the left hand side
-of the case expression is a pattern so here are some examples so for
-example let's say a is my socks and then I want to get both the size
-and the color of my socks so I can write a definition like this and
-where I define x and y at the same time using the pattern matching
-so before you could do this with tuples as well then you don't specify
-the name because tuples have no names in this syntax but a case classes
-can be understood as named tuples so then you specify the name and
-if a is anything else not of this type then this won't compile this
-won't compile the second example is a partial function so suppose
-we define this function f which comes from goes from bag of socks
-to integer and computes doesn't matter what let's say total price
-for what not not not total price let's say {[}Music{]} i total price
-we cannot compute because I didn't have any prices in my data but
-if I had them and I could compute something so imagine we have this
-function that computes something useful and then how do we define
-this function well we need some kind of match so we need to get values
-out of socks so one way would be to just do the access by name another
-name another way is to define it by patronage and then you define
-all names at once and this is convenient and this is another syntax
-where you define functions on case class with an argument written
-on the left see there are these alternative syntax you can write it
-like this or I can really pointless and then there's the syntax be
-match and then you write as a partial function so like make sure you
-you realize that is SC and Z are new variables that are defined only
-in this scope they are not defined outside of this block so these
-are called pattern variables and the case expression introduces on
-the left hand side new pattern variables that are not the same as
-anything you had before so remember the shadowing of pattern variables
-if here I have value a I already defined I could here have also a
-as pattern variable it will be a completely different variable of
-different type just by coincidence called a inside this scope only
-so it is a good style not too use these names and use different names
-but even if you use the same names here and here it will still work
-this variable will only exist in the scope and that variable will
-be unaccessible and only shadowed so now let's look at disjunction
-types the motivation for having disjunction types is that sometimes
-we or we have situations when data comes in these different shapes
-and can be several different data in one kind of container so for
-example if you are asking water what are the roots of a quadratic
-equation then the answer is it could have two roots or you could have
-one root which means two coincident roots and if you are asking for
-real roots now it could have no real roots so if we're interested
-in real roots under three cases and it's convenient if we can introduce
-a type that means the roots of the real roots of quadratic equation
-and inside this type we have this distinction but outside is just
-one type so that it's easier to write expressions with it functions
-and so on another example suppose you run a binary search and look
-for a value now you might find the value or you might not find it
-so it is convenient if you could return something that could be a
-value in the index or absence of value on the index be convenient
-if you could return this as some kind of type {[}Music{]} another
-example is you can have computations that may generate an error and
-fail to make any any value fail to return the value or they can return
-the value and the error could be different so you could you want to
-have a message about what error occurred so then it's convenient to
-return the type which is either a value or an error so it's kind of
-an either-or situation or a disjunction in the mathematical language
-another example is the computer games in computer games usually you
-have states that there can be can be different for example you can
-be in some room of different kind and different kinds of rooms have
-different properties for example Rome could he could be a dangerous
-or not or have a lot of stuff for have some adversaries and you want
-to represent all different kinds of rooms all different kinds of players
-uniformly so that you don't don't worry about the values that you
-have to store and each kind of room or each kind of player could have
-different sets of properties so for example a player who is an adversary
-or a player who is just static and and gives you information but otherwise
-doesn't participate in anything we have different sets of properties
-and so it would be good to come to to say this is a player so the
-dream is a type which is a player and then a player would be either
-one kind of player or another kind of player so automatically you
-want to imprison to say for a quadratic equation you would say it's
-a pair of complex numbers or is a complex number well in this case
-I wanted to do real not complex because with complex you always have
-at least one you cannot have empty well actually you could have empty
-if your quadratic equation is degenerate for example 0 times x equals
-1 that has no solutions and you could you know 0 times x squared plus
-0 times X plus 1 equals 0 that has no solution so you could have that
-situation to then in an example of binary search you want to find
-a value and an index so you're returning a pair or you found nothing
-so you return empty so empty tuple now of course you see it's not
-nice that I returned just int int I have no idea which one is which
-so it would be helpful if I put names on them so I put names on each
-part so this would be found value and this will be found index or
-something I could do that with a case class as I just showed the third
-example is a computation gives you either a value or a string and
-this fourth example is basically case class so each room or player
-would be represented by a case class with many properties but different
-kinds of players or rooms will have different sets of properties so
-you want to have a number of case classes together in the disjunction
-basically either one case class or another case passport and third
-case class that's what you want that's the kind of type you want so
-that's the disjunction type they are available in Scala and they represent
-this kind of situations as types let us look a little at the mathematical
-point of view usually the type means madam ethically that the function
-has an arguments let's say f of X has an argument X the type of X
-let's say X is a real number then the type of X represent the domain
-of the function so now we would like to represent disjoint domains
-so for example X is either a point on the line or as a point on the
-surface completely different surface and from a line and so in mathematics
-this is not often used but in functional programming it is used quite
-a lot because it looks it appears that real life situations and tasks
-require a lot of this coming of this disjoint domains I just gave
-you examples on the previous slide so how would we do a disjoint domain
-between line and surface let's say line is the real numbers and surfaces
-are part two the real plane so in functional programming the way it's
-done is that the domains are labeled so we introduce some fixed special
-set of symbols with which are labels like left Android's say these
-are just symbols that come from a fixed set of symbols and then we
-first make two sets the first set will be a set of pairs where the
-first element of the pair is the symbol left and the second element
-of the pair is some real number so this set is a set of all such pairs
-and this set is a set of all different pairs where the first element
-is a symbol right and the second element is some point from a surface
-from r2 and then make union of these two sets now this is a labeled
-union because each set has this label and so there's no way that any
-even if this were our and this were also our there will be no way
-to confuse an element from the left part of the union and lanolin
-from the right part of the Union and so the disjoint union is always
-an exclusive or it's never inclusive or it could be couldn't be both
-from here and from here because the symbols are different so given
-any such X from this set from this entire set we can always determine
-by looking at the first element of the pair from which side it comes
-and we therefore can obtain and know what is the type of the corresponding
-other value in each case so there is no confusion if we label the
-two parts of the Union even if all these types are worth the same
-with this where artists were also her will still be no confusion whereas
-a ordinary mathematical Union you would be confused you would think
-well our union ours just are so but disjoint Union is labeled and
-allows you to always know from which part you come from that from
-which parts the value comes so in Scala this kind of type is disjoint
-Union or exclusive or between two domains it's denoted like this so
-it's special library you find a special type defined in the library
-called either it has two type parameters describing the two domains
-the first let's say double that's a describing this and second is
-a tuple of two doubles which describes the so this was a very close
-analogy with a mathematical disjunction between the two domains and
-as I just said domains in mathematics corresponds to types of variables
-in programming in functions so types of variables is exactly the same
-as a set from which the variable comes so like X comes from the set
-of real numbers and here double is a type that approximately represents
-real numbers and pattern matching is used to define expressions with
-such types so let's look at examples with either so we were looking
-before at a situation when we wanted to generate error messages with
-computation and so let's suppose we have a function that needs to
-return an integer but may actually have an error and so it turns this
-type either of string and integer which is a disjunction between two
-domains the first is the set of all strings the second is the set
-of all integers and it is labeled by symbols left and right these
-symbols also come from the skull a standard library now if we have
-a function let's say log error we want to write this function that
-takes an argument of this type how can we construct an expression
-using this type and here's how we say X match this is keyword match
-so say X match and then you write this partial function which matches
-against possible values of X and there are two cases the left having
-an error value which is of type string and the right having a result
-value which is of type integer in both cases we can specify what needs
-to be done or rather the expression that needs to be computed well
-we can print of course but we need to return a value and this function
-must return integer value so let's return some integer value or not
-and then the result now this is just an example now how can we interpret
-this code what does it mean case left error case right result it means
-these are actually possible values of this type so this and this are
-specific possible values of this type remember that we have this labeled
-disjunction so this is a possible value with symbol left and a number
-and so similarly here a symbol left which is the name of the case
-class this is just a symbol it is not itself a value it's it does
-not give you a value until you give it this the the string and so
-left of blah is actually a value of type either string int and similarly
-right of one two three is also a possible value of this type so in
-this for in this code we enumerate the possible cases the disjunction
-there are only two cases in this disjunction the left and the right
-and so we enumerate them and each time we have a pattern variable
-of a different type because if we are in the left case of disjunction
-when the error is of string type this pattern variable we could have
-called it X or Y or whatever it's just a pattern variable and it's
-introduced right here and it only is visible within the scope of this
-expression so here we cannot have access to error if you want to here
-if I cannot make a mistake and try to access this error value when
-actually I'm in the right disjunction in the second part of the disjunction
-because the error is not defined in this Cobra that I am just showing
-in the scope only the rest is defined so these case expressions have
-limited scope so this expression from the first case until the second
-it is one scope and within this scope the error variable is defined
-outside it is not defined and similarly for this so if we call this
-function on the value such as write 123 then this function will match
-the first case will not match so then the second case will match and
-the result will be returned so this will be the value it returns then
-the match is performed line by line so if the first line that matches
-gives you this expression and that's it not no further lines are evaluated
+now let's look at disjunctive types 
+
+and try to access this error value when actually I'm in the right
+disjunctive in the second part of the disjunctive because the error
+is not defined in this Cobra that I am just showing in the scope only
+the rest is defined so these case expressions have limited scope so
+this expression from the first case until the second it is one scope
+and within this scope the error variable is defined outside it is
+not defined and similarly for this so if we call this function on
+the value such as write 123 then this function will match the first
+case will not match so then the second case will match and the result
+will be returned so this will be the value it returns then the match
+is performed line by line so if the first line that matches gives
+you this expression and that's it not no further lines are evaluated
 so log error of left bad result will match this because it matches
 the symbol the left and then error will be the variable equal to the
 value of it will be equal to bad result and so it'll print got error
 bad result and then it will return -1 so case X Russians that choose
-among possible values of a given type when this type is a disjunction
+among possible values of a given type when this type is a disjunctive
 and here is another way of using case expressions with types that
-don't look like a disjunction like int where you say if so I say X
+don't look like a disjunctive like int where you say if so I say X
 which is an argument of this function X match and then I enumerate
 certain cases 0 1 and then all other cases so if if 0 does not match
 if one does not match then this case this line will be evaluated and
@@ -342,9 +791,9 @@ will be equal to this X since we matched it and so then the same X
 will be returned so you could think about integers as a type that
 has different values like 0 1 and others there are possible values
 of this type and so you could use case expression also for those so
-case expression is not limited to disjunction types or case classes
-integer is not defined as a disjunction type because it has long parts
-of disjunction but it has different values and so just to know to
+case expression is not limited to disjunctive types or case classes
+integer is not defined as a disjunctive type because it has long parts
+of disjunctive but it has different values and so just to know to
 the similarity between this code and this code the case expressions
 in the partial function enumerate possible values of the function
 and so here also I'm not limited to just writing two cases lines here
@@ -354,14 +803,14 @@ and that will only match when X has that value left of empty string
 then on the next line I could say case left of something else and
 won't match only when X is net this is just to what you know that
 the case expressions are more powerful than just matching the two
-parts of a disjunction they're matching anything these patterns can
+parts of a disjunctive they're matching anything these patterns can
 have many conditions and this can be complicated so either is a example
-of disjunction but there are more general disjunctions like for example
-well if I want to have a disjunction between three different domains
+of disjunctive but there are more general disjunctives like for example
+well if I want to have a disjunctive between three different domains
 do I have to do either of either so that is not convenient now in
 in principle what I want is something like this I want to just say
 this type or this type or let's say this type or this type or this
-type this is a disjunction I want to be able to define these junctions
+type this is a disjunctive I want to be able to define these junctions
 like this but Scala does not have this syntax there are some libraries
 like these libraries that provide syntax similar to this one but I
 don't want to go into these libraries that are more advanced right
@@ -372,37 +821,37 @@ talk about those libraries and see what they offer but for now let's
 use the long syntax which is available in Scala and this is the syntax
 okay this is quite long to represent what I would ideally write like
 this if I if I compare this with that my type is a name of the type
-the type has disjunction of three domains the first domain is a list
+the type has disjunctive of three domains the first domain is a list
 of integers so the first domain here has a name all domains must have
-a name in the disjunction is a label so here in this context the name
+a name in the disjunctive is a label so here in this context the name
 would be implicit something like underscore one or something but in
 this syntax in the long syntax the domain has to be explicit so your
 name is have list int it has one part so it's a tuple of one with
 name have list int and the part is named X let's say then I have to
 write this keyword extends my type and in this way I say that this
-case class is part of a disjunction which I'm going to define now
-so my type is the name of the entire disjunction and these are the
+case class is part of a disjunctive which I'm going to define now
+so my type is the name of the entire disjunctive and these are the
 names of its three parts the labels and these are the names of the
 tuple parts so each domain is a tuple with names case class as I explained
-is a tuple with names so this disjunction has two lists the names
-for everything for every part of the disjunction and for every part
+is a tuple with names so this disjunctive has two lists the names
+for everything for every part of the disjunctive and for every part
 of each tuple finally these keywords sealed final case class trait
 these keywords are necessary in Scala and what they do is they make
-sure that you cannot by mistake change this disjunction later because
+sure that you cannot by mistake change this disjunctive later because
 that would be a difficult bug that some other part of the program
-changes this disjunction and then adds some more stuff to it let's
+changes this disjunctive and then adds some more stuff to it let's
 see some other domain and then your case matches stop working because
 you don't know that somebody added domains you have your case State
 case expressions like this pattern matching and you expect three domains
-in your disjunction so you write it like this but somebody adds a
+in your disjunctive so you write it like this but somebody adds a
 different domain and this stops working this will crash if if that
 word if that happens so to prevent that you say that my trait called
-my type is sealed so no so only the ones the the domains of the disjunction
+my type is sealed so no so only the ones the the domains of the disjunctive
 that are listed next to it in the file well not necessarily next day
 but in the same file only those exist and no others may be defined
 later at any time similarly the case passes are final so they cannot
 be extended later as the result the syntax is quite long you have
-to write a lot of stuff just to express this kind of disjunction of
+to write a lot of stuff just to express this kind of disjunctive of
 three domains but you write it only once and using it is quite short
 is not so bad at all so for example first I create a value of this
 type so this could be a result of some computation with conditions
@@ -411,7 +860,7 @@ values and otherwise it's have list int with some list int value so
 this is computed and then somebody wants to find out what that X was
 and they don't know this could be in a different part of the code
 and this could be even in a different library and so you have to match
-on the three domains of the disjunction that's how you write it you
+on the three domains of the disjunctive that's how you write it you
 put pattern variables in the case classes so these nine names don't
 have to be the same as these they can be for convenience but they
 don't have to be I'm just specifically selecting all different names
@@ -422,8 +871,8 @@ to use this LST but not this and all that because the scope is is
 limited so the scope of definition of this LST is only this expression
 the scope of definition of pmq is only this expression if you try
 to use P and Q here the compiler would say cannot find symbol or something
-like that if very often used disjunction type is called option here
-is how I would implement option in a very simple way it has a disjunction
+like that if very often used disjunctive type is called option here
+is how I would implement option in a very simple way it has a disjunctive
 of two domains one domain is a tuple with one element of type T or
 T is a type parameter and the second domain is a tuple of zero elements
 or unit type which is represented as a case object this is just a
@@ -435,21 +884,21 @@ tuple it does not have any values inside so we cannot use any type
 for parameter here but we must specify the parameter so we use this
 special type nothing all of this is defined in the standard library
 of skeleton nothing option some none so some and none are the two
-labels on the two domains of the disjunction now in order to use it
+labels on the two domains of the disjunctive now in order to use it
 you do pattern match for instance like this here's a function that
 performs safe divided divides X by Y but your turns an option of double
-and so option list is a disjunction and option parameterize by the
-type double is a disjunction of of either double or nothing so no
+and so option list is a disjunctive and option parameterize by the
+type double is a disjunctive of of either double or nothing so no
 value rather unit is the type or empty tuple if you prefer is a type
 that does not carry any value of type double in it and so here's how
 you define a function that computes this it checks the condition and
 if Y is 0 you return none which is this label otherwise you return
 value X divided by Y labeled by the name and a single Sun now the
 symbol is a label on the second part or here on the first part of
-the disjunction and here's how I would use it so I would say safe
+the disjunctive and here's how I would use it so I would say safe
 divide one divided by Q maybe Q is zero maybe not but I then match
 so this returns an option of double I match the option with two cases
-some X and none so these are the two parts of the disjunction and
+some X and none so these are the two parts of the disjunctive and
 I mention them and so if I have some X then I multiply that some whatever
 previous result by that X and otherwise I returned previous result
 so this is a kind of a default value that I return when I don't get
@@ -466,7 +915,7 @@ return option and the final note is that option has many functions
 or methods defined on it in a sense option is like a collection it's
 like sequence of tea so option of tea is very much like sequence of
 tea in terms of what you can do with it you can see with sequins you
-cannot do this match because sequence is not a disjunction between
+cannot do this match because sequence is not a disjunctive between
 nan and Sun but sequence has map flatmap filter exists and so on all
 of this is also defined on an option and you can understand this in
 a simple way if you imagine that the sequence is like a container
@@ -487,7 +936,7 @@ each element is transformed by that function option will behave in
 a very similar way you do a map with an option and every element in
 an option will be transformed using the function you specify however
 option can only contain at most one element so it can be empty which
-is this disjunction part or it can be non-empty containing one element
+is this disjunctive part or it can be non-empty containing one element
 of type T one value of type T so it's kind of a very limited simple-minded
 collection but otherwise it's similar to collection we will see how
 that works in the examples so with the tools we just learned what
@@ -496,13 +945,13 @@ domains as a single type and we can use these values to define functions
 on them or functions producing them and use also these values in collections
 as elements of collections or in any other way we can these are types
 so there's no restriction on how you can use them so let's go through
-some examples now the first example is to define a disjunction type
+some examples now the first example is to define a disjunctive type
 day of week it represents the seven days of the week let me go to
 this example so here's what it would look like so all these keywords
 here in IntelliJ you see in bold blue dark blue seal the trade final
 case object.extend so these are keywords of Scala and everything else
 is our labels that we introduced so day of week is the name of this
-entire type the entire disjunction type it has seven domains and these
+entire type the entire disjunctive type it has seven domains and these
 domains don't carry any values so these are just empty tuples and
 the syntax for them is to say case object and then you don't you don't
 write this this is a mistake you should know right that empty tuple
@@ -514,13 +963,13 @@ how will we use the type like this will define values a and B let's
 say of this type and assign these values so we define Monday and Saturday
 just like this we don't have to do anything else we don't have to
 say new new Monday there's no numa there's only one Monday because
-that's a label of the domain and a disjunction is no no sense in that
+that's a label of the domain and a disjunctive is no no sense in that
 to say new Monday cannot have different Monday's they're all the same
-it's a label on the disjunction now if I don't do this and just say
+it's a label on the disjunctive now if I don't do this and just say
 well a eCos Monday then Scala will actually not know that I want a
 to be of this type color we'll think but it has typed Monday type
 so monday dot type is just ask our feature that I'm not going to use
-right now it is a more advanced feature so with these disjunction
+right now it is a more advanced feature so with these disjunctive
 types it is a good idea to write type annotations Scala it can be
 too smart about what I want to do and so it is better if I do this
 but it would not be an error if I did it that way if I put just any
@@ -532,8 +981,8 @@ and this will run and I will get the string printed after we implement
 the function so that this test can pass so how do we implement this
 function this function is supposed to give us a boolean which is true
 when the day of the week of Saturday and false otherwise so we do
-this by pattern matching since the type is a disjunction so we need
-to match on the label of the disjunction or in the scala language
+this by pattern matching since the type is a disjunctive so we need
+to match on the label of the disjunctive or in the scala language
 we match on the case class or case object so we say Dean match and
 then you see there's this red case close as expected sure and then
 there's this thing which I can click it says generate case closes
@@ -573,8 +1022,8 @@ are that a and B so a was Monday B was Saturday they they pass let's
 go to the second example {[}Music{]} modified day a week so that the
 values additionally represent a restaurant name and total amount for
 Friday's and a wake-up time on Saturdays so what does it mean I want
-additional values on list on this disjunction on on the domains in
-the disjunction I want these domains to be not just empty tuples as
+additional values on list on this disjunctive on on the domains in
+the disjunctive I want these domains to be not just empty tuples as
 I did before here but for Friday I want a domain that represents a
 string which is restaurant name and an amount paid so here's what
 I do i make Friday and Saturday case classes instead of case objects
@@ -634,7 +1083,7 @@ as this combination so there's no difference it's just pure aesthetics
 I like this symbol this is the way to write this kind of code and
 it clearly says here's a disjunct into disjunctive domain which we
 match and specify different possibilities one possibility is that
-it's a Friday so sub domain of the disjunction that is labeled as
+it's a Friday so sub domain of the disjunctive that is labeled as
 Friday with these two values in it and then I return that otherwise
 for any other domain I return them so let's run this test and see
 what it prints because we printed here Monday and Friday right so
@@ -644,7 +1093,7 @@ default way to print case classes so you don't have to write code
 for your own printing function or to string function the function
 to string is already defined in a reasonable way it may not be what
 you want to Princeton your users but for debugging - this is pretty
-good let us continue the next example is to define a disjunction type
+good let us continue the next example is to define a disjunctive type
 roots of quadratic it represents real valued roots of the equation
 x squared plus bx plus c equals 0 for arbitrary real B\&C and there
 are three cases no real roots two real equal roots two unequal real
@@ -654,9 +1103,9 @@ C there could be a case when a is zero and then we'll have a linear
 equation so in this particular example I chose it to be like this
 for simplicity and then we want to implement a solve function solve
 to or solve quadratic which takes a tuple of two coefficients B and
-C and returns the this value of this disjunction type which is a roots
+C and returns the this value of this disjunctive type which is a roots
 whatever situation of this it returns that value and that value represents
-a disjunction of these three cases no real roots 2 equals 2 M equals
+a disjunctive of these three cases no real roots 2 equals 2 M equals
 and conceptional conceptually this is easy to think about you call
 this function you get the value and then you can imagine it and see
 what the situation is if you feel like it how do we implement that
@@ -664,14 +1113,14 @@ let's take a look so I define sealed straight roots of quadratic final
 case object no real roots extends the roots of quadratic so I say
 again all this all this final extends and sealed trait these are scholar
 keywords this is kind of verbose but you just only write this once
-for every disjunction and you never look at this more than once so
+for every disjunctive and you never look at this more than once so
 that's to me that's acceptable although I would prefer for example
 that everything is sealed by default and everything else gives me
 everything is final by default but I would prefer that that I don't
 have to say final all the time but it's okay it's not so bad for the
-value it gives us is that we can represent arbitrary disjunctions
+value it gives us is that we can represent arbitrary disjunctives
 of types when this case case classes and other types so there are
-three domains in the disjunction as we were over told no real roots
+three domains in the disjunctive as we were over told no real roots
 and that has no values obviously no roots so we say this is an empty
 tuple and that is represented by a case object also this case object
 doesn't have to be a new keyword in principle so but that's what scholar
@@ -679,7 +1128,7 @@ requires just remember that this needs to be everything like that
 second domain is when the roots are equal then there is only one number
 to store and that number is X and so the third domain is when there
 are two unequal roots and when there are two numbers to store all
-right so we have defined a disjunction type and now we define a function
+right so we have defined a disjunctive type and now we define a function
 solve - it takes a tuple of its coefficients a B and C and returns
 the roots of quadratic so how does it work I always say we I chose
 this syntax just to be a little the pure side of things you know value
@@ -705,7 +1154,7 @@ case class but this is more clear in this clearer in this in this
 way finally if the discriminant is negative there are no real notes
 so in this way I return a value of this type I construct this value
 as an element of one of the three possible domains each domain having
-its own values in there so this is a disjunction of empty to pull
+its own values in there so this is a disjunctive of empty to pull
 to pull of one and tuple of two but I put names on them so now it's
 much more readable it's clear what I'm doing and easy to check for
 mistakes so let's now check that this works so here's what I do i
@@ -735,7 +1184,7 @@ there is no flag boolean flag that would be true or false when you
 have roots or you don't have words you don't do any of this it's much
 more visual and clear when your code exactly says what's happening
 there are no hidden flags hidden special values this is the advantage
-of using disjunction types actually this is one of the main advantages
+of using disjunctive types actually this is one of the main advantages
 over using some other methods of representing complicated data next
 example is that we want to define a function called route average
 which is from roots of quadratic in to option double that computes
@@ -781,7 +1230,7 @@ the functions of two that we implemented just previously the result
 will be a sequence of this roots of quadratic that we have so each
 element of the sequence could have different configuration of roots
 in or roots at one or two rows and it's all in this type because this
-is a disjunction tab now we compute averages so solutions we map over
+is a disjunctive tab now we compute averages so solutions we map over
 that sequence with root n rooster remember the function wrote average
 takes roots of quadratic and returns option double so when we map
 with this function over sequence of roots of quadratic we get a sequence
@@ -1008,7 +1457,7 @@ is so in this way you can go step by step within each of these transformations
 and see what types then generate and having if you have done this
 enough times initially it will take time and you you have many steps
 and at the end you will see it becomes easier so here are some more
-exercises for you to work with disjoint disjunction types case classes
+exercises for you to work with disjoint disjunctive types case classes
 and collections of them and implement some functions like like these
 also with fully parametric types and so these functions are usually
 obvious what is meant so for example option of a pair goes into a
@@ -1027,75 +1476,16 @@ luck with these exercises
 \end{comment}
 
 
-\subsection{Scala's case classes as ``named tuple'' types}
+\subsection{Disjunctive types in other programming languages}
 
-It is often convenient to use names for the different parts of a tuple.
-Scala's ``case classes\index{case class}'' allow programmers to
-put names on each tuple part, as well as on the tuple type itself.
-The syntax is
-\begin{lstlisting}
-case class Person(firstName: String, lastName: String, age: Int)
-\end{lstlisting}
-This data type carries the same information as a tuple \lstinline!(String, String, Int)!.
-Without using a case class to hold this information, we could define
-a type alias\index{type alias} for this tuple,
-\begin{lstlisting}
-type PersonTuple = (String, String, Int)
-\end{lstlisting}
-and write code like this,
-\begin{lstlisting}
-scala> val p: PersonTuple = ("Albert", "Einstein", 140)
-p: PersonTuple = (Albert,Einstein,140)
+Disjunctive types (and the associated pattern matching) turns out
+to be one of the defining features of functional programming languages.
+Programming languages that were not designed for functional programming
+do not support this feature, while ML, OCaml, Haskell, F\#, Scala,
+Swift, Elm, and PureScript support disjunctive types as part of the
+language design. 
 
-scala> val einsteinName = p._2
-einsteinName: String = Einstein 
-\end{lstlisting}
-However, this type alias only creates an alternative name for an existing
-tuple of data. The declaration of a \lstinline!case class Person!
-gives the programmer several methods that make working with this tuple
-more convenient.
-
-In one sense, case classes behave as named tuples with named parts.
-Creating a value of a case class and accessing its parts looks like
-this:
-\begin{lstlisting}
-scala> val einstein = Person(firstName = "Albert", lastName = "Einstein", age = 140)
-einstein: Person = Person(Albert,Einstein,140)
-
-scala> einstein.firstName
-res0: String = Albert
-
-scala> einstein.age
-res1: Int = 140
-\end{lstlisting}
-Part names are optional when creating a value:
-\begin{lstlisting}
-scala> val poincare = Person("Henri", "Poincare", 165)
-poincare: Person = Person(Henri,Poincare,165)
-\end{lstlisting}
-It is a type error to use wrong types with a case class:
-\begin{lstlisting}
-scala> val p = Person(140, "Einstein", "Albert")
-<console>:13: error: type mismatch;
- found   : Int(140)
- required: String
-       val p = Person(140, "Einstein", "Albert")
-                      ^
-<console>:13: error: type mismatch;
- found   : String("Albert")
- required: Int
-       val p = Person(140, "Einstein", "Albert")
-                                       ^
-\end{lstlisting}
-However, parts can be specified in any order when using part names:
-\begin{lstlisting}
-scala> val p = Person(age = 140, lastName = "Einstein", firstName = "Albert")
-p: Person = Person(Albert,Einstein,140)
-\end{lstlisting}
-
-Another feature of case classes is that eachcase class is a \emph{different
-type}, even if the data it contains is the same. A function whose
-argument is of type \lstinline!Person! requires an argument of that
-type. It will be a type error to call that function with an argument
-of type \lstinline!(String, String, Int)!. One cannot make a mistake
-using one case class instead of another. 
+It is remarkable that the tuple types (or ``records'') are present
+in almost every programming language, while disjunctive types are
+absent except in languages specifically designed for the functional
+programming paradigm.
