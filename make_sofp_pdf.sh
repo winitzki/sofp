@@ -5,7 +5,12 @@
 function run_latex_many_times {
 	local base="$1"
 	echo "LaTeX Warning - Rerun" > "$base.log"
-	while grep -q '\(LaTeX Warning.*Rerun\|^(rerunfilecheck).*Rerun\)' "$base.log"; do pdflatex --interaction=batchmode "$base.tex"; done 
+	while grep -q '\(LaTeX Warning.*Rerun\|^(rerunfilecheck).*Rerun\)' "$base.log"; do
+		 latex --interaction=batchmode "$base.tex"
+       done # This used to be only pdflatex but now we are using ps2pdf because of pstricks.
+       dvips "$base.dvi"
+       ps2pdf "$base.ps"
+
 }
 
 function make_pdf_with_index {
@@ -43,4 +48,4 @@ tar jcvf "$name-src.tar.bz2" $name*lyx $name*tex `fgrep includegraphics $name*te
 mv "1$name.pdf" "$name.pdf"
 echo Result is "$name.pdf" having `pdftk "$name.pdf" dump_data | fgrep NumberOfPages | sed -e 's,^.* ,,'` pages.
 # Cleanup.
-rm -f $name*{idx,ind,aux,dvi,ilg,out,toc,log}
+rm -f $name*{idx,ind,aux,dvi,ilg,out,toc,log,ps}
