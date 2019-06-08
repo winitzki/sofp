@@ -7,10 +7,7 @@ function run_latex_many_times {
 	echo "LaTeX Warning - Rerun" > "$base.log"
 	while grep -q '\(LaTeX Warning.*Rerun\|^(rerunfilecheck).*Rerun\)' "$base.log"; do
 		 latex --interaction=batchmode "$base.tex"
-       done # This used to be only pdflatex but now we are using ps2pdf because of pstricks.
-       dvips "$base.dvi"
-       ps2pdf "$base.ps"
-
+        done # This used to be only pdflatex but now we are using ps2pdf because of pstricks.
 }
 
 function make_pdf_with_index {
@@ -18,6 +15,8 @@ function make_pdf_with_index {
 	run_latex_many_times "$base"
 	makeindex "$base.idx"
 	run_latex_many_times "$base"
+        dvips "$base.dvi"
+        ps2pdf "$base.ps"
 }
 
 function add_color {
@@ -43,7 +42,7 @@ rm -f $name*tex
 "$lyx" --export pdflatex $name.lyx # Exports LaTeX for all child documents as well.
 for f in $name*tex; do add_color "$f"; done
 make_pdf_with_index "$name" # Output is $name.pdf, main file is $name.tex, and other .tex files are \include'd.
-tar jcvf "$name-src.tar.bz2" $name*lyx $name*tex `fgrep includegraphics $name*tex | sed -e 's,[^{]*{\([^}]*\)},\1.*,' |while read f; do ls $f ; done` "$0"
+tar jcvf "$name-src.tar.bz2" $name*lyx $name*tex $name*dvi `fgrep includegraphics $name*tex | sed -e 's,[^{]*{\([^}]*\)},\1.*,' |while read f; do ls $f ; done` "$0"
 "$pdftk" "$name.pdf" attach_files "$name-src.tar.bz2" output "1$name.pdf"
 mv "1$name.pdf" "$name.pdf"
 echo Result is "$name.pdf" having `pdftk "$name.pdf" dump_data | fgrep NumberOfPages | sed -e 's,^.* ,,'` pages.
