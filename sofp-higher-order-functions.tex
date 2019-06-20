@@ -6,6 +6,7 @@
 \subsection{Motivation and a first example}
 
 \global\long\def\gunderline#1{\mathunderline{greenunder}{#1}}
+\global\long\def\bef{\forwardcompose}
 Consider the task of preparing a logger function that prints messages
 but adds a fixed prefix to each message. 
 
@@ -310,15 +311,14 @@ of the functions \lstinline!f1! and \lstinline!f2! is not \emph{equality}
  \textendash{}  these functions are \emph{different}; but one of them
 can be easily reconstructed from the other if necessary. 
 
-More generally, a curried function may have a type signature of the
-form \lstinline!A => B => C => ... => R => S!, where \lstinline!A!,
-\lstinline!B!, \lstinline!C!, ..., \lstinline!S! are some types.
-A function with this type signature is computationally equivalent
-to an uncurried\index{uncurried function} function with type signature
-\lstinline!(A,B,C,...,R) => S!. The uncurried function takes all
-arguments at once, while the curried function takes one argument at
-a time. Other than that, these two functions compute the same results
-given the same arguments.
+More generally, a curried function has a type signature of the form
+\lstinline!A => B => C => ... => R => S!, where \lstinline!A!, \lstinline!B!,
+\lstinline!C!, ..., \lstinline!S! are some types. A function with
+this type signature is computationally equivalent to an uncurried\index{uncurried function}
+function with type signature \lstinline!(A,B,C,...,R) => S!. The
+uncurried function takes all arguments at once, while the curried
+function takes one argument at a time. Other than that, these two
+functions compute the same results given the same arguments.
 
 We have seen how a curried function can be converted to an equivalent
 uncurried one, and vice versa. The Scala library defines the methods
@@ -442,16 +442,38 @@ and returns a new function that always returns \lstinline!c!:
 def const[C, X](c: C): X => C = { _ => c }
 \end{lstlisting}
 The syntax \lstinline!(_ => c)! is used to emphasize that the function
-ignores its argument. 
+ignores its argument.
+
+\paragraph{Function composition}
+
+\index{function composition}Consider two functions \lstinline!f: Int => Double!
+and \lstinline!g: Double => String!. We can apply \lstinline!f!
+to an integer argument \lstinline!x:Int! and get a result \lstinline!f(x)!
+of type \lstinline!Double!. We can then apply \lstinline!g! to that
+result and obtain a \lstinline!String! value \lstinline!g(f(x))!.
+The transformation from the original integer \lstinline!x:Int! to
+the final \lstinline!String! value \lstinline!g(f(x))! can be viewed
+as a new function of type \lstinline!Int => String!. That new function
+is called the \textbf{forward composition} of the two functions \lstinline!f!
+and \lstinline!g!. In Scala, this operation is written as \lstinline!f andThen g!:
+\begin{lstlisting}
+val f: Int => Double = x => 5.67 + x
+val g: Double => String = x => f"Result x = $x%3.2f"
+
+scala> val h = f andThen g
+h: Int => String = <function1>
+
+scala> h(40)
+res36: String = Result x = 45.67
+\end{lstlisting}
+The Scala compiler derives the type of \lstinline!h! automatically
+as \lstinline!Int => String!. 
 
 The Scala library defines two different function composition methods,
 called \lstinline!andThen! and \lstinline!compose!. The method \lstinline!andThen!
 performs the \textbf{\index{forward composition}forward composition}
-of two functions: the result is a new function, written in Scala as
-\lstinline!f andThen g!. That function first applies \lstinline!f!
-to the argument ``and then'' applies \lstinline!g! to the result.
-Mathematically, this operation is denoted by $\bef$ (pronounced ``before'')
-and can be defined as
+of two functions. Mathematically, this operation is denoted by $\bef$
+(pronounced ``before'') and can be defined as
 \begin{equation}
 f\bef g\triangleq\left(x\Rightarrow g(f(x))\right)\quad.\label{eq:def-of-forward-composition}
 \end{equation}
@@ -466,8 +488,11 @@ The type signature of this curried function is could be written as
 \[
 \text{andThen}:\left(X\Rightarrow Y\right)\Rightarrow\left(Y\Rightarrow Z\right)\Rightarrow X\Rightarrow Z\quad.
 \]
-This type signature shows how the types of the functions must match
-for the composition to be defined.
+This type signature shows how the types of the functions must match,
+or else the composition is undefined.
+
+The method \lstinline!andThen! is an example of a function that \emph{both}
+returns a new function \emph{and} takes other functions as arguments.
 
 The \textbf{backward composition\index{backward composition}} of
 two functions $f$ and $g$ works in the opposite order: first $g$
@@ -489,8 +514,8 @@ The type signature of this curried function is
 \]
 
 We have already seen the methods \lstinline!curried! and \lstinline!uncurried!
-defined by the Scala library. As an illustration, let us write a transformation
-from curried to uncurried functions in our own Scala code:
+defined by the Scala library. As an illustration, let us write our
+own code for converting curried functions to uncurried:
 \begin{lstlisting}
 def uncurry[A, B, R](f: A => B => R): ((A, B)) => R = {
   case (a, b) => f(a)(b) // Compute a value of type R.
@@ -510,8 +535,9 @@ for short.
 
 \subsection{Laws of function composition\label{subsec:Laws-of-function-composition}}
 
-Function composition has three important properties or ``laws''
-that follow naturally from the definitions. These laws are:
+The operations of function composition, introduced in Section~\ref{subsec:Examples-of-fully-parametric},
+have three important properties or ``laws'' that follow directly
+from the definitions. These laws are:
 \begin{itemize}
 \item the identity laws: the composition of any function $f$ with the identity
 function will give again the function $f$;
@@ -519,8 +545,10 @@ function will give again the function $f$;
 $f$, $g$, $h$ does not depend on the order in which the pairs are
 composed.
 \end{itemize}
+These laws hold for the forward and the backward composition, since
+they are just syntactic variants of the same mathematical operation.
 Let us write these laws rigorously as mathematical equations and prove
-them. For brevity, we will denote the identity function by ``$\text{id}$''.
+them. 
 
 The composition of the identity function with an arbitrary function
 $f$ can be $\text{id}\bef f$ with the identity function to the left
@@ -550,7 +578,7 @@ or else the types do not match. Therefore, the identity function must
 have type $A\Rightarrow A$, and the argument $x$ must have type
 $A$. With these choices of the type parameters, the function $\left(x\Rightarrow f(\text{id}(x))\right)$
 will have type $A\Rightarrow B$, as it must since the right-hand
-side of the law is $f$. We add type annotations to the code as superscripts,
+side of the law is $f$. We add type annotations to the code as \emph{superscripts},
 \[
 \text{id}^{A}\bef f^{:A\Rightarrow B}=\left(x^{:A}\Rightarrow f(\text{id}(x))\right)^{:A\Rightarrow B}\quad.
 \]
@@ -561,9 +589,13 @@ id[A] andThen (f: A => B) == { x: A => f(id(x)) }: A => B
 It is quicker to write the short mathematical notation than code in
 the Scala syntax. 
 
-We write $\text{id}^{A}$ to denote the type parameter $A$ in the
-identity function \lstinline!id[A]!; equivalently (but more verbosely)
-we may write $\text{id}^{:A\Rightarrow A}$.
+The colon symbol ($:$) in the superscript $x^{:A}$ means the type
+annotation, as in Scala code \lstinline!x:A!. A superscript without
+the colon symbol, such as $\text{id}^{A}$, means a type parameter,
+as in Scala code \lstinline!id[A]!. Since the function \lstinline!id[A]!
+has type \lstinline!A => A!, we can write $\text{id}^{A}$ or equivalently
+(but more verbosely) $\text{id}^{:A\Rightarrow A}$ to denote that
+function.
 
 Since $\text{id}(x)=x$ by definition of the identity function, we
 find that 
@@ -760,7 +792,7 @@ laws, and provide proofs.
 
 \section{Symbolic calculations with nameless functions}
 
-\subsection{Deriving a function's type from its code}
+\subsection{Solved examples: Deriving a function's type from its code}
 
 Checking that the types match is an important part of the functional
 programming paradigm \textendash{} both in the practice of writing
@@ -769,11 +801,11 @@ functions. For instance, in the derivations of the composition laws
 (Section~\ref{subsec:Laws-of-function-composition}), we were able
 to deduce the possible type parameters for $f$, $g$, and $h$ in
 the expression $f\bef g\bef h$. This worked because the composition
-function \lstinline!andThen! (denoted $\bef$) is fully parametric.
-Given a fully parametric function, it is often possible to derive
-the most general type signature that matches the body of the function.
-The same method will also work for generalizing a given function to
-a fully parametric form.
+operation \lstinline!andThen! (denoted by the symbol $\bef$) is
+fully parametric. Given a fully parametric function, it is often possible
+to derive the most general type signature that matches the body of
+the function. The same method will also work for generalizing a given
+function to a fully parametric form.
 
 Let us look at some examples of doing this.
 
@@ -878,31 +910,29 @@ the function body unchanged,
 def twice[A, B, ...](f: ...): ... = { x => f(f(x)) }
 \end{lstlisting}
  To determine the type signature and the possible type parameters
-\lstinline!A!, \lstinline!B!, ..., we need to determine the most
-general type that matches the function body. The function body is
-the expression $x\Rightarrow f(f(x))$. Assume that $x$ has type
-$A$; for types to match in the sub-expression $f(x)$, we need $f$
-to have type $A\Rightarrow B$ for some type $B$. The sub-expression
-$f(x)$ will then have type $B$. For types to match in $f(f(x))$,
-the argument of $f$ must have type $B$; but we already assumed $f^{:A\Rightarrow B}$.
-This is consistent only if $A=B$. In this way, $x^{:A}$ implies
-$f^{:A\Rightarrow A}$, and the expression $x\Rightarrow f(f(x))$
-has type $A\Rightarrow A$. We can now write the type signature of
-\lstinline!twice! as
+$A$, $B$, etc., we need to determine the most general type that
+matches the function body. The function body is the expression $x\Rightarrow f(f(x))$.
+Assume that $x$ has type $A$; for types to match in the sub-expression
+$f(x)$, we need $f$ to have type $A\Rightarrow B$ for some type
+$B$. The sub-expression $f(x)$ will then have type $B$. For types
+to match in $f(f(x))$, the argument of $f$ must have type $B$;
+but we already assumed $f^{:A\Rightarrow B}$. This is consistent
+only if $A=B$. In this way, $x^{:A}$ implies $f^{:A\Rightarrow A}$,
+and the expression $x\Rightarrow f(f(x))$ has type $A\Rightarrow A$.
+We can now write the type signature of \lstinline!twice! as
 \begin{lstlisting}
 def twice[A](f: A => A): A => A = { x => f(f(x)) }
 \end{lstlisting}
 This fully parametric function has only one independent type parameter,
-\lstinline!A!. A mathematical notation for this function can be written
-as
+$A$. A mathematical notation for this function can be written as
 \[
 \text{twice}^{A}=f^{:A\Rightarrow A}\Rightarrow x^{:A}\Rightarrow f(f(x))\quad.
 \]
 
-The procedure of deriving the most general type for a given expression
-is called \textbf{type inference}\index{type inference}. The type
-signature \lstinline!(A => A) => A => A! has been \textbf{infer}red
-from the expression $f\Rightarrow x\Rightarrow f(f(x))$.
+The procedure of deriving the most general type for a given code is
+called \textbf{type inference}\index{type inference}. The type signature
+$\left(A\Rightarrow A\right)\Rightarrow A\Rightarrow A$ has been
+\textbf{infer}red from the code $f\Rightarrow x\Rightarrow f(f(x))$.
 
 \subsubsection{Example \label{subsec:Example-hof-derive-types-3}\ref{subsec:Example-hof-derive-types-3}}
 
@@ -948,9 +978,9 @@ we find
 \end{align*}
 The last expression is hard to work with: it is confusing that the
 argument names $f$ and $x$ are repeated. The calculation will be
-made clearer if we give the arguments new names and eliminate name
-shadowing\index{name shadowing}. To avoid errors, we will rename
-arguments in one scope at a time:
+made clearer if we rename the arguments to eliminate shadowing of
+names\index{shadowed name}. To avoid errors, we will rename arguments
+one scope at a time:
 \begin{align*}
  & x\Rightarrow\text{twice}(\text{twice}(x))\\
 {\color{greenunder}\text{rename }x\text{ to }z:}\quad & =z\Rightarrow\text{twice}(\text{twice}(z))\\
@@ -963,10 +993,11 @@ arguments in one scope at a time:
 We find that \lstinline!twice(twice)! is a function that applies
 its (function-typed) argument \emph{four} times.
 
-The type parameters can be written out as \lstinline!twice[Int => Int](twice[Int])!,
-as we find from Eq.~(\ref{eq:hof-twice-example-solved3}) with $A=\text{Int}$.
-To test, we need to write at least one type parameter in the code,
-or else Scala cannot infer the types correctly:
+The type parameters follow from Eq.~(\ref{eq:hof-twice-example-solved3})
+with $A=\text{Int}$ and can be written as $\text{twice}^{\text{Int}\Rightarrow\text{Int}}(\text{twice}^{\text{Int}})$,
+or in Scala syntax, \lstinline!twice[Int => Int](twice[Int])!. To
+test, we need to write at least one type parameter in the code, or
+else Scala cannot infer the types correctly:
 \begin{lstlisting}
 scala> twice(twice[Int])(x => x + 3)(100) // _ + 3 + 3 + 3 + 3
 res0: Int = 112
@@ -990,14 +1021,13 @@ In the nameless function $f\Rightarrow f(2)$, the argument $f$ has
 to be itself a function, otherwise the expression $f(2)$ would make
 no sense. The sub-expression $f(2)$ will have correct types only
 if the argument of $f$ is of type \lstinline!Int!. Therefore, the
-type signature of $f$ must be \lstinline!Int => A!, where \lstinline!A!
-is the (so far unknown) type of the value \lstinline!f(2)!. The nameless
-function $f\Rightarrow f(2)$ has the argument of type \lstinline!Int => A!
-and the result of type \lstinline!A!, so the type of $p$ must be
-\lstinline!(Int => A) => A!. With this type assignment, all types
-match; so the type parameter \lstinline!A! remains undetermined,
-and must appear as a type parameter of the function \lstinline!p!.
-The code is
+type signature of $f$ must be $\text{Int}\Rightarrow A$, where $A$
+is the (so far unknown) type of the value $f(2)$. The nameless function
+$f\Rightarrow f(2)$ has the argument $f$ of type $\text{Int}\Rightarrow A$
+and the result of type $A$, so the type of $p$ must be $\left(\text{Int}\Rightarrow A\right)\Rightarrow A$.
+With this type assignment, all types match. The type parameter $A$
+remains undetermined, and must appear as a type parameter of the function
+\lstinline!p!. The code is
 \begin{lstlisting}
 def p[A]: (Int => A) => A = { f => f(2) }
 \end{lstlisting}
@@ -1087,10 +1117,10 @@ We see that the right associativity for the function arrow \lstinline!=>!
 is well adapted to the left associativity for function applications.
 All functional languages adopt these syntactic conventions.
 
-To perform the calculations faster, we will write code in a short
-mathematical notation rather than in the Scala syntax. We will write
-type annotations with a colon in the \emph{superscript}, for example:
-$x^{:\text{Int}}\Rightarrow x+10$ instead of the Scala code \lstinline!((x:Int) => x + 10)!.
+To perform the calculations faster, we will write code in a mathematical
+notation rather than in the Scala syntax. We will write type annotations
+with a colon in the \emph{superscript}, for example: $x^{:\text{Int}}\Rightarrow x+10$
+instead of the Scala code \lstinline!((x:Int) => x + 10)!.
 
 The symbolic evaluation of the Scala code \lstinline!((x:Int) => (y:Int) => x - y)(20)(4)!
 can be written as the following derivation,
@@ -1099,8 +1129,8 @@ can be written as the following derivation,
 {\color{greenunder}\text{substitute }x=20:}\quad & = & (\gunderline{y^{:\text{Int}}\Rightarrow}\,20-\gunderline y)\left(4\right)\\
 {\color{greenunder}\text{substitute }y=4:}\quad & = & 20-4=16\quad.
 \end{eqnarray*}
-We use the green underline to show the part of the expression that
-is being rewritten in the next step.
+(The green underline shows the part of the expression that is being
+rewritten in the next step.)
 
 Here we have been performing calculations step by step, substituting
 an argument into a function at each step. A Scala program is evaluated
@@ -1121,9 +1151,9 @@ to be itself a function, otherwise the expression $f(2)$ would make
 no sense. The argument $x$ of $f(x)$ must be an integer, or else
 we would not be able to compute $x+4$. The result of computing $f(2)$
 is $4$, and integer. We conclude that in this example, $f$ must
-have type \lstinline!Int => Int!, or else the types will not match.
-To verify this result in Scala, we need to specify the type annotation
-for $f$:
+have type $\text{Int}\Rightarrow\text{Int}$, or else the types will
+not match. To verify this result in Scala, we need to specify the
+type annotation for $f$:
 \begin{lstlisting}
 scala> ((f: Int => Int) => f(2))(x => x + 4)
 res2: Int = 6  
@@ -1164,17 +1194,27 @@ scala> ((p:Int) => (z:Int) => z*p)(10)(4)
 res5: Int = 40 
 \end{lstlisting}
 
-In the following examples, some arguments are themselves functions:
+In the following examples, some arguments are themselves functions.
+Consider the code $g\Rightarrow g(2)$. The body of this function
+contains the sub-expression $g(2)$, which makes sense only if $g$
+is itself a function with an integer argument. So, types will match
+if $g$ has type $\text{Int}\Rightarrow\text{Int}$ or $\text{Int}\Rightarrow\text{String}$
+or similar. The most general case is when $g$ has type $\text{Int}\Rightarrow A$,
+where $A$ is an arbitrary type (i.e.~a type parameter).
+
+Now we compute an expression that uses $\left(g\Rightarrow g(2)\right)$
+as an argument:
 \begin{align}
- & (\gunderline f\Rightarrow p\Rightarrow f(p))\left(g\Rightarrow g(2)\right)\nonumber \\
+ & (f\Rightarrow p\Rightarrow\gunderline f(p))\left(g\Rightarrow g(2)\right)\nonumber \\
 {\color{greenunder}\text{substitute }f=\left(g\Rightarrow g(2)\right):}\quad & =p\Rightarrow(g\Rightarrow\gunderline g(2))\,(p)\nonumber \\
 {\color{greenunder}\text{substitute }g=p:}\quad & =p\Rightarrow p(2)\quad.\label{eq:higher-order-functions-derivation1}
 \end{align}
 The result of this expression is a function $p\Rightarrow p(2)$ that
 will apply \emph{its} argument to the value $2$. In other words,
 this function expects that its argument $p$ has the type of a function
-\lstinline!Int => Int!. A suitable argument is a function $x\Rightarrow x+4$,
-and we can apply the previous expression to that function:
+$\text{Int}\Rightarrow\text{Int}$. A suitable argument is a function
+$x\Rightarrow x+4$, and we can apply the previous expression to that
+function:
 \begin{align*}
  & \gunderline{\left(f\Rightarrow p\Rightarrow f(p)\right)\left(g\Rightarrow g(2)\right)}\left(x\Rightarrow x+4\right)\\
 {\color{greenunder}\text{use Eq.~(\ref{eq:higher-order-functions-derivation1})}:}\quad & =(p\Rightarrow\gunderline p(2))\left(x\Rightarrow x+4\right)\\
@@ -1183,29 +1223,28 @@ and we can apply the previous expression to that function:
 \end{align*}
 
 To verify this calculation in Scala, we need to add appropriate type
-annotations for $f$ and $p$. The reasoning bout types goes like
-this: We know that the function $f\Rightarrow p\Rightarrow f(p)$
+annotations for $f$ and $p$. To figure out the types, we reason
+like this: We know that the function $f\Rightarrow p\Rightarrow f(p)$
 is being applied to the arguments $g\Rightarrow g(2)$ and $x\Rightarrow x+4$.
 The variable $g$ in $g\Rightarrow g(2)$ must be a function with
 argument of type \lstinline!Int!; let us assume that $g$ has type
-\lstinline!Int => A! with a type parameter \lstinline!A! that we
-do not yet know. It follows that the function $g\Rightarrow g(2)$
-has type \lstinline!(Int => A) => A!. This must also be the type
-of the argument $f$ in $f\Rightarrow p\Rightarrow f(p)$. 
+$\text{Int}\Rightarrow A$ with a new type parameter $A$. It follows
+that the function $g\Rightarrow g(2)$ has type $\left(\text{Int}\Rightarrow A\right)\Rightarrow A$.
+This must also be the type of the argument $f$ in $f\Rightarrow p\Rightarrow f(p)$. 
 
 The variable $x$ in $x\Rightarrow x+4$ must be of type \lstinline!Int!,
 or else we cannot add $x$ to $4$. So, the type of the expression
-$x\Rightarrow x+4$ is \lstinline!Int => Int!, and so must be the
-type of the argument $p$ in $f\Rightarrow p\Rightarrow f(p)$. 
+$x\Rightarrow x+4$ is $\text{Int}\Rightarrow\text{Int}$, and so
+must be the type of the argument $p$ in $f\Rightarrow p\Rightarrow f(p)$. 
 
 Finally, we need to make sure that the types match in the function
 $f\Rightarrow p\Rightarrow f(p)$. The types match in $f(p)$ if the
 type of $f$'s argument is the same as the type of $p$. Since $f$
-has type \lstinline!(Int => A) => A!, its argument has type \lstinline!Int => A!.
-This will be the same as the type of $p$, which is \lstinline!Int => Int!,
-only if we set \lstinline!A = Int!. So, the actual type of $f$ is
-\lstinline!(Int => Int) => Int!. We know enough to write the Scala
-code now:
+has type $\left(\text{Int}\Rightarrow A\right)\Rightarrow A$, its
+argument has type $\text{Int}\Rightarrow A$. This will be the same
+as the type of $p:\text{Int}\Rightarrow\text{Int}$ only if we set
+$A=\text{Int}$. So, the actual type of $f$ is $\left(\text{Int}\Rightarrow\text{Int}\right)\Rightarrow\text{Int}$.
+We know enough to write the Scala code now:
 \begin{lstlisting}
 scala> ((f: (Int => Int) => Int) => p => f(p))(g => g(2))(x => x + 4)
 res6: Int = 6
@@ -1214,229 +1253,16 @@ Type annotations for $p$, $g$, and $x$ are not necessary because
 Scala can derive their types unambiguously from the given type of
 $f$.
 
-\subsubsection{Example \label{subsec:Example-hof-derive-types-5}\ref{subsec:Example-hof-derive-types-5}}
-
-Infer the most general type for the fully parametric function
-\begin{lstlisting}
-def q[...]: ... = { f => g => g(f) }
-\end{lstlisting}
-What types are inferred for the expressions \lstinline!q(q)! and
-\lstinline!q(q(q))!?
-
-\subparagraph{Solution}
-
-In the sub-expression $f\Rightarrow g\Rightarrow g(f)$, the curried
-argument $g$ must itself be a function, because it is being applied
-to $f$ as $g(f)$. So we can assign types as $f^{:A}\Rightarrow g^{:A\Rightarrow B}\Rightarrow g(f)$,
-where $A$ and $B$ are some type parameters. Since there are no other
-constraints on the types, the parameters $A$ and $B$ remain arbitrary
-and need to be added to the type signature:
-\begin{lstlisting}
-def q[A, B]: A => (A => B) => B = { f => g => g(f) }
-\end{lstlisting}
-
-To match types in the expression \lstinline!q(q)!, we first assume
-arbitrary type parameters and write \lstinline!q[A,B](q[C,D])!. The
-type of the first curried argument of \lstinline!q[A, B]!, which
-is \lstinline!A!, must match the type of \lstinline!q[C, D]!, so
-we must set
-\[
-A=\left(C\Rightarrow\left(C\Rightarrow D\right)\Rightarrow D\right)\quad.
-\]
-The type of \lstinline!q(q)! becomes
-\begin{align*}
-q^{A,B}(q^{C,D}) & :\left(\left(C\Rightarrow\left(C\Rightarrow D\right)\Rightarrow D\right)\Rightarrow B\right)\Rightarrow B\quad,\\
-\text{where } & A\triangleq\left(C\Rightarrow\left(C\Rightarrow D\right)\Rightarrow D\right)\quad.
-\end{align*}
-
-We use this result to infer the most general type for the expression
-\lstinline!q(q(q))!. We may denote $r\triangleq q(q)$ for brevity;
-then, as we already know, $r$ has type $\left(\left(C\Rightarrow\left(C\Rightarrow D\right)\Rightarrow D\right)\Rightarrow B\right)\Rightarrow B$.
-To infer types in the expression \lstinline!q(r)!, we introduce new
-type parameters \lstinline!E, F! and write \lstinline!q[E, F](r)!.
-The type of the argument of \lstinline!q[E, F]! is \lstinline!E!,
-and this must be the same as the type of \lstinline!r!. This gives
-the constraint
-\[
-E=\left(\left(C\Rightarrow\left(C\Rightarrow D\right)\Rightarrow D\right)\Rightarrow B\right)\Rightarrow B\quad.
-\]
-Other than that, the type parameters are arbitrary. The type of the
-expression \lstinline!q(q(q))! is $\left(E\Rightarrow F\right)\Rightarrow F$.
-We conclude that the most general type of \lstinline!q(q(q))! is
-\begin{align*}
-q^{E,F}(q^{A,B}(q^{C,D})) & :\left(\left(\left(\left(C\Rightarrow\left(C\Rightarrow D\right)\Rightarrow D\right)\Rightarrow B\right)\Rightarrow B\right)\Rightarrow F\right)\Rightarrow F\quad,\\
-\text{where } & A\triangleq\left(C\Rightarrow\left(C\Rightarrow D\right)\Rightarrow D\right)\\
-\text{and } & E=\left(\left(C\Rightarrow\left(C\Rightarrow D\right)\Rightarrow D\right)\Rightarrow B\right)\Rightarrow B\quad.
-\end{align*}
-It is clear that we will be able to find matching types for expressions
-such as \lstinline!q(q(q(q)))!, \lstinline!q(q(q(q(q))))!, and so
-on.
-
-To test our results in Scala, we write the type signatures (renaming
-the type parameters for clarity to \lstinline!A!, \lstinline!B!,
-\lstinline!C!, \lstinline!D!):
-\begin{lstlisting}
-scala> def qq[A, B, C]: ((A => (A => B) => B) => C) => C = q(q)
-qq: [A, B, C]=> ((A => ((A => B) => B)) => C) => C
-
-scala> def qqq[A, B, C, D]: ((((A => (A => B) => B) => C) => C) => D) => D =
-     |  q(q(q))
-qqq: [A, B, C, D]=> ((((A => ((A => B) => B)) => C) => C) => D) => D
-\end{lstlisting}
-We did not need to give any type parameters within the expressions
-\lstinline!q(q)! and \lstinline!q(q(q))! because the full type signature
-was declared at the beginning of each of these expressions. Since
-the Scala compiler did not print any error messages, we are assured
-that the types match correctly.
-
-\subsubsection{Example \label{subsec:Example-hof-curried}\ref{subsec:Example-hof-curried}}
-
-Infer types in the code expression
-\[
-\left(f\Rightarrow g\Rightarrow g(f)\right)\left(f\Rightarrow g\Rightarrow g(f)\right)\left(f\Rightarrow f(10)\right)\quad,
-\]
-and simplify the code as much as possible.
-
-\subparagraph{Solution}
-
-The given expression is a curried function $f\Rightarrow g\Rightarrow g(f)$
-applied to two curried arguments. The plan is to consider each of
-these sub-expressions in turn, assigning types for them using type
-parameters, and then to figure out how to set the type parameters
-so that all types match.
-
-Begin by renaming the shadowed variables $f$ and $g$, so that no
-names are repeated:
-\begin{equation}
-\left(f\Rightarrow g\Rightarrow g(f)\right)\left(x\Rightarrow y\Rightarrow y(x)\right)\left(h\Rightarrow h(10)\right)\quad.\label{eq:example-hof-curried-function-solved1}
-\end{equation}
- As we have seen in Example~\ref{subsec:Example-hof-derive-types-5},
-the sub-expression $f\Rightarrow g\Rightarrow g(f)$ is typed as $f^{:A}\Rightarrow g^{:A\Rightarrow B}\Rightarrow g(f)$,
-where $A$ and $B$ are some type parameters. The sub-expression $x\Rightarrow y\Rightarrow y(x)$
-is the same function as $f\Rightarrow g\Rightarrow g(f)$ after renaming
-of the arguments ($x$ instead of $f$ and $y$ instead of $g$).
-Renaming a function's arguments does not change that function. So
-the types in $x\Rightarrow y\Rightarrow y(x)$ can be written as $x^{:C}\Rightarrow y^{:C\Rightarrow D}\Rightarrow y(x)$.
-We need to introduce new type parameters $C$, $D$ because these
-types may be different from $A$, $B$. The types $A$, $B$, $C$,
-$D$ are so far unknown.
-
-Finally, the variable $h$ in the sub-expression $h\Rightarrow h(10)$
-must have type $\text{Int}\Rightarrow E$, where $E$ is another type
-parameter. So, the sub-expression $h\Rightarrow h(10)$ is a function
-of type $\left(\text{Int}\Rightarrow E\right)\Rightarrow E$.
-
-The types must match in the entire expression~(\ref{eq:example-hof-curried-function-solved1}):
-\begin{equation}
-(f^{:A}\Rightarrow g^{:A\Rightarrow B}\Rightarrow g(f))(x^{:C}\Rightarrow y^{:C\Rightarrow D}\Rightarrow y(x))(h^{:\text{Int}\Rightarrow E}\Rightarrow h(10)\quad.\label{eq:example-hof-curried-function-solved2}
-\end{equation}
-It follows that $f$ must have the same type as $x\Rightarrow y\Rightarrow y(x)$,
-and $g$ must have the same type as $h\Rightarrow h(10)$. The type
-of $g$, which we know as $A\Rightarrow B$, will match the type of
-$h\Rightarrow h(10)$, which we know as $\left(\text{Int}\Rightarrow E\right)\Rightarrow E$,
-only if $A=\text{Int}\Rightarrow E$ and $B=E$. It follows that $f$
-has type $\text{Int}\Rightarrow E$. At the same time, the type of
-$f$ must match the type of $x\Rightarrow y\Rightarrow y(x)$, which
-is $C\Rightarrow(C\Rightarrow D)\Rightarrow D$. This can work only
-if $C=\text{Int}$ and $E=(C\Rightarrow D)\Rightarrow D$.
-
-In this way, we have found all the relationships between the type
-parameters $A$, $B$, $C$, $D$, $E$ in Eq.~(\ref{eq:example-hof-curried-function-solved2}).
-The type $D$ remains undetermined (i.e.~arbitrary), while 
-\begin{align}
-A & =\text{Int}\Rightarrow\left(\text{Int}\Rightarrow D\right)\Rightarrow D\quad,\label{eq:example-hof-curried-solved3}\\
-B & =E=\left(\text{Int}\Rightarrow D\right)\Rightarrow D\quad,\label{eq:example-hof-curried-solved4}\\
-C & =\text{Int}\quad.\nonumber 
-\end{align}
-The entire expression in Eq.~(\ref{eq:example-hof-curried-function-solved2})
-is a saturated application of a curried function, and thus has the
-same type as the ``final'' result expression $g(f)$, which has
-type $B$. So, the entire expression has type $\left(\text{Int}\Rightarrow D\right)\Rightarrow D$.
-
-Having established that types match, we can now omit the type annotations
-and rewrite the code expression as
-\begin{align*}
- & (f\Rightarrow g\Rightarrow\gunderline g(\gunderline f))\left(x\Rightarrow y\Rightarrow y(x)\right)\left(h\Rightarrow h(10)\right)\\
-{\color{greenunder}\text{substitute }f,g:}\quad & =(h\Rightarrow\gunderline h(10))\left(x\Rightarrow y\Rightarrow y(x)\right)\\
-{\color{greenunder}\text{substitute }h:}\quad & =(x\Rightarrow y\Rightarrow y(\gunderline x))(10)\\
-{\color{greenunder}\text{substitute }x:}\quad & =y\Rightarrow y(10)\quad.
-\end{align*}
-The type of this expression is $\left(\text{Int}\Rightarrow D\right)\Rightarrow D$
-for an arbitrary type $D$. Since the argument $y$ is an arbitrary
-function, we cannot simplify $y(10)$. We find that 
-\[
-y^{:\text{Int}\Rightarrow D}\Rightarrow y(10)
-\]
-is the final simplified form of Eq.~(\ref{eq:example-hof-curried-function-solved1}).
-
-To test this in Scala, we first define the function $f\Rightarrow g\Rightarrow g(f)$
-as in Example~\ref{subsec:Example-hof-derive-types-5},
-\begin{lstlisting}
-def q[A, B]: A => (A => B) => B = { f => g => g(f) }
-\end{lstlisting}
-We also define the function $h\Rightarrow h(10)$ with a general type
-$\left(\text{Int}\Rightarrow E\right)\Rightarrow E$,
-\begin{lstlisting}
-def r[E]: (Int => E) => E = { h => h(10) }
-\end{lstlisting}
-To help Scala evaluate Eq.~(\ref{eq:example-hof-curried-function-solved2}),
-we need to set the type parameters for the first \lstinline!q! function
-as \lstinline!q[A, B]! where \lstinline!A! and \lstinline!B! are
-given by Eqs.~(\ref{eq:example-hof-curried-solved3})\textendash (\ref{eq:example-hof-curried-solved4}):
-\begin{lstlisting}
-scala> def s[D] = q[Int => (Int => D) => D, (Int => D) => D](q)(r)
-s: [D]=> (Int => D) => D
-\end{lstlisting}
-To verify that the function $s^{D}$ equals $y^{:\text{Int}\Rightarrow D}\Rightarrow y(10)$,
-we apply $s^{D}$ to some functions of type $\text{Int}\Rightarrow D$,
-say, for $D=\text{Boolean}$ and $D=\text{Int}$:
-\begin{lstlisting}
-scala> s(_ > 0) // Evaluate 10 > 0.
-res6: Boolean = true
-
-scala> s(_ + 20) // Evaluate 10 + 20.
-res7: Int = 30
-\end{lstlisting}
-
-
-\subsubsection{Exercise \label{subsec:Exercise-hof-curried-1}\ref{subsec:Exercise-hof-curried-1}}
-
-Apply the function $\left(x\Rightarrow\_\Rightarrow x\right)$ to
-the value $\left(z\Rightarrow z(q)\right)$ where $q$ is a given
-value of type $Q$. Infer types in the resulting expression.
-
-\subsubsection{Exercise \label{subsec:Exercise-hof-curried-3}\ref{subsec:Exercise-hof-curried-3}}
-
-Infer types in the following expressions:
-\begin{align*}
-\text{(a):}\quad & p\Rightarrow q\Rightarrow p(t\Rightarrow t(q))\quad,\\
-\text{(b):}\quad & p\Rightarrow q\Rightarrow q(x\Rightarrow x(p(q)))\quad.
-\end{align*}
-
-
-\subsubsection{Exercise \label{subsec:Exercise-hof-curried-4}\ref{subsec:Exercise-hof-curried-4}}
-
-Show that the following expressions are not well-typed:
-\begin{align*}
-\text{(a):}\quad & p\Rightarrow p(q\Rightarrow q(p))\quad,\\
-\text{(b):}\quad & p\Rightarrow q\Rightarrow q(x\Rightarrow p(q(x)))\quad.
-\end{align*}
-
-
-\subsubsection{Exercise \label{subsec:Exercise-hof-curried-2}\ref{subsec:Exercise-hof-curried-2}}
-
-Infer types and simplify the following code expressions:
-\begin{align*}
-\text{(a):}\quad & q\Rightarrow\left(x\Rightarrow y\Rightarrow z\Rightarrow x(z)(y(z))\right)\left(a\Rightarrow a\right)\left(b\Rightarrow b(q)\right)\quad,\\
-\text{(b):}\quad & \left(f\Rightarrow g\Rightarrow h\Rightarrow f(g(h))\right)(x\Rightarrow x)\quad,\\
-\text{(c):}\quad & \left(x\Rightarrow y\Rightarrow x(y)\right)\left(x\Rightarrow y\Rightarrow x\right)\quad,\\
-\text{(d):}\quad & \left(x\Rightarrow y\Rightarrow x(y)\right)\left(x\Rightarrow y\Rightarrow y\right)\quad,\\
-\text{(e):}\quad & x\Rightarrow\left(f\Rightarrow y\Rightarrow f(y)(x)\right)\left(z\Rightarrow\_\Rightarrow z\right)\quad,\\
-\text{(f):}\quad & z\Rightarrow\left(x\Rightarrow y\Rightarrow x\right)\left(x\Rightarrow x(z)\right)(y\Rightarrow y(z))\quad.
-\end{align*}
-
-
 \section{Summary}
+
+What can we do with this chapter's techniques?
+\begin{itemize}
+\item Implement functions that return new functions, and/or take functions
+as arguments.
+\item Convert functions to a fully parametric form.
+\item Infer types from code of fully parametric functions.
+\end{itemize}
+The following solved examples and exercises illustrate these techniques.
 
 \begin{comment}
 infer the type from the code that you write so you write some code
@@ -2161,117 +1987,460 @@ in the same way and I encourage you to do these exercises
 \end{comment}
 
 
-\subsection{Solved examples: higher-order functions}
+\subsection{Solved examples}
+
+\subsubsection{Example \label{subsec:Example-hof-simple-1}\ref{subsec:Example-hof-simple-1}}
 
 Implement a function that applies a given function $f$ repeatedly
-to an initial value $x_{0}$, until a given condition function cond
-returns true:
+to an initial value $x_{0}$, until a given condition function \lstinline!cond!
+returns \lstinline!true!:
+\begin{lstlisting}
+def converge[X](f: X => X, x0: X, cond: X => Boolean): X = ???
+\end{lstlisting}
 
-def converge{[}X{]}(f: X $\Rightarrow$ X, x0: X, cond: X $\Rightarrow$
-Boolean): X = ???
-\begin{enumerate}
-\item Using both \lstinline!def! and \lstinline!val!, define a function
-that...
-\begin{enumerate}
-\item ...adds $20$ to its integer argument.
-\begin{lyxcode}
-def~fa(i:~Int):~Int~=~i~+~20
 
-val~fa\_v:~(Int~$\Rightarrow$~Int)~=~k~$\Rightarrow$~k~+~20
-\end{lyxcode}
-It is not necessary to specify the type of the argument \texttt{k}
-because we already fully specified the type \texttt{(Int => Int)}
-of \texttt{fa\_v}. The parentheses around the type of \texttt{fa\_v}
-are optional, I added them for clarity.
-\item ...takes an integer $x$, and returns a \emph{function} that adds
-$x$ to \emph{its} argument.
-\begin{lyxcode}
-def~fb(x:~Int):~(Int~$\Rightarrow$~Int)~=~k~$\Rightarrow$~k~+~x
+\subparagraph{Solution}
 
-val~fb\_v:~(Int~$\Rightarrow$~Int~$\Rightarrow$~Int)~=~x~$\Rightarrow$~k~$\Rightarrow$~k~+~x
+We create an iterator that keeps applying the function $f$, and determine
+when the condition holds with \lstinline!.find!:
+\begin{lstlisting}
+def converge[X](f: X => X, x0: X, cond: X => Boolean): X = 
+  Stream.iterate(x0)(f) // Type is Stream[X].
+  .find(cond) // Type is Option[X].
+  .get // Type is X.
+\end{lstlisting}
+Here it is safe to perform \lstinline!.get! on an \lstinline!Option!:
+if the condition never holds, the program will either run out of memory
+(since \lstinline!Stream.iterate! keeps all computed values in memory)
+or the user runs out of time.
 
-def~fb\_v2(x:~Int)(k:~Int):~Int~=~k~+~x
-\end{lyxcode}
-Since functions are values, we can directly return new functions.
-When defining the right-hand sides as function expressions in \texttt{fb}
-and \texttt{fb\_v}, it is not necessary to specify the type of the
-arguments \texttt{x} and \texttt{k} because we already fully specified
-the type signatures of \texttt{fb} and \texttt{fb\_v}. The last version,
-\texttt{fb\_v2}, may be easier to read and is equivalent to \texttt{fb\_v.}
-\item ...takes an integer $x$ and returns \texttt{true} iff $x+1$ is a
-prime. Use the function \texttt{is\_prime} defined previously.
-\begin{lyxcode}
-def~fc(x:~Int):~Boolean~=~is\_prime(x~+~1)
+An alternative implementation that operates in constant memory is
+a tail-recursive function
+\begin{lstlisting}
+@tailrec def converge[X](f: X  X, x0: X, cond: X  Boolean): X =
+  if (cond(x0)) x0 else converge(f, f(x0), cond)
+\end{lstlisting}
 
-val~fc\_v:~(Int~$\Rightarrow$~Boolean)~=~x~$\Rightarrow$~is\_prime(x~+~1)
-\end{lyxcode}
-\end{enumerate}
-\item Define a function \texttt{comp} that takes two functions $f:$\texttt{Int
-$\Rightarrow$ Double} and $g:$\texttt{Double $\Rightarrow$ String}
-as arguments, and returns a new function that computes $g(f(x))$.
-What is the type of the function \texttt{comp}?
-\begin{lyxcode}
-{\footnotesize{}def~comp(f:~Int~$\Rightarrow$~Double,~g:~Double~$\Rightarrow$~String):~(Int~$\Rightarrow$~String)~=}{\footnotesize\par}
+To test, let us compute an approximation to the square root of a given
+number $q$ by Newton's method. The iteration function $f$ is 
+\[
+f(x)=\frac{x+q/x}{2}\quad.
+\]
+We iterate $f(x)$ starting with $x_{0}=q/2$ until we obtain a required
+precision:
+\begin{lstlisting}
+def approx_sqrt(x: Double, precision: Double): Double = {
+      def cond(y: Double): Boolean = math.abs(y * y - x) <= precision
+      def iterate_sqrt(y: Double): Double = (y + x / y) / 2
+      converge(iterate_sqrt, x / 2, cond)
+}
+\end{lstlisting}
+Test it:
+\begin{lstlisting}
+scala> approx_sqrt(25, 1.0e-8)
+res0: Double = 5.000000000016778
+\end{lstlisting}
 
-{\footnotesize{}~~x~$\Rightarrow$~g(f(x))}{\footnotesize\par}
 
-{\footnotesize{}scala>~val~f:~Int~$\Rightarrow$~Double~=~x~$\Rightarrow$~5.67~+~x}{\footnotesize\par}
+\subsubsection{Example \label{subsec:Example-hof-simple-2}\ref{subsec:Example-hof-simple-2}}
 
-{\footnotesize{}scala>~val~g:~Double~$\Rightarrow$~String~=~x~$\Rightarrow$~f\textquotedbl x=\%3.2f\textquotedbl}{\footnotesize\par}
+Using both \lstinline!def! and \lstinline!val!, define a Scala function
+that takes an integer \lstinline!x! and returns a function that adds
+\lstinline!x! to \emph{its} argument.
 
-{\footnotesize{}scala>~val~h~=~comp(f,~g)}{\footnotesize\par}
+\subparagraph{Solution}
 
-{\footnotesize{}scala>~h(10)}{\footnotesize\par}
-\end{lyxcode}
-The function \texttt{comp} has two arguments, of types \texttt{Int
-$\Rightarrow$ Double} and \texttt{Double $\Rightarrow$ String}.
-The result value of \texttt{comp} is of type \texttt{Int $\Rightarrow$
-String}, because \texttt{comp} returns a new function that takes an
-argument $x$ of type \texttt{Int} and returns a \texttt{String}.
-So the full type signature of the function \texttt{comp} is written
-as
-\begin{lyxcode}
-///~(Int~$\Rightarrow$~Double,~Double~$\Rightarrow$~String)~$\Rightarrow$~(Int~$\Rightarrow$~String)
-\end{lyxcode}
-This is an example of a function that both takes other functions as
-arguments \emph{and} returns a new function.
-\end{enumerate}
+Let us first write down the required type signature: the function
+must take an integer argument \lstinline!x:Int!, and the return value
+must be a function of type \lstinline!Int => Int!.
+\begin{lstlisting}
+def add_x(x: Int): Int => Int = ???
+\end{lstlisting}
+We are required to return a function that adds \lstinline!x! to its
+argument. Let us call that argument \lstinline!z!, to avoid confusion
+with the \lstinline!x!. So, we are required to return a function
+that we can write as \lstinline!{ z => z + x }!. Since functions
+are values, we can directly return new functions by writing a nameless
+function expression:
+\begin{lstlisting}
+def add_x(x: Int): Int => Int = { z => z + x }
+\end{lstlisting}
+
+To implement the same function via a \lstinline!val!, we first convert
+the type signature of \lstinline!add_x! to the equivalent type expression
+$\text{Int}\Rightarrow\text{Int}\Rightarrow\text{Int}$. Now we can
+write the Scala code of a function \lstinline!add_x_v!:
+\begin{lstlisting}
+val add_x_v: Int => Int => Int = x => z => z + x
+\end{lstlisting}
+The function \lstinline!add_x_v! is equal to \lstinline!add_x! except
+for using the \lstinline!val! syntax instead of \lstinline!def!.
+It is not necessary to specify the type of the arguments \lstinline!x!
+and \lstinline!z! because we already fully specified the type $\text{Int}\Rightarrow\text{Int}\Rightarrow\text{Int}$
+of the value \lstinline!add_x_v!. 
+
+\subsubsection{Example \label{subsec:Example-hof-simple-3}\ref{subsec:Example-hof-simple-3}}
+
+Using both \lstinline!def! and \lstinline!val!, implement a curried
+function \lstinline!prime_f! that takes a function $f$ and an integer
+$x$, and returns \lstinline!true! iff $f(x)$ is a prime. Use the
+function \lstinline!is_prime! defined in Section~\ref{subsec:Nameless-functions}. 
+
+\subparagraph{Solution}
+
+First, we need to determine the required type signature of \lstinline!prime_f!.
+The value $f(x)$ must have integer type, or else we cannot check
+whether it is prime. So, $f$ must have type $\text{Int}\Rightarrow\text{Int}$.
+Since \lstinline!prime_f! should be a curried function, we need to
+put each argument into its own set of parentheses:
+\begin{lstlisting}
+def prime_f(f: Int => Int)(x: Int): Boolean = ???
+\end{lstlisting}
+To implement \lstinline!prime_f!, we need to return the result of
+\lstinline!is_prime! applied to \lstinline!f(x)!. A simple solution
+is
+\begin{lstlisting}
+def prime_f(f: Int => Int)(x: Int): Boolean = is_prime(f(x))
+\end{lstlisting}
+
+Let us now implement the same function as a \lstinline!val!. We have
+to rewrite the type signature as
+\begin{lstlisting}
+val prime_f: (Int => Int) => Int => Boolean = ???
+\end{lstlisting}
+The implementation is
+\begin{lstlisting}
+val prime_f: (Int => Int) => Int => Boolean = f => x => is_prime(f(x))
+\end{lstlisting}
+We also notice that the code is a forward composition of the functions
+\lstinline!f! and \lstinline!is_prime!, so we can rewrite it as
+\begin{lstlisting}
+val prime_f: (Int => Int) => Int => Boolean = f => f andThen is_prime
+\end{lstlisting}
+The function body is of the form \lstinline!f => f.something!, which
+is equivalent to a shorter Scala syntax \lstinline!(_.something)!.
+So we can rewrite the code of \lstinline!prime_f! as
+\begin{lstlisting}
+val prime_f: (Int => Int) => Int => Boolean = (_ andThen is_prime)
+\end{lstlisting}
+
+
+\subsubsection{Example \label{subsec:Example-hof-simple-4}\ref{subsec:Example-hof-simple-4}}
+
+Implement a function \lstinline!choice(x,p,f,g)! that takes a value
+$x$, a predicate $p$, and two functions $f$ and $g$. The return
+value must be $f(x)$ if $p(x)$ returns true; otherwise the return
+value must be $g(x)$. Infer the most general type of this function.
+
+\subparagraph{Solution}
+
+We begin by assuming that $x$ has type $A$, where $A$ is a type
+parameter. Then predicate $p$ must have type \lstinline!A => Boolean!.
+Since we are returning $f(x)$ or $g(x)$, the type $A$ must also
+be the argument type of both $f$ and $g$. So we may assume $f^{:A\Rightarrow B}$
+and $g^{:A\Rightarrow C}$. The type signature of the function is
+(so far)
+\[
+\text{choice}(x^{:A},p^{:A\Rightarrow\text{Boolean}},f^{:A\Rightarrow B},g^{:A\Rightarrow C})\quad.
+\]
+The code of this function must be
+\begin{lstlisting}
+def choice[...](x,p,f,g) = if (p(x)) f(x) else g(x)
+\end{lstlisting}
+
+Now let us infer the most general type signature for this code. What
+could be the return type of \lstinline!choice(x,p,f,g)!? Since $p$
+is an arbitrary predicate, the value $p(x)$ will be sometimes \lstinline!true!
+and sometimes \lstinline!false!. If $p(x)$ returns \lstinline!true!,
+the function \lstinline!choice! returns $f(x)$, which is of type
+$B$. Otherwise, \lstinline!choice! returns $g(x)$, which is of
+type $C$. However, the type signature of \lstinline!choice! must
+be fixed in advance (at compile time) and cannot depend on values
+of $p(x)$ passed to the function at run time. So, the types of $f(x)$
+and the type of $g(x)$ must be the same, $B=C$. The type signature
+of \lstinline!choice! will thus have only two type parameters, $A$
+and $B$:
+\begin{lstlisting}
+def choice[A, B](x: A, p: A => Boolean, f: A => B, g: A => B): B =
+  if (p(x)) f(x) else g(x)
+\end{lstlisting}
+
+
+\subsubsection{Example \label{subsec:Example-hof-derive-types-5}\ref{subsec:Example-hof-derive-types-5}}
+
+Infer the most general type for the fully parametric function
+\begin{lstlisting}
+def q[...]: ... = { f => g => g(f) }
+\end{lstlisting}
+What types are inferred for the expressions \lstinline!q(q)! and
+\lstinline!q(q(q))!?
+
+\subparagraph{Solution}
+
+In the sub-expression $f\Rightarrow g\Rightarrow g(f)$, the curried
+argument $g$ must itself be a function, because it is being applied
+to $f$ as $g(f)$. So we can assign types as $f^{:A}\Rightarrow g^{:A\Rightarrow B}\Rightarrow g(f)$,
+where $A$ and $B$ are some type parameters. Since there are no other
+constraints on the types, the parameters $A$ and $B$ remain arbitrary
+and need to be added to the type signature:
+\begin{lstlisting}
+def q[A, B]: A => (A => B) => B = { f => g => g(f) }
+\end{lstlisting}
+
+To match types in the expression \lstinline!q(q)!, we first assume
+arbitrary type parameters and write \lstinline!q[A,B](q[C,D])!. The
+type of the first curried argument of \lstinline!q[A, B]!, which
+is $A$, must match the type of \lstinline!q[C, D]!, so we must set
+\[
+A=\left(C\Rightarrow\left(C\Rightarrow D\right)\Rightarrow D\right)\quad.
+\]
+The type of \lstinline!q(q)! becomes
+\begin{align*}
+q^{A,B}(q^{C,D}) & :\left(\left(C\Rightarrow\left(C\Rightarrow D\right)\Rightarrow D\right)\Rightarrow B\right)\Rightarrow B\quad,\\
+\text{where}\quad & A\triangleq\left(C\Rightarrow\left(C\Rightarrow D\right)\Rightarrow D\right)\quad.
+\end{align*}
+
+We use this result to infer the most general type for the expression
+\lstinline!q(q(q))!. We may denote $r\triangleq q(q)$ for brevity;
+then, as we already know, $r$ has type $\left(\left(C\Rightarrow\left(C\Rightarrow D\right)\Rightarrow D\right)\Rightarrow B\right)\Rightarrow B$.
+To infer types in the expression \lstinline!q(r)!, we introduce new
+type parameters $E$, $F$ and write \lstinline!q[E, F](r)!. The
+type of the argument of \lstinline!q[E, F]! is $E$, and this must
+be the same as the type of $r$. This gives the constraint
+\[
+E=\left(\left(C\Rightarrow\left(C\Rightarrow D\right)\Rightarrow D\right)\Rightarrow B\right)\Rightarrow B\quad.
+\]
+Other than that, the type parameters are arbitrary. The type of the
+expression \lstinline!q(q(q))! is $\left(E\Rightarrow F\right)\Rightarrow F$.
+We conclude that the most general type of \lstinline!q(q(q))! is
+\begin{align*}
+q^{E,F}(q^{A,B}(q^{C,D})) & :\left(\left(\left(\left(C\Rightarrow\left(C\Rightarrow D\right)\Rightarrow D\right)\Rightarrow B\right)\Rightarrow B\right)\Rightarrow F\right)\Rightarrow F\quad,\\
+\text{where}\quad & A\triangleq\left(C\Rightarrow\left(C\Rightarrow D\right)\Rightarrow D\right)\\
+\text{and}\quad & E=\left(\left(C\Rightarrow\left(C\Rightarrow D\right)\Rightarrow D\right)\Rightarrow B\right)\Rightarrow B\quad.
+\end{align*}
+It is clear that we will be able to find matching types for expressions
+such as \lstinline!q(q(q(q)))!, \lstinline!q(q(q(q(q))))!, and so
+on.
+
+To test our results in Scala, we write the type signatures (renaming
+the type parameters for clarity to \lstinline!A!, \lstinline!B!,
+\lstinline!C!, \lstinline!D!):
+\begin{lstlisting}
+scala> def qq[A, B, C]: ((A => (A => B) => B) => C) => C = q(q)
+qq: [A, B, C]=> ((A => ((A => B) => B)) => C) => C
+
+scala> def qqq[A, B, C, D]: ((((A => (A => B) => B) => C) => C) => D) => D =
+     |  q(q(q))
+qqq: [A, B, C, D]=> ((((A => ((A => B) => B)) => C) => C) => D) => D
+\end{lstlisting}
+We did not need to give any type parameters within the expressions
+\lstinline!q(q)! and \lstinline!q(q(q))! because the full type signature
+was declared at the beginning of each of these expressions. Since
+the Scala compiler did not print any error messages, we are assured
+that the types match correctly.
+
+\subsubsection{Example \label{subsec:Example-hof-curried}\ref{subsec:Example-hof-curried}}
+
+Infer types in the code expression
+\[
+\left(f\Rightarrow g\Rightarrow g(f)\right)\left(f\Rightarrow g\Rightarrow g(f)\right)\left(f\Rightarrow f(10)\right)\quad,
+\]
+and simplify the code as much as possible.
+
+\subparagraph{Solution}
+
+The given expression is a curried function $f\Rightarrow g\Rightarrow g(f)$
+applied to two curried arguments. The plan is to consider each of
+these sub-expressions in turn, assigning types for them using type
+parameters, and then to figure out how to set the type parameters
+so that all types match.
+
+Begin by renaming the shadowed variables $f$ and $g$, so that no
+names are repeated:
+\begin{equation}
+\left(f\Rightarrow g\Rightarrow g(f)\right)\left(x\Rightarrow y\Rightarrow y(x)\right)\left(h\Rightarrow h(10)\right)\quad.\label{eq:example-hof-curried-function-solved1}
+\end{equation}
+ As we have seen in Example~\ref{subsec:Example-hof-derive-types-5},
+the sub-expression $f\Rightarrow g\Rightarrow g(f)$ is typed as $f^{:A}\Rightarrow g^{:A\Rightarrow B}\Rightarrow g(f)$,
+where $A$ and $B$ are some type parameters. The sub-expression $x\Rightarrow y\Rightarrow y(x)$
+is the same function as $f\Rightarrow g\Rightarrow g(f)$ after renaming
+of the arguments ($x$ instead of $f$ and $y$ instead of $g$).
+Renaming a function's arguments does not change that function. So
+the types in $x\Rightarrow y\Rightarrow y(x)$ can be written as $x^{:C}\Rightarrow y^{:C\Rightarrow D}\Rightarrow y(x)$.
+We need to introduce new type parameters $C$, $D$ because these
+types may be different from $A$, $B$. The types $A$, $B$, $C$,
+$D$ are so far unknown.
+
+Finally, the variable $h$ in the sub-expression $h\Rightarrow h(10)$
+must have type $\text{Int}\Rightarrow E$, where $E$ is another type
+parameter. So, the sub-expression $h\Rightarrow h(10)$ is a function
+of type $\left(\text{Int}\Rightarrow E\right)\Rightarrow E$.
+
+The types must match in the entire expression~(\ref{eq:example-hof-curried-function-solved1}):
+\begin{equation}
+(f^{:A}\Rightarrow g^{:A\Rightarrow B}\Rightarrow g(f))(x^{:C}\Rightarrow y^{:C\Rightarrow D}\Rightarrow y(x))(h^{:\text{Int}\Rightarrow E}\Rightarrow h(10)\quad.\label{eq:example-hof-curried-function-solved2}
+\end{equation}
+It follows that $f$ must have the same type as $x\Rightarrow y\Rightarrow y(x)$,
+and $g$ must have the same type as $h\Rightarrow h(10)$. The type
+of $g$, which we know as $A\Rightarrow B$, will match the type of
+$h\Rightarrow h(10)$, which we know as $\left(\text{Int}\Rightarrow E\right)\Rightarrow E$,
+only if $A=\text{Int}\Rightarrow E$ and $B=E$. It follows that $f$
+has type $\text{Int}\Rightarrow E$. At the same time, the type of
+$f$ must match the type of $x\Rightarrow y\Rightarrow y(x)$, which
+is $C\Rightarrow(C\Rightarrow D)\Rightarrow D$. This can work only
+if $C=\text{Int}$ and $E=(C\Rightarrow D)\Rightarrow D$.
+
+In this way, we have found all the relationships between the type
+parameters $A$, $B$, $C$, $D$, $E$ in Eq.~(\ref{eq:example-hof-curried-function-solved2}).
+The type $D$ remains undetermined (i.e.~arbitrary), while 
+\begin{align}
+A & =\text{Int}\Rightarrow\left(\text{Int}\Rightarrow D\right)\Rightarrow D\quad,\label{eq:example-hof-curried-solved3}\\
+B & =E=\left(\text{Int}\Rightarrow D\right)\Rightarrow D\quad,\label{eq:example-hof-curried-solved4}\\
+C & =\text{Int}\quad.\nonumber 
+\end{align}
+The entire expression in Eq.~(\ref{eq:example-hof-curried-function-solved2})
+is a saturated application of a curried function, and thus has the
+same type as the ``final'' result expression $g(f)$, which has
+type $B$. So, the entire expression has type $\left(\text{Int}\Rightarrow D\right)\Rightarrow D$.
+
+Having established that types match, we can now omit the type annotations
+and rewrite the code expression as
+\begin{align*}
+ & (f\Rightarrow g\Rightarrow\gunderline g(\gunderline f))\left(x\Rightarrow y\Rightarrow y(x)\right)\left(h\Rightarrow h(10)\right)\\
+{\color{greenunder}\text{substitute }f,g:}\quad & =(h\Rightarrow\gunderline h(10))\left(x\Rightarrow y\Rightarrow y(x)\right)\\
+{\color{greenunder}\text{substitute }h:}\quad & =(x\Rightarrow y\Rightarrow y(\gunderline x))(10)\\
+{\color{greenunder}\text{substitute }x:}\quad & =y\Rightarrow y(10)\quad.
+\end{align*}
+The type of this expression is $\left(\text{Int}\Rightarrow D\right)\Rightarrow D$
+for an arbitrary type $D$. Since the argument $y$ is an arbitrary
+function, we cannot simplify $y(10)$. We find that 
+\[
+y^{:\text{Int}\Rightarrow D}\Rightarrow y(10)
+\]
+is the final simplified form of Eq.~(\ref{eq:example-hof-curried-function-solved1}).
+
+To test this in Scala, we first define the function $f\Rightarrow g\Rightarrow g(f)$
+as in Example~\ref{subsec:Example-hof-derive-types-5},
+\begin{lstlisting}
+def q[A, B]: A => (A => B) => B = { f => g => g(f) }
+\end{lstlisting}
+We also define the function $h\Rightarrow h(10)$ with a general type
+$\left(\text{Int}\Rightarrow E\right)\Rightarrow E$,
+\begin{lstlisting}
+def r[E]: (Int => E) => E = { h => h(10) }
+\end{lstlisting}
+To help Scala evaluate Eq.~(\ref{eq:example-hof-curried-function-solved2}),
+we need to set the type parameters for the first \lstinline!q! function
+as \lstinline!q[A, B]! where $A$ and $B$ are given by Eqs.~(\ref{eq:example-hof-curried-solved3})\textendash (\ref{eq:example-hof-curried-solved4}):
+\begin{lstlisting}
+scala> def s[D] = q[Int => (Int => D) => D, (Int => D) => D](q)(r)
+s: [D]=> (Int => D) => D
+\end{lstlisting}
+To verify that the function $s^{D}$ equals $y^{:\text{Int}\Rightarrow D}\Rightarrow y(10)$,
+we apply $s^{D}$ to some functions of type $\text{Int}\Rightarrow D$,
+say, for $D=\text{Boolean}$ and $D=\text{Int}$:
+\begin{lstlisting}
+scala> s(_ > 0) // Evaluate 10 > 0.
+res6: Boolean = true
+
+scala> s(_ + 20) // Evaluate 10 + 20.
+res7: Int = 30
+\end{lstlisting}
+
 
 \subsection{Exercises}
 
-For the function id defined above, what is id(id) and what is its
-type? Same question for id(const). Are id(id)(id) or id(id(id)) well-typed? 
+\subsubsection{Exercise \label{subsec:Exercise-hof-simple-1}\ref{subsec:Exercise-hof-simple-1}}
 
-For the function const above, what is const(const), and what is its
-type?
+For the function \lstinline!id! defined above, what is \lstinline!id(id)!
+and what is its type? Same question for \lstinline!id(const)!. Are
+\lstinline!id(id)(id)! or \lstinline!id(id(id))! well-typed? What
+are they simplified to?
 
-For the function twice above, what does twice(twice(twice))) do? Write
-out the type parameters. Test your answer on an example.
+\subsubsection{Exercise \label{subsec:Exercise-hof-simple-2}\ref{subsec:Exercise-hof-simple-2}}
 
-Define a function thrice that applies its argument function 3 times,
-similarly to twice. What does thrice(thrice(thrice))) do?
+For the function \lstinline!const! defined above, what is \lstinline!const(const)!
+simplified to, and what is its most general type?
 
-Define a function ence that applies a given function $n$ times.
+\subsubsection{Exercise \label{subsec:Exercise-hof-simple-3}\ref{subsec:Exercise-hof-simple-3}}
 
-Define a function flip(f) with fully parametric types, which swaps
-arguments for any given function f of two arguments. To test: 
+For the function \lstinline!twice! from Example~\ref{subsec:Example-hof-derive-types-2},
+what does \lstinline!twice(twice(twice)))! do? Write out the type
+parameters. Test your answer on an example.
 
-def f(x: Int, y: Int) = x - y // check that f(10, 2) gives 8
+\subsubsection{Exercise \label{subsec:Exercise-hof-simple-4}\ref{subsec:Exercise-hof-simple-4}}
 
-val g = flip(f)  // now check that g(10, 2) gives (\textendash{} 8)
-\begin{enumerate}
-\item Implement a function of type \texttt{}\lstinline!Int => List[List[Int]] => List[List[Int]]!
+Define a function \lstinline!thrice! similarly to \lstinline!twice!
+except it should apply a given function $3$ times. What does \lstinline!thrice(thrice(thrice)))!
+do?
+
+\subsubsection{Exercise \label{subsec:Exercise-hof-simple-5}\ref{subsec:Exercise-hof-simple-5}}
+
+Define a function \lstinline!ence! similarly to \lstinline!twice!
+except it should apply a given function $n$ times.
+
+\subsubsection{Exercise \label{subsec:Exercise-hof-simple-6}\ref{subsec:Exercise-hof-simple-6}}
+
+Define a fully parametric function \lstinline!flip(f)! that swaps
+arguments for any given function \lstinline!f! of two arguments.
+To test: 
+
+\begin{lstlisting}
+def f(x: Int, y: Int) = x - y // Check that f(10, 2) == 8.
+val g = flip(f)  // Now check that g(2, 10) == 8.
+\end{lstlisting}
+
+
+\subsubsection{Exercise \label{subsec:Exercise-hof-simple-7}\ref{subsec:Exercise-hof-simple-7}}
+
+Implement a function of type \texttt{}\lstinline!Int => List[List[Int]] => List[List[Int]]!
 similar to Exercise~\ref{subsec:ch1-transf-Exercise-4} except that
 the hard-coded number $100$ must be a \emph{curried} first argument.
 Implement Exercise~\ref{subsec:ch1-transf-Exercise-4} using this
 function.
-\item Implement a function thrice that takes a function $f^{:\text{Int}\Rightarrow\text{Int}}$
-as its argument and returns a new function that computes $f(f(f(x)))$
-for any given $x$. What is the required type of the function $q$?
-\item Implement a function \lstinline!curry2! that takes an uncurried function
+
+\subsubsection{Exercise \label{subsec:Exercise-hof-simple-8}\ref{subsec:Exercise-hof-simple-8}}
+
+Implement a function \lstinline!curry2! that takes an uncurried function
 of type \texttt{}\lstinline!(Int, Int) => Int! and returns an equivalent
 curried function of type \texttt{}\lstinline!Int => Int => Int!.
-\end{enumerate}
+
+\subsubsection{Exercise \label{subsec:Exercise-hof-curried-1}\ref{subsec:Exercise-hof-curried-1}}
+
+Apply the function $\left(x\Rightarrow\_\Rightarrow x\right)$ to
+the value $\left(z\Rightarrow z(q)\right)$ where $q$ is a given
+value of type $Q$. Infer types in the resulting expression.
+
+\subsubsection{Exercise \label{subsec:Exercise-hof-curried-3}\ref{subsec:Exercise-hof-curried-3}}
+
+Infer types in the following expressions:
+\begin{align*}
+\text{(a):}\quad & p\Rightarrow q\Rightarrow p(t\Rightarrow t(q))\quad,\\
+\text{(b):}\quad & p\Rightarrow q\Rightarrow q(x\Rightarrow x(p(q)))\quad.
+\end{align*}
+
+
+\subsubsection{Exercise \label{subsec:Exercise-hof-curried-4}\ref{subsec:Exercise-hof-curried-4}}
+
+Show that the following expressions are not well-typed:
+\begin{align*}
+\text{(a):}\quad & p\Rightarrow p(q\Rightarrow q(p))\quad,\\
+\text{(b):}\quad & p\Rightarrow q\Rightarrow q(x\Rightarrow p(q(x)))\quad.
+\end{align*}
+
+
+\subsubsection{Exercise \label{subsec:Exercise-hof-curried-2}\ref{subsec:Exercise-hof-curried-2}}
+
+Infer types and simplify the following code expressions:
+\begin{align*}
+\text{(a):}\quad & q\Rightarrow\left(x\Rightarrow y\Rightarrow z\Rightarrow x(z)(y(z))\right)\left(a\Rightarrow a\right)\left(b\Rightarrow b(q)\right)\quad,\\
+\text{(b):}\quad & \left(f\Rightarrow g\Rightarrow h\Rightarrow f(g(h))\right)(x\Rightarrow x)\quad,\\
+\text{(c):}\quad & \left(x\Rightarrow y\Rightarrow x(y)\right)\left(x\Rightarrow y\Rightarrow x\right)\quad,\\
+\text{(d):}\quad & \left(x\Rightarrow y\Rightarrow x(y)\right)\left(x\Rightarrow y\Rightarrow y\right)\quad,\\
+\text{(e):}\quad & x\Rightarrow\left(f\Rightarrow y\Rightarrow f(y)(x)\right)\left(z\Rightarrow\_\Rightarrow z\right)\quad,\\
+\text{(f):}\quad & z\Rightarrow\left(x\Rightarrow y\Rightarrow x\right)\left(x\Rightarrow x(z)\right)(y\Rightarrow y(z))\quad.
+\end{align*}
+
 
 \section{Discussion}
 
@@ -2290,52 +2459,35 @@ that both take other functions as arguments \emph{and} return a new
 function.
 
 Examples:
-\begin{lyxcode}
-def~f1(x:~Int):~Int~=~x~+~10
-\end{lyxcode}
-The function \texttt{f1} has type signature \texttt{Int $\Rightarrow$
-Int} and order 1, so it is \emph{not} a higher-order function.
-\begin{lyxcode}
-def~f2(x:~Int):~Int~$\Rightarrow$~Int~=~z~$\Rightarrow$~z~+~x
-\end{lyxcode}
-The function \texttt{f2} has type signature \texttt{Int $\Rightarrow$
-Int $\Rightarrow$ Int} and is a higher-order function, of order 2. 
-\begin{lyxcode}
-def~f3(g:~Int~$\Rightarrow$~Int):~Int~=~g(123)
-\end{lyxcode}
-The function \texttt{f3} has type signature \texttt{(Int $\Rightarrow$
-Int) $\Rightarrow$ Int} and is a higher-order function of order 2.
+\begin{lstlisting}
+def f1(x: Int): Int = x + 10
+\end{lstlisting}
+The function \texttt{}\lstinline!f1! has type signature \texttt{}\lstinline!Int => Int!
+and order $1$, so it is \emph{not} a higher-order function.
+\begin{lstlisting}
+def f2(x: Int): Int => Int = z => z + x
+\end{lstlisting}
+The function \texttt{}\lstinline!f2! has type signature \texttt{}\lstinline!Int => Int => Int!
+and is a higher-order function, of order $2$. 
+\begin{lstlisting}
+def f3(g: Int  Int): Int = g(123)
+\end{lstlisting}
+The function \texttt{}\lstinline!f3! has type signature \texttt{$(\text{Int}\Rightarrow\text{Int})\Rightarrow\text{Int}$}
+and is a higher-order function of order $2$.
 
-Although \texttt{f2} is a higher-order function, its higher-orderness
-comes from the fact that the return value is of function type. An
-equivalent computation can be performed by an uncurried function that
-is not higher-order:
-\begin{lyxcode}
-scala>~def~f2u(x:~Int,~z:~Int):~Int~=~z~+~x
-\end{lyxcode}
-The Scala library defines methods to transform between curried and
-uncurried functions:
-\begin{lyxcode}
-scala>~def~f2u(x:~Int,~z:~Int):~Int~=~z~+~x
+Although \texttt{}\lstinline!f2! is a higher-order function, its
+``higher-orderness'' comes from the fact that the return value is
+of a function type. An equivalent computation can be performed by
+an uncurried function that is not higher-order:
+\begin{lstlisting}
+scala> def f2u(x: Int, z: Int): Int = z + x
+\end{lstlisting}
 
-scala>~val~f2c~=~(f2u~\_).curried
-
-scala>~val~f2u1~=~Function.uncurried(f2c)
-\end{lyxcode}
-The syntax \lstinline!(f2u _)! is used in Scala to convert methods
-to function values. Recall that Scala has two ways of defining a function:
-one as a method\index{Scala method} (defined using \lstinline!def!),
-another as a function value\index{function value} (defined using
-\lstinline!val!). 
-
-The methods \lstinline!.curried! and \lstinline!.uncurried! can
-be easily implemented in Scala code, as we will see in the solved
-examples.
-
-Unlike \lstinline!f2!, the function \lstinline!f3! cannot be converted
-to a non-higher-order function because \lstinline!f3! has an argument
-of function type, rather than a return value of function type. Converting
-to an uncurried form cannot eliminate an argument of function type.
+Unlike \lstinline!f2!, the function \lstinline!f3! \emph{cannot}
+be converted to a non-higher-order function because \lstinline!f3!
+has an argument of a function type, rather than a return value of
+a function type. Converting to an uncurried form cannot eliminate
+an argument of a function type.
 
 \subsection{Scope of bound variables}
 
@@ -2406,13 +2558,13 @@ $\partial_{x}f$.
 Many programming languages (such as ML, OCaml, F\#, Haskell, Elm,
 PureScript) have adopted this ``operator syntax\index{operator syntax}'',
 where parentheses are optional for function arguments. The result
-is a concise notation where \lstinline!f x! means the same as \lstinline!f(x)!.
+is a syntax where \lstinline!f x! means the same as \lstinline!f(x)!.
 Parentheses are still used where necessary to avoid ambiguity or for
-readability.\footnote{The operator syntax has a long history. It is used in Unix shell commands,
-for example \lstinline!cp file1 file2!, as well as in the programming
-language Tcl/Tk. In LISP and Scheme, each function application is
-enclosed in parentheses but the arguments are separated by spaces,
-for example \lstinline!(+ 1 2 3)!.}
+readability.\footnote{The operator syntax has a long history in programming. It is used
+in Unix shell commands, for example \lstinline!cp file1 file2!, as
+well as in the programming language Tcl/Tk. In LISP and Scheme, each
+function application is enclosed in parentheses but the arguments
+are separated by spaces, for example \lstinline!(+ 1 2 3)!.}
 
 The conventions for nameless functions in the operator syntax become:
 \begin{itemize}
@@ -2446,12 +2598,12 @@ In the syntax used e.g.\ in OCaml and Haskell, a curried function
 such as \lstinline!f2! is applied to its arguments as \lstinline!f2 20 4!.
 This departs further from the mathematical tradition and requires
 some getting used to. If the two arguments are more complicated than
-just $20$ and $4$, the resulting expression may become significantly
-harder to read, compared with the syntax where commas are used to
-separate the arguments. (Consider, for example, the Haskell expression
-\lstinline!f2 (g 10) (h 20) + 30!.) To improve readability of code,
-programmers may prefer to first define short names for complicated
-expressions and then use these names as curried arguments.
+just $20$ and $4$, the resulting expression may become harder to
+read, compared with the syntax where commas are used to separate the
+arguments. (Consider e.g.~the expression \lstinline!f2 (g 10) (h 20) + 30!.)
+To improve readability of code, programmers may prefer to first define
+short names for complicated expressions and then use these names as
+curried arguments.
 
 In Scala, the choice of whether to use curried or uncurried function
 signatures is largely a matter of syntactic convenience. Most Scala
@@ -2506,26 +2658,27 @@ How can we implement \lstinline!pa!? Since \lstinline!pa(x)(f)!
 must return a function of type \lstinline!B => C!, we have no choice
 other than to begin writing the function body as
 \begin{lstlisting}
-def pa[A, B, C](x: A)(f: (A, B) => C): B => C = { b: B =>
+def pa[A, B, C](x: A)(f: (A, B) => C): B => C = { y: B =>
   ??? // Need to compute a value of type C here.
 }
 \end{lstlisting}
-In the inner scope, we need to compute a value of type \lstinline!C!,
-and we have values \lstinline!x: A!, \lstinline!b: B!, and \lstinline!f:(A, B)=>C!.
-Since the type \lstinline!C! is arbitrary, we cannot produce any
-values of type \lstinline!C! from scratch. The only way of producing
-any values of type \lstinline!C! is by applying the function \lstinline!f!
-to arguments of types \lstinline!A! and \lstinline!B!. Since the
-types \lstinline!A! and \lstinline!B! are arbitrary, we cannot obtain
-any values of these types other than \lstinline!x: A! and \lstinline!b: B!.
-So, the only way of obtaining a value of type \lstinline!C! is to
-compute \lstinline!f(x, b)!, and the body of \lstinline!pa! \emph{must}
-be
+In the inner scope, we need to compute a value of type $C$, and we
+have values \lstinline!x: A!, \lstinline!y: B!, and \lstinline!f:(A, B)=>C!.
+Since the type \lstinline!C! is arbitrary, a fully parametric function
+cannot produce any values of type \lstinline!C! from scratch. The
+only way of producing any values of type \lstinline!C! is by applying
+the function \lstinline!f! to arguments of types \lstinline!A! and
+\lstinline!B!. Since the types \lstinline!A! and \lstinline!B!
+are arbitrary, we cannot obtain any values of these types other than
+\lstinline!x: A! and \lstinline!y: B!. So, the only way of obtaining
+a value of type \lstinline!C! is to compute \lstinline!f(x, y)!.
+Thus, the body of \lstinline!pa! must be
 \begin{lstlisting}
-def pa[A, B, C](x: A)(f: (A, B) => C): B => C = { b => f(x, b) }
+def pa[A, B, C](x: A)(f: (A, B) => C): B => C = { y => f(x, y) }
 \end{lstlisting}
-In this way, we have unambiguously derived the body of this function
-from its type signature.
+In this way, we have \emph{unambiguously} derived the body of this
+function from its type signature, by assuming that the function must
+be fully parametric.
 
 Another example is the operation of forward composition $f\bef g$,
 viewed as a fully parametric function with type signature
@@ -2535,24 +2688,23 @@ def before[A, B, C](f: A => B, g: B => C): A => C = ???
 The only way of implementing \lstinline!before! is by returning a
 nameless function of type \lstinline!A => C!,
 \begin{lstlisting}
-def before[A, B, C](f: A => B, g: B => C): A => C = { a: A =>
-  ??? // Need to compute a value of type C here.
+def before[A, B, C](f: A => B, g: B => C): A => C = { x: A =>
+  ??? // Need to compute a value of type C in this scope.
 }
 \end{lstlisting}
-In the inner scope, we need to compute a value of type \lstinline!C!,
-and we have \lstinline!a: A!, \lstinline!f: A => B!, and \lstinline!g: B => C!.
-Since the type \lstinline!C! is arbitrary, the only way of obtaining
-a value of type \lstinline!C! is to apply \lstinline!g! to an argument
-of type \lstinline!B!. The only way of obtaining a value of type
-\lstinline!B! is to apply \lstinline!f! to an argument of type \lstinline!A!.
-Finally, we have only one value of type \lstinline!A!, namely \lstinline!a:A!.
-So, the only way of obtaining the required result is to compute \lstinline!g(f(a))!.
-We have again unambiguously derived the body of the function before
-from its type signature:
+In the inner scope, we need to compute a value of type $C$, and we
+have the values $x^{:A}$, $f^{:A\Rightarrow B}$, and $g^{:B\Rightarrow C}$.
+Since the type $C$ is arbitrary, the only way of obtaining a value
+of type $C$ is to apply $g$ to an argument of type $B$. The only
+way of obtaining a value of type $B$ is to apply $f$ to an argument
+of type $A$. Finally, we have only one value of type $A$, namely
+$x^{:A}$. So, the only way of obtaining the required result is to
+compute $g(f(x))$. We have again unambiguously derived the body of
+the function before from its type signature:
 \begin{lstlisting}
-def before[A, B, C](f: A => B, g: B => C): A => C = { a => g(f(a)) }
+def before[A, B, C](f: A => B, g: B => C): A => C = { x => g(f(x)) }
 \end{lstlisting}
 
 In Chapter~\ref{chap:3-3-The-formal-logic-curry-howard} and in Appendix~\ref{app:The-Curry-Howard-correspondence},
-we will see how function bodies can be derived from type signatures
+we will see how a function's code can be derived from type signatures
 for a wide range of fully parametric functions.
