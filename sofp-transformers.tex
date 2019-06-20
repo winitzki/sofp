@@ -1,6 +1,578 @@
 
 \chapter{Computations in functor blocks III. Monad transformers}
 
+\section{Slides}
+
+\subsection{Computations within a functor context: Combining monads}
+
+Programs often need to combine monadic effects (see code)
+
+``Effect'' $\triangleq$ what else happens in {\footnotesize{}$A\Rightarrow M^{B}$}
+besides computing $B$ from $A$
+
+Examples of effects for some standard monads:
+
+\texttt{\textcolor{blue}{\footnotesize{}Option}} \textendash{} computation
+will have no result or a single result
+
+\texttt{\textcolor{blue}{\footnotesize{}List}} \textendash{} computation
+will have zero, one, or multiple results
+
+\texttt{\textcolor{blue}{\footnotesize{}Either}} \textendash{} computation
+may fail to obtain its result, reports error
+
+\texttt{\textcolor{blue}{\footnotesize{}Reader}} \textendash{} computation
+needs to read an external context value
+
+\texttt{\textcolor{blue}{\footnotesize{}Writer}} \textendash{} some
+value will be appended to a (monoidal) accumulator
+
+\texttt{\textcolor{blue}{\footnotesize{}Future}} \textendash{} computation
+will be scheduled to run later
+
+How to combine several effects in the same functor block (\texttt{\textcolor{blue}{\footnotesize{}for}}/\texttt{\textcolor{blue}{\footnotesize{}yield}})?
+
+{\footnotesize{}\vspace{-0.35cm}}\texttt{\textcolor{blue}{\footnotesize{}}}%
+\begin{minipage}[t]{0.49\columnwidth}%
+\begin{lyxcode}
+\textcolor{darkgray}{\footnotesize{}//~This~is~not~valid~Scala!}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}val~result~=~for~\{~i~$\leftarrow$~1~to~n}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}~~~j~$\leftarrow$~Future~\{~q(i)~\}}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}~~~k~$\leftarrow$~maybeError(j)~:~Try{[}Int{]}}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}\}~yield~f(k)}{\footnotesize\par}
+
+\textcolor{darkgray}{\footnotesize{}//~What~should~be~the~type~of~result??}{\footnotesize\par}
+\end{lyxcode}
+%
+\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}~ ~ ~}}%
+\begin{minipage}[t]{0.49\columnwidth}%
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}~~}\textcolor{darkgray}{\footnotesize{}//~This~is~not~valid~Scala!}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}(1~to~n).flatMap~\{~i~$\Rightarrow$}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}~~~Future(q(i)).flatMap~\{~j~$\Rightarrow$}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}~~~~~maybeError(j).map~\{~k~$\Rightarrow$}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}~~~~~~~f(k)}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}~~~~~~~~~\}\}\}}{\footnotesize\par}
+\end{lyxcode}
+%
+\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\medskip{}
+}}{\footnotesize\par}
+
+The code will work if we ``unify'' all effects in a new, larger
+monad
+
+Need to compute the type of new monad that contains all given effects
+
+
+\subsection{Combining monadic effects I. Trial and error\protect 
+
+}There are several ways of combining two monads into a new monad:
+
+If $M_{1}^{A}$ and $M_{2}^{A}$ are monads then $M_{1}^{A}\times M_{2}^{A}$
+is also a monad
+
+But $M_{1}^{A}\times M_{2}^{A}$ describes two separate values with
+two separate effects
+
+If $M_{1}^{A}$ and $M_{2}^{A}$ are monads then $M_{1}^{A}+M_{2}^{A}$
+is usually not a monad
+
+If it worked, it would be a choice between two different values /
+effects
+
+If $M_{1}^{A}$ and $M_{2}^{A}$ are monads then one of $M_{1}^{M_{2}^{A}}$
+or $M_{2}^{M_{1}^{A}}$ is often a monad
+
+Examples and counterexamples for functor composition:
+
+Combine $Z\Rightarrow A$ and $\text{List}^{A}$ as $Z\Rightarrow\text{List}^{A}$
+
+Combine \texttt{\textcolor{blue}{\footnotesize{}Future{[}A{]}}} and
+\texttt{\textcolor{blue}{\footnotesize{}Option{[}A{]}}} as \texttt{\textcolor{blue}{\footnotesize{}Future{[}Option{[}A{]}{]}}} 
+
+But \texttt{\textcolor{blue}{\footnotesize{}Either{[}Z, Future{[}A{]}{]}}}
+and \texttt{\textcolor{blue}{\footnotesize{}Option{[}Z $\Rightarrow$
+A{]}}} are not monads
+
+Neither \texttt{\textcolor{blue}{\footnotesize{}Future{[}State{[}A{]}{]}}}
+nor \texttt{\textcolor{blue}{\footnotesize{}State{[}Future{[}A{]}{]}}}
+are monads
+
+The order of effects matters when composition works both ways: 
+
+Combine \texttt{\textcolor{blue}{\footnotesize{}Either}} ($M_{1}^{A}=Z+A$)
+and \texttt{\textcolor{blue}{\footnotesize{}Writer}} ($M_{2}^{A}=W\times A$) 
+
+as $Z+W\times A$ \textendash{} either compute result and write a
+message, or all fails
+
+as $\left(Z+A\right)\times W$ \textendash{} message is always written,
+but computation may fail
+
+Find a general way of defining a new monad with combined effects
+
+Derive properties required for the new monad
+
+
+\subsection{Combining monadic effects II. Lifting into a larger monad}
+
+{\footnotesize{}\vspace{-0.15cm}}If a ``big monad'' \texttt{\textcolor{blue}{\footnotesize{}BigM{[}A{]}}}
+\emph{somehow} combines all the needed effects:
+
+{\footnotesize{}\vspace{-0.15cm}\hspace{-0.35cm}}\texttt{\textcolor{blue}{\footnotesize{}}}%
+\begin{minipage}[t]{0.49\columnwidth}%
+\begin{lyxcode}
+\textrm{\textcolor{darkgray}{\footnotesize{}//~This~could~be~valid~Scala...}}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}val~result:~BigM{[}Int{]}~=~for~\{}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}~~~i~$\leftarrow$~lift$_{1}$(1~to~n)}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}~~~j~$\leftarrow$~lift$_{2}$(Future\{~q(i)~\})}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}~~~k~$\leftarrow$~lift$_{3}$(maybeError(j))}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}\}~yield~f(k)}{\footnotesize\par}
+\end{lyxcode}
+%
+\end{minipage}\texttt{\textcolor{blue}{\footnotesize{} }}%
+\begin{minipage}[t]{0.49\columnwidth}%
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}~}\textrm{\textcolor{darkgray}{\footnotesize{}//~If~we~define~the~various}}{\footnotesize\par}
+
+\textrm{\textcolor{darkgray}{\footnotesize{}~//~required~``lifting''~functions:}}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}def~lift$_{1}${[}A{]}:~Seq{[}A{]}~$\Rightarrow$~BigM{[}A{]}~=~???}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}def~lift$_{2}${[}A{]}:~Future{[}A{]}~$\Rightarrow$~BigM{[}A{]}~=~???}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}def~lift$_{3}${[}A{]}:~Try{[}A{]}~$\Rightarrow$~BigM{[}A{]}~=~???~~~}{\footnotesize\par}
+\end{lyxcode}
+%
+\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\medskip{}
+}}{\footnotesize\par}
+
+Example 1: combining as \texttt{\textcolor{blue}{\footnotesize{}BigM{[}A{]}
+= Future{[}Option{[}A{]}{]}}} with liftings:
+
+{\footnotesize{}\vspace{-0.4cm}}\texttt{\textcolor{blue}{\footnotesize{}def
+lift$_{1}${[}A{]}: Option{[}A{]} $\Rightarrow$ Future{[}Option{[}A{]}{]}
+= Future.successful(\_)}}{\footnotesize\par}
+
+\texttt{\textcolor{blue}{\footnotesize{}def lift$_{2}${[}A{]}: Future{[}A{]}
+$\Rightarrow$ Future{[}Option{[}A{]}{]} = \_.map(x $\Rightarrow$
+Some(x))}}{\footnotesize\par}
+
+{\footnotesize{}\vspace{-0.15cm}}Example 2: combining as \texttt{\textcolor{blue}{\footnotesize{}BigM{[}A{]}
+= List{[}Try{[}A{]}{]}}} with liftings:
+
+{\footnotesize{}\vspace{-0.05cm}}\texttt{\textcolor{blue}{\footnotesize{}def
+lift$_{1}${[}A{]}: Try{[}A{]} $\Rightarrow$ List{[}Try{[}A{]}{]}
+= x $\Rightarrow$ List(x)}}{\footnotesize\par}
+
+\texttt{\textcolor{blue}{\footnotesize{}def lift$_{2}${[}A{]}: List{[}A{]}
+$\Rightarrow$ List{[}Try{[}A{]}{]} = \_.map(x $\Rightarrow$ Success(x))}}{\footnotesize\par}
+
+{\footnotesize{}\vspace{-0.1cm}}Remains to be understood:
+
+Finding suitable laws for the liftings; checking that the laws hold
+
+Building a ``big monad'' out of ``smaller'' ones, with lawful
+liftings
+
+Is this always possible? Unique? Are there alternative solutions?
+
+Ways of reducing the complexity of code; make liftings automatic
+
+
+\subsection{Laws for monad liftings I. Identity laws}
+
+Whatever identities we expect to hold for monadic programs must continue
+to hold after lifting \texttt{\textcolor{blue}{\footnotesize{}M$_{1}$}}
+or \texttt{\textcolor{blue}{\footnotesize{}M$_{2}$}} values into
+the ``big monad'' \texttt{\textcolor{blue}{\footnotesize{}BigM}} 
+
+We assume that \texttt{\textcolor{blue}{\footnotesize{}M$_{1}$}},
+\texttt{\textcolor{blue}{\footnotesize{}M$_{2}$}}, and \texttt{\textcolor{blue}{\footnotesize{}BigM}}
+already satisfy all the monad laws
+
+Consider the various functor block constructions containing the liftings:
+
+Left identity law after \texttt{\textcolor{blue}{\footnotesize{}lift$_{1}$}} 
+
+{\footnotesize{}\vspace{-0.3cm}\hspace{-0.0cm}}\texttt{\textcolor{blue}{\footnotesize{}}}%
+\begin{minipage}[t]{0.54\columnwidth}%
+\begin{lyxcode}
+\textrm{\textcolor{darkgray}{\footnotesize{}//~Anywhere~inside~a~for/yield:}}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}i~$\leftarrow$~lift$_{1}$(M$_{1}$.pure(x))}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}j~$\leftarrow$~bigM(i)~}\textrm{\textcolor{darkgray}{\footnotesize{}//~Any~BigM~value.}}{\footnotesize\par}
+\end{lyxcode}
+%
+\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}~ }}%
+\begin{minipage}[t]{0.54\columnwidth}%
+\begin{lyxcode}
+\textrm{\textcolor{darkgray}{\footnotesize{}//~Must~be~equivalent~to...}}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}i~=~x}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}j~$\leftarrow$~bigM(x)}{\footnotesize\par}
+\end{lyxcode}
+%
+\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\smallskip{}
+lift$_{1}$(M$_{1}$.pure(x)).flatMap(b) = b(x)}} \textemdash{} in
+terms of Kleisli composition $\left(\diamond\right)$:
+\begin{center}
+{\footnotesize{}\vspace{-0.2cm}\hspace{-0.0cm}$\left(\text{pure}_{M_{1}}\bef\text{lift}_{1}\right)^{:X\Rightarrow\text{BigM}^{X}}\diamond b^{:X\Rightarrow\text{BigM}^{Y}}=b$\hspace*{\fill}with
+$f^{:X\Rightarrow M^{Y}}\diamond g^{:Y\Rightarrow M^{Z}}\triangleq x\Rightarrow f(x).\text{flatMap}(g)$}{\footnotesize\par}
+\par\end{center}
+
+{\footnotesize{}\vspace{-0.2cm}\hspace{-0.0cm}}Right identity law
+after \texttt{\textcolor{blue}{\footnotesize{}lift$_{1}$}} 
+
+{\footnotesize{}\vspace{-0.3cm}\hspace{-0.0cm}}\texttt{\textcolor{blue}{\footnotesize{}}}%
+\begin{minipage}[t]{0.54\columnwidth}%
+\begin{lyxcode}
+\textrm{\textcolor{darkgray}{\footnotesize{}//~Anywhere~inside~a~for/yield:}}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}x~$\leftarrow$~bigM~}\textrm{\textcolor{darkgray}{\footnotesize{}//~Any~BigM~value.}}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}i~$\leftarrow$~lift$_{1}$(M$_{1}$.pure(x))}{\footnotesize\par}
+\end{lyxcode}
+%
+\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}~ }}%
+\begin{minipage}[t]{0.54\columnwidth}%
+\begin{lyxcode}
+\textrm{\textcolor{darkgray}{\footnotesize{}//~Must~be~equivalent~to...}}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}x~$\leftarrow$~bigM}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}i~=~x}{\footnotesize\par}
+\end{lyxcode}
+%
+\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\medskip{}
+b.flatMap(M$_{1}$.pure andThen lift$_{1}$) = b}} \textemdash{} in
+terms of Kleisli composition:
+\begin{center}
+{\footnotesize{}\vspace{-0.1cm}\hspace{-0.0cm}$b^{:X\Rightarrow\text{BigM}^{Y}}\diamond\left(\text{pure}_{M_{1}}\bef\text{lift}_{1}\right)^{:Y\Rightarrow\text{BigM}^{Y}}=b$}{\footnotesize\par}
+\par\end{center}
+
+{\footnotesize{}\vspace{-0.15cm}\hspace{-0.0cm}}The same identity
+laws must hold for \texttt{\textcolor{blue}{\footnotesize{}M$_{2}$}}
+and \texttt{\textcolor{blue}{\footnotesize{}lift$_{2}$}} as well
+
+
+\subsection{Laws for monad liftings II. Simplifying the laws}
+
+{\footnotesize{}\vspace{-0.2cm}\hspace{-0.0cm}}$\big(\text{pure}_{M_{1}}\bef\text{lift}_{1}\big)$
+is a unit for the Kleisli composition $\diamond$ in the monad \texttt{\textcolor{blue}{\footnotesize{}BigM}} 
+
+But the monad \texttt{\textcolor{blue}{\footnotesize{}BigM}} already
+has a unit element, namely $\text{pure}_{\text{BigM}}$
+
+The two-sided unit element is always unique: $\text{u}=\text{u}\diamond\text{u}^{\prime}=\text{u}^{\prime}$
+
+So the two identity laws for $\big(\text{pure}_{M_{1}}\bef\text{lift}_{1}\big)$
+can be reduced to one law:{\footnotesize{}\vspace{-0.1cm}\hspace{-0.0cm}
+\[
+\text{pure}_{M_{1}}\bef\text{lift}_{1}=\text{pure}_{\text{BigM}}
+\]
+}{\footnotesize\par}
+
+{\footnotesize{}\vspace{-0.15cm}\hspace{-0.0cm}}Refactoring a portion
+of a monadic program under \texttt{\textcolor{blue}{\footnotesize{}lift$_{1}$}}
+gives another law:
+
+{\footnotesize{}\vspace{-0.2cm}\hspace{-0.0cm}}\texttt{\textcolor{blue}{\footnotesize{}}}%
+\begin{minipage}[t]{0.58\columnwidth}%
+\begin{lyxcode}
+\textrm{\textcolor{darkgray}{\footnotesize{}//~Anywhere~inside~a~for/yield,~this...}}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}i~$\leftarrow$~lift$_{1}$(p)~}\textrm{\textcolor{darkgray}{\footnotesize{}//~Any~M$_{1}$~value.}}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}j~$\leftarrow$~lift$_{1}$(q(i))~}\textrm{\textcolor{darkgray}{\footnotesize{}//~Any~M$_{1}$~value.}}{\footnotesize\par}
+\end{lyxcode}
+%
+\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}~ }}%
+\begin{minipage}[t]{0.5\columnwidth}%
+\begin{lyxcode}
+\textrm{\textcolor{darkgray}{\footnotesize{}//~must~be~equivalent~to...}}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}pq~=~p.flatMap(q)~}\textrm{\textcolor{darkgray}{\footnotesize{}//~In~M$_{1}$.}}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}j~$\leftarrow$~lift$_{1}$(pq)}\textrm{\textcolor{darkgray}{\footnotesize{}~~//~Now~lift~it.}}{\footnotesize\par}
+\end{lyxcode}
+%
+\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\medskip{}
+lift$_{1}$(p).flatMap(q andThen lift$_{1}$) = lift$_{1}$(p flatMap
+q)}}{\footnotesize\par}
+
+Rewritten equivalently through {\footnotesize{}$\text{flm}_{M}:\left(A\Rightarrow M^{B}\right)\Rightarrow M^{A}\Rightarrow M^{B}$}
+as
+\begin{center}
+{\footnotesize{}\vspace{-0.2cm}\hspace{-0.0cm}$\text{lift}_{1}\bef\text{flm}_{\text{BigM}}\left(q\bef\text{lift}_{1}\right)=\text{flm}_{M_{1}}q\bef\text{lift}_{1}$
+\textendash{} both sides are functions $M_{1}^{A}\Rightarrow\text{BigM}^{B}$}{\footnotesize\par}
+\par\end{center}
+
+{\footnotesize{}\vspace{-0.3cm}\hspace{-0.0cm}}Rewritten equivalently
+through {\footnotesize{}$\text{ftn}_{M}:M^{M^{A}}\Rightarrow M^{A}$,}
+the law is
+\begin{center}
+{\footnotesize{}\vspace{-0.2cm}\hspace{-0.0cm}$\text{lift}_{1}\bef\text{fmap}_{\text{BigM}}\text{lift}_{1}\bef\text{ftn}_{\text{BigM}}=\text{ftn}_{M_{1}}\bef\text{lift}_{1}$
+\textendash{} both sides are functions $M_{1}^{M_{1}^{A}}\Rightarrow\text{BigM}^{A}$}{\footnotesize\par}
+\par\end{center}
+
+{\footnotesize{}\vspace{-0.3cm}\hspace{-0.0cm}}In terms of Kleisli
+composition $\diamond_{M}$ it becomes the \textbf{composition law}:
+\begin{center}
+{\footnotesize{}\vspace{-0.2cm}\hspace{-0.0cm}$\big(b^{:X\Rightarrow M_{1}^{Y}}\bef\text{lift}_{1}\big)\diamond_{\text{BigM}}\big(c^{:Y\Rightarrow M_{1}^{Z}}\bef\text{lift}_{1}\big)=\left(b\diamond_{M_{1}}c\right)\bef\text{lift}_{1}$}{\footnotesize\par}
+\par\end{center}
+
+{\footnotesize{}\vspace{-0.3cm}\hspace{-0.0cm}}Liftings $\text{lift}_{1}$
+and $\text{lift}_{2}$ must obey an identity law and a composition
+law
+
+The laws say that the liftings \textbf{commute with} the monads' operations
+
+
+\subsection{Laws for monad liftings III. The naturality law}
+
+Show that $\text{lift}_{1}:M_{1}^{A}\Rightarrow\text{BigM}^{A}$ is
+a natural transformation 
+
+It maps $\text{pure}_{M_{1}}$ to $\text{pure}_{\text{BigM}}$ and
+$\text{flm}_{M_{1}}$ to $\text{flm}_{\text{BigM}}$
+
+$\text{lift}_{1}$ is a \textbf{monadic morphism} between monads $M_{1}^{\bullet}$
+and $\text{BigM}^{\bullet}$
+
+example: monad ``interpreters'' $M^{A}\Rightarrow N^{A}$ are monadic
+morphisms
+
+The (functor) naturality law: for any $f:X\Rightarrow Y$, {\footnotesize{}\vspace{-0.1cm}}
+\[
+\text{lift}_{1}\bef\text{fmap}_{\text{BigM}}f=\text{fmap}_{M_{1}}f\bef\text{lift}_{1}
+\]
+{\footnotesize{}\vspace{-0.5cm}
+\[
+\xymatrix{\xyScaleY{2pc}\xyScaleX{3pc}M_{1}^{X}\ar[d]\sb(0.45){\text{fmap}_{M_{1}}\,f^{:X\Rightarrow Y}}\ar[r]\sp(0.45){\ \text{lift}_{1}} & \text{BigM}^{X}\ar[d]\sp(0.45){\text{fmap}_{\text{BigM}}\,f^{:X\Rightarrow Y}}\\
+M_{1}^{Y}\ar[r]\sp(0.45){\text{lift}_{1}} & \text{BigM}^{Y}
+}
+\]
+}Derivation of the functor naturality law for $\text{lift}_{1}$:
+
+Express $\text{fmap}$ as $\text{fmap}_{M}f\triangleq f^{\uparrow M}=\text{flm}_{M}\left(f\bef\text{pure}_{M}\right)$
+for both monads
+
+Given $f^{:X\Rightarrow Y}$, use the law {\footnotesize{}$\text{flm}_{M_{1}}q\bef\text{lift}_{1}=\text{lift}_{1}\bef\text{flm}_{\text{BigM}}\left(q\bef\text{lift}_{1}\right)$}
+to compute {\footnotesize{}$\text{flm}_{M_{1}}\left(f\bef\text{pure}_{M_{1}}\right)\bef\text{lift}_{1}=\text{lift}_{1}\bef\text{flm}_{\text{BigM}}\left(f\bef\text{pure}_{M_{1}}\bef\text{lift}_{1}\right)=\text{lift}_{1}\bef\text{flm}_{\text{BigM}}\left(f\bef\text{pure}_{\text{BigM}}\right)=\text{lift}_{1}\bef\text{fmap}_{\text{BigM}}f$}{\footnotesize\par}
+
+A monadic morphism is always also a natural transformation of the
+functors
+
+
+\subsection{Monad transformers I: Motivation}
+
+{\footnotesize{}\vspace{-0.2cm}}Combine $Z\Rightarrow A$ and $1+A$:
+only $Z\Rightarrow1+A$ works, not $1+\left(Z\Rightarrow A\right)$
+
+It is not possible to combine monads via a natural bifunctor $B^{M_{1},M_{2}}$
+
+It is not possible to combine arbitrary monads as $M_{1}^{M_{2}^{\bullet}}$
+or $M_{2}^{M_{1}^{\bullet}}$
+
+Example: state monad $\text{St}_{S}^{A}\triangleq S\Rightarrow A\times S$
+does not compose
+
+The trick: for a fixed \textbf{base }monad $L^{\bullet}$, let $M^{\bullet}$
+(\textbf{foreign }monad) vary
+
+Call the desired result $T_{L}^{M,\bullet}$ the \textbf{monad transformer
+for} $L$
+
+In Scala: \texttt{\textcolor{blue}{\footnotesize{}MyMonadT{[}M{[}\_{]}:Monad,
+A{]}}} \textendash{} e.g. \texttt{\textcolor{blue}{\footnotesize{}ReaderT}},
+\texttt{\textcolor{blue}{\footnotesize{}StateT}}, etc.
+
+$T_{L}^{M,\bullet}$ is generic in $M$ but not in $L$
+
+No general formula for monad transformers seems to exist
+
+For each base monad $L$, a different construction is needed
+
+Some transformers are compositions $L^{M^{\bullet}}$ or $M^{L^{\bullet}}$,
+others are not
+
+Do all monads $L$ have a transformer? (Unknown.)
+
+{\footnotesize{}\vspace{-0.3cm}}To combine 3 or more monads, ``stack
+up'' the transformers as $T_{L_{1}}^{T_{L_{2}}^{T_{L_{3}}^{M}},\bullet}$
+
+Example in Scala: \texttt{\textcolor{blue}{\footnotesize{}StateT{[}S,
+ListT{[}Reader{[}R, ?{]}, ?{]}, A{]}}} 
+
+Substitute nested transformers into the monad argument, not as $A$
+
+This is called a \textbf{monad stack} \textendash{} but may not be
+\emph{functor composition}
+
+because e.g.~\texttt{\textcolor{blue}{\footnotesize{}State{[}S, List{[}Reader{[}R,
+A{]}{]}{]}}} is not a monad
+
+
+\subsection{Monad transformers II: The requirements}
+
+{\footnotesize{}\vspace{-0.2cm}}A \textbf{monad transformer} for
+a \textbf{base} monad $L^{\bullet}$ is a type constructor $T_{L}^{M,\bullet}$
+parameterized by a monad $M^{\bullet}$, such that for all monads
+$M^{\bullet}$:
+
+$T_{L}^{M,\bullet}$ is a monad (the monad $M$ \textbf{transformed
+with} $T_{L}$)
+
+``Lifting'' \textendash{} a monadic morphism $\text{lift}_{L}^{M}:M^{A}\leadsto T_{L}^{M,A}$
+
+``Base lifting'' \textendash{} a monadic morphism $\text{blift}:L^{A}\leadsto T_{L}^{M,A}$
+
+The ``base lifting'' could not possibly be natural in $L^{\bullet}$
+
+Transformed identity monad ($\text{Id}$) must become $L$, i.e.~$T_{L}^{\text{Id},\bullet}\cong L^{\bullet}$
+
+$T_{L}^{M,\bullet}$ is \textbf{monadically natural} in $M^{\bullet}$
+(but not in $L^{\bullet}$)
+
+$T_{L}^{M,\bullet}$ is natural w.r.t.~a monadic functor $M^{\bullet}$
+as a type parameter
+
+For any monad $N^{\bullet}$ and a monadic morphism $f:M^{\bullet}\leadsto N^{\bullet}$
+we need to have a monadic morphism $T_{L}^{M,\bullet}\leadsto T_{L}^{N,\bullet}$
+for the transformed monads: $\text{mrun}_{L}^{M}:\left(M^{\bullet}\leadsto N^{\bullet}\right)\Rightarrow T_{L}^{M,\bullet}\leadsto T_{L}^{N,\bullet}$
+with the ``lifting'' laws
+
+If we implement $T_{L}^{M,\bullet}$ only via $M$'s monad methods,
+naturality will hold 
+
+Cf.~\texttt{\textcolor{blue}{\footnotesize{}traverse}}{\small{}$:L^{A}\Rightarrow(A\Rightarrow F^{B})\Rightarrow F^{L^{B}}$
+\textendash{} natural w.r.t.~applicative $F^{\bullet}$}{\small\par}
+
+This can be used for lifting a ``runner'' $M^{A}\leadsto A$ to
+$T_{L}^{M,\bullet}\leadsto T_{L}^{\text{Id},\bullet}=L^{\bullet}$
+
+``Base runner'': lifts $L^{A}\leadsto A$ into a monadic morphism
+$T_{L}^{M,\bullet}\leadsto M^{\bullet}$; so $\text{brun}_{L}^{M}:\left(L^{\bullet}\leadsto\bullet\right)\Rightarrow T_{L}^{M,\bullet}\leadsto M^{\bullet}$,
+must commute with \texttt{\textcolor{blue}{\footnotesize{}lift}} and
+\texttt{\textcolor{blue}{\footnotesize{}blift}} 
+
+
+\subsection{Monad transformers III: First examples}
+
+{\footnotesize{}\vspace{-0.15cm}}Recall these monad constructions:
+
+If $M^{A}$ is a monad then $R\Rightarrow M^{A}$ is also a monad
+(for a fixed type $R$)
+
+If $M^{A}$ is a monad then $M^{Z+A\times W}$ is also a monad (for
+fixed $W,$ $Z$)
+
+This gives the monad transformers for base monads \texttt{\textcolor{blue}{\footnotesize{}Reader}},
+\texttt{\textcolor{blue}{\footnotesize{}Writer}}, \texttt{\textcolor{blue}{\footnotesize{}Either}}:
+
+\texttt{\textcolor{blue}{\footnotesize{}type ReaderT{[}R, M{[}\_{]},
+A{]} = R $\Rightarrow$ M{[}A{]}}}{\footnotesize\par}
+
+\texttt{\textcolor{blue}{\footnotesize{}type EitherT{[}Z, M{[}\_{]},
+A{]} = M{[}Either{[}Z, A{]}{]}}}{\footnotesize\par}
+
+\texttt{\textcolor{blue}{\footnotesize{}type WriterT{[}W, M{[}\_{]},
+A{]} = M{[}(W, A){]}}}{\footnotesize\par}
+
+{\footnotesize{}\vspace{-0.2cm}}\texttt{\textcolor{blue}{\footnotesize{}ReaderT}}
+composes with the foreign monad from the \emph{outside}
+
+\texttt{\textcolor{blue}{\footnotesize{}EitherT}} and \texttt{\textcolor{blue}{\footnotesize{}WriterT}}
+must be composed \emph{inside} the foreign monad
+
+{\footnotesize{}\vspace{-0.1cm}}Remaining questions:
+
+What are transformers for other standard monads (\texttt{\textcolor{blue}{\footnotesize{}List}},
+\texttt{\textcolor{blue}{\footnotesize{}State}}, \texttt{\textcolor{blue}{\footnotesize{}Cont}})?
+
+These monads do not compose (neither ``inside'' nor ``outside''
+works)!
+
+How to derive a monad transformer for an arbitrary given monad?
+
+For monads obtained via known monad constructions?
+
+For monads constructed via other monad transformers? (Stack them.)
+
+Is it always possible? (No known counterexamples.)
+
+Is a given monad's transformer unique? (No.)
+
+How to avoid the boilerplate around \texttt{\textcolor{blue}{\footnotesize{}lift}}?
+(\texttt{\textcolor{blue}{\footnotesize{}mtl}}-style transformers)
+
+
+\subsection{Monad transformers IV: The zoology of \emph{ad hoc} methods}
+
+{\footnotesize{}\vspace{-0.2cm}}Need to choose the correct monad
+transformer construction, per monad:
+
+``Composed-inside'', base monad is inside foreign monad: $T_{L}^{M,A}=M^{L^{A}}$
+
+Examples: the \textbf{linear} monads \texttt{\textcolor{blue}{\footnotesize{}OptionT}},
+\texttt{\textcolor{blue}{\footnotesize{}WriterT}}, \texttt{\textcolor{blue}{\footnotesize{}EitherT}} 
+
+``Composed-outside'' \textendash{} the base monad is outside: $T_{L}^{M,A}=L^{M^{A}}$
+
+Examples: \texttt{\textcolor{blue}{\footnotesize{}ReaderT}}; \texttt{\textcolor{blue}{\footnotesize{}SearchT}}
+for search monad \texttt{\textcolor{blue}{\footnotesize{}S{[}A{]}
+= (A $\Rightarrow$ Z) $\Rightarrow$ A}} 
+
+More generally: all \textbf{rigid} monads have ``outside'' transformers
+
+``Recursive'': interleaves the base monad and the foreign monad
+
+Examples: \texttt{\textcolor{blue}{\footnotesize{}ListT}}, \texttt{\textcolor{blue}{\footnotesize{}NonEmptyListT}},
+\texttt{\textcolor{blue}{\footnotesize{}FreeMonadT}} 
+
+Monad constructions: defining a transformer for new monads
+
+Product monads $L_{1}^{A}\times L_{2}^{A}$ \textendash{} product
+transformer $T_{L_{1}}^{M,A}\times T_{L_{2}}^{M,A}$
+
+``Contrafunctor-choice'' $H^{A}\Rightarrow A$ \textendash{} composed-outside
+transformer
+
+Free pointed monads $A+L^{A}$ \textendash{} transformer $M^{A+T_{L}^{M,A}}$
+
+``Irregular'': none of the above constructions work, need something
+else
+
+{\footnotesize{}$T_{\text{State}}^{M,A}=S\Rightarrow M^{S\times A}$};
+{\footnotesize{}$T_{\text{Cont}}^{M,A}=\left(A\Rightarrow M^{R}\right)\Rightarrow M^{R}$};
+``selector'' {\footnotesize{}$F^{A\Rightarrow P^{Q}}\Rightarrow P^{A}$}
+\textendash{} transformer $F^{A\Rightarrow T_{P}^{M,Q}}\Rightarrow T_{P}^{M,A}$;
+codensity {\footnotesize{}$\forall R.\left(A\Rightarrow M^{R}\right)\Rightarrow M^{R}$}{\footnotesize\par}
+
+Examples of monads $K^{A}$ for which no transformers exist? (not
+known)
+
+{\footnotesize{}\vspace{-0.4cm}}$T_{\text{Cod}}$, $T_{\text{Sel}}$,
+and $T_{\text{Cont}}$ transformers have no \texttt{\textcolor{blue}{\footnotesize{}blift}},
+\texttt{\textcolor{blue}{\footnotesize{}brun}}, or \texttt{\textcolor{blue}{\footnotesize{}mrun}} 
+
 \section{Practical use}
 
 \section{Laws and structure}
@@ -236,12 +808,11 @@ the identity monad and $M$.
 The identity law requires $\text{pu}_{\text{Id}}\bef\text{pu}_{M}=\text{pu}_{M}$.
 This holds because $\text{pu}_{\text{Id}}=\text{id}$. The composition
 law requires $\text{ftn}_{\text{Id}}\bef\text{pu}_{M}=\text{pu}_{M}^{\uparrow\text{Id}}\bef\text{pu}_{M}\bef\text{ftn}_{M}$.
-Since $\text{ftn}_{\text{Id}}=\text{id}$ and $f^{\uparrow\text{Id}}=f$
-for any function $f$, we simplify both sides of the composition law
-to the same expression $\text{pu}_{M}$:
+Since $\text{ftn}_{\text{Id}}=\text{id}$, the left-hand side of the
+composition law simplifies to $\text{pu}_{M}$. Transform the right-hand
+side:
 \begin{align*}
- & \text{ftn}_{\text{Id}}\bef\text{pu}_{M}=\text{pu}_{M}\quad,\\
- & \gunderline{\text{pu}_{M}^{\uparrow\text{Id}}}\bef\text{pu}_{M}\bef\text{ftn}_{M}\\
+{\color{greenunder}\text{expect to equal }\text{pu}_{M}:}\quad & \gunderline{\text{pu}_{M}^{\uparrow\text{Id}}}\bef\text{pu}_{M}\bef\text{ftn}_{M}\\
 {\color{greenunder}\text{lifting to the identity functor}:}\quad & =\text{pu}_{M}\bef\gunderline{\text{pu}_{M}\bef\text{ftn}_{M}}\\
 {\color{greenunder}\text{left identity law for }M:}\quad & =\text{pu}_{M}\quad.
 \end{align*}
@@ -340,21 +911,6 @@ into functors as necessary. The result will be a number of nested
 layers of $T$. Second, we use $\text{ftn}_{T}$ as many times as
 necessary to flatten all nested layers of $T$ into a single layer.
 The result is a value of type $T^{A}$.
-
-\subsection{Monad transformers are not unique}
-
-Suppose $T_{L}^{M}$ is a lawful monad transformer for the base monad
-$L$ and a foreign monad $M$. Can we construct another monad that
-still satisfies all transformer laws?
-
-One possibility is to compose $T$ with the monad $M$. Define $U$
-and $V$ by
-\[
-U^{A}\triangleq M^{T_{L}^{M,A}}\quad,\quad\quad V^{A}\triangleq T_{L}^{M,M^{A}}\quad.
-\]
-In a shorter notation, $U\triangleq M\circ T_{L}^{M}$ and $V\triangleq T_{L}^{M}\circ M$.
-It turns out that both $U$ and $V$ are lawful monad transformers
-for $L$.
 
 \subsection{Stacking two monads\label{subsec:Stacking-two-monads}}
 
@@ -1189,63 +1745,112 @@ or, expressed equivalently through the $\text{flm}$ methods instead
 of $\text{ftn}$,
 \begin{align*}
 \text{flm}_{L}f^{:A\Rightarrow L^{M^{B}}} & =\text{pure}_{M}^{\uparrow L}\bef\text{flm}_{T}f^{:A\Rightarrow L^{M^{B}}}\quad,\\
-\big(\text{flm}_{M}f^{:A\Rightarrow M^{B}}\big)^{\uparrow L} & =\text{pure}_{L}^{\uparrow T}\bef\text{flm}_{T}\left(f^{\uparrow L}\right)\quad.
+\big(\text{flm}_{M}f^{:A\Rightarrow M^{B}}\big)^{\uparrow L} & =\text{pure}_{L}^{\uparrow T}\bef\text{flm}_{T}(f^{\uparrow L})\quad.
 \end{align*}
 
 
-\subsection{Monad transformer identity law: Proof}
+\subsection{Monad transformer identity law: Proofs}
 
 The identity law requires that $T_{L}^{M}\cong L$ if $M=\text{Id}$.
-We will now prove this law, assuming that $\text{ftn}_{T}$ is defined
-via \lstinline!swap! by Eq.~(\ref{eq:def-flatten-T-via-sw-and-flatten-L-M}).
+We will now prove this law assuming that $\text{pu}_{T}$ and $\text{ftn}_{T}$
+are defined by Eqs.~(\ref{eq:def-pure-T-via-pure-L-and-pure-M})\textendash (\ref{eq:def-flatten-T-via-sw-and-flatten-L-M}),
+and that the two identity laws of \lstinline!swap! hold (see Theorem~\ref{sec:Theorem-swap-laws-to-monad-transformer-first-law}),
+\begin{align*}
+{\color{greenunder}\text{outer-identity}:}\quad & \text{pu}_{L}^{\uparrow M}\bef\text{sw}_{L,M}=\text{pu}_{L}\quad,\\
+{\color{greenunder}\text{inner-identity}:}\quad & \text{pu}_{M}\bef\text{sw}_{L,M}=\text{pu}_{M}^{\uparrow L}\quad.
+\end{align*}
+Note that $M$ is the foreign monad for composed-outside transformers,
+$T_{L}^{M}=L\circ M$. Setting $M=\text{Id}$ in the inner-identity
+law, we obtain 
+\[
+\text{pu}_{\text{Id}}\bef\text{sw}_{L,\text{Id}}=\text{pu}_{\text{Id}}^{\uparrow L}\quad.
+\]
+Since $\text{pu}_{\text{Id}}=\text{id}$, it follows that $\text{sw}_{L,\text{Id}}=\text{id}$.
+In a similar way, for composed-inside transformers $T_{L}^{M}=M\circ L$
+we need to switch the roles of $M$ and $L$ in the same computation
+and substitute $L=\text{id}$ into the outer-identity law,
+\[
+\text{pu}_{\text{Id}}^{\uparrow M}\bef\text{sw}_{\text{Id},M}=\text{pu}_{\text{Id}}\quad.
+\]
+ We obtain $\text{sw}_{\text{Id},M}=\text{id}$.
 
-Setting $M=\text{Id}$ in the composed-outside transformer $T_{L}^{M}=L\circ M$,
-we find that the type signature of \lstinline!swap! becomes
-\[
-\text{sw}_{L,\text{Id}}:\text{Id}\circ L\leadsto L\circ\text{Id}\cong L\leadsto L\quad.
-\]
-It is reasonable to assume that a function with the type signature
-$L^{A}\Rightarrow L^{A}$ is the identity function,
-\[
-\text{sw}_{L,\text{Id}}=\text{id}^{:L^{A}\Rightarrow L^{A}}\quad.
-\]
- This assumption becomes the \textbf{identity law\index{identity law of swap}}
-of \lstinline!swap! for composed-outside transformers $T_{L}^{M}=L\circ M$
-where $M$ is the foreign monad. For composed-\emph{inside} transformers
-$T_{L}^{M}=L\circ M$ where $L$ is the foreign monad, the \lstinline!swap!
-identity law is 
-\[
-\text{sw}_{\text{Id},M}=\text{id}^{:M^{A}\Rightarrow M^{A}}\quad.
-\]
+Note that $\text{sw}_{L,\text{Id}}:L^{A}\Rightarrow L^{A}$ is a natural
+transformation for a monad $L$, so one may heuristically expect $\text{sw}_{L,\text{Id}}$
+to be equal to the identity map (the only natural transformation $L^{A}\Rightarrow L^{A}$
+that exists for all monads $L$). Similarly, one may expect that $\text{sw}_{\text{Id},M}:M^{A}\Rightarrow M^{A}=\text{id}$
+since it is a natural transformation. But these are only heuristic
+expectations, while we have just shown that the properties $\text{sw}_{L,\text{Id}}=\text{id}$
+and $\text{sw}_{\text{Id},M}=\text{id}$ follow from the previously
+established laws of \lstinline!swap! without any new assumptions.
+These properties will be needed in the proofs below. 
 
-For the monad transformer identity law, we need a monadic isomorphism
-between the monads $T_{L}^{\text{Id}}$ and $L$. Since $T_{L}^{M}=L\circ M$,
-the monad $T_{L}^{\text{Id}}=L\circ\text{Id}=L$ is the same type
-constructor as $L$. So, the isomorphism between $T_{L}^{\text{Id}}$
-and $L$ is simply the identity maps in both directions, $\text{id}:T_{L}^{\text{Id},A}\Rightarrow L^{A}$
+To demonstrate a monadic isomorphism between the monads $T_{L}^{\text{Id}}$
+and $L$, we will consider separately the cases of composed-inside
+and composed-outside transformers.
+
+For composed-inside transformers $T_{L}^{M}=M\circ L$, we set $M=\text{Id}$
+and find that the monad $T_{L}^{\text{Id}}=\text{Id}\circ L=L$ is
+the same type constructor as $L$. So, the isomorphism maps between
+$T_{L}^{\text{Id}}$ and $L$ are simply the identity maps in both
+directions, $\text{id}:T_{L}^{\text{Id},A}\Rightarrow L^{A}$ and
+$\text{id}:L^{A}\Rightarrow T_{L}^{\text{Id},A}$. 
+
+For composed-outside transformers $T_{L}^{M}=L\circ M$, the monad
+$T_{L}^{\text{Id}}=L\circ\text{Id}=L$ is again the same type constructor
+as $L$. The isomorphisms between $T_{L}^{\text{Id}}$ and $L$ are
+again the identity maps in both directions, $\text{id}:T_{L}^{\text{Id},A}\Rightarrow L^{A}$
 and $\text{id}:L^{A}\Rightarrow T_{L}^{\text{Id},A}$. 
 
-However, we still need to verify that the monad structure of $T_{L}^{\text{Id}}$
-is the same as that of $L$; otherwise the identity map would not
-be a \emph{monadic} isomorphism (i.e.~an isomorphism that preserves
-the structure of the monads). To verify this, it is sufficient to
-show that the methods $\text{pu}_{T}$ and $\text{ftn}_{T}$ defined
+We have found the isomorphism maps between $T_{L}^{\text{Id}}$ and
+$L$. However, we still need to verify that the monad structure of
+$T_{L}^{\text{Id}}$ is the same as that of $L$; otherwise the isomorphism
+would not be a \emph{monadic} isomorphism (i.e.~an isomorphism that
+preserves the structure of the monads). To verify this, it is sufficient
+to show that the methods $\text{pu}_{T}$ and $\text{ftn}_{T}$ defined
 by Eqs.~(\ref{eq:def-pure-T-via-pure-L-and-pure-M})\textendash (\ref{eq:def-flatten-T-via-sw-and-flatten-L-M})
 for the monad $T_{L}^{\text{Id}}$ are \emph{the same functions} as
 the given methods $\text{pu}_{L}$ and $\text{ftn}_{L}$ of the monad
-$L$. If the monad's methods are the same functions, the identity
-maps will satisfy the laws of the monadic morphism in both directions,
-e.g.
+$L$. If the monad's methods are the same functions, i.e.~$\text{pu}_{L}=\text{pu}_{T}$
+and $\text{ftn}_{L}=\text{ftn}_{T}$, then the identity map $\text{id}:T^{A}\Rightarrow L^{A}$
+will satisfy the laws of the monadic morphism,
 \[
 \text{pu}_{T}\bef\text{id}=\text{pu}_{L}\quad,\quad\quad\text{ftn}_{T}\bef\text{id}=\text{id}^{\uparrow T}\bef\text{id}\bef\text{ftn}_{L}\quad.
 \]
+In the same way, the laws of the monadic morphism will hold for the
+identity map in the direction $L\leadsto T$. 
 
-To show that $\text{pu}_{L}=\text{pu}_{T}$, use Eq.~(\ref{eq:def-pure-T-via-pure-L-and-pure-M})
-with $M=\text{Id}$:
+\paragraph{For composed-inside transformers:}
+
+We need to show that $\text{pu}_{M}=\text{pu}_{T}$ and $\text{ftn}_{M}=\text{ftn}_{T}$.
+Designate $L$ as the foreign monad and $M$ as the base monad in
+Eq.~(\ref{eq:def-pure-T-via-pure-L-and-pure-M}), as appropriate
+for the composed-inside transformer $T_{L}^{M}=M\circ L$. Setting
+the foreign monad to identity, $L=\text{Id}$, in Eq.~(\ref{eq:def-pure-T-via-pure-L-and-pure-M})
+gives
+\[
+\text{pu}_{T}=\text{pu}_{M}\bef\text{pu}_{\text{Id}}=\text{pu}_{M}.
+\]
+
+To show that $\text{ftn}_{M}=\text{ftn}_{T}$, we use Eq.~(\ref{eq:def-flatten-T-via-sw-and-flatten-L-M})
+with $L=\text{Id}$:
 \begin{align*}
- & \text{pu}_{T}\\
-{\color{greenunder}\text{use Eq.~(\ref{eq:def-pure-T-via-pure-L-and-pure-M})}:}\quad & =\text{pu}_{\text{Id}}\bef\text{pu}_{L}=\text{id}\bef\text{pu}_{L}=\text{pu}_{L}\quad.
+ & \text{ftn}_{T}\\
+{\color{greenunder}\text{use Eq.~(\ref{eq:def-flatten-T-via-sw-and-flatten-L-M})}:}\quad & =\text{sw}_{\text{Id},M}^{\uparrow\text{Id}}\bef\text{ftn}_{\text{Id}}\bef\text{ftn}_{M}^{\uparrow\text{Id}}\\
+{\color{greenunder}\text{use \ensuremath{\text{ftn}_{\text{Id}}}=\text{id} and \ensuremath{\text{sw}_{\text{Id},M}}=\text{id}}:}\quad & =\text{ftn}_{M}\quad.
 \end{align*}
+
+
+\paragraph{For composed-outside transformers:}
+
+We need to show that $\text{pu}_{L}=\text{pu}_{T}$ and $\text{ftn}_{L}=\text{ftn}_{T}$.
+Designate $M$ as the foreign monad and $L$ as the base monad in
+Eq.~(\ref{eq:def-pure-T-via-pure-L-and-pure-M}), as appropriate
+for the composed-outside transformer $T_{L}^{M}=L\circ M$. Setting
+the foreign monad to identity, $M=\text{Id}$, in Eq.~(\ref{eq:def-pure-T-via-pure-L-and-pure-M})
+gives
+\[
+\text{pu}_{T}=\text{pu}_{\text{Id}}\bef\text{pu}_{L}=\text{pu}_{L}.
+\]
 
 To show that $\text{ftn}_{L}=\text{ftn}_{T}$, use Eq.~(\ref{eq:def-flatten-T-via-sw-and-flatten-L-M})
 with $M=\text{Id}$:
@@ -3850,6 +4455,36 @@ $\text{mrun}$ and $\text{brun}$,
 \end{itemize}
 
 \section{Summary and discussion}
+
+\subsection{Exercises}
+
+\subsubsection{Exercise \label{subsec:Exercise-monad-transformer-extra-layer}\ref{subsec:Exercise-monad-transformer-extra-layer} }
+
+Suppose $T_{L}^{M}$ is a lawful monad transformer for the base monad
+$L$ and a foreign monad $M$. Can we modify $T_{L}^{M}$ and construct
+another monad transformer for $L$ that still satisfies all transformer
+laws?
+
+One possibility is to compose $T$ with an extra layer of the monads
+$L$ or $M$. Define $U$ and $V$ by
+\[
+U^{A}\triangleq L^{T_{L}^{M,A}}\quad,\quad\quad V^{A}\triangleq M^{T_{L}^{M,A}}\quad.
+\]
+In a shorter notation, $U\triangleq L\circ T_{L}^{M}$ and $V\triangleq M\circ T_{L}^{M}$.
+We have the \lstinline!swap! functions 
+\begin{align*}
+\text{sw}_{L,T} & :T_{L}^{M}\circ L\leadsto L\circ T_{L}^{M}\quad,\\
+\text{sw}_{M,T} & :T_{L}^{M}\circ M\leadsto M\circ T_{L}^{M}\quad,
+\end{align*}
+defined using the already given methods $\text{lift}$ and $\text{blift}$
+of $T_{L}^{M}$ as
+\begin{align*}
+\text{sw}_{L,T} & =\text{blift}^{\uparrow T}\bef\text{ftn}_{T}\bef\text{pu}_{L}\quad,\\
+\text{sw}_{M,T} & =\text{lift}^{\uparrow T}\bef\text{ftn}_{T}\bef\text{pu}_{M}\quad.
+\end{align*}
+We can define the monad methods $\text{ftn}_{U}$ and $\text{ftn}_{V}$
+using these \lstinline!swap! functions. Will $U$ and/or $V$ be
+lawful monad transformers for $L$?
 
 \begin{comment}
 Chapter eleven of the functional programming tutorial computations
