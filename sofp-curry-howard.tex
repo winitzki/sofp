@@ -1,50 +1,157 @@
 
 \chapter{The formal logic of types III. The Curry-Howard correspondence\label{chap:3-3-The-formal-logic-curry-howard}}
 
-\section{Slides}
+\global\long\def\gunderline#1{\mathunderline{greenunder}{#1}}%
+\global\long\def\bef{\forwardcompose}%
+\global\long\def\bbnum#1{\custombb{#1}}%
+Fully parametric functions were defined in Section~\ref{sec:Fully-parametric-functions}.
+These functions perform general operations that work with type parameters
+and do not depend on any specific data types. We have seen examples
+of fully parametric functions, such as
+\begin{lstlisting}
+def before[A, B, C](f: A => B, g: B => C): A => C = { x => g(f(x)) }
+\end{lstlisting}
+We have also seen in Section~\ref{subsec:Deriving-a-function's}
+that for certain functions of this kind, the code can be derived unambiguously
+from the type signature.
 
-\subsection{Types and propositional logic}
+There exists a mathematical theory (called the \textbf{Curry-Howard
+correspondence}) that provides precise conditions for the possibility
+of deriving a function's code from its type, and, when possible, a
+systematic derivation algorithm. This chapter will describe the main
+results and applications of this theory to functional programming.
+Technical details about the algorithm are found in Appendix~\ref{app:The-Curry-Howard-correspondence}.
 
-The Curry-Howard correspondence
+\section{Values computable by fully parametric functions}
 
-The code \texttt{\textcolor{blue}{\footnotesize{}val x:\ T =}} ...
-shows that \emph{we can compute a value} of type \texttt{\textcolor{blue}{\footnotesize{}T}}
-as part of our program expression
+To begin, consider the Scala code of a fully parametric function,
+\begin{lstlisting}
+def f[A, B, ...]: ... = {
+  ...
+  val x: A = ... // Some expression here.
+  ...
+}
+\end{lstlisting}
+If this program compiles without type errors, it means that the types
+match and, in particular, that the function \lstinline!f! is able
+to compute a value \lstinline!x! of type \lstinline!A!.
 
-Let's denote this \emph{proposition} by ${\cal CH}(T)$ \textendash{}
-``$\mathcal{C}$ode $\mathcal{H}$as a value of type \texttt{\textcolor{blue}{\footnotesize{}T}}''
+It is sometimes \emph{impossible} to compute a value of a certain
+type within the body of a fully parametric function. For example,
+the fully parametric function \lstinline!fmap! described in Section~\ref{subsec:Disjunctive-Example-option-1}
+cannot compute any values of type \lstinline!A!,
+\begin{lstlisting}
+def fmap[A, B](f: A => B): Option[A] => Option[B] = {
+  val x: A = ??? // Cannot compute x here!
+  ... }
+\end{lstlisting}
+The reason is that a fully parametric function cannot compute values
+of type \lstinline!A! from scratch, without using previously given
+values of type \lstinline!A! and without calling a function that
+would return a value of type \lstinline!A!. There are no values of
+type \lstinline!A! given as arguments; the given function \lstinline!f: A => B!
+returns values of type \lstinline!B! and not \lstinline!A!. The
+code of \lstinline!fmap! must do pattern matching on \lstinline!oa:Option[A]!,
+which yields two cases, and the value x must be computed in both cases:
+\begin{lstlisting}
+def fmap[A, B](f: A => B): Option[A] => Option[B] = {
+  case None       => 
+    val x: A = ??? // Cannot compute x here!
+  case Some(a)    =>
+    val x: A = a   // Can compute x in this scope.
+}
+\end{lstlisting}
+Since the case \lstinline!None! does not contain any values of type
+\lstinline!A!, we are unable to compute a value \lstinline!x! in
+that scope (as long as \lstinline!fmap! remains a fully parametric
+function). Being able to compute \lstinline!x:A! ``within the body
+of the function'' means being able to compute \lstinline!x! in \emph{all}
+cases, not just within one part of the \lstinline!match! expression.
+
+The body of \lstinline!fmap! also cannot compute any values of type
+\lstinline!B!. Since no arguments of type \lstinline!B! are given,
+the only way of obtaining a value of type \lstinline!B! would be
+to apply the function \lstinline!f: A => B! to \emph{some} value
+of type \lstinline!A!; but we just saw that the body of \lstinline!fmap!
+cannot compute any values of type \lstinline!A!.
+
+Another example of being unable to compute a value of a certain type
+is
+\begin{lstlisting}
+def before[A, B, C](f: A => B, g: B => C): A => C = {
+  //  val h: C => A = ??? // Cannot compute h here!
+  a => g(f(a)) // Can compute a value of type A => C.
+}
+\end{lstlisting}
+The body of \lstinline!before! may only use the arguments \lstinline!f!
+and \lstinline!g!. It is possible to obtain a value of type \lstinline!A => C!
+by composing \lstinline!f! and \lstinline!g!, but it is impossible
+to compute a value \lstinline!h! of type \lstinline!C => A!, no
+matter what code we try to write for computing \lstinline!h! via
+\lstinline!f! and \lstinline!g!. The reason is that the body of
+\lstinline!before! has no given values of type \lstinline!A! and
+no functions that return values of type \lstinline!A!, so a nameless
+function such as \lstinline!(c:C) => ???! cannot implement its return
+value of type \lstinline!A!. Since a fully parametric function cannot
+create values of an arbitrary type \lstinline!A! from scratch, we
+see no possibility of computing \lstinline!h! within the body of
+\lstinline!before!.
+
+Can we prove rigorously that the implementation of \lstinline!before!
+is unique, and that no values of type \lstinline!C => A! can be computed
+within the body of \lstinline!before!? Or would some clever trick
+(that we do not know about) produce a value of that type? So far,
+we only have an intuition about whether a value of certain type can
+be computed. To make our arguments rigorous, we need to translate
+the statement such as ``the body of a fully parametric function can
+compute a value of type \lstinline!T! from given arguments of types
+\lstinline!X!, \lstinline!Y!, ..., \lstinline!Z!'' into a mathematical
+formula.
+
+{*}{*}{*}This formula will be either provable or not.
+
+The considerations will be simpler if we assume that the function
+is \emph{returning} a value of type \lstinline!T! (rather than computing
+it as an intermediate result). Being able to return a \lstinline!t:T!
+is equivalent to being able to compute a \lstinline!t:T! in the body
+of the function. So, we can now formulate the statement
+
+{*}{*}{*}We will denote this statement by ${\cal CH}(X\Rightarrow Y)$.
+
+Let's denote this proposition by ${\cal CH}(T)$ \textendash{} ``$\mathcal{C}$ode
+$\mathcal{H}$as a value of type T''
 
 Correspondence between types and propositions, for a given program:
 \begin{center}
-\begin{tabular}{|c|c|c|}
+\begin{tabular}{|c|c|c|c|}
 \hline 
-\textbf{Type} & \textbf{Proposition} & \textbf{Short notation}\tabularnewline
+\textbf{Type} & \textbf{Proposition} & \textbf{Logic notation} & \textbf{Type notation}\tabularnewline
 \hline 
 \hline 
-\texttt{\textcolor{blue}{\footnotesize{}T}} & ${\cal CH}(T)$ & $T$\tabularnewline
+\texttt{\textcolor{blue}{\footnotesize{}A}} & ${\cal CH}(A)$ & $A$ & $A$\tabularnewline
 \hline 
-\texttt{\textcolor{blue}{\footnotesize{}(A, B)}} & ${\cal CH}(A)$ \emph{and} ${\cal CH}(B)$ & $A\times B$\tabularnewline
+\texttt{\textcolor{blue}{\footnotesize{}(A, B)}} & ${\cal CH}(A)$ \emph{and} ${\cal CH}(B)$ & $A\wedge B$ & $A\times B$\tabularnewline
 \hline 
-\texttt{\textcolor{blue}{\footnotesize{}Either{[}A, B{]}}} & ${\cal CH}(A)$ \emph{or} ${\cal CH}(B)$ & $A+B$, $A\vee B$\tabularnewline
+\texttt{\textcolor{blue}{\footnotesize{}Either{[}A, B{]}}} & ${\cal CH}(A)$ \emph{or} ${\cal CH}(B)$ & $A\vee B$ & $A+B$\tabularnewline
 \hline 
-\texttt{\textcolor{blue}{\footnotesize{}A $\Rightarrow$ B}} & ${\cal CH}(A)$ \emph{implies} ${\cal CH}(B)$ & $A\Rightarrow B$\tabularnewline
+\texttt{\textcolor{blue}{\footnotesize{}A $\Rightarrow$ B}} & ${\cal CH}(A)$ \emph{implies} ${\cal CH}(B)$ & $A\Rightarrow B$ & $A\Rightarrow B$\tabularnewline
 \hline 
-\texttt{\textcolor{blue}{\footnotesize{}Unit}} & \emph{True} & 1\tabularnewline
+\texttt{\textcolor{blue}{\footnotesize{}Unit}} & \emph{True} & $T$ & $\bbnum 1$\tabularnewline
 \hline 
-\texttt{\textcolor{blue}{\footnotesize{}Nothing}} & \emph{False} & 0\tabularnewline
+\texttt{\textcolor{blue}{\footnotesize{}Nothing}} & \emph{False} & $F$ & $\bbnum 0$\tabularnewline
 \hline 
 \end{tabular}
 \par\end{center}
 
 Short notation helps reason about logic and types
 
-Type parameter \texttt{\textcolor{blue}{\footnotesize{}{[}T{]}}} in
-a function type means $\forall T$
+Type parameter {[}T{]} in a function type means $\forall T$
 
-Example: \texttt{\textcolor{blue}{\footnotesize{}def dupl{[}A{]}:\ A
-$\Rightarrow$ (A, A)}}. The type of this function corresponds to
-the (valid) proposition $\forall A:A\Rightarrow A\times A$
+Example: def dupl{[}A{]}:\ A $\Rightarrow$ (A, A). The type of this
+function corresponds to the (valid) proposition $\forall A:A\Rightarrow A\times A$
 
+
+\section{Slides}
 
 \subsection{Working with the CH correspondence I}
 
@@ -134,13 +241,25 @@ library, and Appendix~???
 
 \subsection{Working with the CH correspondence III}
 
+\subsection{Type isomorphisms I: identities}
+
 Using known properties of propositional logic and arithmetic
 
 Are $A+B,\:A\times B$ more like logic $\left(A\vee B,\;A\wedge B\right)$
 or like arithmetic?
 
-Some standard identities in logic ($\forall A\forall B\forall C$
-is assumed):
+Some identities in logic ($\forall A\forall B\forall C$ is assumed)
+written using $\times$, $+$:
+\begin{align*}
+A\times1=A; & \quad A\times B=B\times A\\
+A+1=1; & \quad A+B=B+A\\
+(A\times B)\times C=A\times(B\times C); & \quad A+(B\times C)=(A+B)\times(A+C)\\
+(A+B)+C=A+(B+C); & \quad A\times(B+C)=(A\times B)+(A\times C)\\
+(A\times B)\Rightarrow C & =A\Rightarrow(B\Rightarrow C)\\
+A\Rightarrow(B\times C) & =(A\Rightarrow B)\times(A\Rightarrow C)\\
+(A+B)\Rightarrow C & =(A\Rightarrow C)\times(B\Rightarrow C)
+\end{align*}
+In the logic notation:
 \begin{align*}
 A\times1=A; & \quad A\times B=B\times A\\
 A\vee1=1; & \quad A\vee B=B\vee A\\
@@ -151,9 +270,20 @@ A\Rightarrow(B\times C) & =(A\Rightarrow B)\times(A\Rightarrow C)\\
 (A\vee B)\Rightarrow C & =(A\Rightarrow C)\times(B\Rightarrow C)
 \end{align*}
 
-Each identity means 2 function types: $X=Y$ is $X\Rightarrow Y\text{ \emph{and} }Y\Rightarrow X$ 
+Each identity means 2 function types: $X=Y$ is $X\Rightarrow Y\text{ \emph{and} }Y\Rightarrow X$
 
-Do these functions convert values between the types $X$ and $Y$?
+These functions exist and convert values between types $X$ and $Y$
+
+Do these functions express \emph{equivalence} of the types $X$ and
+$Y$?
+
+Using known properties of propositional logic and arithmetic
+
+Are $A+B,\:A\times B$ more like logic $\left(A\vee B,\;A\wedge B\right)$
+or like arithmetic?
+
+Some standard identities in logic ($\forall A\forall B\forall C$
+is assumed):
 
 
 \subsection{Type isomorphisms I}
@@ -162,7 +292,7 @@ Types $A$ and $B$ are isomorphic, $A\equiv B$, if there is a 1-to-1
 correspondence between the sets of values of these types
 
 Need to find two functions $f:A\Rightarrow B$ and $g:B\Rightarrow A$
-such that $f\circ g=id$ and $g\circ f=id$
+such that $f\bef g=id$ and $g\bef f=id$
 
 Example 1: Is $\forall A:A\times1\equiv A$? Types in Scala: \texttt{\textcolor{blue}{\footnotesize{}(A,
 Unit)}} and \texttt{\textcolor{blue}{\footnotesize{}A}}{\footnotesize\par}
@@ -195,7 +325,7 @@ Which ones \emph{do} \emph{not} yield isomorphisms, and why?
 
 Verifying type equivalence by implementing isomorphisms
 
-Need to verify that $f_{1}\circ f_{2}=id$ and $f_{2}\circ f_{1}=id$
+Need to verify that $f_{1}\bef f_{2}=id$ and $f_{2}\bef f_{1}=id$
 
 Example 3: $\forall A\forall B\forall C:(A\times B)\times C\equiv A\times(B\times C)$
 
@@ -303,10 +433,10 @@ List{[}Nothing{]}}}{\footnotesize\par}
 \texttt{\textcolor{blue}{\footnotesize{}final case class ::(head: A,
 tail: List{[}A{]}) extends List{[}A{]}}}{\footnotesize\par}
 
-Short notation: (the sign ``$\equiv$'' means type equivalence)\texttt{\footnotesize{}
+Short notation: (the sign ``$\cong$'' means type equivalence)\texttt{\footnotesize{}
 \begin{align*}
-\text{List}^{A} & \equiv1+A\times\text{List}^{A}\equiv1+A\times(1+A\times(1+A\times(...)...)\\
- & \equiv1+A+A\times A+A\times A\times A+...+A\times...\times A\times\text{List}^{A}
+\text{List}^{A} & \cong1+A\times\text{List}^{A}\cong1+A\times(1+A\times(1+A\times(...)...)\\
+ & \cong1+A+A\times A+A\times A\times A+...+A\times...\times A\times\text{List}^{A}
 \end{align*}
 }A curious analogy with calculus: $\text{List}(t)=1+t\cdot\text{List}(t)$;
 ``solve'' this as 
@@ -335,7 +465,7 @@ and {\footnotesize{}$\text{Reader}^{E,A}\Rightarrow(A\Rightarrow B)\Rightarrow\t
 
 Show that one cannot implement \texttt{\textcolor{blue}{\footnotesize{}Reader{[}A,T{]}$\Rightarrow$(A$\Rightarrow$B)$\Rightarrow$Reader{[}B,T{]}}}{\footnotesize\par}
 
-Implement {\footnotesize{}$map^{A,B}:1+A\Rightarrow(A\Rightarrow B)\Rightarrow1+B$
+Implement {\footnotesize{}$\text{map}^{A,B}:1+A\Rightarrow(A\Rightarrow B)\Rightarrow1+B$
 }with no ``information loss'', that is, \texttt{\textcolor{blue}{\footnotesize{}map(opt)(x
 $\Rightarrow$ x) = opt}}{\footnotesize\par}
 
@@ -353,11 +483,10 @@ $\text{map}^{S,A,B}:\text{State}^{S,A}\Rightarrow(A\Rightarrow B)\Rightarrow\tex
 {\footnotesize{}$\text{flatMap}^{S,A,B}:\text{State}^{S,A}\Rightarrow(A\Rightarrow\text{State}^{S,B})\Rightarrow\text{State}^{S,B}$}{\footnotesize\par}
 
 Define recursive type \texttt{\textcolor{blue}{\footnotesize{}NEList{[}A{]}}}
-by{\footnotesize{} $\text{NEList}^{A}\equiv A+A\times\text{NEList}^{A}$}{\footnotesize\par}
+by{\footnotesize{} $\text{NEList}^{A}\triangleq A+A\times\text{NEList}^{A}$}{\footnotesize\par}
 
-Implement \texttt{\textcolor{blue}{\footnotesize{}map}} and \texttt{\textcolor{blue}{\footnotesize{}concat}}
-for \texttt{\textcolor{blue}{\footnotesize{}NEList}} (tail recursion
-not necessary)
+Implement \texttt{\textcolor{blue}{\footnotesize{}concat}} for \texttt{\textcolor{blue}{\footnotesize{}NEList}}
+(tail recursion not necessary)
 
 
 \subsection{Exercises }
@@ -373,16 +502,17 @@ Either{[}(A, Char), (A, Float){]}{]}}} into an isomorphic type of
 the form {\footnotesize{}$A\times(...)$};{\footnotesize{} }write{\footnotesize{}
 }the{\footnotesize{} }equivalence tests
 
-Define type {\footnotesize{}$\text{OptEither}^{A,B}=1+A+B$ }and implement\texttt{\textcolor{blue}{\footnotesize{}
-map}} and \texttt{\textcolor{blue}{\footnotesize{}flatMap}} for it,
-without information loss, preferring $B$ over $A$. Get the same
-result using the equivalent type {\footnotesize{}$(1+A)+B$}, i.e.
-\texttt{\textcolor{blue}{\footnotesize{}Either{[}Option{[}A{]}, B{]}}}{\footnotesize\par}
+Define type {\footnotesize{}$\text{OptEither}^{A,B}\triangleq1+A+B$
+}and implement\texttt{\textcolor{blue}{\footnotesize{} map}} and \texttt{\textcolor{blue}{\footnotesize{}flatMap}}
+for it, without information loss, preferring $B$ over $A$. Get the
+same result using the equivalent type {\footnotesize{}$(1+A)+B$},
+i.e. \texttt{\textcolor{blue}{\footnotesize{}Either{[}Option{[}A{]},
+B{]}}}{\footnotesize\par}
 
 Implement \texttt{\textcolor{blue}{\footnotesize{}map}} for \texttt{\textcolor{blue}{\footnotesize{}MyT{[}T{]}}}
 (see worked example 1) and for \texttt{\textcolor{blue}{\footnotesize{}MyTU{[}T,U{]}}}{\footnotesize\par}
 
-Implement type-parametric functions with the following types:
+Implement fully parametric functions with the following types:
 
 {\footnotesize{}$\text{State}^{S,A}\Rightarrow\left(S\times A\Rightarrow S\times B\right)\Rightarrow\text{State}^{S,B}$}{\footnotesize\par}
 
@@ -405,7 +535,7 @@ $A+Z\Rightarrow B+Z\Rightarrow(A\Rightarrow B\Rightarrow C)\Rightarrow C+Z$}{\fo
 
 {\footnotesize{}$\text{flatMap}^{R,T,U}:\text{Cont}^{R,T}\Rightarrow(T\Rightarrow\text{Cont}^{R,U})\Rightarrow\text{Cont}^{R,U}$}{\footnotesize\par}
 
-Define recursive type {\footnotesize{}$\text{Tr3}{}^{A}\equiv1+A\times A\times A\times\text{Tr3}^{A}$};
+Define recursive type {\footnotesize{}$\text{Tr3}{}^{A}\triangleq1+A\times A\times A\times\text{Tr3}^{A}$};
 implement \texttt{\textcolor{blue}{\footnotesize{}map}} for it
 
 
@@ -505,32 +635,6 @@ prefer \texttt{\textcolor{blue}{\footnotesize{}case class A{[}T{]}()}}{\footnote
 
 \section{Some slides may be repeated}
 
-\subsection{Type isomorphisms I: identities}
-
-Using known properties of propositional logic and arithmetic
-
-Are $A+B,\:A\times B$ more like logic $\left(A\vee B,\;A\wedge B\right)$
-or like arithmetic?
-
-Some identities in logic ($\forall A\forall B\forall C$ is assumed)
-written using $\times$, $+$:
-\begin{align*}
-A\times1=A; & \quad A\times B=B\times A\\
-A+1=1; & \quad A+B=B+A\\
-(A\times B)\times C=A\times(B\times C); & \quad A+(B\times C)=(A+B)\times(A+C)\\
-(A+B)+C=A+(B+C); & \quad A\times(B+C)=(A\times B)+(A\times C)\\
-(A\times B)\Rightarrow C & =A\Rightarrow(B\Rightarrow C)\\
-A\Rightarrow(B\times C) & =(A\Rightarrow B)\times(A\Rightarrow C)\\
-(A+B)\Rightarrow C & =(A\Rightarrow C)\times(B\Rightarrow C)
-\end{align*}
-
-Each identity means 2 function types: $X=Y$ is $X\Rightarrow Y\text{ \emph{and} }Y\Rightarrow X$ 
-
-These functions exist and convert values between types $X$ and $Y$
-
-Do these functions express \emph{equivalence} of the types $X$ and
-$Y$?
-
 
 \subsection{Type isomorphisms II}
 
@@ -538,7 +642,7 @@ Types $A$ and $B$ are isomorphic, $A\equiv B$, if there is a 1-to-1
 correspondence between the sets of values of these types
 
 Need to find two functions $f:A\Rightarrow B$ and $g:B\Rightarrow A$
-such that $f\circ g=id$ and $g\circ f=id$
+such that $f\bef g=id$ and $g\bef f=id$
 
 Example 1: Is $\forall A:A\times1\equiv A$? Types in Scala: \texttt{\textcolor{blue}{\footnotesize{}(A,
 Unit)}} and \texttt{\textcolor{blue}{\footnotesize{}A}}{\footnotesize\par}
@@ -570,7 +674,7 @@ Which ones \emph{do} \emph{not} yield isomorphisms, and why?
 
 Verifying type equivalence by implementing isomorphisms
 
-Need to verify that $f_{1}\circ f_{2}=id$ and $f_{2}\circ f_{1}=id$
+Need to verify that $f_{1}\bef f_{2}=id$ and $f_{2}\bef f_{1}=id$
 
 Example 3: $\forall A\forall B\forall C:(A\times B)\times C\equiv A\times(B\times C)$
 
@@ -757,24 +861,24 @@ Do not yet develop fully the rules for writing code in the short notation;
 this will be done in later chapters
 
 \begin{comment}
-this is part three of chapter three the courage Harvard correspondence
-imagine you have a program and in this program you have code like
-this it means that at some point in your program in the expression
-you are able to compute a value X of type T now of course we're assuming
-that your program is correct and running and your expression is being
-evaluated correctly so if so you have a value of type T let's denote
-this proposition by CH of T meaning that code has a value of type
-T the curry habit respondents is a correspondence between types and
-prepositions and also between values and proofs on the one side there
-is program code in a functional language that program has types and
-expressions that have those types or values of those types on the
-other side of the correspondence there is formal logic which has prepositions
-and these prepositions can be true or false the formal logic has proofs
-of prepositions so true prepositions follow from axioms or from other
-already proved prepositions so in this tutorial I will explore this
-correspondence using Scala as usual as in all my lectures so what
-is this correspondence let's look at this table which summarizes this
-correspondence so as we as we agreed the proposition that corresponds
+you have code like this it means that at some point in your program
+in the expression you are able to compute a value X of type T now
+of course we're assuming that your program is correct and running
+and your expression is being evaluated correctly so if so you have
+a value of type T let's denote this proposition by CH of T meaning
+that code has a value of type T the curry habit respondents is a correspondence
+between types and prepositions and also between values and proofs
+on the one side there is program code in a functional language that
+program has types and expressions that have those types or values
+of those types on the other side of the correspondence there is formal
+logic which has prepositions and these prepositions can be true or
+false the formal logic has proofs of prepositions so true prepositions
+follow from axioms or from other already proved prepositions so in
+this tutorial I will explore this correspondence using Scala as usual
+as in all my lectures
+
+so what is this correspondence let's look at this table which summarizes
+this correspondence so as we as we agreed the proposition that corresponds
 to each type not to each value but to each type such as integer floating
 point double string and so on so each type responds to a proposition
 the tuple type corresponds to the situation that you have computed
