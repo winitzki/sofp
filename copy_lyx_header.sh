@@ -14,8 +14,9 @@ headerfile=/tmp/header$$.tmp
 find_header sofp.lyx | (
   read h1 h2
   # Copy the master header into a temporary file.
-  head -$h2 sofp.lyx | tail -n +$h1  > $headerfile
-  # Insert '\master sofp.lyx' after '\use_default_options true'
+  # Replace '\inputencoding utf8' by '\inputencoding auto'.
+  head -$h2 sofp.lyx | tail -n +$h1 | sed -e 's|\inputencoding utf8|\inputencoding auto|' > $headerfile
+  # Insert '\master sofp.lyx' after '\use_default_options true'.
   h3=`fgrep -a -n '\use_default_options' $headerfile | cut -d: -f1`
   cat <(head -$h3 $headerfile) <(echo '\master sofp.lyx') <(tail -n +$((h3+1)) $headerfile) > $headerfile.1
   mv $headerfile.1 $headerfile
