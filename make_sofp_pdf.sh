@@ -47,4 +47,5 @@ tar jcvf "$name-src.tar.bz2" $name*lyx $name*tex $name*dvi `fgrep includegraphic
 mv "1$name.pdf" "$name.pdf"
 echo Result is "$name.pdf" having `pdftk "$name.pdf" dump_data | fgrep NumberOfPages | sed -e 's,^.* ,,'` pages.
 # Cleanup.
+tar jcvf "$name-logs.tar.bz2" $name*log
 rm -f $name*{idx,ind,aux,dvi,ilg,out,toc,log,ps}
