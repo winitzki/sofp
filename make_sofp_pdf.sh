@@ -15,7 +15,7 @@ function make_pdf_with_index {
 	run_latex_many_times "$base"
 	makeindex "$base.idx"
 	run_latex_many_times "$base"
-        dvips "$base.dvi" >> $base.log
+        dvips "$base.dvi" 2>&1 >> $base.log
         ps2pdf "$base.ps" >> $base.log
 }
 
