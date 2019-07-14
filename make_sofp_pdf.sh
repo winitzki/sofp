@@ -16,7 +16,7 @@ function make_pdf_with_index {
 	makeindex "$base.idx"
 	run_latex_many_times "$base"
         dvips "$base.dvi" 2>&1 >> $base.log
-        ps2pdf "$base.ps" >> $base.log
+        ps2pdf "$base.ps" 2>&1 >> $base.log
 }
 
 function add_color {
@@ -42,7 +42,15 @@ rm -f $name*tex
 "$lyx" --export pdflatex $name.lyx # Exports LaTeX for all child documents as well.
 for f in $name*tex; do add_color "$f"; done
 make_pdf_with_index "$name" # Output is $name.pdf, main file is $name.tex, and other .tex files are \include'd.
-tar jcvf "$name-src.tar.bz2" $name*lyx $name*tex $name*dvi `fgrep includegraphics $name*tex | sed -e 's,[^{]*{\([^}]*\)},\1.*,' |while read f; do ls $f ; done` "$0"
+
+#tar jcvf "$name-src.tar.bz2" $name*lyx $name*tex $name*dvi `fgrep includegraphics $name*tex | sed -e 's,[^{]*{\([^}]*\)},\1.*,' |while read f; do ls $f ; done` "$0"
+srcbase="sofp-src"
+rm -rf "$srcbase"
+mkdir "$srcbase"
+cp $name*lyx $name*tex $name*dvi `fgrep includegraphics $name*tex | sed -e 's,[^{]*{\([^}]*\)},\1.*,' |while read f; do ls $f ; done` *.sh "$srcbase"/
+tar jcvf "$name-src.tar.bz2" "$srcbase"/
+rm -rf "$srcbase"/
+
 "$pdftk" "$name.pdf" attach_files "$name-src.tar.bz2" output "1$name.pdf"
 mv "1$name.pdf" "$name.pdf"
 echo Result is "$name.pdf" having `pdftk "$name.pdf" dump_data | fgrep NumberOfPages | sed -e 's,^.* ,,'` pages.

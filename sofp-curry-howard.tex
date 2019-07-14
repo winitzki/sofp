@@ -5,9 +5,9 @@
 \global\long\def\bef{\forwardcompose}
 \global\long\def\bbnum#1{\custombb{#1}}
 Fully parametric functions were defined in Section~\ref{sec:Fully-parametric-functions}.
-These functions perform general operations that work with type parameters
-and do not depend on any specific data types. We have seen examples
-of fully parametric functions, such as
+These functions perform general operations that do not depend on any
+specific data types such as \lstinline!Int! or \lstinline!String!.
+An example of a fully parametric function is
 \begin{lstlisting}
 def before[A, B, C](f: A => B, g: B => C): A => C = { x => g(f(x)) }
 \end{lstlisting}
@@ -17,31 +17,30 @@ from the type signature.
 
 There exists a mathematical theory (called the \textbf{Curry-Howard
 correspondence}) that provides precise conditions for the possibility
-of deriving a function's code from its type, and, when possible, a
-systematic derivation algorithm. Technical details about the algorithm
-are found in Appendix~\ref{app:The-Curry-Howard-correspondence}.
-This chapter will describe the main results and applications of this
-theory to functional programming.
+of deriving a function's code from its type and a systematic derivation
+algorithm. Technical details about the algorithm are found in Appendix~\ref{app:The-Curry-Howard-correspondence}.
+This chapter describes the main results and applications of this theory
+to functional programming.
 
 \section{Values computed by fully parametric functions}
 
 \subsection{Motivation}
 
-To begin, consider the Scala code of a fully parametric function,
+Consider the Scala code of a fully parametric function,
 \begin{lstlisting}
 def f[A, B, ...]: ... = {
   ...
-  val x: A = ... // Some expression here.
+  val x: Either[A, B] = ... // Some expression here.
   ...
 }
 \end{lstlisting}
 If this program compiles without type errors, it means that the types
 match and, in particular, that the function \lstinline!f! is able
-to compute a value \lstinline!x! of type \lstinline!A!.
+to compute a value \lstinline!x! of type \lstinline!Either[A, B]!.
 
 It is sometimes \emph{impossible} to compute a value of a certain
 type within the body of a fully parametric function. For example,
-the fully parametric function \lstinline!fmap! described in Section~\ref{subsec:Disjunctive-Example-option-1}
+the fully parametric function \lstinline!fmap! shown in Section~\ref{subsec:Disjunctive-Example-option-1}
 cannot compute any values of type \lstinline!A!,
 \begin{lstlisting}
 def fmap[A, B](f: A => B): Option[A] => Option[B] = {
@@ -55,7 +54,7 @@ returns values of type \lstinline!A!. In \lstinline!fmap!, no values
 of type \lstinline!A! are given as arguments; the given function
 \lstinline!f: A => B! returns values of type \lstinline!B! and not
 \lstinline!A!. The code of \lstinline!fmap! must do pattern matching
-on \lstinline!oa:Option[A]!, yielding two cases:
+on an \lstinline!Option[A]!:
 \begin{lstlisting}
 def fmap[A, B](f: A => B): Option[A] => Option[B] = {
   case None       => 
@@ -64,14 +63,13 @@ def fmap[A, B](f: A => B): Option[A] => Option[B] = {
     val x: A = a   // Can compute x in this scope.
 }
 \end{lstlisting}
-Since the case \lstinline!None! does not contain any values of type
-\lstinline!A!, we are unable to compute a value \lstinline!x! in
-that scope (as long as \lstinline!fmap! remains a fully parametric
-function). Being able to compute \lstinline!x:A! ``within the body
-of the function'' means that, if needed, function should be able
-to return \lstinline!x! as a result value. This requires being able
-to compute \lstinline!x! in \emph{all} cases, not just within one
-part of the \lstinline!match! expression. 
+Since the case \lstinline!None! has no values of type \lstinline!A!,
+we are unable to compute a value \lstinline!x! in that scope (as
+long as \lstinline!fmap! remains a fully parametric function). Being
+able to compute \lstinline!x:A! ``within the body of the function''
+means that, if needed, function should be able to \emph{return} \lstinline!x!
+as a result value. This requires being able to compute \lstinline!x!
+in all cases, not just within one part of the \lstinline!match! expression. 
 
 The body of \lstinline!fmap! also cannot compute any values of type
 \lstinline!B!. Since no arguments of type \lstinline!B! are given,
@@ -85,76 +83,69 @@ is
 \begin{lstlisting}
 def before[A, B, C](f: A => B, g: B => C): A => C = {
   //  val h: C => A = ??? // Cannot compute h here!
-  a => g(f(a)) // Can compute a value of type A => C.
+  a => g(f(a))            // Can compute a value of type A => C.
 }
 \end{lstlisting}
 The body of \lstinline!before! may only use the arguments \lstinline!f!
 and \lstinline!g!. It is possible to obtain a value of type \lstinline!A => C!
 by composing \lstinline!f! and \lstinline!g!, but it is impossible
 to compute a value \lstinline!h! of type \lstinline!C => A!, no
-matter what code we try to write for computing \lstinline!h! via
-\lstinline!f! and \lstinline!g!. The reason is that the body of
-\lstinline!before! has no given values of type \lstinline!A! and
-no functions that return values of type \lstinline!A!, so a nameless
-function such as \lstinline!(c:C) => ???! cannot implement its return
-value of type \lstinline!A!. Since a fully parametric function cannot
-create values of an arbitrary type \lstinline!A! from scratch, we
-see no possibility of computing \lstinline!h! within the body of
-\lstinline!before!.
+matter what code we try to write. The reason is that the body of \lstinline!before!
+has no given values of type \lstinline!A! and no functions that return
+values of type \lstinline!A!, so a nameless function such as \lstinline!(c:C) => ???!
+cannot compute its return value of type \lstinline!A!. Since a fully
+parametric function cannot create values of an arbitrary type \lstinline!A!
+from scratch, we see no possibility of computing \lstinline!h! within
+the body of \lstinline!before!.
 
 Can we prove rigorously that a value of type \lstinline!C => A! cannot
-be computed within the body of \lstinline!before!? Could some clever
-trick produce a value of that type? So far, we only gave informal
-arguments about whether values of certain types can be computed. To
-make the arguments rigorous, we need to translate statements such
-as ``\emph{a fully parametric function} \lstinline!before! \emph{can
-compute a value of type} \lstinline!C => A!'' into mathematical
-formulas having rigorous rules for proving them true or false.
+be computed within the body of \lstinline!before!? Could a clever
+trick produce a value of that type? So far, we only saw informal arguments
+about whether values of certain types can be computed. To make the
+arguments rigorous, we need to translate statements such as ``\emph{a
+fully parametric function} \lstinline!before! \emph{can compute a
+value of type} \lstinline!C => A!'' into mathematical formulas,
+with rigorous rules for proving them true or false.
 
 In Section~\ref{subsec:Disjunctions-and-conjunctions}, we denoted
 by ${\cal CH}(A)$ the proposition ``the ${\cal C}$ode ${\cal H}$as
 a value of type $A$''. By ``the code'' we now mean the body of
 a given fully parametric function. So, the notation ${\cal CH}(A)$
-is not fully adequate because the validity of the proposition ${\cal CH}(A)$
-depends not only on the choice of the type $A$ but also on the function
-in which the value of type $A$ needs to be computed. What exactly
-is this additional dependency? In our reasoning in the above examples,
-we used the types of a function's \emph{arguments} in order to analyze
-the possibility of computing a value of a given type $A$. Thus, a
+is not completely adequate because the validity of the proposition
+${\cal CH}(A)$ depends not only on the choice of the type $A$ but
+also on the place in the code fragment where the value of type $A$
+needs to be computed. What exactly is this additional dependency?
+In the above examples, we used the \emph{types} of a function's arguments
+when reasoning about getting a value of a given type $A$. Thus, a
 precise description of the proposition ${\cal CH}(A)$ is 
 \begin{align}
 {\color{greenunder}{\cal CH}\text{-proposition}:}\quad & \text{a fully parametric function having arguments of types}\nonumber \\
  & X,Y,...,Z\text{ can compute a value of type }A\quad.\label{eq:ch-CH-proposition-def}
 \end{align}
-Here, $X$, $Y$, ..., $Z$, $A$ may be type parameters or more complicated
-type expressions such as $X=B\Rightarrow C$ or $Y=(C\Rightarrow D)\Rightarrow E$,
+Here $X$, $Y$, ..., $Z$, $A$ may be either type parameters or
+more complicated type expressions such as $B\Rightarrow C$ or $(C\Rightarrow D)\Rightarrow E$,
 built from other type parameters.
 
-If arguments of types $X$, $Y$, ..., $Z$ are already given, the
-propositions ${\cal CH}(X)$, ${\cal CH}(Y)$, ..., ${\cal CH}(Z)$
-will be true. So, proposition~(\ref{eq:ch-CH-proposition-def}) is
-equivalent to ``${\cal CH}(A)$ assuming ${\cal CH}(X)$, ${\cal CH}(Y)$,
+If arguments of types $X$, $Y$, ..., $Z$ are given, it means we
+already have values of these types. So, the propositions ${\cal CH}(X)$,
+${\cal CH}(Y)$, ..., ${\cal CH}(Z)$ will be true. Thus, proposition~(\ref{eq:ch-CH-proposition-def})
+is equivalent to ``${\cal CH}(A)$ assuming ${\cal CH}(X)$, ${\cal CH}(Y)$,
 ..., ${\cal CH}(Z)$''. In mathematical logic, a statement of this
 form is called a \textbf{sequent}\index{sequent!example} and is denoted
 by
 \begin{equation}
 {\cal CH}(X),{\cal CH}(Y),...,{\cal CH}(Z)\vdash{\cal CH}(A)\quad.\label{eq:ch-example-sequent}
 \end{equation}
-In this sequent, the assumptions ${\cal CH}(X)$, ${\cal CH}(Y)$,
-..., ${\cal CH}(Z)$ are called \textbf{premises}\index{sequent!premises}
-and the proposition ${\cal CH}(A)$ is called the \textbf{goal}\index{sequent!goal}.
-So, describing rigorously the possibility of computing values in functions
+The assumptions ${\cal CH}(X)$, ${\cal CH}(Y)$, ..., ${\cal CH}(Z)$
+are called \textbf{premises}\index{sequent!premises} and the proposition
+${\cal CH}(A)$ is called the \textbf{goal}\index{sequent!goal}.
+So, showing rigorously the possibility of computing values in functions
 means proving that sequents of the form~(\ref{eq:ch-example-sequent})
-are true. Conversely, a proof of the sequent~(\ref{eq:ch-example-sequent})
-shows the existence of a code expression of type $A$ that may use
-previously computed values (``premises'') of types $X$, $Y$, ...,
-$Z$.
-
-Our previous examples are then denoted by the following sequents:
+are true. Our previous examples are denoted by the following sequents:
 \begin{align*}
-{\color{greenunder}\text{\texttt{fmap} for \texttt{Option}}:}\quad & {\cal CH}(A\Rightarrow B)\vdash{\cal CH}(\text{Option}^{A}\Rightarrow\text{Option}^{B})\\
+{\color{greenunder}\text{\texttt{fmap} for \texttt{Option}}:}\quad & {\cal CH}(A\Rightarrow B)\vdash{\cal CH}(\text{\texttt{Option[A]}}\Rightarrow\text{\texttt{Option[B]}})\\
 {\color{greenunder}\text{the function \texttt{before}}:}\quad & {\cal CH}(A\Rightarrow B),{\cal CH}(B\Rightarrow C)\vdash{\cal CH}(A\Rightarrow C)\\
-{\color{greenunder}\text{value of type }A\text{ within \texttt{fmap}}:}\quad & {\cal CH}(A\Rightarrow B),{\cal CH}(\text{Option}^{A})\vdash{\cal CH}(A)\\
+{\color{greenunder}\text{value of type }A\text{ within \texttt{fmap}}:}\quad & {\cal CH}(A\Rightarrow B),{\cal CH}(\text{\texttt{Option[A]}})\vdash{\cal CH}(A)\\
 {\color{greenunder}\text{value of type }C\Rightarrow A\text{ within \texttt{before}}:}\quad & {\cal CH}(A\Rightarrow B),{\cal CH}(B\Rightarrow C)\vdash{\cal CH}(C\Rightarrow A)
 \end{align*}
 Calculations in formal logic are called ``proofs''. So, in this
@@ -162,13 +153,13 @@ section we gave informal arguments towards proving the first two sequents
 and disproving the last two. We will now develop tools for proving
 such sequents rigorously.
 
-The proposition ${\cal CH}(A)$ may be true for one set of premises
-${\cal CH}(X)$, ${\cal CH}(Y)$, ..., ${\cal CH}(Z)$ but false for
-another. Here and in the following sections, we will be reasoning
-about ${\cal CH}$-propositions within the body of a \emph{chosen}
-fully parametric function, i.e.~with a fixed set of premises ${\cal CH}(X)$,
-${\cal CH}(Y)$, ..., ${\cal CH}(Z)$. We will then temporarily omit
-the premises and use the shorter notation ${\cal CH}(A)$.
+A proposition ${\cal CH}(A)$ may be true for one set of premises
+such as ${\cal CH}(X)$, ${\cal CH}(Y)$, ..., ${\cal CH}(Z)$ but
+false for another. Here and in the following sections, we will be
+reasoning about ${\cal CH}$-propositions within the body of a \emph{chosen}
+fully parametric function, i.e.~with a fixed set of premises. We
+will then temporarily omit the premises and use the shorter notation
+${\cal CH}(A)$.
 
 \subsection{Type notation and ${\cal CH}$-propositions for standard type constructions\label{subsec:Type-notation-and-standard-type-constructions}}
 
@@ -197,7 +188,6 @@ def f[...]: ... = {
   ...
   val x: Unit = () // We can always compute a `Unit` value.
   ...
-}
 \end{lstlisting}
 So the proposition ${\cal CH}($\lstinline!Unit!$)$ is always true.
 In the type notation, the \lstinline!Unit! type is denoted by $\bbnum 1$.
@@ -225,14 +215,12 @@ is denoted by $\bbnum 0$ in the type notation.
 
 For a specific primitive (or library-defined) type such as \lstinline!Int!
 or \lstinline!String!, the corresponding ${\cal CH}$-proposition
-is \emph{always true} because we could use any constant value, for
-example:
+is \emph{always true} because we could use any constant value, e.g.
 \begin{lstlisting}
 def f[...]: ... {
    ...
    val x: String = "abc" // We can always compute a `String` value.
    ...
-}
 \end{lstlisting}
 
 
@@ -250,6 +238,11 @@ the Scala definition
 case class Person(firstName: String, lastName: String, age: Int)
 \end{lstlisting}
 is written in the type notation as $\text{String}\times\text{String}\times\text{Int}$.
+So, the rule for tuple types is
+\[
+{\cal CH}\left(A\times B\times...\times C\right)={\cal CH}(A)\wedge{\cal CH}(B)\wedge...\wedge{\cal CH}(C)\quad.
+\]
+
 
 \paragraph{Rule for disjunctive types}
 
@@ -272,13 +265,18 @@ is translated to the type notation as
 \text{RootsOfQ}=1+\text{Double}+\text{Double}\times\text{Double}\quad.
 \]
 The type notation is significantly shorter because it omits all case
-class names and part names from the type definitions.
+class names and part names from the type definitions. In this notation,
+the rule for disjunctive types is
+\[
+{\cal CH}\left(A+B+...+C\right)={\cal CH}(A)\vee{\cal CH}(B)\vee...\vee{\cal CH}(C)\quad.
+\]
+
 
 \paragraph{Rule for function types}
 
 Consider now a function type such as \lstinline!A => B!. (This type
 is written in the type notation as $A\Rightarrow B$.) To compute
-a value of that type, we are required to write code such as
+a value of that type, we need to write code such as
 \begin{lstlisting}
 val f: A => B = { (a: A) =>
   ??? // Compute a value of type B in this scope.
@@ -291,7 +289,7 @@ when we are given a value of type $A$. To translate this statement
 into the language of logical propositions, we need to use the logical
 implication, ${\cal CH}(A)\Rightarrow{\cal CH}(B)$, which means that
 ${\cal CH}(B)$ can be proved if ${\cal CH}(A)$ already holds. So
-the formula can be written as
+the rule for function types is
 \[
 {\cal CH}(A\Rightarrow B)={\cal CH}(A)\Rightarrow{\cal CH}(B)\quad.
 \]
@@ -305,8 +303,8 @@ def f[A, B]: A => (A => B) => B = { x => g => g(x) }
 \end{lstlisting}
 Being able to define the body of such a function is equivalent to
 being able to compute a value of type \lstinline!A => (A => B) => B!
-for \emph{all} possible types \lstinline!A! and \lstinline!B! at
-once. In the notation of formal logic, this is written as
+for \emph{all} possible types \lstinline!A! and \lstinline!B!. In
+the notation of formal logic, this is written as
 \[
 {\cal CH}\left(\forall(A,B).\,A\Rightarrow(A\Rightarrow B)\Rightarrow B\right)
 \]
@@ -314,7 +312,7 @@ and is equivalent to
 \[
 \forall(A,B).\,{\cal CH}\left(A\Rightarrow(A\Rightarrow B)\Rightarrow B\right)\quad.
 \]
- The code notation for the parameterized function \lstinline!f! is
+The code notation for the parameterized function \lstinline!f! is
 \[
 f^{A,B}:A\Rightarrow\left(A\Rightarrow B\right)\Rightarrow B\quad,
 \]
@@ -325,12 +323,14 @@ and its type can be written as
 The symbol $\forall$ means ``for all'' and is known as the \index{universal quantifier}\textbf{universal
 quantifier} in logic.
 
-In Scala, longer type expressions may be named as type aliases, which
-can also contain type parameters. Defining and using a type alias
-for the type of the function \lstinline!f! looks like this,
+In Scala, longer type expressions can be named and their names (called
+\textbf{type aliases}\index{type aliases}) can be used to make code
+shorter. Type aliases may also contain type parameters. Defining and
+using a type alias for the type of the function \lstinline!f! looks
+like this,
 \begin{lstlisting}
 type F[A, B] = A => (A => B) => B
-def f[A, B]: F[A, B] = x => g => g(x)
+def f[A, B]: F[A, B] = { x => g => g(x) }
 \end{lstlisting}
 This is written in the type notation as
 \begin{align*}
@@ -345,47 +345,50 @@ f:\big(\forall(A,B).\,F^{A,B}\big)=\forall(A,B).\,x^{:A}\Rightarrow g^{:A\Righta
 In Scala 3, the function \lstinline!f! can be written as a value
 via the syntax
 \begin{lstlisting}
-val f: [A, B] => A => (A => B) => B =
+val f: [A, B] => A => (A => B) => B = {
   [A, B] => (x: A) => (g: A => B) => g(x)
+}
 \end{lstlisting}
 This syntax corresponds more closely to the mathematical notation
 shown above.
 
+So, the rule for parameterized types with the type notation $F^{A}$
+is
+\[
+{\cal CH}(\forall A.\:F^{A})=\forall A.\,{\cal CH}(F^{A})\quad.
+\]
+
 Case classes and disjunctive types use \emph{names} for the types
 and their parts. However, those names only add convenience for programmers
 and do not affect the computational properties of types. So, the type
-notation uses no names.
+notation allows us to use nameless type expressions.
 
 Table~\ref{tab:ch-correspondence-type-notation-CH-propositions}
-summarizes the type notation\footnote{See also Appendix~\ref{chap:Appendix-Notations} for more detail
-about the type notation.} and also shows how the type notation is directly translated into
-logic formulas for the propositions of the form ${\cal CH}(...)$.
+summarizes the type notation and also shows how to translate it into
+logic formulas involving propositions of the form ${\cal CH}(...)$.
 
 The precedence\index{type notation!operator precedence} of operators
-in the type notation is chosen to write frequently used type expressions
-with fewer parentheses. Let us now summarize the rules of operator
-precedence.
-
-The type product operators ($\times$) group stronger than the disjunctive
+in the type notation is chosen to have fewer parentheses in the type
+expressions that are frequently used. Here are the rules of precedence:
+\begin{itemize}
+\item The type product operators ($\times$) group stronger than the disjunctive
 operators ($+$), so that type expressions such as $A+B\times C$
 have the same operator precedence as in standard arithmetic. That
 is, $A+B\times C$ means $A+\left(B\times C\right)$. This convention
-makes type expressions easier to reason about, for people familiar
-with arithmetic.
-
-The function type arrows ($\Rightarrow$) group weaker than the operators
+makes type expressions easier to reason about (for people familiar
+with arithmetic).
+\item The function type arrows ($\Rightarrow$) group weaker than the operators
 $+$ and $\times$, so that often-used types such as $A\Rightarrow\bbnum 1+B$
 (representing \lstinline!A => Option[B]!) or $A\times B\Rightarrow C$
 (representing \lstinline!((A, B)) => C!) can be written without any
 parentheses. Type expressions such as $\left(A\Rightarrow B\right)\times C$
 will require parentheses but are used less often.
-
-The type quantifiers group weaker than all other operators, so that
-we can write types such as $\forall A.\,A\Rightarrow A\Rightarrow A$
+\item The type quantifiers group weaker than all other operators, so we
+can write types such as $\forall A.\,A\Rightarrow A\Rightarrow A$
 without parentheses. Type quantifiers are most often placed outside
-a type expression. When this is not the case, parentheses will be
-necessary, e.g.~$\left(\forall A.\,A\Rightarrow A\right)\Rightarrow\bbnum 1$.
-
+a type expression. When this is not the case, parentheses are necessary,
+e.g.~in the type expression $\left(\forall A.\,A\Rightarrow A\right)\Rightarrow\bbnum 1$.
+\end{itemize}
 \begin{table}
 \begin{centering}
 \begin{tabular}{|c|c|c|}
@@ -401,9 +404,9 @@ necessary, e.g.~$\left(\forall A.\,A\Rightarrow A\right)\Rightarrow\bbnum 1$.
 \hline 
 {\small{}function type} \lstinline!A => B! & $A\Rightarrow B$ & ${\cal CH}(A)$ $\Rightarrow$ ${\cal CH}(B)$\tabularnewline
 \hline 
-\lstinline!Unit! {\small{}or a ``named''} \lstinline!Unit! {\small{}type} & $\bbnum 1$ & {\small{}always} \emph{True}\tabularnewline
+\lstinline!Unit! {\small{}or a ``named''} \lstinline!Unit! {\small{}type} & $\bbnum 1$ & ${\cal CH}(\bbnum 1)=True$\tabularnewline
 \hline 
-\lstinline!Nothing! {\small{}(the void type)} & $\bbnum 0$ & {\small{}always} \emph{False}\tabularnewline
+\lstinline!Nothing! {\small{}(the void type)} & $\bbnum 0$ & ${\cal CH}(\bbnum 0)=False$\tabularnewline
 \hline 
 {\small{}parameterized method} \lstinline!def f[A]: F[A]! & $f^{A}:F^{A}$ & $\forall A.\,{\cal CH}(F^{A})$\tabularnewline
 \hline 
@@ -451,8 +454,8 @@ In the type notation, the type signature of $\Delta$ is written as
 \[
 \Delta^{A}:A\Rightarrow A\times A\quad.
 \]
-So the proposition ${\cal CH}(\Delta)$ (``the function $\Delta$
-can be defined'') is
+So the proposition ${\cal CH}(\Delta)$ (meaning ``the function $\Delta$
+can be implemented'') is
 \[
 {\cal CH}(\Delta)=\forall A.{\cal \,CH}\left(A\Rightarrow A\times A\right)\quad.
 \]
@@ -463,9 +466,9 @@ omitted.
 
 Using the rules for transforming ${\cal CH}$-propositions, we rewrite
 \begin{align*}
- & {\cal CH}\left(A\Rightarrow A\times A\right)\\
-{\color{greenunder}\text{rule for function types}:}\quad & ={\cal CH}(A)\Rightarrow{\cal CH}\left(A\times A\right)\\
-{\color{greenunder}\text{rule for tuple types}:}\quad & ={\cal CH}(A)\Rightarrow({\cal CH}(A)\wedge{\cal CH}(A))\quad.
+ & {\cal CH}(A\Rightarrow A\times A)\\
+{\color{greenunder}\text{rule for function types}:}\quad & ={\cal CH}(A)\Rightarrow{\cal CH}(A\times A)\\
+{\color{greenunder}\text{rule for tuple types}:}\quad & ={\cal CH}(A)\Rightarrow\left({\cal CH}(A)\wedge{\cal CH}(A)\right)\quad.
 \end{align*}
 Thus the proposition ${\cal CH}(\Delta)$ is equivalent to
 \[
@@ -478,20 +481,20 @@ Thus the proposition ${\cal CH}(\Delta)$ is equivalent to
 The standard disjunctive types \lstinline!Either[A, B]! and \lstinline!Option[A]!
 are written in the type notation as
 \begin{align*}
-\text{Either}^{A,B} & \triangleq A+B\quad.\\
-\text{Option}^{A} & \triangleq\bbnum 1+A\quad,
+\text{Either}^{A,B} & \triangleq A+B\quad,\\
+\text{Opt}^{A} & \triangleq\bbnum 1+A\quad.
 \end{align*}
-The type \lstinline!Either[A, B]! is denoted as $A+B$ by definition
+The type \lstinline!Either[A, B]! is written as $A+B$ by definition
 of the disjunctive type operator ($+$). The type \lstinline!Option[A]!
 has two disjoint cases, \lstinline!None! and \lstinline!Some[A]!.
-The value \lstinline!None! is a ``\index{unit type!named}named
-\lstinline!Unit!'', which is denoted by $\bbnum 1$. The case class
+The case class \lstinline!None! is a ``\index{unit type!named}named
+\lstinline!Unit!'' and is denoted by $\bbnum 1$. The case class
 \lstinline!Some[A]! contains a single value of type $A$. So, the
 type notation for \lstinline!Option[A]! is $\bbnum 1+A$.
 
 \subsubsection{Example \label{subsec:Example-ch-notation-function-1-a}\ref{subsec:Example-ch-notation-function-1-a}}
 
-The Scala definition of the disjunctive type
+The Scala definition of the disjunctive type \lstinline!UserAction!,
 \begin{lstlisting}
 sealed trait UserAction
 final case class SetName(first: String, last: String) extends UserAction
@@ -502,24 +505,25 @@ is written in the type notation as
 \begin{equation}
 \text{UserAction}\triangleq\text{String}\times\text{String}+\text{String}+\text{Long}\quad.\label{eq:ch-example-case-class-type-notation}
 \end{equation}
-The type operation $\times$ binds stronger than $+$, as in arithmetic.
+The type operation $\times$ groups stronger than $+$, as in arithmetic.
 To derive the type notation~(\ref{eq:ch-example-case-class-type-notation}),
-we first drop all names from case classes and get the three nameless
-tuples \lstinline!(String, String)!, \lstinline!(String)!, and \lstinline!(Long)!.
+we first drop all names from case classes and get three nameless tuples
+\lstinline!(String, String)!, \lstinline!(String)!, and \lstinline!(Long)!.
 Each of these tuples is then converted into a product using the operator
 $\times$, and all products are ``summed'' in the type notation
 using the operator $+$.
 
 \subsubsection{Example \label{subsec:Example-ch-notation-function-2}\ref{subsec:Example-ch-notation-function-2}}
 
-The parameterized disjunctive type generalizing \lstinline!Either!,
+The parameterized disjunctive type \lstinline!Either3! is a generalization
+of \lstinline!Either!:
 \begin{lstlisting}
 sealed trait Either3[A, B, C]
 final case class Left[A, B, C](x: A) extends Either3[A, B, C]
 final case class Middle[A, B, C](x: B) extends Either3[A, B, C]
 final case class Right[A, B, C](x: C) extends Either3[A, B, C]
 \end{lstlisting}
-is written in the type notation as
+This disjunctive type is written in the type notation as
 \[
 \text{Either3}^{A,B,C}\triangleq A+B+C\quad.
 \]
@@ -536,12 +540,13 @@ F^{A}\triangleq\bbnum 1+\text{Int}\times A\times A+\text{Int}\times\left(\text{I
 
 \subparagraph{Solution}
 
-The formula for $F^{A}$ defines a disjunctive type constructor \lstinline!F!
-with three parts. To implement \lstinline!F! in Scala, we need to
-choose names for each of the disjoint parts, which will become case
-classes. For the purposes of this example, let us choose names \lstinline!F1!,
-\lstinline!F2!, and \lstinline!F3!. Each of these case classes needs
-to have the same type parameter \lstinline!A!. So the code will be
+The formula for $F^{A}$ defines a disjunctive type \lstinline!F[A]!
+with three parts. To implement \lstinline!F[A]! in Scala, we need
+to choose names for each of the disjoint parts, which will become
+case classes. For the purposes of this example, let us choose names
+\lstinline!F1!, \lstinline!F2!, and \lstinline!F3!. Each of these
+case classes needs to have the same type parameter \lstinline!A!.
+So we begin writing the code as
 \begin{lstlisting}
 sealed trait F[A]
 final case class F1[A](...) extends F[A]
@@ -555,12 +560,12 @@ To define these case classes, we need to name their parts. The final
 code is
 \begin{lstlisting}
 sealed trait F[A]
-final case class F1[A]() extends F[A] // Named `Unit`.
+final case class F1[A]() extends F[A]          // Named `Unit`.
 final case class F2[A](n: Int, x1: A, x2: A) extends F[A]
-final case class F3[A](n: Int, f: Int => A) extends F[A]
+final case class F3[A](n: Int, f: Int => A)  extends F[A]
 \end{lstlisting}
-The names \lstinline!F1!, \lstinline!F2!, \lstinline!F3!, \lstinline!n!,
-\lstinline!x1!, etc.~were chosen purely for convenience.
+The names \lstinline!n!, \lstinline!x1!, \lstinline!x2!, and \lstinline!f!
+are chosen purely for convenience.
 
 \subsubsection{Example \label{subsec:Example-ch-notation-function-4}\ref{subsec:Example-ch-notation-function-4}}
 
@@ -585,7 +590,8 @@ we can write the type signature of \lstinline!fmap! as
 \end{align*}
 We do not put parentheses around $\bbnum 1+A$ and $\bbnum 1+B$ because
 the function arrows ($\Rightarrow$) group weaker than the other type
-operations.
+operations. Parentheses around $\left(A\Rightarrow B\right)$ are
+required.
 
 \subsection{Exercises: Type notation\index{exercises}}
 
@@ -623,8 +629,8 @@ and implement this function, preserving information as much as possible.
 So far, we were able to convert statements such as ``\emph{a fully
 parametric function can compute values of type} $A$'' into logical
 propositions of the form ${\cal CH}(A)$ that we called ${\cal CH}$-propositions.
-The next step is to determine the proof rules suitable for this task
-(i.e.~reasoning about values in fully parametric functions).
+The next step is to determine the proof rules suitable for reasoning
+about ${\cal CH}$-propositions.
 
 Formal logic uses axioms and derivation rules for proving that certain
 formulas are true or false. A simple example of a true formula is
@@ -632,14 +638,14 @@ formulas are true or false. A simple example of a true formula is
 \[
 \forall\alpha.\,\alpha=\alpha\quad.
 \]
-In logic, equivalence of propositions is usually understood as \emph{implication}
+In logic, equivalence of propositions is usually understood as \index{implication}\textbf{implication}
 ($\Rightarrow$) in both directions: $\alpha=\beta$ means $\left(\alpha\Rightarrow\beta\right)\wedge\left(\beta\Rightarrow\alpha\right)$.
 So, the above formula is the same as
 \[
 \forall\alpha.\,\alpha\Rightarrow\alpha\quad.
 \]
-If the proposition $\alpha$ is taken to be a ${\cal CH}$-proposition
-such as ${\cal CH}(A)$ for some type $A$, we obtain the formula
+If the proposition $\alpha$ is a ${\cal CH}$-proposition, $\alpha\triangleq{\cal CH}(A)$
+for some type $A$, we obtain the formula
 \begin{equation}
 \forall A.\,{\cal CH}(A)\Rightarrow{\cal CH}(A)\quad.\label{eq:ch-type-sig-1}
 \end{equation}
@@ -648,8 +654,8 @@ We expect true ${\cal CH}$-propositions to correspond to types that
 if this example fits our expectations. We can rewrite Eq.~(\ref{eq:ch-type-sig-1})
 as
 \begin{align*}
- & \forall A.\,{\cal CH}(A)\Rightarrow{\cal CH}(A)\\
-{\color{greenunder}\text{rule for function types}:}\quad & =\forall A.\,{\cal CH}\left(A\Rightarrow A\right)\\
+ & \forall A.\,\gunderline{{\cal CH}(A)\Rightarrow{\cal CH}(A)}\\
+{\color{greenunder}\text{rule for function types}:}\quad & =\gunderline{\forall A}.\,{\cal CH}\left(A\Rightarrow A\right)\\
 {\color{greenunder}\text{rule for parameterized types}:}\quad & ={\cal CH}\left(\forall A.\,A\Rightarrow A\right)\quad.
 \end{align*}
 The last line shows the ${\cal CH}$-proposition that corresponds
@@ -667,37 +673,35 @@ into the type of a value \lstinline!f! that can be implemented.
 
 While the formula $\forall\alpha.\,\alpha=\alpha$ may be self-evident,
 the point of using formal logic is to obtain the precise set of axioms
-and derivation rules that allow us to deduce all correct formulas
-systematically, without need for intuition or guessing. What are the
-axioms and derivation rules suitable for our task?
+and proof rules that allow us to deduce all correct formulas systematically,
+without need for intuition or guessing. What is the set of axioms
+and proof rules suitable for the task?
 
 A well-known set of logical rules is called \index{Boolean logic}Boolean
-logic. In that logic, each proposition is always either $True$ or
-$False$, and the implication operation ($\Rightarrow$) is defined
-by 
+logic. In that logic, each proposition is either $True$ or $False$,
+and the implication operation ($\Rightarrow$) is defined by 
 \begin{equation}
 \left(\alpha\Rightarrow\beta\right)\triangleq\left((\neg\alpha)\vee\beta\right)\quad.\label{eq:ch-definition-of-implication-in-Boolean-logic}
 \end{equation}
-The truth of formulas can be checked in Boolean logic by substituting
-either $True$ or $False$ in every variable and computing the truth
-value of the formula in all possible cases. The result is arranged
-into a \index{truth table}truth table. The formula $\forall\alpha.\,\alpha\Rightarrow\alpha$
-is true in Boolean logic since the implication operation has the truth
-table
+The truth of formulas can be checked by substituting either $True$
+or $False$ in every variable and computing the truth value of the
+formula in all possible cases. The result is arranged into a \index{truth table}truth
+table. The basic operations (disjunction, conjunction, negation, and
+implication) have the following truth tables:
 \begin{center}
 {\small{}}%
-\begin{tabular}{|c|c|c|}
+\begin{tabular}{|c|c|c|c|c|c|}
 \hline 
-{\small{}$\alpha$} & {\small{}$\beta$} & \textbf{\small{}$\alpha\Rightarrow\beta$}\tabularnewline
+{\small{}$\alpha$} & {\small{}$\beta$} & \textbf{\small{}$\alpha\vee\beta$} & \textbf{\small{}$\alpha\wedge\beta$} & \textbf{\small{}$\neg\alpha$} & \textbf{\small{}$\alpha\Rightarrow\beta$}\tabularnewline
 \hline 
 \hline 
-{\small{}$True$} & {\small{}$True$} & {\small{}$True$}\tabularnewline
+{\small{}$True$} & {\small{}$True$} & {\small{}$True$} & {\small{}$True$} & {\small{}$False$} & {\small{}$True$}\tabularnewline
 \hline 
-{\small{}$True$} & {\small{}$False$} & {\small{}$False$}\tabularnewline
+{\small{}$True$} & {\small{}$False$} & {\small{}$True$} & {\small{}$False$} & {\small{}$False$} & {\small{}$False$}\tabularnewline
 \hline 
-{\small{}$False$} & {\small{}$True$} & {\small{}$True$}\tabularnewline
+{\small{}$False$} & {\small{}$True$} & {\small{}$True$} & {\small{}$False$} & {\small{}$True$} & {\small{}$True$}\tabularnewline
 \hline 
-{\small{}$False$} & {\small{}$False$} & {\small{}$True$}\tabularnewline
+{\small{}$False$} & {\small{}$False$} & {\small{}$False$} & {\small{}$False$} & {\small{}$True$} & {\small{}$True$}\tabularnewline
 \hline 
 \end{tabular}{\small\par}
 \par\end{center}
@@ -707,9 +711,9 @@ $\alpha$ itself is $True$ or $False$. This check is sufficient
 to show that $\forall\alpha.\,\alpha\Rightarrow\alpha$ is true in
 Boolean logic.
 
-Here is the truth table for the formula $\forall(\alpha,\beta).\,(\alpha\wedge\beta)\Rightarrow\alpha$,
-which is true in Boolean logic since all values in the last column
-are $True$:
+Here is the truth table for the formula $\forall(\alpha,\beta).\,(\alpha\wedge\beta)\Rightarrow\alpha$;
+that formula is true in Boolean logic since all values in the last
+column are $True$:
 \begin{center}
 {\small{}}%
 \begin{tabular}{|c|c|c|c|}
@@ -750,11 +754,10 @@ truth table (one value in the last column is $False$):
 \par\end{center}
 
 Table~\ref{tab:Logical-formulas-Boolean-theorems} shows more examples
-of logical formulas that are true in Boolean logic. Each logical formula
-is first given in terms of ${\cal CH}$-propositions (for brevity,
-we denote $\alpha\triangleq{\cal CH}(A)$, $\beta\triangleq{\cal CH}(B)$,
-etc.) and then into a Scala type signature of a function that can
-be implemented.
+of logical formulas that are true in Boolean logic. Each formula is
+first given in terms of ${\cal CH}$-propositions (we denoted $\alpha\triangleq{\cal CH}(A)$
+and $\beta\triangleq{\cal CH}(B)$ for brevity) and then into a Scala
+type signature of a function that can be implemented.
 
 \begin{table}
 \begin{centering}
@@ -763,15 +766,15 @@ be implemented.
 \textbf{Logic formula} & \textbf{Type formula} & \textbf{Scala code}\tabularnewline
 \hline 
 \hline 
-{\footnotesize{}$\forall\alpha.\,\alpha\Rightarrow\alpha$} & {\footnotesize{}$\forall A.\,A\Rightarrow A$} & \lstinline!def id[A](x:A): A = x!\tabularnewline
+{\footnotesize{}$\forall\alpha.\,\alpha\Rightarrow\alpha$} & {\footnotesize{}$\forall A.\,A\Rightarrow A$} & \lstinline!def id[A](x: A): A = x!\tabularnewline
 \hline 
-{\footnotesize{}$\forall\alpha.\,\alpha\Rightarrow True$} & {\footnotesize{}$\forall A.\,A\Rightarrow\bbnum 1$} & \lstinline!def toUnit[A](x:A): Unit = ()!\tabularnewline
+{\footnotesize{}$\forall\alpha.\,\alpha\Rightarrow True$} & {\footnotesize{}$\forall A.\,A\Rightarrow\bbnum 1$} & \lstinline!def toUnit[A](x: A): Unit = ()!\tabularnewline
 \hline 
-{\footnotesize{}$\forall(\alpha,\beta).\,\alpha\Rightarrow(\alpha\vee\beta)$} & {\footnotesize{}$\forall(A,B).\,A\Rightarrow A+B$} & \lstinline!def toL[A,B](x:A):Either[A,B]=Left(x)!\tabularnewline
+{\footnotesize{}$\forall(\alpha,\beta).\,\alpha\Rightarrow(\alpha\vee\beta)$} & {\footnotesize{}$\forall(A,B).\,A\Rightarrow A+B$} & \lstinline!def toL[A, B](x: A): Either[A, B] = Left(x)!\tabularnewline
 \hline 
-{\footnotesize{}$\forall(\alpha,\beta).\,(\alpha\wedge\beta)\Rightarrow\alpha$} & {\footnotesize{}$\forall(A,B).\,A\times B\Rightarrow A$} & \lstinline!def first[A,B](p:(A,B)): A = p._1!\tabularnewline
+{\footnotesize{}$\forall(\alpha,\beta).\,(\alpha\wedge\beta)\Rightarrow\alpha$} & {\footnotesize{}$\forall(A,B).\,A\times B\Rightarrow A$} & \lstinline!def first[A, B](p: (A, B)): A = p._1!\tabularnewline
 \hline 
-{\footnotesize{}$\forall(\alpha,\beta).\,\alpha\Rightarrow(\beta\Rightarrow\alpha)$} & {\footnotesize{}$\forall(A,B).\,A\Rightarrow(B\Rightarrow A)$} & \lstinline!def const[A,B](x: A): B=>A = (_ => x)!\tabularnewline
+{\footnotesize{}$\forall(\alpha,\beta).\,\alpha\Rightarrow(\beta\Rightarrow\alpha)$} & {\footnotesize{}$\forall(A,B).\,A\Rightarrow(B\Rightarrow A)$} & \lstinline!def const[A, B](x: A): B => A = (_ => x)!\tabularnewline
 \hline 
 \end{tabular}
 \par\end{centering}
@@ -780,15 +783,14 @@ be implemented.
 
 Table~\ref{tab:Logical-formulas-not-Boolean-theorems} some examples
 of formulas that are \emph{not true} in Boolean logic. Translated
-into type formulas and then into Scala code, these formulas yield
-type signatures that \emph{cannot} be implemented as fully parametric
-functions.
+into type formulas and then into Scala, these formulas yield type
+signatures that \emph{cannot} be implemented by fully parametric functions.
 
 \begin{table}
 \begin{centering}
 \begin{tabular}{|c|c|c|}
 \hline 
-\textbf{Logic formula} & \textbf{Type formula} & \textbf{Scala code}\tabularnewline
+\textbf{Logic formula} & \textbf{Type formula} & \textbf{Scala type signature}\tabularnewline
 \hline 
 \hline 
 {\footnotesize{}$\forall\alpha.\,True\Rightarrow\alpha$} & {\footnotesize{}$\forall A.\,\bbnum 1\Rightarrow A$} & \lstinline!def f[A](x: Unit): A = ???!\tabularnewline
@@ -807,16 +809,15 @@ functions.
 At first sight, it appears from these examples that whenever a logical
 formula is true in Boolean logic, the corresponding type signature
 can be implemented in code, and vice versa. However, this is \emph{incorrect}:
-The rules of Boolean logic are not suitable for reasoning about types
-in a functional language. We will see some counterexamples below,
-where formulas are true in Boolean logic but yield unimplementable
-type signatures.
+the rules of Boolean logic are not suitable for reasoning about types
+in a functional language. Below we will see some examples of formulas
+that are true in Boolean logic but yield unimplementable type signatures.
 
 \subsection{Example: Failure of Boolean logic for type reasoning\label{subsec:Example:-Failure-of-Boolean-logic}}
 
 To see an explicit example of obtaining an incorrect result when using
 Boolean logic to reason about values computed by fully parametric
-functions, consider the following function type,
+functions, consider the following type,
 \begin{equation}
 \forall(A,B,C).\,\left(A\Rightarrow B+C\right)\Rightarrow\left(A\Rightarrow B\right)+\left(A\Rightarrow C\right)\quad,\label{eq:ch-example-boolean-bad-type}
 \end{equation}
@@ -826,8 +827,8 @@ def bad[A, B, C](g: A => Either[B, C]): Either[A => B, A => C] = ???
 \end{lstlisting}
 The function \lstinline!bad! cannot be implemented as a fully parametric
 function. To see why, consider that the only available data is a function
-$g^{:A\Rightarrow B+C}$, which returns values of type $B$ or $C$,
-depending in some unknown way on the input value of type $A$. The
+$g^{:A\Rightarrow B+C}$, which returns values of type $B$ or $C$
+depending (in some unknown way) on the input value of type $A$. The
 function \lstinline!bad! must return either a function of type $A\Rightarrow B$
 or a function of type $A\Rightarrow C$. How can the code of \lstinline!bad!
 make this decision? The only input data is the function $g$ that
@@ -850,7 +851,7 @@ However, for some $x$, the value $g(x)$ may have type \lstinline!Right(c)!
 where \lstinline!c! is of type $C$. In that case, we will have a
 value of type $C$, not $B$. So, in general, we cannot guarantee
 that we can always obtain a value of type $B$ from a given value
-$x$ of type $A$. This means we cannot build a function of type $A\Rightarrow B$
+$x^{:A}$. This means we cannot build a function of type $A\Rightarrow B$
 out of the function $g$. Similarly, we cannot build a function of
 type $A\Rightarrow C$ out of $g$. 
 
@@ -889,18 +890,19 @@ is equal to $True$ for any Boolean values of the variables $\alpha$,
 $\beta$, $\gamma$. One way is to rewrite the expression~(\ref{eq:abc-example-classical-logic-bad})
 using the rules of Boolean logic, such as Eq.~(\ref{eq:ch-definition-of-implication-in-Boolean-logic}):
 \begin{align*}
- & \alpha\Rightarrow\left(\beta\vee\gamma\right)\\
-{\color{greenunder}\text{definition of }\Rightarrow\text{ in Boolean logic}:}\quad & =(\neg\alpha)\vee\beta\vee\gamma\quad,\\
- & \left(\alpha\Rightarrow\beta\right)\vee\left(\alpha\Rightarrow\gamma\right)\\
-{\color{greenunder}\text{definition of }\Rightarrow\text{ in Boolean logic}:}\quad & =(\neg\alpha)\vee\beta\vee(\neg\alpha)\vee\gamma\\
+ & \gunderline{\alpha\Rightarrow}\left(\beta\vee\gamma\right)\\
+{\color{greenunder}\text{definition of }\Rightarrow\text{ via Eq.~(\ref{eq:ch-definition-of-implication-in-Boolean-logic})}:}\quad & =(\neg\alpha)\vee\beta\vee\gamma\quad,\\
+ & \gunderline{\left(\alpha\Rightarrow\beta\right)}\vee\gunderline{\left(\alpha\Rightarrow\gamma\right)}\\
+{\color{greenunder}\text{definition of }\Rightarrow\text{ via Eq.~(\ref{eq:ch-definition-of-implication-in-Boolean-logic})}:}\quad & =\gunderline{(\neg\alpha)}\vee\beta\vee\gunderline{(\neg\alpha)}\vee\gamma\\
 {\color{greenunder}\text{property }x\vee x=x\text{ in Boolean logic}:}\quad & =(\neg\alpha)\vee\beta\vee\gamma\quad,
 \end{align*}
 showing that $\alpha\Rightarrow(\beta\vee\gamma)$ is in fact \emph{equal}
-to $\left(\alpha\Rightarrow\beta\right)\vee\left(\alpha\Rightarrow\gamma\right)$.
+to $\left(\alpha\Rightarrow\beta\right)\vee\left(\alpha\Rightarrow\gamma\right)$
+in Boolean logic.
 
-Let us also give a proof via case-by-case reasoning. In Boolean logic,
-the only possibility for an implication $X\Rightarrow Y$ to be $False$
-is when $X=True$ and $Y=False$. So, Eq.~(\ref{eq:abc-example-classical-logic-bad})
+Let us also give a proof via truth value reasoning. The only possibility
+for an implication $X\Rightarrow Y$ to be $False$ is when $X=True$
+and $Y=False$. So, Eq.~(\ref{eq:abc-example-classical-logic-bad})
 can be $False$ only if $\left(\alpha\Rightarrow(\beta\vee\gamma)\right)=True$
 and $\left(\alpha\Rightarrow\beta\right)\vee\left(\alpha\Rightarrow\gamma\right)=False$.
 A disjunction can be false only when both parts are false; so we must
@@ -908,33 +910,36 @@ have both $\left(\alpha\Rightarrow\beta\right)=False$ and $\left(\alpha\Rightarr
 This is only possible if $\alpha=True$ and $\beta=\gamma=False$.
 But, with these value assignments, we find $\left(\alpha\Rightarrow(\beta\vee\gamma)\right)=False$
 rather than $True$ as we assumed. It follows that we cannot ever
-make Eq.~(\ref{eq:abc-example-classical-logic-bad}) equal to $False$
-as a Boolean formula. This proves Eq.~(\ref{eq:abc-example-classical-logic-bad})
-to be true in Boolean logic.
+make Eq.~(\ref{eq:abc-example-classical-logic-bad}) equal to $False$.
+This proves Eq.~(\ref{eq:abc-example-classical-logic-bad}) to be
+true in Boolean logic.
 
 \subsection{The rules of proof for ${\cal CH}$-propositions\label{subsec:The-rules-of-proof}}
 
 Section~\ref{subsec:Example:-Failure-of-Boolean-logic} shows that
-some true formulas in Boolean logic do not correspond to type signatures
-of \emph{implementable} fully parametric functions. However, we have
-also seen several other examples where Boolean logic did provide correct
-results: some true formulas correspond to implementable type signatures,
-while some false formulas correspond to non-implementable type signatures.
+some true formulas in Boolean logic do not correspond to types of
+\emph{implementable} fully parametric functions. However, we have
+also seen several other examples where Boolean logic does provide
+correct results: some true formulas correspond to implementable type
+signatures, while some false formulas correspond to non-implementable
+type signatures.
 
 Instead of guessing whether the rules of Boolean logic are suitable,
-let us derive the suitable logical axioms and derivation rules systematically.
+let us derive the suitable logical axioms and proof rules systematically.
 
 The proposition ${\cal CH}(A)$ is true when a value of type $A$
 can be computed by a fully parametric function with a given type signature.
-To describe all possible ways in which a value of type $A$ can be
-computed, we need to enumerate all possible ways of writing code within
-a fully parametric function. The requirement of parametricity means
-that we are not allowed to use any specific types such as \lstinline!Int!
+To describe all possible ways of computing a value of type $A$, we
+need to enumerate all possible ways of writing code within a fully
+parametric function. The requirement of parametricity means that we
+are not allowed to use any specific types such as \lstinline!Int!
 or \lstinline!String!. We are only allowed to work with values of
-unknown types described by the given type parameters. This prevents
-us from using any concrete values such as \lstinline!123! or \lstinline!"hello"!,
-or any library functions that work with specific types. The allowed
-code constructs are illustrated in this code fragment:
+unknown types described by the given type parameters. We cannot use
+any concrete values such as \lstinline!123! or \lstinline!"hello"!,
+or any library functions that work with specific (non-parametric)
+types; however, we are permitted to use fully parametric types, such
+as \lstinline!Either[A, B]! or \lstinline!Option[A]!. The allowed
+eight code constructs are illustrated in this code fragment:
 \begin{lstlisting}
 def f[A, B, ...](a: A, b: B)... = { // (A given type signature.)
   val x1: Unit = ()            // 1) Create a value of type Unit.
@@ -954,51 +959,32 @@ of these eight code constructs, ending with a value of type $X$.
 So, each of the eight code constructs should correspond to a logical
 rule for proving a ${\cal CH}$-proposition.
 
-A set of axioms and proof rules defines a \textbf{formal logic}\index{formal logic}
-in the mathematical sense. So, we will now write the proof rules that
-will define \emph{the} logic appropriate for reasoning about ${\cal CH}$-propositions
-for fully parametric functions. (As we have already seen, the required
-logic is somewhat different from Boolean logic.)
+A set of axioms and proof rules defines a \textbf{formal logic}\index{formal logic}.
+So, we will now write the proof rules that will define \emph{the}
+logic appropriate for reasoning about ${\cal CH}$-propositions.
 
-Since all proof rules will be obtained from a specific code construct,
+Because each proof rule will be obtained from a specific code construct,
 any ${\cal CH}$-proposition such as ${\cal CH}(X)$ proved by applying
 a sequence of these rules will automatically correspond to a code
 fragment that combines the relevant code constructs to compute a value
 of type $X$. Conversely, any code computing a value of type $X$
-must be a combination of some code constructs, which can be automatically
-translated into a sequence of applications of proof rules in the logic
-to produce a proof of the proposition ${\cal CH}(X)$.
+must be a combination of some of the eight code constructs, and that
+combination can be automatically translated into a sequence of applications
+of proof rules in the logic to produce a proof of the proposition
+${\cal CH}(X)$.
 
-This correspondence between types, code, logical propositions, and
-proofs is known as the \textbf{Curry-Howard correspondence}\index{Curry-Howard correspondence}.
-We have already seen several examples of using the CH correspondence;
-e.g.~the proof of the logical proposition 
-\begin{equation}
-\forall(\alpha,\beta).\,\alpha\Rightarrow\left(\beta\Rightarrow\alpha\right)\label{eq:ch-proposition-example-2}
-\end{equation}
-corresponds to the code of the function 
-\begin{lstlisting}
-def f[A, B]: A => (B => A) = { x => _ => x }
-\end{lstlisting}
-Keeping the CH correspondence in mind, we may say that the function
-\lstinline!f!'s code ``is'' the proof of the proposition~(\ref{eq:ch-proposition-example-2}).
-In this sense, the \emph{existence} of the code \lstinline!x => _ => x!
-with the type $A\Rightarrow(B\Rightarrow A)$ ``is'' a proof of
-the logical formula~(\ref{eq:ch-proposition-example-2}).
-
-Let us now write down the proof rules that follow from each of the
-eight code constructs. We will need to consider the full formulation~(\ref{eq:ch-CH-proposition-def})
+Let us now write down the proof rules that follow from the eight code
+constructs. We will need to consider the full formulation~(\ref{eq:ch-CH-proposition-def})
 of ${\cal CH}$-propositions and write them as sequents such as Eq.~(\ref{eq:ch-example-sequent}).
 For brevity, we define $\alpha\triangleq{\cal CH}(A)$, $\beta\triangleq{\cal CH}(B)$,
-etc. It is also customary to use the letter $\Gamma$ to denote the
+etc. It is also customary to use the letter $\Gamma$ to denote a
 set of premises, such as ${\cal CH}(X)$, ${\cal CH}(Y)$, ..., ${\cal CH}(Z)$
 in Eq.~(\ref{eq:ch-example-sequent}). So, we can write a shorter
 formula $\Gamma\vdash\alpha$ instead of the sequent~(\ref{eq:ch-example-sequent}).
 
 With these notations, we will now enumerate all the possible ways
 of proving that a ${\cal CH}$-proposition is true. We assume that
-the set of premises $\Gamma$ (describing the types of the given arguments)
-is known.
+the set of premises $\Gamma$ is known.
 
 \paragraph{1) Create a \lstinline!Unit! value}
 
@@ -1019,27 +1005,27 @@ and is written in the following notation,
 \[
 \frac{}{\Gamma\vdash{\cal CH}(\bbnum 1)}\quad(\text{create unit})\quad\quad.
 \]
-The ``fraction with a label'' represents rules of derivation in
-a given logic. The denominator of the ``fraction'' is the target
-sequent that we can prove. The numerator of the ``fraction'' can
-have zero or more other previous sequents that need to be proved before
-the target sequent can be proved. In this case, the set of previous
-sequents is empty, because the target sequent is an axiom and so requires
-no previous sequents for its proof. The label ``$\text{create unit}$''
-is an arbitrary name used to refer to the rule in the text.
+The ``fraction with a label'' represents a proof rule. The denominator
+of the ``fraction'' is the target sequent that we need to prove.
+The numerator of the ``fraction'' can have zero or more other sequents
+that need to be proved before the target sequent can be proved. In
+this case, the set of previous sequents is empty: the target sequent
+is an axiom and so requires no previous sequents for its proof. The
+label ``$\text{create unit}$'' is an arbitrary name used to refer
+to the rule.
 
 \paragraph{2) Use a given argument}
 
 At any place within the code of a fully parametric function, we may
-use one of its arguments, say $x^{:A}$. If some argument has type
-$A$, it means that $\alpha\triangleq{\cal CH}(A)$ belongs to the
-set of premises of the sequent we are trying to prove. To indicate
+use one of the function's arguments, say $x^{:A}$. If some argument
+has type $A$, it means that $\alpha\triangleq{\cal CH}(A)$ belongs
+to the set of premises of the sequent we are trying to prove. To indicate
 this, we may write the set of premises as ``$\Gamma,\alpha$''.
 The code construct \lstinline!x:A! shows that we can compute a value
 of type $A$, i.e.~show that $\alpha$ is true, given these premises.
 This is expressed by the sequent $\Gamma,\alpha\vdash\alpha$. The
-proof of this sequent corresponds to a an expression that returns
-one of the given arguments (which we may call $x^{:A}$),
+proof of this sequent corresponds to an expression that returns one
+of the given arguments (which we here called $x^{:A}$),
 \[
 \text{Proof}\big(\Gamma,\alpha\vdash\alpha\big)=x^{:A}\quad.
 \]
@@ -1053,33 +1039,33 @@ The formal logic notation for this axiom is
 \paragraph{3) Create a function}
 
 At any place in the code, we may compute a nameless function of type,
-say, $A\Rightarrow B$, by writing \lstinline!(x:A) => expr(x)! as
-long as an expression \lstinline!expr(x)! of type $B$ can be written
-in the inner scope of the function. The expression \lstinline!expr(x)!
-is also required to be fully parametric. So we now need to answer
-the question of whether a fully parametric function can compute a
-value of type $B$, given an argument of type $A$ as well as all
-other arguments previously given to the parent function. This question
-is answered by a sequent whose premises contain one more proposition,
-$\alpha\triangleq{\cal CH}(A)$, in addition to all previously available
-premises. Translating this into the language of ${\cal CH}$-propositions,
-we find that we will prove the sequent 
+say, $A\Rightarrow B$, by writing \lstinline!(x:A) => expr! as long
+as a value \lstinline!expr! of type $B$ can be computed in the inner
+scope of the function. The code for \lstinline!expr! is also required
+to be fully parametric; it may use \lstinline!x! and/or other values
+visible in that scope. So we now need to answer the question of whether
+a fully parametric function can compute a value of type $B$, given
+an argument of type $A$ as well as all other arguments previously
+given to the parent function. This question is answered by a sequent
+whose premises contain one more proposition, ${\cal CH}(A)$, in addition
+to all previously available premises. Translating this into the language
+of ${\cal CH}$-propositions, we find that we will prove the sequent
 \[
-\Gamma\vdash{\cal CH}(A\Rightarrow B)\quad=\quad\Gamma\vdash{\cal CH}(A)\Rightarrow{\cal CH}(B)
+\Gamma\vdash{\cal CH}(A\Rightarrow B)\quad=\quad\Gamma\vdash{\cal CH}(A)\Rightarrow{\cal CH}(B)\quad\triangleq\quad\Gamma\vdash\alpha\Rightarrow\beta
 \]
-if we can prove the sequent $\Gamma,{\cal CH}(A)\vdash{\cal CH}(B)$.
-In the notation of formal logic, this is a \emph{derivation rule}
+if we can prove the sequent $\Gamma,{\cal CH}(A)\vdash{\cal CH}(B)=\Gamma,\alpha\vdash\beta$.
+In the notation of formal logic, this is a \textbf{derivation rule}\index{derivation rule}
 (rather than an axiom) and is written as
 \[
 \frac{\Gamma,\alpha\vdash\beta}{\Gamma\vdash\alpha\Rightarrow\beta}\quad(\text{create function})\quad\quad.
 \]
-(The ``turnstile'' symbol, $\vdash$, binds weaker than other operators.
-So, we can write sequents such as $(\Gamma,\alpha)\vdash(\beta\Rightarrow\gamma)$
-with fewer parentheses, $\Gamma,\alpha\vdash\beta\Rightarrow\gamma$.)
+The \textbf{turnstile}\index{turnstile} symbol, $\vdash$, groups
+weaker than other operators. So, we can write sequents such as $(\Gamma,\alpha)\vdash(\beta\Rightarrow\gamma)$
+with fewer parentheses: $\Gamma,\alpha\vdash\beta\Rightarrow\gamma$.
 
-What code corresponds to the ``$\text{create function}$'' proof
-rule? The proof of $\Gamma\vdash\alpha\Rightarrow\beta$ depends on
-a proof of another sequent. So, the corresponding code must be a function
+What code corresponds to the ``$\text{create function}$'' rule?
+The proof of $\Gamma\vdash\alpha\Rightarrow\beta$ depends on a proof
+of another sequent. So, the corresponding code must be a \emph{function}
 that takes a proof of the previous sequent as an argument and returns
 a proof of the new sequent. By the CH correspondence, a proof of a
 sequent corresponds to a code expression of the type given by the
@@ -1087,32 +1073,32 @@ goal of the sequent; the expression may use arguments of types corresponding
 to the premises of the sequent. So, a proof of the sequent $\Gamma,\alpha\vdash\beta$
 is an expression \lstinline!exprB! of type $B$ that may use a given
 value of type $A$ as well as any other arguments given previously.
-Then we can write the proof of the sequent $\Gamma\vdash\alpha\Rightarrow\beta$
-as the nameless function \lstinline!(x:A) => exprB!: this expression
+Then we can write the proof code for the sequent $\Gamma\vdash\alpha\Rightarrow\beta$
+as the nameless function \lstinline!(x:A) => exprB!. This function
 has type $A\Rightarrow B$ and requires us to already have a suitable
-\lstinline!exprB!. This exactly corresponds to the proof rule ``$\text{create-function}$''.
+\lstinline!exprB!. This exactly corresponds to the proof rule ``$\text{create function}$''.
 We may write the corresponding code as
 \[
 \text{Proof}(\Gamma\vdash{\cal CH}(A)\Rightarrow{\cal CH}(B))=x^{:A}\Rightarrow\text{Proof}(\Gamma,x^{:A}\vdash{\cal CH}(B))\quad.
 \]
 Here we wrote $x^{:A}$ instead of ${\cal CH}(A)$ since the value
 $x^{:A}$ is a proof of the proposition ${\cal CH}(A)$. We will see
-in Section~\ref{subsec:Example:-Proving-a-ch-proposition} how this
-notation is used.
+in Section~\ref{subsec:Example:-Proving-a-ch-proposition} how premises
+such as $\Gamma,x^{:A}$ are implemented in code.
 
 \paragraph{4) Use a function}
 
 At any place in the code, we may apply an already defined function
 of type $A\Rightarrow B$ to an already computed value of type $A$.
 The result will be a value of type $B$. This corresponds to assuming
-${\cal CH}(f^{:A\Rightarrow B})$ and ${\cal CH}(A)$ and then deriving
+${\cal CH}(A\Rightarrow B)$ and ${\cal CH}(A)$, and then deriving
 ${\cal CH}(B)$. The formal logic notation for this proof rule is
 \[
 \frac{\Gamma\vdash\alpha\quad\quad\Gamma\vdash\alpha\Rightarrow\beta}{\Gamma\vdash\beta}\quad(\text{use function})\quad\quad.
 \]
-The code representing this proof rule takes previously computed values
-\lstinline!x:A! and \lstinline!f:A => B!, and writes the expression
-\lstinline!f(x)!. This can be written as 
+The code corresponding to this proof rule takes previously computed
+values \lstinline!x:A! and \lstinline!f:A => B!, and writes the
+expression \lstinline!f(x)!. This can be written as a function application,
 \[
 \text{Proof}(\Gamma\vdash\beta)=\text{Proof}\left(\Gamma\vdash\alpha\Rightarrow\beta\right)(\text{Proof}(\Gamma\vdash\alpha))\quad.
 \]
@@ -1122,8 +1108,7 @@ The code representing this proof rule takes previously computed values
 
 If we have already computed some values \lstinline!x:A! and \lstinline!y:B!,
 we may write the expression \lstinline!(x, y)! and so compute a value
-of the tuple type \lstinline!(A, B)!. In the type notation, this
-type is written as $A\times B$, so the proof rule is
+of the tuple type \lstinline!(A, B)!. The proof rule is
 \[
 \frac{\Gamma\vdash\alpha\quad\quad\Gamma\vdash\beta}{\Gamma\vdash\alpha\wedge\beta}\quad(\text{create tuple})\quad\quad.
 \]
@@ -1155,11 +1140,11 @@ The code can be written as
 \text{Proof}\left(\Gamma\vdash\alpha\right) & =\nabla_{1}\left(\text{Proof}\left(\Gamma\vdash\alpha\wedge\beta\right)\right)\quad,\\
 \text{Proof}\left(\Gamma\vdash\beta\right) & =\nabla_{2}\left(\text{Proof}\left(\Gamma\vdash\alpha\wedge\beta\right)\right)\quad,
 \end{align*}
-where we introduced the notation $\nabla_{1}$ to mean the Scala code
-\lstinline!_._1!.
+where we introduced the notation $\nabla_{1}$ and $\nabla_{2}$ to
+mean the Scala code \lstinline!_._1! and \lstinline!_._2!.
 
-Since any other tuple can be expressed through some pairs, it is sufficient
-to have the proof rules for pairs.
+Since all tuples can be expressed through pairs, it is sufficient
+to have proof rules for pairs.
 
 \paragraph{7) Create a disjunctive value}
 
@@ -1167,7 +1152,7 @@ The disjunctive type \lstinline!Either[A, B]! corresponding to the
 disjunction $\alpha\vee\beta$ can be used to define any other disjunctive
 type; for instance, a disjunctive type with three parts can be expressed
 as \lstinline!Either[A, Either[B, C]]!. So it is sufficient to have
-proof rules for a disjunction of two propositions.
+proof rules for a disjunction of \emph{two} propositions.
 
 There are two ways of creating a value of the type \lstinline!Either[A, B]!:
 the code expressions are \lstinline!Left(x:A)! and \lstinline!Right(y:B)!.
@@ -1188,9 +1173,9 @@ The corresponding code can be written as
 
 The only way we may use a value of disjunctive type \lstinline!Either[A, B]!
 is by pattern matching on it, which will compute a result of some
-other type \lstinline!C!. The code looks like this,
+other type \lstinline!C!. The code is
 \begin{lstlisting}
-(e: Either[A, B]) match {
+val result: C = (e: Either[A, B]) match {
   case Left(x:A)    => expr1(x)
   case Right(y:B)   => expr2(y)
 }
@@ -1216,12 +1201,27 @@ The code can be written as
 \end{cases}\quad.
 \]
 
-The eight rules derived in this section all hold for any propositions
-$\alpha$, $\beta$, $\gamma$. These proof rules define a logic known
-as the \textbf{\index{intuitionistic propositional logic}intuitionistic
+Table~\ref{tab:Proof-rules-for-constructive-logic} summarizes the
+eight proof rules derived in this section. These proof rules define
+a logic known as the \textbf{\index{intuitionistic propositional logic}intuitionistic
 propositional logic} or \textbf{\index{constructive propositional logic}constructive
 propositional logic}. We will call this logic ``constructive'' for
 short.
+
+\begin{table}
+\begin{align*}
+{\color{greenunder}\text{axioms}:}\quad & \frac{~}{\Gamma\vdash{\cal CH}(\bbnum 1)}\quad(\text{create unit})\quad\quad\quad\quad\frac{~}{\Gamma,\alpha\vdash\alpha}\quad(\text{use arg})\\
+{\color{greenunder}\text{derivation rules}:}\quad & \frac{\Gamma,\alpha\vdash\beta}{\Gamma\vdash\alpha\Rightarrow\beta}\quad(\text{create function})\\
+ & \frac{\Gamma\vdash\alpha\quad\quad\Gamma\vdash\alpha\Rightarrow\beta}{\Gamma\vdash\beta}\quad(\text{use function})\\
+ & \frac{\Gamma\vdash\alpha\quad\quad\Gamma\vdash\beta}{\Gamma\vdash\alpha\wedge\beta}\quad(\text{create tuple})\\
+ & \frac{\Gamma\vdash\alpha\wedge\beta}{\Gamma\vdash\alpha}\quad(\text{use tuple-}1)\quad\quad\quad\frac{\Gamma\vdash\alpha\wedge\beta}{\Gamma\vdash\beta}\quad(\text{use tuple-}2)\\
+ & \frac{\Gamma\vdash\alpha}{\Gamma\vdash\alpha\vee\beta}\quad(\text{create Left})\quad\quad\quad\frac{\Gamma\vdash\beta}{\Gamma\vdash\alpha\vee\beta}\quad(\text{create Right})\\
+ & \frac{\Gamma\vdash\alpha\vee\beta\quad\quad\Gamma,\alpha\vdash\gamma\quad\quad\Gamma,\beta\vdash\gamma}{\Gamma\vdash\gamma}\quad(\text{use Either})
+\end{align*}
+
+\caption{Proof rules for the constructive logic.\label{tab:Proof-rules-for-constructive-logic}}
+\end{table}
+
 
 \subsection{Example: Proving a ${\cal CH}$-proposition and deriving code\label{subsec:Example:-Proving-a-ch-proposition}}
 
@@ -1244,49 +1244,49 @@ the set $\Gamma$ of premises is empty, $\Gamma=\emptyset$. Rewriting
 this sequent using the rules of Table~\ref{tab:ch-correspondence-type-notation-CH-propositions},
 we get
 \begin{equation}
-\forall(\alpha,\beta).\:\emptyset\vdash((\alpha\Rightarrow\alpha)\Rightarrow\beta)\Rightarrow\beta\quad,\label{eq:ch-example-sequent-2}
+\forall(\alpha,\beta).\;\emptyset\vdash((\alpha\Rightarrow\alpha)\Rightarrow\beta)\Rightarrow\beta\quad,\label{eq:ch-example-sequent-2}
 \end{equation}
 where we denoted $\alpha\triangleq{\cal CH}(A)$ and $\beta\triangleq{\cal CH}(B)$. 
 
-The next step is to prove the sequent in Eq.~(\ref{eq:ch-example-sequent-2})
+The next step is to prove the sequent~(\ref{eq:ch-example-sequent-2})
 using the logic proof rules of Section~\ref{subsec:The-rules-of-proof}.
 For brevity, we will omit the quantifier $\forall(\alpha,\beta)$
 since it will be present in front of every sequent.
 
 Begin by looking for a proof rule whose ``denominator'' has a sequent
-similar to Eq.~(\ref{eq:ch-example-sequent-2}), i.e.~has a function
-type (in logic, an implication, $p\Rightarrow q$) in the goal. We
-have only one rule that can prove a sequent of the form $\Gamma\vdash(p\Rightarrow q$);
-this is the rule ``$\text{create function}$''. That rule requires
-us to already have a proof of the sequent $(\Gamma,p)\vdash q$. So,
-we use this rule with $\Gamma=\emptyset$, $p=(\alpha\Rightarrow\alpha)\Rightarrow\beta$,
+similar to Eq.~(\ref{eq:ch-example-sequent-2}), i.e.~has an implication
+($p\Rightarrow q$) in the goal. We have only one rule that can prove
+a sequent of the form $\Gamma\vdash(p\Rightarrow q$); this is the
+rule ``$\text{create function}$''. That rule requires us to already
+have a proof of the sequent $(\Gamma,p)\vdash q$. So, we use this
+rule with $\Gamma=\emptyset$, $p=(\alpha\Rightarrow\alpha)\Rightarrow\beta$,
 and $q=\beta$: 
 \[
 \frac{(\alpha\Rightarrow\alpha)\Rightarrow\beta\vdash\beta}{\emptyset\vdash((\alpha\Rightarrow\alpha)\Rightarrow\beta)\Rightarrow\beta}\quad.
 \]
 We now need to prove the sequent $(\alpha\Rightarrow\alpha)\Rightarrow\beta)\vdash\beta$,
-which we can write as $\Gamma_{1}\vdash\beta$ where we define $\Gamma_{1}\triangleq[(\alpha\Rightarrow\alpha)\Rightarrow\beta]$
-as the set containing the single premise $(\alpha\Rightarrow\alpha)\Rightarrow\beta$. 
+which we can write as $\Gamma_{1}\vdash\beta$ where we defined $\Gamma_{1}\triangleq[(\alpha\Rightarrow\alpha)\Rightarrow\beta]$
+to be the set containing the single premise $(\alpha\Rightarrow\alpha)\Rightarrow\beta$. 
 
 There are no proof rules that derive a sequent with an explicit premise
-of a function type (of the form $p\Rightarrow q$). However, we have
+of the form of an implication $p\Rightarrow q$. However, we have
 a rule called ``$\text{use function}$'' that derives a sequent
-by assuming another sequent containing a function type. We would be
+by assuming another sequent containing an implication. We would be
 able to use that rule,
 \[
 \frac{\Gamma_{1}\vdash\alpha\Rightarrow\alpha\quad\quad\Gamma_{1}\vdash(\alpha\Rightarrow\alpha)\Rightarrow\beta}{\Gamma_{1}\vdash\beta}\quad,
 \]
-if we could have proofs of the two sequents $\Gamma_{1}\vdash\alpha\Rightarrow\alpha$
+if we could prove the two sequents $\Gamma_{1}\vdash\alpha\Rightarrow\alpha$
 and $\Gamma_{1}\vdash(\alpha\Rightarrow\alpha)\Rightarrow\beta$.
-It turns out we can prove these sequents easily. The rule ``$\text{create function}$''
+To prove these sequents, note that the rule ``$\text{create function}$''
 applies to $\Gamma_{1}\vdash\alpha\Rightarrow\alpha$ as follows,
 \[
 \frac{\Gamma_{1},\alpha\vdash\alpha}{\Gamma_{1}\vdash\alpha\Rightarrow\alpha}\quad.
 \]
 The sequent $\Gamma_{1},\alpha\vdash\alpha$ is proved directly by
-the axiom ``$\text{use arg}$''. The second sequent, $\Gamma_{1}\vdash(\alpha\Rightarrow\alpha)\Rightarrow\beta$,
-is again an application of the axiom ``$\text{use arg}$'' because
-$\Gamma_{1}$ already contains $(\alpha\Rightarrow\alpha)\Rightarrow\beta$.
+the axiom ``$\text{use arg}$''. The sequent $\Gamma_{1}\vdash(\alpha\Rightarrow\alpha)\Rightarrow\beta$
+is also proved by the axiom ``$\text{use arg}$'' because $\Gamma_{1}$
+already contains $(\alpha\Rightarrow\alpha)\Rightarrow\beta$.
 
 The proof of the sequent~(\ref{eq:ch-example-sequent-2}) is now
 complete and can be visualized as a tree (Figure~\ref{fig:Proof-of-the-sequent-example-2}).
@@ -1300,9 +1300,9 @@ by one.
 
 \begin{figure}
 \begin{centering}
- \Tree[ .$\emptyset\vdash((\alpha\Rightarrow\alpha)\Rightarrow\beta)\Rightarrow\beta $ [ .\smaller{rule ``$\text{create function}$''} [ .$(\alpha\Rightarrow\alpha)\Rightarrow\beta\vdash\beta$ [ .\smaller{rule ``$\text{apply function}$''} [ .$(\alpha\Rightarrow\alpha)\Rightarrow\beta\vdash\alpha\Rightarrow\alpha$ [ .\smaller{rule ``$\text{create function}$''} [ .$\Gamma_1,\alpha\vdash\alpha$ \smaller{axiom ``$\text{use arg}$''} ] ] ] [ .$(\alpha\Rightarrow\alpha)\Rightarrow\beta\vdash(\alpha\Rightarrow\alpha)\Rightarrow\beta$ \smaller{axiom ``$\text{use arg}$''} ] ] ] ] ]
+ \Tree[ .$\emptyset\vdash((\alpha\Rightarrow\alpha)\Rightarrow\beta)\Rightarrow\beta $ [ .\smaller{rule ``$\text{create function}$''} [ .$(\alpha\Rightarrow\alpha)\Rightarrow\beta\vdash\beta$ [ .\smaller{rule ``$\text{use function}$''} [ .$(\alpha\Rightarrow\alpha)\Rightarrow\beta\vdash\alpha\Rightarrow\alpha$ [ .\smaller{rule ``$\text{create function}$''} [ .$\Gamma_1,\alpha\vdash\alpha$ \smaller{axiom ``$\text{use arg}$''} ] ] ] [ .$(\alpha\Rightarrow\alpha)\Rightarrow\beta\vdash(\alpha\Rightarrow\alpha)\Rightarrow\beta$ \smaller{axiom ``$\text{use arg}$''} ] ] ] ] ]
 \par\end{centering}
-\caption{Proof of the sequent~(\ref{eq:ch-example-sequent-2}).\label{fig:Proof-of-the-sequent-example-2}}
+\caption{Proof tree for the sequent~(\ref{eq:ch-example-sequent-2}).\label{fig:Proof-of-the-sequent-example-2}}
 
 \end{figure}
 
@@ -1323,15 +1323,15 @@ in $\Gamma_{1}$. So we can write
 \[
 \text{Proof}\left(\Gamma_{1}\vdash(\alpha\Rightarrow\alpha)\Rightarrow\beta\right)=f^{:(A\Rightarrow A)\Rightarrow B}\quad.
 \]
-The previous rule, ``$\text{apply function}$'', combines the two
+The previous rule, ``$\text{use function}$'', combines the two
 preceding proofs:
 \begin{align*}
  & \text{Proof}\left((\alpha\Rightarrow\alpha)\Rightarrow\beta\vdash\beta\right)\\
  & =\text{Proof}(\Gamma_{1}\vdash(\alpha\Rightarrow\alpha)\Rightarrow\beta)\left(\text{Proof}(\Gamma_{1}\vdash\alpha\Rightarrow\alpha)\right)\\
  & =f(x^{:A}\Rightarrow x)\quad.
 \end{align*}
-The rule used before ``$\text{apply function}$'' was ``$\text{create function}$''.
-We need to provide the same $f^{:\left(A\Rightarrow A\right)\Rightarrow B}$
+Keep going backwards and find that the rule applied before ``$\text{use function}$''
+is ``$\text{create function}$''. We need to provide the same $f^{:\left(A\Rightarrow A\right)\Rightarrow B}$
 as in the premise above, and so we obtain the code
 \begin{align*}
  & \text{Proof}\left(\emptyset\vdash((\alpha\Rightarrow\alpha)\Rightarrow\beta)\Rightarrow\beta\right)\\
@@ -1343,8 +1343,7 @@ In this way, we have systematically derived the code from the type
 signature of a function. This function can be implemented in Scala
 as
 \begin{lstlisting}
-scala> def f[A, B]: ((A => A) => B) => B = { f => f(x => x) }
-f: [A, B]=> ((A => A) => B) => B
+def f[A, B]: ((A => A) => B) => B = { f => f(x => x) }
 \end{lstlisting}
 
 We found the proof tree in Figure~\ref{fig:Proof-of-the-sequent-example-2}
@@ -1352,18 +1351,17 @@ by guessing how to combine various proof rules. If we \emph{somehow}
 find a proof tree for a sequent, we can prove the sequent and derive
 the corresponding code. However, it is not always obvious how to combine
 the proof rules for a given initial sequent, particularly when disjunctive
-types are present. This is so because the rules as presented in Section~\ref{subsec:The-rules-of-proof}
+types are present. This is so because the rules of Table~\ref{tab:Proof-rules-of-constructive-and-boolean}
 do not provide an algorithm for finding a proof tree automatically
 for a given initial sequent. It turns out that such an algorithm exists
 (the ``LJT algorithm'', see Appendix~\ref{app:The-Curry-Howard-correspondence}).
-That algorithm can find proofs and so derive the code for any fully
-parametric type signature with type parameters, tuples, disjunctive
-types, and function types (if the given type signature \emph{can}
-be implemented in code).
+That algorithm can find proofs and derive the code for any fully parametric
+type signature with type parameters, tuples, disjunctive types, and
+function types (if the given type signature can be implemented).
 
 The library \texttt{curryhoward}\footnote{\texttt{\href{https://github.com/Chymyst/curryhoward}{https://github.com/Chymyst/curryhoward}}}
-implements the LJT algorithm. Here are some simple examples of using
-this library. We will run the \texttt{ammonite}\footnote{\texttt{\href{http://ammonite.io/\#Ammonite-Shell}{http://ammonite.io/\#Ammonite-Shell}}}
+implements the LJT algorithm. Here are some examples of using this
+library. We will run the \texttt{ammonite}\footnote{\texttt{\href{http://ammonite.io/\#Ammonite-Shell}{http://ammonite.io/\#Ammonite-Shell}}}
 shell to load the library more easily.
 
 Consider the type signature 
@@ -1373,8 +1371,7 @@ Consider the type signature
 It is not immediately clear whether it is even possible to implement
 a function with this type signature. It turns out that it \emph{is}
 possible, and the code can be derived automatically with help of the
-LJT algorithm. The library provides the method \lstinline!implement!
-used like this:
+LJT algorithm. The library does this via the method \lstinline!implement!:
 \begin{lstlisting}
 @ import $ivy.`io.chymyst::curryhoward:0.3.7`, io.chymyst.ch._
 
@@ -1403,17 +1400,17 @@ The logical formula corresponding to this type signature is
 \forall(\alpha,\beta).\,\left(\left(\alpha\Rightarrow\alpha\right)\Rightarrow\beta\right)\Rightarrow\beta\quad.\label{eq:ch-example-3-peirce-law}
 \end{equation}
 This formula, known as ``Peirce's law'',\footnote{\texttt{\href{https://en.wikipedia.org/wiki/Peirce\%27s_law}{https://en.wikipedia.org/wiki/Peirce\%27s\_law}}}
-is another example of a failure of Boolean logic to describe the logic
-of types in functional programming languages. Peirce's law is a true
-theorem in Boolean logic, but it is not true in the constructive logic
-(i.e.~it cannot be derived using the proof rules of Section~\ref{subsec:The-rules-of-proof}).
-If we try to implement a fully parametric function \lstinline!g[A, B]!
-with the corresponding type signature shown above, we will find that
-we cannot write code for \lstinline!g! that compiles without type
-errors. This failure is because no such code exists, \textendash{}
-not because we are not clever enough. The LJT algorithm can \emph{prove}
-that the given type signature cannot be implemented; the \texttt{curryhoward}
-library will then print an error message, and compilation will fail.
+is another example of the failure of Boolean logic to describe the
+logic of types in functional programming languages. Peirce's law is
+a true theorem in Boolean logic, but it does not hold in the constructive
+logic (i.e.~it cannot be derived using the proof rules of Table~\ref{tab:Proof-rules-of-constructive-and-boolean}).
+If we try to implement \lstinline!g[A, B]! with the type signature
+shown above, we will fail to write fully parametric code for \lstinline!g!
+that compiles without type errors. We will fail because no such code
+exists, \textendash{} not because we are insufficiently clever. The
+LJT algorithm can \emph{prove} that the given type signature cannot
+be implemented; the \texttt{curryhoward} library will then print an
+error message, and compilation will fail.
 
 As another example, let us verify that the type signature from Section~\ref{subsec:Example:-Failure-of-Boolean-logic}
 cannot be implemented as a fully parametric function:
@@ -1421,12 +1418,29 @@ cannot be implemented as a fully parametric function:
 @ def bad[A, B, C](g: A => Either[B, C]): Either[A => B, A => C] = implement
 cmd4.sc:1: type (A => Either[B, C]) => Either[A => B, A => C] cannot be implemented
 def bad[A, B, C](g: A => Either[B, C]): Either[A => B, A => C] = implement
-                                                                  ^
+                                                                 ^
 Compilation Failed
 \end{lstlisting}
 
 
 \section{Solved examples: Equivalence of types}
+
+We found a correspondence between types, code, logical propositions,
+and proofs, which is known as the \textbf{Curry-Howard correspondence}\index{Curry-Howard correspondence}.
+An example of the CH correspondence is that a proof of the logical
+proposition
+\begin{equation}
+\forall(\alpha,\beta).\,\alpha\Rightarrow\left(\beta\Rightarrow\alpha\right)\label{eq:ch-proposition-example-2}
+\end{equation}
+corresponds to the code of the function 
+\begin{lstlisting}
+def f[A, B]: A => (B => A) = { x => _ => x }
+\end{lstlisting}
+With the CH correspondence in mind, we may say that the function \lstinline!f!'s
+code ``is'' the proof of the proposition~(\ref{eq:ch-proposition-example-2}).
+In this sense, the \emph{existence} of the code \lstinline!x => _ => x!
+with the type $A\Rightarrow(B\Rightarrow A)$ ``is'' a proof of
+the logical formula~(\ref{eq:ch-proposition-example-2}).
 
 The Curry-Howard correspondence maps logic formulas such as $(\alpha\vee\beta)\wedge\gamma$
 into type expressions such as $\left(A+B\right)\times C$. We have
@@ -1434,22 +1448,23 @@ seen that types behave similarly to logic formulas in one respect:
 A logic formula is a true theorem when the corresponding type signature
 can be implemented as a fully parametric function, and vice versa.
 
-It turns out that the similarity ends here. In most other respects,
-type expressions behave as arithmetic expressions and not as logic
+It turns out that the similarity ends here. In other respects, type
+expressions behave as \emph{arithmetic} expressions and not as logic
 formulas. For this reason, the type notation used in this book denotes
 disjunctive types by $A+B$ and tuples by $A\times B$, which is designed
-to remind us more of arithmetic expressions (such as $1+2$ and $2\times3$)
-more than of logic formulas (such as $A\vee B$ and $A\wedge B$). 
+to remind us of arithmetic expressions (such as $1+2$ and $2\times3$)
+rather than of logic formulas (such as $A\vee B$ and $A\wedge B$). 
 
 The most important use of the type notation is for writing equations
-with types. When is one type expression equivalent to another? Can
-we use the arithmetic intuition and write type equations such as 
+with types. Can we write type equations using the arithmetic intuition,
+such as 
 \begin{equation}
-\forall(A,B,C).\,\left(A+B\right)\times C=A\times C+B\times C\quad?\label{eq:ch-example-distributive}
+\left(A+B\right)\times C=A\times C+B\times C\quad?\label{eq:ch-example-distributive}
 \end{equation}
+In this section, we will learn how to check whether one type expression
+is equivalent to another.
 
-
-\subsection{Identity in logic does not correspond to type equivalence}
+\subsection{Identity in logic does not correspond to type equivalence\label{subsec:Identity-in-logic-not-type-equivalence}}
 
 The CH correspondence maps Eq.~(\ref{eq:ch-example-distributive})
 into the logic formula
@@ -1466,20 +1481,20 @@ that the two formulas hold,
  & \forall(A,B,C).\,\left(A\wedge C\right)\vee\left(B\wedge C\right)\Rightarrow\left(A\vee B\right)\wedge C\quad.\label{eq:ch-example-distributive-1b}
 \end{align}
 The CH correspondence maps these logical formulas to fully parametric
-functions with type signatures
+functions with types
 \begin{lstlisting}
 def f1[A, B, C]: ((Either[A, B], C))    => Either[(A, C), (B, C)] = ???
 def f2[A, B, C]: Either[(A, C), (B, C)] => (Either[A, B], C) = ???
 \end{lstlisting}
-In the type notation, these two type signatures are written as
+In the type notation, these type signatures are written as
 \begin{align*}
  & f_{1}:\forall(A,B,C).\,\left(A+B\right)\times C\Rightarrow A\times C+B\times C\quad,\\
- & f_{2}:\forall(A,B,C).\:A\times C+B\times C\Rightarrow\left(A+B\right)\times C\quad.
+ & f_{2}:\forall(A,B,C).\;A\times C+B\times C\Rightarrow\left(A+B\right)\times C\quad.
 \end{align*}
 Since the two logical formulas (\ref{eq:ch-example-distributive-1a})\textendash (\ref{eq:ch-example-distributive-1b})
-are true theorems, we expect to be able to implement the functions
-\lstinline!f1! and \lstinline!f2!. However, it is not straightforward
-to guess how to combine the proof rules of Section~\ref{subsec:The-rules-of-proof}
+are true theorems in constructive logic, we expect to be able to implement
+the functions \lstinline!f1! and \lstinline!f2!. It is not straightforward
+to guess how to combine the proof rules of Table~\ref{tab:Proof-rules-of-constructive-and-boolean}
 to obtain proofs of Eqs.~(\ref{eq:ch-example-distributive-1a})\textendash (\ref{eq:ch-example-distributive-1b}).
 So, instead of deriving the implementations of \lstinline!f1! and
 \lstinline!f2! from the CH correspondence, we will write the Scala
@@ -1507,10 +1522,10 @@ def f2[A, B, C]: Either[(A, C), (B, C)] => (Either[A, B], C) = {
 The code of \lstinline!f1! and \lstinline!f2! never discards any
 given values; in other words, these functions appear to preserve information.
 We can formulate this property rigorously as a requirement that an
-arbitrary value \lstinline!x:(Either[A, B], C)! is mapped by \lstinline!f1!
-to some value \lstinline!y:Either[(A, C), (B, C)]! and then mapped
+arbitrary value \lstinline!x: (Either[A, B], C)! is mapped by \lstinline!f1!
+to some value \lstinline!y: Either[(A, C), (B, C)]! and then mapped
 by \lstinline!f2! back to \emph{the same} value \lstinline!x!. Similarly,
-any value \lstinline!y:Either[(A, C), (B, C)]! should be transformed
+any value \lstinline!y: Either[(A, C), (B, C)]! should be transformed
 by \lstinline!f2! and then by \lstinline!f1! back to the \emph{same
 value} \lstinline!y!. 
 
@@ -1518,33 +1533,31 @@ Let us write these conditions as equations,
 \[
 \forall x^{:(A+B)\times C}.\,f_{2}(f_{1}(x))=x\quad,\quad\quad\forall y^{:A\times C+B\times C}.\,f_{1}\left(f_{2}(y)\right)=y\quad.
 \]
-If we show that these conditions hold, it would follow that all the
+If we show that these equations hold, it will follow that all the
 information in a value $x^{:(A+B)\times C}$ is completely preserved
 inside the value $y\triangleq f_{1}(x)$; the original value $x$
-can be recovered by applying $f_{2}(y)$. Conversely, all the information
+can be recovered as $x=f_{2}(y)$. Conversely, all the information
 in a value $y^{:A\times C+B\times C}$ is preserved inside $x\triangleq f_{2}(y)$
 and can be recovered by applying $f_{1}$. Since the values $x^{:(A+B)\times C}$
-and $y^{:A\times C+B\times C}$ are arbitrary, it would follow the
+and $y^{:A\times C+B\times C}$ are arbitrary, it will follow the
 \emph{data types} themselves, $\left(A+B\right)\times C$ and $A\times C+B\times C$,
 carry equivalent information. Such types are called \textbf{equivalent}\index{types!equivalent}
 or \textbf{isomorphic}\index{types!isomorphic}\index{isomorphic types}.
 
 Generally, we say that types $P$ and $Q$ are \textbf{equivalent}
-(denoted as $P\cong Q$) \index{type equivalence}when there exist
-functions $f_{1}^{:P\Rightarrow Q}$ and $f_{2}^{:Q\Rightarrow P}$
-that are inverses for each other: Compositions of $f_{1}$ and $f_{2}$
-in both directions must be equal to an identity function. We can write
-these conditions using the notation $(f_{1}\bef f_{2})(x)\triangleq f_{2}(f_{1}(x))$
-as
+or \textbf{isomorphic} (denoted $P\cong Q$) \index{type equivalence}when
+there exist functions $f_{1}^{:P\Rightarrow Q}$ and $f_{2}^{:Q\Rightarrow P}$
+that are inverses of each other. We can write these conditions using
+the notation $(f_{1}\bef f_{2})(x)\triangleq f_{2}(f_{1}(x))$ as
 \[
 f_{1}\bef f_{2}=\text{id}\quad,\quad\quad f_{2}\bef f_{1}=\text{id}\quad.
 \]
 (We omit type annotations since we already checked that the types
 match. In Scala, the forward composition $f_{1}\bef f_{2}$ is the
-function \lstinline!f1 andThen f2!. ) If these conditions hold, there
+function \lstinline!f1 andThen f2!.) If these conditions hold, there
 is a one-to-one correspondence between the values of types $P$ and
-$Q$. This is clearly the same as to say that the data types $P$
-and $Q$ ``carry equivalent information''.
+$Q$. This is the same as to say that the data types $P$ and $Q$
+``carry equivalent information''.
 
 To verify that the Scala functions \lstinline!f1! and \lstinline!f2!
 defined above are inverses of each other, we first check if $f_{1}\bef f_{2}=\text{id}$.
@@ -1567,22 +1580,21 @@ To check whether $f_{2}\bef f_{1}=\text{id}$, we apply $f_{2}$ to
 an arbitrary value $y^{:A\times C+B\times C}$, which must be one
 of the two disjoint cases, \lstinline!Left((a, c))! or \lstinline!Right((b, c))!.
 The code of \lstinline!f2! maps these two cases into tuples \lstinline!(Left(a), c)!
-or a tuple \lstinline!(Right(b), c)! respectively. Then we apply
-\lstinline!f1!, which will map these tuples back to \lstinline!Left((a, c))!
-or \lstinline!Right((b, c))! respectively. It follows that applying
-$f_{2}$ and then $f_{1}$ will always recover the initial value $y$.
-In other words, $f_{2}\bef f_{1}=\text{id}$.
+and \lstinline!(Right(b), c)! respectively. Then we apply \lstinline!f1!
+and map these tuples back to \lstinline!Left((a, c))! and \lstinline!Right((b, c))!
+respectively. It follows that applying $f_{2}$ and then $f_{1}$
+will always recover the initial value $y$. In other words, $f_{2}\bef f_{1}=\text{id}$.
 
 By looking at the code of \lstinline!f1! and \lstinline!f2!, we
 can directly observe that these functions are inverses of each other:
-the tuple pattern \lstinline!(Left(a), c)! is converted into \lstinline!Left((a, c))!,
-and the pattern \lstinline!(Right(b), c)! into \lstinline!Right((b, c))!,
+the tuple pattern \lstinline!(Left(a), c)! is mapped to \lstinline!Left((a, c))!,
+and the pattern \lstinline!(Right(b), c)! to \lstinline!Right((b, c))!,
 or vice versa. It is then visually clear that no information is lost
 and that the original values are restored by function compositions
 $f_{1}\bef f_{2}$ or $f_{2}\bef f_{1}$.
 
 We find that the logical identity~(\ref{eq:ch-example-distributive-1})
-leads to the equivalence of the corresponding types,
+leads to an equivalence of the corresponding types,
 \begin{equation}
 \left(A+B\right)\times C\cong A\times C+B\times C\quad.\label{eq:ch-distributive-law-types}
 \end{equation}
@@ -1592,9 +1604,9 @@ law for conjunction,
 \begin{equation}
 \left(\alpha\wedge\beta\right)\wedge\gamma=\alpha\wedge\left(\beta\wedge\gamma\right)\quad.\label{eq:ch-example-associativity-conjunction}
 \end{equation}
-The corresponding types are $(A\times B)\times C$ and $A\times(B\times C)$,
-or in Scala syntax \lstinline!((A, B), C)! and \lstinline!(A, (B, C))!.
-We can define functions mapping between these types without information
+The corresponding types are $(A\times B)\times C$ and $A\times(B\times C)$;
+in Scala, \lstinline!((A, B), C)! and \lstinline!(A, (B, C))!. We
+can define functions that convert between these types without information
 loss:
 \begin{lstlisting}
 def f3[A, B, C]: (((A, B), C)) => (A, (B, C)) = { case ((a, b), c) => (a, (b, c)) }
@@ -1604,13 +1616,13 @@ By applying these functions to arbitrary values of types \lstinline!((A, B), C)!
 and \lstinline!(A, (B, C))!, it is easy to see that the functions
 \lstinline!f3! and \lstinline!f4! are inverses of each other. This
 is also directly visible in the code: the nested tuple pattern \lstinline!((a, b), c)!
-is transformed into the pattern \lstinline!(a, (b, c))! and vice
-versa. So, the types $\left(A\times B\right)\times C$ and $A\times\left(B\times C\right)$
+is mapped to the pattern \lstinline!(a, (b, c))! and back. So, the
+types $\left(A\times B\right)\times C$ and $A\times\left(B\times C\right)$
 are equivalent, and we can write $A\times B\times C$ without parentheses.
 
 Does a logical identity always correspond to an equivalence of types?
 This turns out to be \emph{not} so. A simple example of a logical
-identity that does \emph{not} correspond to a type equivalence is
+identity that does not correspond to a type equivalence is
 \begin{equation}
 True\vee\alpha=True\quad.\label{eq:ch-example-logic-identity-2}
 \end{equation}
@@ -1622,10 +1634,10 @@ type equivalence would be $\bbnum 1+A\cong\bbnum 1$ (in Scala, \lstinline!Option
 It is intuitively clear that this type equivalence does not hold:
 an \lstinline!Option[A]! may carry a value of type \lstinline!A!,
 which cannot possibly be stored in a value of type \lstinline!Unit!.
-We can verify this intuition rigorously by proving that any two fully
+We can verify this intuition rigorously by proving that any fully
 parametric functions with type signatures $g_{1}:\bbnum 1+A\Rightarrow\bbnum 1$
-and $g_{2}:\bbnum 1\Rightarrow\bbnum 1+A$ cannot satisfy $g_{1}\bef g_{2}=\text{id}$.
-To verify this, we notice that $g_{2}:\bbnum 1\Rightarrow\bbnum 1+A$
+and $g_{2}:\bbnum 1\Rightarrow\bbnum 1+A$ will not satisfy $g_{1}\bef g_{2}=\text{id}$.
+To verify this, we note that $g_{2}:\bbnum 1\Rightarrow\bbnum 1+A$
 must be a Scala function with the type signature
 \begin{lstlisting}
 def g2[A]: Unit => Option[A] = ???
@@ -1636,24 +1648,23 @@ from scratch. Therefore, $g_{1}\bef g_{2}$ is also a function that
 always returns \lstinline!None!. The function $g_{1}\bef g_{2}$
 has type signature $\bbnum 1+A\Rightarrow\bbnum 1+A$ or, in Scala
 syntax, \lstinline!Option[A] => Option[A]!, and is not equal to the
-identity function with that type signature because the identity function
-will not always return \lstinline!None!.
+identity function, because the identity function does not \emph{always}
+return \lstinline!None!.
 
-Another example of a logical identity that does not yield a type equivalence
-is the distributive law 
+Another example of a logical identity without a type equivalence is
+the distributive law 
 \begin{equation}
 \forall(A,B,C).\,\left(A\wedge B\right)\vee C=\left(A\vee C\right)\wedge\left(B\vee C\right)\quad,\label{eq:ch-example-distributive-2}
 \end{equation}
-which is ``dual'' to the law~\ref{eq:ch-example-distributive-1},
+which is ``dual'' to the law~(\ref{eq:ch-example-distributive-1}),
 i.e.~it is obtained from Eq.~(\ref{eq:ch-example-distributive-1})
 by swapping all conjunctions ($\wedge$) with disjunctions ($\vee$).
-In logic, a dual formula to an identity is often also an identity
-(this is always true in Boolean logic, but not always true in the
-constructive logic we are using now). The CH correspondence maps Eq.~(\ref{eq:ch-example-distributive-2})
+In logic, a dual formula to an identity is often also an identity.
+The CH correspondence maps Eq.~(\ref{eq:ch-example-distributive-2})
 into the type equation
-\[
-\forall(A,B,C).\,\left(A\times B\right)+C=\left(A+C\right)\times\left(B+C\right)\quad(?).
-\]
+\begin{equation}
+\forall(A,B,C).\,\left(A\times B\right)+C=\left(A+C\right)\times\left(B+C\right)\quad.\label{eq:ch-example-incorrect-identity-2}
+\end{equation}
 However, the types $A\times B+C$ and $\left(A+C\right)\times\left(B+C\right)$
 are \emph{not} equivalent. This can be seen by looking at the possible
 code of functions $g_{3}:\left(A+C\right)\times\left(B+C\right)\Rightarrow A\times B+C$
@@ -1669,69 +1680,68 @@ def g3[A,B,C]: ((Either[A, C], Either[B, C])) => Either[(A, B), C] = {
 \end{lstlisting}
 In the last line, we have a choice of returning \lstinline!Right(c1)!
 or \lstinline!Right(c2)!. Whichever we choose, we will lose information
-because we will have discarded one of the given values of type \lstinline!C!.
-After evaluating $g_{3}$, we will not be able to restore \emph{both}
-\lstinline!c1! and \lstinline!c2! \textendash{} no matter what code
-we write for $g_{4}$. So, the composition $g_{3}\bef g_{4}$ cannot
-possibly equal the identity function.
+because we will have discarded one of the given values \lstinline!c1!,
+\lstinline!c2!. After evaluating $g_{3}$, we will not be able to
+restore \emph{both} \lstinline!c1! and \lstinline!c2! \textendash{}
+no matter what code we write for $g_{4}$. So, the composition $g_{3}\bef g_{4}$
+cannot be equal to the identity function. The type equation~(\ref{eq:ch-example-incorrect-identity-2})
+is incorrect.
 
 We conclude that a logical identity ${\cal CH}(P)={\cal CH}(Q)$ guarantees,
 via the CH correspondence, that we can implement \emph{some} fully
 parametric functions of types $P\Rightarrow Q$ and $Q\Rightarrow P$.
-It is not guaranteed, however, that these functions will be inverses
-of each other, i.e.~that there is no information loss in the type
-conversions $P\Rightarrow Q$ or $Q\Rightarrow P$. So, the type equivalence
-$P\cong Q$ does not follow from the logical identity ${\cal CH}(P)={\cal CH}(Q)$.
+However, it is not guaranteed that these functions are inverses of
+each other, i.e.~that the type conversions $P\Rightarrow Q$ or $Q\Rightarrow P$
+have no information loss. So, the type equivalence $P\cong Q$ does
+not automatically follow from the logical identity ${\cal CH}(P)={\cal CH}(Q)$.
 
 The CH correspondence means that we can compute \emph{some} value
 $x^{:X}$ of a given type $X$ when the proposition ${\cal CH}(X)$
 holds. However, the CH correspondence does not guarantee that the
-computed value $x^{:X}$ should satisfy any additional properties
-or laws.
+computed value $x^{:X}$ will satisfy any additional properties or
+laws.
 
 \subsection{Arithmetic identities correspond to type equivalences}
 
-Looking at the examples of equivalent types, we will notice that correct
+Looking at the examples of equivalent types, we notice that correct
 type equivalences correspond to \emph{arithmetical} identities rather
 than \emph{logical} identities. For instance, the logical identity
 in Eq.~(\ref{eq:ch-example-distributive-1}) leads to the type equivalence~(\ref{eq:ch-distributive-law-types}),
 which looks like a standard identity of arithmetic, such as
 \[
-(1+10)\times20=1\times20+10\times20\quad,
+(1+10)\times20=1\times20+10\times20\quad.
 \]
-while the logical identity in Eq.~(\ref{eq:ch-example-distributive-2}),
-which does not yield a type equivalence, leads to an incorrect arithmetic
-equation $a\times b+c\neq\left(a+c\right)\times\left(b+c\right)$,
-e.g. $\left(1\times10\right)+20\neq\left(1+20\right)\times\left(10+20\right)$.
+The logical identity in Eq.~(\ref{eq:ch-example-distributive-2}),
+which does \emph{not} yield a type equivalence, leads to an incorrect
+arithmetic equation~\ref{eq:ch-example-incorrect-identity-2}, e.g.~$\left(1\times10\right)+20\neq\left(1+20\right)\times\left(10+20\right)$.
 Similarly, the associativity law~(\ref{eq:ch-example-associativity-conjunction})
-leads to a type equivalence and has a corresponding arithmetic identity
+leads to a type equivalence and to the arithmetic identity
 \[
 \left(a\times b\right)\times c=a\times\left(b\times c\right)\quad,
 \]
 while the logical identity in Eq.~(\ref{eq:ch-example-logic-identity-2}),
-,which does not yield a type equivalence, leads to an incorrect arithmetic
-equation $1+a\neq1$.
+which does not yield a type equivalence, leads to an incorrect arithmetic
+statement ($\forall a.\,1+a=1$).
 
 Table~\ref{tab:Logical-identities-with-disjunction-and-conjunction}
 summarizes these and other examples of logical identities, with the
-corresponding type equivalences. In all rows, the quantifiers such
-as $\forall\alpha$ or $\forall(A,B)$ are implied when necessary.
+corresponding type equivalences. In all rows, quantifiers such as
+$\forall\alpha$ or $\forall(A,B)$ are implied when necessary.
 
-Because we chose the type notation to be similar to ordinary arithmetic
-notation, it is easy to check whether a possible type equivalence
-would be a valid arithmetic identity. In all cases, valid arithmetic
-identities correspond to type equivalences, and failures to obtain
-a type equivalence correspond to incorrect arithmetic identities.
-As far as type equivalence goes, types such as $A+B$ and $A\times B$
-behave similarly to arithmetic expressions such as $10+20$ and $10\times20$
-and not similarly to logical formulas such as $\alpha\vee\beta$ and
-$\alpha\wedge\beta$.
+Because we chose the type notation to be similar to the ordinary arithmetic
+notation, it is easy to translate a possible type equivalence into
+an arithmetic equation. In all cases, valid arithmetic identities
+correspond to type equivalences, and failures to obtain a type equivalence
+correspond to incorrect arithmetic identities. With regard to type
+equivalence, types such as $A+B$ and $A\times B$ behave similarly
+to arithmetic expressions such as $10+20$ and $10\times20$ and not
+similarly to logical formulas such as $\alpha\vee\beta$ and $\alpha\wedge\beta$.
 
 \begin{table}
 \begin{centering}
 \begin{tabular}{|c|c|}
 \hline 
-\textbf{Logical identity} & \textbf{Type equivalence (if holds)}\tabularnewline
+\textbf{Logical identity} & \textbf{Type equivalence (if it holds)}\tabularnewline
 \hline 
 \hline 
 $True\vee\alpha=True$ & $\bbnum 1+A\not\cong\bbnum 1$\tabularnewline
@@ -1761,8 +1771,8 @@ types.\label{tab:Logical-identities-with-disjunction-and-conjunction}}
 \end{table}
 
 We already verified the first line and the last three lines of Table~\ref{tab:Logical-identities-with-disjunction-and-conjunction}.
-Other identities are verified in a similar way, as we will see later.
-At this point, let us consider the 3rd and 4th lines of Table~\ref{tab:Logical-identities-with-disjunction-and-conjunction},
+Other identities are verified in a similar way. Let us begin with
+the 3rd and 4th lines of Table~\ref{tab:Logical-identities-with-disjunction-and-conjunction},
 which involve the proposition $False$ and the corresponding \index{void type}void
 type $\bbnum 0$, defined in Scala as \lstinline!Nothing!. Reasoning
 about the void type needs a special technique that we will now develop
@@ -1780,15 +1790,14 @@ tuple type \lstinline!(Nothing, A)!. To demonstrate that the type
 \lstinline!(Nothing, A)! is equivalent to the type \lstinline!Nothing!,
 we need to show that the type \lstinline!(Nothing, A)! has \emph{no}
 values. Indeed, how could we create a value of type, say, \lstinline!(Nothing, Int)!?
-We would need to create values to fill both parts of the tuple. We
-could create a value of type \lstinline!Int!, but we can never get
-a value of type \lstinline!Nothing!. So, regardless of the type \lstinline!A!,
-it is impossible to create any values of type \lstinline!(Nothing, A)!.
-In other words, the set of values of the type \lstinline!(Nothing, A)!
-is empty; but that is the definition of the type \lstinline!Nothing!.
-The types \lstinline!(Nothing, A)! (denoted by $\bbnum 0\times A$)
-and \lstinline!Nothing! (denoted by $\bbnum 0$) are both void and
-therefore equivalent.
+We would need to fill both parts of the tuple. We have values of type
+\lstinline!Int!, but we can never get a value of type \lstinline!Nothing!.
+So, regardless of the type \lstinline!A!, it is impossible to create
+any values of type \lstinline!(Nothing, A)!. In other words, the
+set of values of the type \lstinline!(Nothing, A)! is empty; but
+that is the definition of the type \lstinline!Nothing!. The types
+\lstinline!(Nothing, A)! (denoted by $\bbnum 0\times A$) and \lstinline!Nothing!
+(denoted by $\bbnum 0$) are both void and therefore equivalent.
 
 \subsubsection{Example \label{subsec:ch-Example-0-plus-A}\ref{subsec:ch-Example-0-plus-A}}
 
@@ -1819,8 +1828,8 @@ def f1[A]: Either[Nothing, A] => A = {
 // No need for case Left(x) => ... since no x can be given there.
 }
 \end{lstlisting}
-For the same reason, there is only one implementation of the inverse
-function,
+For the same reason, there is only one implementation of the function
+\lstinline!f2!,
 \begin{lstlisting}
 def f2[A]: A => Either[Nothing, A] = { y => Right(y) }
 \end{lstlisting}
@@ -1864,9 +1873,9 @@ and should be determined by matching the types of other expressions.
 
 In the notation $\bbnum 0+y^{:B}$, we use the symbol $\bbnum 0$
 rather than an ordinary zero ($0$), to avoid suggesting that $0$
-is a value of type $\bbnum 0$. The void type $\bbnum 0$ has no values
-and is not similar to the \lstinline!Unit! type, $\bbnum 1$, whose
-value we denote by $1$.
+is a value of type $\bbnum 0$. The void type $\bbnum 0$ has no values,
+unlike the \lstinline!Unit! type, $\bbnum 1$, which has a value
+denoted by $1$ in the code notation.
 
 \subsubsection{Example \label{subsec:ch-Example-1xA}\ref{subsec:ch-Example-1xA}}
 
@@ -1888,7 +1897,7 @@ Let us first write a proof by reasoning directly with Scala code:
 (f1 andThen f2)((a,())) == f2(f1((a,())) == f2(a) == (a, ())
 (f2 andThen f1)(a) == f1(f2(a)) == f1((a, ())) = a
 \end{lstlisting}
-Now let us write a proof in a code notation. The codes of $f_{1}$
+Now let us write a proof in the code notation. The codes of $f_{1}$
 and $f_{2}$ are
 \begin{align*}
 f_{1} & =a^{:A}\times1\Rightarrow a\quad,\\
@@ -1933,13 +1942,13 @@ using only a given value \lstinline!a:A!. The only way of doing that
 is by returning \lstinline!Right(a)!.
 
 It is clear from the code that the functions \lstinline!f1! and \lstinline!f2!
-are inverses for each other (in other words, the function \lstinline!f1!
-is its own inverse). To verify that rigorously, we need show that
-\lstinline!f1 andThen f2! is equal to an identity function. The function
-\lstinline!f1 andThen f2! applies \lstinline!f2! to the result of
-\lstinline!f1!. The code of \lstinline!f1! contains two \lstinline!case ...!
-lines, each returning its own result. So, we need to apply \lstinline!f2!
-separately in each line. Evaluate the code symbolically:
+are inverses of each other (i.e.~the function \lstinline!f1! is
+its own inverse). To verify that rigorously, we need show that \lstinline!f1 andThen f2!
+is equal to an identity function. The function \lstinline!f1 andThen f2!
+applies \lstinline!f2! to the result of \lstinline!f1!. The code
+of \lstinline!f1! contains two \lstinline!case ...! lines, each
+returning a result. So, we need to apply \lstinline!f2! separately
+in each line. Evaluate the code symbolically:
 \begin{lstlisting}
 f1 andThen f2 == {
   case Left(a)    => f2(Right(a))
@@ -1983,7 +1992,7 @@ The rows of the matrix correspond to the \lstinline!case! rows in
 the Scala code; there is one row for each part of the disjunctive
 type of the argument. The columns of the matrix correspond to the
 parts of the disjunctive type of the result.\index{pattern matching!matrix notation}
-The double line marks the input types of the function.
+The double line marks the input types of the functions.
 
 The code of $f_{2}$ is written similarly; let us rename arguments
 for clarity:
@@ -1999,7 +2008,7 @@ rules of row-by-column matrix multiplication.\footnote{\texttt{\href{https://en.
 The empty places in matrices are ignored, and the non-empty expressions
 are composed as functions:
 \begin{align*}
- & f_{1}\bef f_{2}=\begin{array}{|c||cc|}
+f_{1}\bef f_{2} & =\begin{array}{|c||cc|}
  & B & A\\
 \hline A~ &  & a^{:A}\Rightarrow a\\
 B~ & b^{:B}\Rightarrow b & 
@@ -2030,7 +2039,7 @@ A
 \end{array}$ of $f_{2}$. Once we verified that all types match, we may omit the
 type annotations and write the derivation as
 \begin{align*}
- & f_{1}\bef f_{2}=\begin{array}{||cc|}
+f_{1}\bef f_{2} & =\begin{array}{||cc|}
  & a^{:A}\Rightarrow a\\
 b^{:B}\Rightarrow b & 
 \end{array}\bef\begin{array}{||cc|}
@@ -2049,7 +2058,7 @@ x^{:A}\Rightarrow x &
 The identity function is represented by the diagonal matrix $\begin{array}{||cc|}
 \text{id} & \\
  & \text{id}
-\end{array}$, just as in standard matrix notation.
+\end{array}\,$, just as in standard matrix notation.
 
 \subsubsection{Exercise \label{subsec:ch-Exercise-AxB}\ref{subsec:ch-Exercise-AxB}\index{exercises}}
 
@@ -2057,10 +2066,20 @@ Verify the type equivalence $A\times B\cong B\times A$.
 
 \subsubsection{Exercise \label{subsec:ch-Exercise-A+B+C}\ref{subsec:ch-Exercise-A+B+C}}
 
-Verify the type equivalences $\left(A+B\right)+C\cong A+\left(B+C\right)$
-and $\left(A\times B\right)\times C\cong A\times\left(B\times C\right)$.
-These equivalences permit us to write the type notation as $A+B+C$
-and $A\times B\times C$ without the parentheses.
+Verify the type equivalence $\left(A+B\right)+C\cong A+\left(B+C\right)$.
+The equivalences $\left(A+B\right)+C\cong A+\left(B+C\right)$ and
+$\left(A\times B\right)\times C\cong A\times\left(B\times C\right)$,
+which was verified in Section~\ref{subsec:Identity-in-logic-not-type-equivalence},
+permit us to write the type notation as $A+B+C$ and $A\times B\times C$
+without the parentheses.
+
+\subsubsection{Exercise \label{subsec:ch-Exercise-A+B2}\ref{subsec:ch-Exercise-A+B2}}
+
+Verify the type equivalence 
+\[
+\left(A+B\right)\times\left(A+B\right)=A\times A+\bbnum 2\times A\times B+B\times B\quad,
+\]
+where $\bbnum 2$ denotes the \lstinline!Boolean! type.
 
 \subsection{Type cardinalities and type equivalence}
 
@@ -2083,16 +2102,16 @@ and so the total number of possible different strings will be finite
 
 For a given type $A$, let us denote by $\left|A\right|$ the number
 of distinct values of type $A$. The number $\left|A\right|$ is called
-the \textbf{cardinality} of type $A$; this is the same as the cardinality\index{cardinality}
-of the set of all values of type $A$. Since any computer's memory
-is limited, and since we may assume that we are already working with
-the largest possible computer, then there will be \emph{finitely}
-many different values of a given type $A$ that can be represented
-by the computer. So, we may assume that $\left|A\right|$ is always
-a finite integer value. This assumption will simplify our reasoning.
-We will not actually need to compute the precise number of, say, all
-the different possible strings; it is sufficient to know that the
-set of all strings is finite, so that we can denote its cardinality
+the \index{cardinality}\textbf{cardinality} of type $A$; this is
+the same as the number of elements in the set of all values of type
+$A$. Since any computer's memory is finite, and since we may assume
+that we are already working with the largest possible computer, then
+there will be \emph{finitely} many different values of a given type
+$A$ that can exist in the computer. So, we may assume that $\left|A\right|$
+is always a finite integer value. This assumption will simplify our
+reasoning. We will not actually need to compute the precise number
+of, say, all the different possible strings; it is sufficient to know
+that the set of all strings is finite, so that we can denote its cardinality
 by $\left|\text{String}\right|$.
 
 The next step is to consider the cardinality of types such as $A\times B$
@@ -2132,20 +2151,23 @@ The last step is to notice that two types can be equivalent, $P\cong Q$,
 only if their cardinalities are equal, $\left|P\right|=\left|Q\right|$.
 When the cardinalities are not equal, $\left|P\right|\neq\left|Q\right|$,
 it will be impossible to have a one-to-one correspondence between
-the sets of values of type $P$ and values of type $Q$.
+the sets of values of type $P$ and values of type $Q$. So it will
+be impossible to convert values from type $P$ to type $Q$ and back
+without loss of information.
 
-We conclude that types can be equivalent when a logical identity \emph{and}
-an arithmetic identity are both true.
+We conclude that types are equivalent when a logical identity \emph{and}
+an arithmetic identity hold.
 
 The presence of both identities does not automatically guarantee a
 useful type equivalence. The fact that information in one type can
 be identically stored in another type does not necessarily mean that
-it is helpful to do so in a given application. For example, the types
-\lstinline!Option[Option[A]]! and \lstinline!Either[Boolean, A]!
+it is helpful to do so in a given application.
+
+For example, the types \lstinline!Option[Option[A]]! and \lstinline!Either[Boolean, A]!
 are equivalent because both types contain $2+\left|A\right|$ distinct
 values. The short notation for these types is $\bbnum 1+\bbnum 1+A$
-and $\bbnum 2+A$ respectively (note that the type Boolean is denoted
-by $\bbnum 2$ since it has only two distinct values).
+and $\bbnum 2+A$ respectively (the type Boolean is denoted by $\bbnum 2$
+since it has only two distinct values). 
 
 One could easily write code to convert between these types without
 loss of information:
@@ -2163,19 +2185,18 @@ def f2[A]: Either[Boolean, A] => Option[Option[A]] = {
 \end{lstlisting}
 A sign of trouble is the presence of an arbitrary choice in this code.
 In \lstinline!f1!, we could map \lstinline!None! to \lstinline!Left(false)!
-or to \lstinline!Left(true)!, and adjust the code \lstinline!f2!
-accordingly; the type equivalence would still hold. So, formally speaking,
-these types \emph{are} equivalent; but in practice, there is no ``natural''
-choice of the conversion functions \lstinline!f1! and \lstinline!f2!
-that will work correctly in all applications. because the meaning
-of these data types is application-dependent. The type equivalence
-is accidental\index{type equivalence!accidental}.
+or to \lstinline!Left(true)!, and adjust the rest of the code accordingly;
+the type equivalence would still hold. So, formally speaking, these
+types \emph{are} equivalent, but there is no ``natural'' choice
+of the conversion functions \lstinline!f1! and \lstinline!f2! that
+will work correctly in all applications, because the meaning of these
+data types is application-dependent. This type equivalence is ``accidental''\index{type equivalence!accidental}.
 
 \subsubsection{Example \label{subsec:ch-Example-cardinality-option-either}\ref{subsec:ch-Example-cardinality-option-either}\index{solved examples}}
 
 Are the types \lstinline!Option[A]! and \lstinline!Either[Unit, A]!
-equivalent? Check whether the corresponding logic identity and the
-arithmetic identity hold.
+equivalent? Check whether the corresponding logic identity and arithmetic
+identity hold.
 
 \paragraph{Solution}
 
@@ -2183,7 +2204,7 @@ Begin by writing the given types in the type notation: \lstinline!Option[A]!
 is written as $\bbnum 1+A$, and \lstinline!Either[Unit, A]! is written
 also as $\bbnum 1+A$. This already indicates, by looking at the notation
 alone, that the types are equivalent. However, let us verify explicitly
-that the type notation is not misleading us here.
+that the type notation is not misleading us.
 
 To establish type equivalence, we need to implement two fully parametric
 functions
@@ -2192,7 +2213,7 @@ def f1[A]: Option[A] => Either[Unit, A] = ???
 def f2[A]: Either[Unit, A] => Option[A] = ???
 \end{lstlisting}
 such that $f_{1}\bef f_{2}=\text{id}$ and $f_{2}\bef f_{1}=\text{id}$.
-It is straightforward to implement them:
+It is straightforward to implement \lstinline!f1! and \lstinline!f2!:
 \begin{lstlisting}
 def f1[A]: Option[A] => Either[Unit, A] = {
   case None      => Left(())
@@ -2203,14 +2224,14 @@ def f2[A]: Either[Unit, A] => Option[A] = {
   case Right(x)   => Some(x)
 }
 \end{lstlisting}
-It is clear from the code that these functions are inverses of each
-other. This confirms the type equivalence.
+The code clearly shows that \lstinline!f1! and \lstinline!f2! are
+inverses of each other; this verifies the type equivalence.
 
 The logic identity is $True\vee A=True\vee A$ and holds trivially.
 It remains to check the arithmetic identity, which relates the number
 of distinct values of types \lstinline!Option[A]! and \lstinline!Either[Unit, A]!.
-Assume that the number of all distinct values of type \lstinline!A!
-is $\left|A\right|$. Any possible value of type \lstinline!Option[A]!
+Assume that the number of distinct values of type \lstinline!A! is
+$\left|A\right|$. Any possible value of type \lstinline!Option[A]!
 must be either \lstinline!None! or \lstinline!Some(x)!, where \lstinline!x!
 is a value of type \lstinline!A!. So the number of distinct values
 of type \lstinline!Option[A]! is $1+\left|A\right|$. All possible
@@ -2222,7 +2243,7 @@ the types \lstinline!Option[A]! and \lstinline!Either[Unit, A]!
 have equally many distinct values.
 
 This example shows that the type notation is helpful for reasoning
-about type equivalences. The correct answer was found immediately
+about type equivalences. The answer to the question was found immediately
 when we wrote the type notation, $\bbnum 1+A$, for the given types.
 
 \subsection{Type equivalence involving function types}
@@ -2234,21 +2255,22 @@ Consider two types $A$ and $B$, whose cardinalities are known as
 $\left|A\right|$ and $\left|B\right|$. What is the cardinality of
 the set of all maps between given sets $A$ and $B$? In other words,
 how many distinct values does the function type $A\Rightarrow B$
-have? A function \lstinline!f:A=>B! needs to select a value of type
-$B$ for each possible value of type $A$. Therefore, the number of
-different functions \lstinline!f:A=>B! is $\left|B\right|^{\left|A\right|}$
-(the arithmetic exponent, $\left|B\right|$ to the power $\left|A\right|$).
+have? A function \lstinline!f: A => B! needs to select a value of
+type $B$ for each possible value of type $A$. Therefore, the number
+of different functions \lstinline!f: A => B! is $\left|B\right|^{\left|A\right|}$
+(the arithmetic exponent\index{exponent}, $\left|B\right|$ to the
+power $\left|A\right|$).
 
 For the types $A=B=\text{Int}$, we have $\left|A\right|=\left|B\right|=2^{32}$,
 and so the estimate will give 
 \[
 \left|A\Rightarrow B\right|=\left(2^{32}\right)^{\left(2^{32}\right)}=2^{32\times2^{32}}=2^{2^{37}}\approx10^{4.1\times10^{10}}\quad.
 \]
-In practice, many of these functions will map integers to integers
-in a complicated (and practically useless) way and will be impossible
+In fact, most of these functions will map integers to integers in
+a complicated (and practically useless) way and will be impossible
 to implement on a realistic computer because their code will be much
-longer than the available memory. So, the actual number of implementable
-functions of type $A\Rightarrow B$ is much smaller than $\left|B\right|^{\left|A\right|}$.
+longer than the available memory. So, the number of practically implementable
+functions of type $A\Rightarrow B$ is often much smaller than $\left|B\right|^{\left|A\right|}$.
 Nevertheless, the estimate $\left|B\right|^{\left|A\right|}$ is useful
 since it shows the number of distinct functions that are possible
 in principle.
@@ -2256,12 +2278,16 @@ in principle.
 Let us now see what logic identities and arithmetic identities are
 available for type expressions involving function types. Table~\ref{tab:Logical-identities-with-function-types}
 lists the available identities and the corresponding type equivalences.
-We note that there is no logic identity available for the formula
+(In the last column, we defined $a\triangleq\left|A\right|$, $b\triangleq\left|B\right|$,
+and $c\triangleq\left|C\right|$ for brevity.) 
+
+It is notable that no logic identity is available for the formula
 $\alpha\Rightarrow\left(\beta\vee\gamma\right)$, and correspondingly
-no type equivalence available for the type expression $A\Rightarrow B+C$.
-Because such type expressions cannot be transformed into an equivalent
-formula with simpler parts, the presence of such type expressions
-makes type reasoning more complicated.
+no type equivalence is available for the type expression $A\Rightarrow B+C$
+(although there is an identity for $A\Rightarrow B\times C$). The
+presence of type expressions of the form $A\Rightarrow B+C$ makes
+type reasoning more complicated because they cannot be transformed
+into equivalent formulas with simpler parts.
 
 \begin{table}
 \begin{centering}
@@ -2286,13 +2312,10 @@ $\alpha\Rightarrow\left(\beta\wedge\gamma\right)=\left(\alpha\Rightarrow\beta\ri
 \hline 
 \end{tabular}
 \par\end{centering}
-\caption{Logical identities and arithmetic identities for function types. In
-the last column, we defined $a\triangleq\left|A\right|$, $b\triangleq\left|B\right|$,
-and $c\triangleq\left|C\right|$ for brevity.\label{tab:Logical-identities-with-function-types}}
+\caption{Logical identities and arithmetic identities for function types.\label{tab:Logical-identities-with-function-types}}
 \end{table}
 
-We will now prove some of these type identities. We will also develop
-better notation for reasoning about code.
+We will now prove some of the type identities in Table~\ref{tab:Logical-identities-with-function-types}.
 
 \subsubsection{Example \label{subsec:ch-Example-type-identity-f}\ref{subsec:ch-Example-type-identity-f}\index{solved examples}}
 
@@ -2316,7 +2339,7 @@ def f2[A]: A => Unit => A = ???
 The first function needs to produce a value of type \lstinline!A!,
 given an argument of the function type \lstinline!Unit => A!. The
 only possibility is to apply that function to the value of type \lstinline!Unit!;
-we can always produce that value.
+we can always produce that value as \lstinline!()!:
 \begin{lstlisting}
 def f1[A]: (Unit => A) => A = (h: Unit => A) => h(())
 \end{lstlisting}
@@ -2330,11 +2353,12 @@ are inverses of each other. Let us perform the proof using Scala code
 and then using the code notation.
 
 Writing Scala code, compute \lstinline!f1(f2(x))! for an arbitrary
-\lstinline!x:A!. Substituting the Scala code, we get
+\lstinline!x:A!. Substituting the code, we get
 \begin{lstlisting}
-f1(f2(x)) == f1(_ => x) = (_ => x)(()) = x
+f1(f2(x)) == f1(_ => x) == (_ => x)(()) == x
 \end{lstlisting}
-Now compute \lstinline!f2(f1(x))! for arbitrary \lstinline!h: Unit => A!:
+Now compute \lstinline!f2(f1(h))! for arbitrary \lstinline!h: Unit => A!
+in Scala code:
 \begin{lstlisting}
 f2(f1(h)) == f2(h(())) == { _ => h(()) }
 \end{lstlisting}
@@ -2347,7 +2371,7 @@ as the result of applying \lstinline!{_ => h(())}! to \lstinline!()!.
 In other words, we need to apply both sides to an additional argument
 \lstinline!()!:
 \begin{lstlisting}
-f2(f1(h))(()) == { _ => h(()) } (()) = h(())
+f2(f1(h))(()) == { _ => h(()) } (()) == h(())
 \end{lstlisting}
 This completes the proof.
 
@@ -2361,7 +2385,7 @@ Now write the function compositions in both directions:
 \begin{align*}
  & f_{1}\bef f_{2}=(h^{:\bbnum 1\Rightarrow A}\Rightarrow h(1))\bef(x^{:A}\Rightarrow1\Rightarrow x)\\
 {\color{greenunder}\text{compute composition}:}\quad & =\left(h\Rightarrow1\Rightarrow h(1)\right)\\
-{\color{greenunder}\text{note that }1\Rightarrow h(1)\text{ is the same as }h:}\quad & =\left(h\Rightarrow h\right)=\text{id}\quad,\\
+{\color{greenunder}\text{note that }1\Rightarrow h(1)\text{ is the same as }h:}\quad & =\left(h\Rightarrow h\right)=\text{id}\quad.\\
  & f_{2}\bef f_{1}=(x^{:A}\Rightarrow1\Rightarrow x)\bef(h^{:\bbnum 1\Rightarrow A}\Rightarrow h(1))\\
 {\color{greenunder}\text{compute composition}:}\quad & =x\Rightarrow(1\Rightarrow x)(1)\\
 {\color{greenunder}\text{apply function}:}\quad & =\left(x\Rightarrow x\right)=\text{id}\quad.
@@ -2374,15 +2398,16 @@ while a value of type $\bbnum 1\Rightarrow A$ is a function that
 still needs to be applied to an argument (of type $\bbnum 1$) before
 a value of type $A$ is obtained. The type $\bbnum 1\Rightarrow A$
 may represent an ``on-call''\index{on-call value} value of type
-$A$; that is, a value computed on demand every time.
+$A$; that is, a value computed on demand every time. (See Section~\ref{subsec:Lazy-values-iterators-and-streams}
+for more details about ``on-call'' values.)
+
+The void type\index{void type} $\bbnum 0$ needs special reasoning. 
 
 \subsubsection{Example \label{subsec:ch-Example-type-identity-0-to-A}\ref{subsec:ch-Example-type-identity-0-to-A}}
 
 Verify the type equivalence $\bbnum 0\Rightarrow A\cong\bbnum 1$.
 
 \subparagraph{Solution}
-
-The void type\index{void type} $\bbnum 0$ needs special reasoning. 
 
 What could be a function $f^{:\bbnum 0\Rightarrow A}$ from the type
 $\bbnum 0$ to a type $A$? Since there exist no values of type $\bbnum 0$,
@@ -2399,31 +2424,31 @@ This code will compile without type errors. An equivalent code is
 def absurd[A]: Nothing => A = { x => ??? }
 \end{lstlisting}
 The symbol \lstinline!???! is defined in the Scala library and represents
-``not implemented''. Trying to evaluate this symbol will produce
-an error:
+code that is ``not implemented''. Trying to evaluate this symbol
+will produce an error:
 \begin{lstlisting}
 scala> ???
 scala.NotImplementedError: an implementation is missing
   scala.Predef$.$qmark$qmark$qmark(Predef.scala:288) 
 \end{lstlisting}
 Since the function \lstinline!absurd! is impossible to apply to an
-argument, this error will never happen. Therefore, one can formally
-view the result value (which will never be computed or returned) as
-having any desirable type, e.g.~the type $A$.
+argument, this error will never happen. So, we can pretend that the
+result value (which will never be computed or returned) has any required
+type, e.g.~the type $A$.
 
 Let us now verify that there exists \emph{only one} function of type
 $\bbnum 0\Rightarrow A$. Suppose there are two such functions, $f^{:\bbnum 0\Rightarrow A}$
-and $g^{:\bbnum 0\Rightarrow A}$. We could show that $f$ and $g$
-are \emph{not} the same function only if we could find a value $x$
-such that $f(x)\neq g(x)$. However, there are \emph{no} values of
-type $\bbnum 0$, and so we will never be able to find the required
-value $x$. It follows that any two functions $f$ and $g$ of type
-$\bbnum 0\Rightarrow A$ are equal. In other words, there exists only
-\emph{one} distinct value of type $\bbnum 0\Rightarrow A$ (i.e.~the
-cardinality of the type $\bbnum 0\Rightarrow A$ is $1$). So, the
-type $\bbnum 0\Rightarrow A$ is equivalent to the type $\bbnum 1$.
+and $g^{:\bbnum 0\Rightarrow A}$. Are $f$ and $g$ different functions?
+We would see that $f$ and $g$ are different only if we had a value
+$x$ such that $f(x)\neq g(x)$, where $x$ must have type $\bbnum 0$.
+However, there are \emph{no} values of type $\bbnum 0$, and so we
+will never be able to find such $x$. It follows that any two functions
+$f$ and $g$ of type $\bbnum 0\Rightarrow A$ are equal. In other
+words, there exists only \emph{one} distinct value of type $\bbnum 0\Rightarrow A$;
+i.e.~the cardinality of the type $\bbnum 0\Rightarrow A$ is $1$.
+So, the type $\bbnum 0\Rightarrow A$ is equivalent to the type $\bbnum 1$.
 
-\subsubsection{Example \label{subsec:ch-Example-type-identity-3}\ref{subsec:ch-Example-type-identity-3}}
+\subsubsection{Example \label{subsec:ch-Example-type-identity-A-0}\ref{subsec:ch-Example-type-identity-A-0}}
 
 Show that $A\Rightarrow\bbnum 0\not\cong\bbnum 0$ and $A\Rightarrow\bbnum 0\not\cong\bbnum 1$.
 
@@ -2441,11 +2466,10 @@ $\bbnum 0$. It follows that $\left|\text{Int}\Rightarrow\bbnum 0\right|=0$.
 However, Example~\ref{subsec:ch-Example-type-identity-0-to-A} shows
 that $\bbnum 0\Rightarrow\bbnum 0$ has cardinality $1$. So, the
 cardinality $\left|A\Rightarrow\bbnum 0\right|=1$ if the type $A$
-is itself $\bbnum 0$ (which might be the case since $A$ is a type
-parameter) but $\left|A\Rightarrow\bbnum 0\right|=0$ for all other
-types $A$. We conclude that the type $A\Rightarrow\bbnum 0$ is not
-equivalent to $\bbnum 0$ or $\bbnum 1$ for all $A$; it is equivalent
-to $\bbnum 0$ only for non-void types $A$.
+is itself $\bbnum 0$ but $\left|A\Rightarrow\bbnum 0\right|=0$ for
+all other types $A$. We conclude that the type $A\Rightarrow\bbnum 0$
+is not equivalent to $\bbnum 0$ or $\bbnum 1$ for all $A$; it is
+equivalent to $\bbnum 0$ only for non-void types $A$.
 
 \subsubsection{Example \label{subsec:ch-Example-type-identity-2}\ref{subsec:ch-Example-type-identity-2}}
 
@@ -2471,13 +2495,13 @@ and try to find a value $x^{:A}$ such that $f(x)\neq g(x)$. We cannot
 find any such $x$ because $f(x)=1$ and $g(x)=1$ for all $x$. So,
 any two functions $f$ and $g$ of type $A\Rightarrow\bbnum 1$ must
 be equal to each other. Any type having cardinality $1$ is equivalent
-to the \lstinline!Unit! type, $\bbnum 1$.
+to the \lstinline!Unit! type, $\bbnum 1$. So $A\Rightarrow\bbnum 1\cong\bbnum 1$.
 
 \subsubsection{Example \label{subsec:ch-Example-type-identity-5}\ref{subsec:ch-Example-type-identity-5}}
 
 Verify the type equivalence 
 \[
-(A+B)\Rightarrow C\cong(A\Rightarrow C)\times(B\Rightarrow C)\quad.
+A+B\Rightarrow C\cong(A\Rightarrow C)\times(B\Rightarrow C)\quad.
 \]
 
 
@@ -2497,8 +2521,8 @@ value \lstinline!a:A!. The available data is a function of type \lstinline!Eithe
 called, say, \lstinline!h!. We can apply that function to \lstinline!Left(a)!
 and obtain a value of type \lstinline!C! as required. So, a function
 of type \lstinline!A => C! is computed as \lstinline!a => h(Left(a))!.
-In a similar way, we produce a function of type \lstinline!B => C!.
-The code is
+Similarly, we produce a function of type \lstinline!B => C!. The
+code is
 \begin{lstlisting}
 def f1[A,B,C]: (Either[A, B] => C) => (A => C, B => C) =
   (h: Either[A, B] => C) => (a => h(Left(a)), b => h(Right(b)))
@@ -2541,13 +2565,13 @@ B & g
 \]
 
 It remains to verify that $f_{1}\bef f_{2}=\text{id}$ and $f_{2}\bef f_{1}=\text{id}$.
-Rather than To compute the composition $f_{1}\bef f_{2}$, we write
-(omitting types)
+To compute the composition $f_{1}\bef f_{2}$, we write (omitting
+types)
 \begin{align*}
- & f_{1}\bef f_{2}=\left(h\Rightarrow(a\Rightarrow h(a+\bbnum 0))\times(b\Rightarrow h(\bbnum 0+b))\right)\bef\bigg(f\times g\Rightarrow\begin{array}{||c|}
+f_{1}\bef f_{2} & =\left(h\Rightarrow(a\Rightarrow h(a+\bbnum 0))\times(b\Rightarrow h(\bbnum 0+b))\right)\bef\bigg(f\times g\Rightarrow\begin{array}{||c|}
 f\\
 g
-\end{array}\bigg)\\
+\end{array}\,\bigg)\\
 {\color{greenunder}\text{compute composition}:}\quad & =h\Rightarrow\begin{array}{||c|}
 a\Rightarrow h(a+\bbnum 0)\\
 b\Rightarrow h(\bbnum 0+b)
@@ -2578,9 +2602,9 @@ q
 \]
 To evaluate expressions such as $h(a+\bbnum 0)$ and $h(\bbnum 0+b)$,
 we need to use one of the rows of the column matrix $h$. The correct
-row will be selected automatically if we use the rules of matrix multiplication
-with a \emph{row} vector placed to the \emph{left} of the matrix,
-and if we continue to use the convention of omitting any terms containing
+row will be selected \emph{automatically} by the standard rules of
+matrix multiplication if we place a row vector to the left of the
+matrix, and if we use the convention of omitting any terms containing
 $\bbnum 0$:
 \begin{align*}
  & \begin{array}{|cc|}
@@ -2595,16 +2619,13 @@ q
 \end{array}=b\triangleright q\quad.
 \end{align*}
 Here we used the symbol $\triangleright$ to separate an argument
-from a function when the argument is to the \emph{left} of the function.
-We need to obtain $p(a)$ and $q(b)$ in the places where we have
-$a\triangleright p$ and $b\triangleright q$. So, let us \emph{define}
-the symbol $\triangleright$ (pronounced ``pipe'') as a function
-application where the argument is to the left of the function, $x\triangleright f\triangleq f(x)$.
-In Scala, this operation is available as \lstinline!x.pipe(f)! as
-of Scala 2.13.
+from a function when the argument is written to the \emph{left} of
+the function. The symbol $\triangleright$ (pronounced ``pipe'')
+is defined by $x\triangleright f\triangleq f(x)$. In Scala, this
+operation is available as \lstinline!x.pipe(f)! as of Scala 2.13.
 
-We can then denote values of disjunctive types, such as $a+\bbnum 0$,
-by row vectors:
+We write values of disjunctive types, such as $a+\bbnum 0$, as if
+they were row vectors:
 \begin{equation}
 h(a+\bbnum 0)=(a+\bbnum 0)\triangleright h=\begin{array}{|cc|}
 a & \bbnum 0\end{array}\triangleright h\quad.\label{eq:forward-notation-}
@@ -2622,9 +2643,9 @@ p\\
 q
 \end{array}=b\triangleright q=q(b)\quad.
 \end{align*}
-Then we can complete the proof of $f_{1}\bef f_{2}=\text{id}$:
+Now we can complete the proof of $f_{1}\bef f_{2}=\text{id}$:
 \begin{align*}
- & f_{1}\bef f_{2}=h\Rightarrow\begin{array}{||c|}
+f_{1}\bef f_{2} & =h\Rightarrow\begin{array}{||c|}
 a\Rightarrow h(a+\bbnum 0)\\
 b\Rightarrow h(\bbnum 0+b)
 \end{array}\\
@@ -2641,26 +2662,26 @@ q
 \end{array}\Rightarrow\begin{array}{||c|}
 p\\
 q
-\end{array}\bigg)=\text{id}\quad.
+\end{array}\,\bigg)=\text{id}\quad.
 \end{align*}
 
 To prove that $f_{2}\bef f_{1}=\text{id}$, use the notation~(\ref{eq:forward-notation-}):
 \begin{align*}
- & f_{2}\bef f_{1}=\bigg(f\times g\Rightarrow\begin{array}{||c|}
+f_{2}\bef f_{1} & =\bigg(f\times g\Rightarrow\begin{array}{||c|}
 f\\
 g
-\end{array}\bigg)\bef\left(h\Rightarrow(a\Rightarrow h(a+\bbnum 0))\times(b\Rightarrow h(\bbnum 0+b))\right)\\
- & =f\times g\Rightarrow(a\Rightarrow\begin{array}{|cc|}
+\end{array}\,\bigg)\bef\left(h\Rightarrow(a\Rightarrow h(a+\bbnum 0))\times(b\Rightarrow h(\bbnum 0+b))\right)\\
+{\color{greenunder}\text{compute composition}:}\quad & =f\times g\Rightarrow\big(a\Rightarrow\begin{array}{|cc|}
 a & \bbnum 0\end{array}\triangleright\begin{array}{||c|}
 f\\
 g
-\end{array})\times(b\Rightarrow\begin{array}{|cc|}
+\end{array}\,\big)\times\big(b\Rightarrow\begin{array}{|cc|}
 \bbnum 0 & b\end{array}\triangleright\begin{array}{||c|}
 f\\
 g
-\end{array})\\
-{\color{greenunder}\text{matrix notation}:}\quad & =f\times g\Rightarrow\left(a\Rightarrow a\triangleright f\right)\times\left(b\Rightarrow b\triangleright g\right)\\
-{\color{greenunder}\text{definition of }\triangleright:}\quad & =f\times g\Rightarrow\left(a\Rightarrow f(a)\right)\times\left(b\Rightarrow g(b)\right)\\
+\end{array}\,\big)\\
+{\color{greenunder}\text{matrix notation}:}\quad & =f\times g\Rightarrow(a\Rightarrow\gunderline{a\triangleright f})\times(b\Rightarrow\gunderline{b\triangleright g})\\
+{\color{greenunder}\text{definition of }\triangleright:}\quad & =f\times g\Rightarrow\gunderline{\left(a\Rightarrow f(a)\right)}\times\gunderline{\left(b\Rightarrow g(b)\right)}\\
 {\color{greenunder}\text{simplify functions}:}\quad & =\left(f\times g\Rightarrow f\times g\right)=\text{id}\quad.
 \end{align*}
 
@@ -2689,7 +2710,7 @@ p\\
 q
 \end{array}\\
 b\Rightarrow\begin{array}{|cc|}
-\bbnum 0 & b\end{array}\triangleright\begin{array}{||c|}
+\bbnum 0 & b\end{array}\,\triangleright\,\begin{array}{||c|}
 p\\
 q
 \end{array}
@@ -2700,13 +2721,13 @@ q
 \end{array}\Rightarrow\begin{array}{||c|}
 a\Rightarrow a\triangleright p\\
 b\Rightarrow b\triangleright q
-\end{array}=\begin{array}{||c|}
+\end{array}=\big(\begin{array}{||c|}
 p\\
 q
 \end{array}\Rightarrow\begin{array}{||c|}
 p\\
 q
-\end{array}=\text{id}\quad.
+\end{array}\,\big)=\text{id}\quad.
 \end{align*}
 The code notation makes proofs shorter than they would be if we were
 manipulating code in Scala syntax. From now on, we will prefer to
@@ -2744,7 +2765,7 @@ allows us to write shorter code notation involving tupled arguments.
 
 Compute the function composition $f_{1}\bef f_{2}$:
 \begin{align*}
-f_{1}\bef f_{2}= & (g\Rightarrow\gunderline{a\Rightarrow b\Rightarrow g(a\times b)})\bef\left(h\Rightarrow a\times b\Rightarrow h(a)(b)\right)\\
+f_{1}\bef f_{2} & =(g\Rightarrow\gunderline{a\Rightarrow b\Rightarrow g(a\times b)})\bef\left(h\Rightarrow a\times b\Rightarrow h(a)(b)\right)\\
 {\color{greenunder}\text{substitute }h=a\Rightarrow b\Rightarrow g(a\times b):}\quad & =g\Rightarrow\gunderline{a\times b\Rightarrow g(a\times b)}\\
 {\color{greenunder}\text{simplify function}:}\quad & =\left(g\Rightarrow g\right)=\text{id}\quad.
 \end{align*}
@@ -2753,7 +2774,7 @@ Compute the function composition $f_{2}\bef f_{1}$:
 f_{2}\bef f_{1} & =(h\Rightarrow\gunderline{a\times b\Rightarrow h(a)(b)})\bef\left(g\Rightarrow a\Rightarrow b\Rightarrow g(a\times b)\right)\\
 {\color{greenunder}\text{substitute }g=a\times b\Rightarrow h(a)(b):}\quad & =h\Rightarrow a\Rightarrow\gunderline{b\Rightarrow h(a)(b)}\\
 {\color{greenunder}\text{simplify function }b\Rightarrow h(a)(b):}\quad & =h\Rightarrow\gunderline{a\Rightarrow h(a)}\\
-{\color{greenunder}\text{simplify function }a\Rightarrow h(a):}\quad & =\left(h\Rightarrow h\right)=\text{id}\quad.
+{\color{greenunder}\text{simplify function }a\Rightarrow h(a)\text{ to }h:}\quad & =\left(h\Rightarrow h\right)=\text{id}\quad.
 \end{align*}
 
 
@@ -2767,33 +2788,33 @@ A\Rightarrow B\times C\cong\left(A\Rightarrow B\right)\times\left(A\Rightarrow C
 
 \section{Summary}
 
-What problems can we solve now?
+What tasks can we perform now?
 \begin{itemize}
-\item Use the short type notation for reasoning about types.
+\item Use the short type notation for reasoning about types to:
 \begin{itemize}
-\item Decide type equivalence using the rules of school mathematics.
+\item Decide type equivalence using the rules of arithmetic.
 \item Simplify type expressions before writing code.
 \end{itemize}
-\item Convert a fully parametric type signature into a logical formula.
+\item Convert a fully parametric type signature into a logical formula to:
 \begin{itemize}
 \item Decide whether the type signature can be implemented in code.
-\item If so, derive or generate the code using the CH correspondence.
+\item If possible, derive the code using the CH correspondence.
 \end{itemize}
 \end{itemize}
 What tasks cannot be performed with these tools?
 \begin{itemize}
-\item Automatically generate code for a recursive function. (We usually
-\emph{can} derive recursive code by hand.)
+\item Automatically generate code for a recursive function. (Propositional
+logic cannot describe recursion.)
 \item Automatically generate code satisfying a property (e.g.\ isomorphism).
 We may generate the code, but it is not guaranteed that properties
 will hold. The workaround is to verify the required properties manually,
-after generating the code.
+after deriving the code.
 \item Express complicated conditions (e.g.\ ``array is sorted'') in a
 type signature. This can be done using \textbf{dependent types}\index{dependent type}
 (i.e.~types that depend on run-time values in an arbitrary way) \textendash{}
 an advanced technique that Scala does not fully support. Programming
 languages such as Coq, Agda, and Idris support full dependent types,
-but cannot automatically generate code from type signatures.
+but cannot automatically generate code from dependent type signatures.
 \item Generate code using type constructors with known properties (e.g.\ \lstinline!.map!).
 \end{itemize}
 As an example of using type constructors with properties, consider
@@ -2806,8 +2827,7 @@ We know that the Scala library defines a \lstinline!.map! method
 on the \lstinline!Array! type constructor, so the implementation
 of \lstinline!q! is simple,
 \begin{lstlisting}
-def q[A]: Array[A] => (A => Option[B]) => Array[Option[B]] =
-  arr => f => arr.map(f)
+def q[A]: Array[A] => (A => Option[B]) => Array[Option[B]] = { arr => f => arr.map(f) }
 \end{lstlisting}
 However, it is hard to create an \emph{algorithm} that can derive
 this implementation automatically from the type signature of \lstinline!q!
@@ -2817,15 +2837,15 @@ the type signature of \lstinline!q! into the logical formula
 {\cal CH}(\text{Array}^{A})\Rightarrow{\cal CH}(A\Rightarrow\text{Opt}^{B})\Rightarrow{\cal CH}(\text{Array}^{\text{Opt}^{B}})\quad.\label{eq:ch-example-quantified-proposition}
 \end{equation}
 To derive an implementation, the algorithm would need to use the available
-\lstinline!.map! method for \lstinline!Array!. That methods has
-a type signature such as
+\lstinline!.map! method for \lstinline!Array!. That method has a
+type signature such as
 \[
-\text{map}:\forall(A,B).\text{Array}^{A}\Rightarrow\left(A\Rightarrow B\right)\Rightarrow\text{Array}^{B}\quad.
+\text{map}:\forall(A,B).\,\text{Array}^{A}\Rightarrow\left(A\Rightarrow B\right)\Rightarrow\text{Array}^{B}\quad.
 \]
 To derive the ${\cal CH}$-proposition~(\ref{eq:ch-example-quantified-proposition}),
 the algorithm will need to assume that the ${\cal CH}$-proposition
 \begin{equation}
-{\cal CH}\left(\forall(A,B).\text{Array}^{A}\Rightarrow\left(A\Rightarrow B\right)\Rightarrow\text{Array}^{B}\right)\label{eq:ch-example-quantified-proposition-2}
+{\cal CH}\left(\forall(A,B).\,\text{Array}^{A}\Rightarrow\left(A\Rightarrow B\right)\Rightarrow\text{Array}^{B}\right)\label{eq:ch-example-quantified-proposition-2}
 \end{equation}
 already holds, i.e.~that Eq.~(\ref{eq:ch-example-quantified-proposition-2})
 is one of the premises of a sequent to be proved. Reasoning about
@@ -2852,7 +2872,7 @@ programmers to acquire the necessary intuition and technique.
 \subsubsection{Example \label{subsec:ch-solvedExample-1}\ref{subsec:ch-solvedExample-1}}
 
 Find the cardinality of the type \lstinline!P = Option[Option[Boolean] => Boolean]!.
-Write this type in the type notation and simplify to an equivalent
+Write \lstinline!P! in the type notation and simplify to an equivalent
 type.
 
 \subparagraph{Solution}
@@ -2860,28 +2880,31 @@ type.
 Begin with the type \lstinline!Option[Boolean]!, which can be either
 \lstinline!None! or \lstinline!Some(x)! with an \lstinline!x:Boolean!.
 Since the type \lstinline!Boolean! has $2$ possible values, the
-type \lstinline!Option[Boolean]! has one more value:
+type \lstinline!Option[Boolean]! has $3$ values:
 \[
 \left|\text{Opt}^{\text{Bool}}\right|=\left|\bbnum 1+\text{Bool}\right|=1+\left|\text{Bool}\right|=3\quad.
 \]
 In the type notation, \lstinline!Boolean! is denoted by the symbol
 $\bbnum 2$, and the type \lstinline!Option[Boolean]! by $\bbnum 1+\bbnum 2$.
-So, the type notation it is consistent with the cardinality $3$ of
-that type,
+So, the type notation $\bbnum 1+\bbnum 2$ is consistent with the
+cardinality $3$ of that type,
 \[
 \left|\bbnum 1+\text{Bool}\right|=\left|\bbnum 1+\bbnum 2\right|=1+2=3\quad.
 \]
 
-The type of functions \lstinline!Option[Boolean] => Boolean! is denoted
+The function type \lstinline!Option[Boolean] => Boolean! is denoted
 by $\bbnum 1+\bbnum 2\Rightarrow\bbnum 2$. Its cardinality is computed
 as the arithmetic power 
 \[
 \left|\text{Opt}^{\text{Bool}}\Rightarrow\text{Bool}\right|=\left|\bbnum 1+\bbnum 2\Rightarrow\bbnum 2\right|=\left|\bbnum 2\right|^{\left|\bbnum 1+\bbnum 2\right|}=2^{3}=8\quad.
 \]
-Finally, the outer \lstinline!Option[]! type constructor adds $1$
-to this cardinality, so the answer is 
+Finally, the we write \lstinline!P! in the type notation as 
 \[
-\left|P\right|=\left|\bbnum 1+\left(\bbnum 1+\bbnum 2\Rightarrow\bbnum 2\right)\right|=8+1=9\quad.
+P=\bbnum 1+\left(\bbnum 1+\bbnum 2\Rightarrow\bbnum 2\right)
+\]
+and find 
+\[
+\left|P\right|=\left|\bbnum 1+\left(\bbnum 1+\bbnum 2\Rightarrow\bbnum 2\right)\right|=1+\left|\bbnum 1+\bbnum 2\Rightarrow\bbnum 2\right|=1+8=9\quad.
 \]
 
 
@@ -2889,7 +2912,7 @@ to this cardinality, so the answer is
 
 Implement a Scala type \lstinline!P[A]! for the type notation 
 \[
-P^{A}\triangleq\text{Boolean}\Rightarrow1+A+\text{Int}\times A+(\text{String}\Rightarrow A)\quad.
+P^{A}\triangleq1+A+\text{Int}\times A+(\text{String}\Rightarrow A)\quad.
 \]
 
 
@@ -2920,8 +2943,7 @@ final case class P4[A](f: String => A) extends P[A]
 
 \subsubsection{Example \label{subsec:ch-solvedExample-2a}\ref{subsec:ch-solvedExample-2a}}
 
-Transform the type \lstinline!P = (Either[A, B], Either[C, D])! into
-an equivalent disjunctive type.
+Find an equivalent disjunctive type for the type \lstinline!P = (Either[A, B], Either[C, D])!.
 
 \subparagraph{Solution}
 
@@ -2931,8 +2953,8 @@ or ``sum'' type:
 \[
 P\triangleq(A+B)\times(C+D)\quad.
 \]
-We can use the usual rules of school mathematics to expand brackets
-in this type expression and to obtain an equivalent type:
+We can use the usual rules of arithmetic to expand brackets in this
+type expression and to obtain an equivalent type:
 \[
 P\cong A\times C+A\times D+B\times C+B\times D\quad.
 \]
@@ -2940,9 +2962,9 @@ This type is disjunctive, with $4$ parts.
 
 \subsubsection{Example \label{subsec:ch-solvedExample-3}\ref{subsec:ch-solvedExample-3}}
 
-Show that the following type equivalences do \emph{not} hold, $A+A\not\cong A$
+Show that the following type equivalences do \emph{not} hold: $A+A\not\cong A$
 and $A\times A\not\cong A$, although the corresponding logical identities
-are true.
+hold.
 
 \subparagraph{Solution}
 
@@ -2954,7 +2976,7 @@ for some \lstinline!a:A!. In the code notation, it is either $a^{:A}+\bbnum 0$
 or $\bbnum 0+a^{:A}$. So, a value of type $A+A$ contains a value
 of type $A$ with an additional information about whether it is the
 first or the second part of the disjunctive type. We cannot represent
-all this information in a single value of type $A$. 
+all that information in a single value of type $A$. 
 
 A value of type $A\times A$ contains two (possibly different) values
 of type $A$, which cannot be represented by a single value of type
@@ -2976,7 +2998,7 @@ type signatures
 \end{align*}
 can be implemented via fully parametric functions. For a programmer,
 it is easier to write code than to guess the correct sequence of proof
-rules. For the first pair type signatures, we find
+rules. For the first pair of type signatures, we find
 \begin{lstlisting}
 def f1[A]: Either[A, A] => A = {
   case Left(a)    => a   // No other choice here.
@@ -3011,21 +3033,16 @@ A & \text{id}
 \end{align*}
 The composition of these functions is not equal to identity:
 \[
-f_{1}\bef f_{2}=\begin{array}{|c||c|}
- & A\\
-\hline A & \text{id}\\
-A & \text{id}
-\end{array}\bef\begin{array}{|c||cc|}
- & A & A\\
-\hline A & \text{id} & 
-\end{array}=\begin{array}{|c||cc|}
- & A & A\\
-\hline A & \text{id} & \\
-A & \text{id} & 
-\end{array}\neq\text{id}=\begin{array}{|c||cc|}
- & A & A\\
-\hline A & \text{id} & \\
-A &  & \text{id}
+f_{1}\bef f_{2}=\begin{array}{||c|}
+\text{id}\\
+\text{id}
+\end{array}\bef\begin{array}{||cc|}
+\text{id} & \end{array}=\begin{array}{||cc|}
+\text{id} & \\
+\text{id} & 
+\end{array}\neq\text{id}=\begin{array}{||cc|}
+\text{id} & \\
+ & \text{id}
 \end{array}\quad.
 \]
 
@@ -3055,29 +3072,34 @@ inverses of each other. So, the type equivalences do not hold.
 
 \subsubsection{Example \label{subsec:ch-solvedExample-4}\ref{subsec:ch-solvedExample-4}}
 
-Show that $A\times B\Rightarrow C\neq(A\Rightarrow C)+(B\Rightarrow C)$
+Show that $\left(\left(A\wedge B\right)\Rightarrow C\right)\neq(A\Rightarrow C)\vee(B\Rightarrow C)$
 in the constructive logic, although the equality holds in Boolean
 logic. This is another example of the failure of Boolean logic to
 provide correct reasoning for types.
 
 \subparagraph{Solution}
 
-Begin by rewriting the (supposedly wrong) equation as two implications,
+Begin by rewriting the logical equality as two implications,
 \begin{align*}
- & (A\times B\Rightarrow C)\Rightarrow(A\Rightarrow C)+(B\Rightarrow C)\quad,\\
- & (A\Rightarrow C)+(B\Rightarrow C)\Rightarrow A\times B)\Rightarrow C\quad.
+ & (A\wedge B\Rightarrow C)\Rightarrow(A\Rightarrow C)\vee(B\Rightarrow C)\quad,\\
+ & \left((A\Rightarrow C)\vee(B\Rightarrow C)\right)\Rightarrow\left(\left(A\wedge B\right)\Rightarrow C\right)\quad.
 \end{align*}
-It is sufficient to show that even one of these implications is incorrect.
+It is sufficient to show that one of these implications is incorrect.
 Rather than looking for a proof tree in the constructive logic (which
 would be difficult, since it would require us to demonstrate that
-\emph{no} proof tree exists), let us use the CH correspondence. So,
-we try to implement fully parametric functions with the corresponding
-type signatures. For the first type signature:
+\emph{no} proof tree exists), let us use the CH correspondence. So
+the task is to implement fully parametric functions with the type
+signatures
+\begin{align*}
+ & (A\times B\Rightarrow C)\Rightarrow(A\Rightarrow C)+(B\Rightarrow C)\quad,\\
+ & (A\Rightarrow C)+(B\Rightarrow C)\Rightarrow A\times B\Rightarrow C\quad.
+\end{align*}
+ For the first type signature:
 \begin{lstlisting}
-def f1[A,B,C]: (((A, B)) => C) => Either[A => C, B => C] = k => ???
+def f1[A,B,C]: (((A, B)) => C) => Either[A => C, B => C] = { k => ??? }
 \end{lstlisting}
 We are required to return either a \lstinline!Left(g)! with \lstinline!g: A => C!,
-or a \lstinline!Right(h)! with \lstinline!h: B => C!. Our only given
+or a \lstinline!Right(h)! with \lstinline!h: B => C!. The only given
 data is a function \lstinline!k! of type $A\times B\Rightarrow C$,
 so the decision of whether to return a \lstinline!Left! or a \lstinline!Right!
 must be hard-coded in the function \lstinline!f1! independently of
@@ -3087,7 +3109,7 @@ of type \lstinline!C!. The only way to obtain a value of type \lstinline!C!
 is by applying \lstinline!k! to some arguments. But to apply \lstinline!k!,
 we need a value of type \lstinline!B!, which we do not have. So we
 cannot produce a \lstinline!g: A => C!. Similarly, we cannot produce
-a function of type \lstinline!B => C!.
+a function \lstinline!h! of type \lstinline!B => C!.
 
 We can repeat the same argument in the type notation: To return a
 value of type $(A\Rightarrow C)+(B\Rightarrow C)$ means to return
@@ -3123,16 +3145,18 @@ the Boolean expression using Eq.~(\ref{eq:ch-definition-of-implication-in-Boolea
 which only holds in Boolean logic (but not in the constructive logic).
 We find
 \begin{align*}
- & (\alpha\wedge\beta)\gunderline{\Rightarrow}\gamma\\
+{\color{greenunder}\text{left-hand side of Eq.~(\ref{eq:ch-example-identity-boolean-not-constructive})}:}\quad & \left(\alpha\wedge\beta\right)\gunderline{\Rightarrow}\,\gamma\\
 {\color{greenunder}\text{use Eq.~(\ref{eq:ch-definition-of-implication-in-Boolean-logic})}:}\quad & =\gunderline{\neg(\alpha\wedge\beta)}\vee\gamma\\
-{\color{greenunder}\text{use de Morgan's law}:}\quad & =\neg\alpha\vee\neg\beta\vee\neg\gamma\quad;\\
- & (\gunderline{\alpha\Rightarrow\gamma})\vee(\gunderline{\beta\Rightarrow\gamma})\\
+{\color{greenunder}\text{use de Morgan's law}:}\quad & =\neg\alpha\vee\neg\beta\vee\gamma\quad.\\
+{\color{greenunder}\text{right-hand side of Eq.~(\ref{eq:ch-example-identity-boolean-not-constructive})}:}\quad & (\gunderline{\alpha\Rightarrow\gamma})\vee(\gunderline{\beta\Rightarrow\gamma})\\
 {\color{greenunder}\text{use Eq.~(\ref{eq:ch-definition-of-implication-in-Boolean-logic})}:}\quad & =\neg\alpha\vee\gunderline{\gamma}\vee\neg\beta\vee\gunderline{\gamma}\\
-{\color{greenunder}\text{use identity }\gamma\vee\gamma=\gamma:}\quad & =\neg\alpha\vee\neg\beta\vee\neg\gamma\quad.
+{\color{greenunder}\text{use identity }\gamma\vee\gamma=\gamma:}\quad & =\neg\alpha\vee\neg\beta\vee\gamma\quad.
 \end{align*}
-We have simplified both sides to the same formula, $\neg\alpha\vee\neg\beta\vee\neg\gamma$.
+Both sides of Eq.~(\ref{eq:ch-example-identity-boolean-not-constructive})
+are equal to the same formula, $\neg\alpha\vee\neg\beta\vee\gamma$,
+so the identity holds.
 
-This proof does not work in the constructive logic because that neither
+This proof does not work in the constructive logic because neither
 the Boolean formula~(\ref{eq:ch-definition-of-implication-in-Boolean-logic})
 nor the law of de Morgan,
 \[
@@ -3141,16 +3165,15 @@ nor the law of de Morgan,
 can be derived from the rules of the constructive logic.
 
 Another way of proving the Boolean identity~(\ref{eq:ch-example-identity-boolean-not-constructive})
-is to find the truth values for the variables $\alpha$, $\beta$,
-and $\gamma$ for which both sides are $True$ or $False$. The left-hand
-side, $\left(\alpha\wedge\beta\right)\Rightarrow\gamma$, can be $False$
-only if $\alpha\wedge\beta=True$ (that is, both $\alpha$ and $\beta$
-are $True$) and $\gamma=False$; for all other truth values of $\alpha$,
-$\beta$, and $\gamma$, the formula $\left(\alpha\wedge\beta\right)\Rightarrow\gamma$
-is $True$. Let us then determine when the right-hand side, $(\alpha\Rightarrow\gamma)\vee(\beta\Rightarrow\gamma)$,
+is to enumerate all possible truth values for the variables $\alpha$,
+$\beta$, and $\gamma$. The left-hand side, $\left(\alpha\wedge\beta\right)\Rightarrow\gamma$,
+can be $False$ only if $\alpha\wedge\beta=True$ (that is, both $\alpha$
+and $\beta$ are $True$) and $\gamma=False$; for all other truth
+values of $\alpha$, $\beta$, and $\gamma$, the formula $\left(\alpha\wedge\beta\right)\Rightarrow\gamma$
+is $True$. Let us determine when the right-hand side, $(\alpha\Rightarrow\gamma)\vee(\beta\Rightarrow\gamma)$,
 can be $False$. This can happen only if both parts of the disjunction
-are $False$; this means $\alpha=True$, $\beta=True$, and $\gamma=False$.
-We find that the two sides of the identity~(\ref{eq:ch-example-identity-boolean-not-constructive})
+are $False$; that means $\alpha=True$, $\beta=True$, and $\gamma=False$.
+So, the two sides of the identity~(\ref{eq:ch-example-identity-boolean-not-constructive})
 are both $True$ or both $False$ with any choice of truth values
 of $\alpha$, $\beta$, and $\gamma$. In Boolean logic, this is sufficient
 to prove the identity~(\ref{eq:ch-example-identity-boolean-not-constructive}).
@@ -3169,35 +3192,57 @@ and $\text{Read}^{E,A}\Rightarrow(A\Rightarrow B)\Rightarrow\text{Read}^{E,B}$.
 
 \subparagraph{Solution}
 
+Begin by defining a type alias for the type $\text{Read}^{E,T}$:
+\begin{lstlisting}
+type Read[E, T] = E => T
+\end{lstlisting}
 The first type signature has only one implementation:
 \begin{lstlisting}
-def p[E, A]: A => E => A = { x => _ => x }
+def p[E, A]: A => Read[E, A] = { x => _ => x }
 \end{lstlisting}
-The argument of type $E$ must be discarded: there is no way we could
-have used it while computing a value of type \lstinline!A! given
-an \lstinline!x:A!.
+The argument of type $E$ must be discarded: we cannot use it while
+computing a value of type \lstinline!A! given an \lstinline!x:A!.
 
-The second type signature has three type parameters, and has a typical
-type signature of the standard function \lstinline!map!:
+The second type signature has three type parameters. It is the type
+signature of the standard function \lstinline!map!:
 \begin{lstlisting}
-def map[E, A, B]: (E => A) => (A => B) => E => B = ???
+def map[E, A, B]: Read[E, A] => (A => B) => Read[E, B] = ???
 \end{lstlisting}
-We note that the two curried arguments are functions of types $E\Rightarrow A$
-and $A\Rightarrow B$. The forward composition of these functions
-is a function of type $E\Rightarrow B$, or $\text{Read}^{E,B}$,
-which is exactly what we are required to return. So the code can be
-written as
+Expanding the type alias, we see that the two curried arguments are
+functions of types $E\Rightarrow A$ and $A\Rightarrow B$. The forward
+composition of these functions is a function of type $E\Rightarrow B$,
+or $\text{Read}^{E,B}$, which is exactly what we are required to
+return. So the code can be written as
 
 \begin{lstlisting}
 def map[E, A, B]: (E => A) => (A => B) => E => B = { r => f => r andThen f }
 \end{lstlisting}
-If we did not notice this shortcut, we would have reasoned differently:
-We are required to compute a value of type $B$ given \emph{three}
-curried arguments $r^{:E\Rightarrow A}$, $f^{:A\Rightarrow B}$,
-and $e^{:E}$. The only way of getting a value of type $B$ is to
-apply $f^{:A\Rightarrow B}$ to some value of type $A$. The only
-way of getting an $A$ is to apply $r$ to a value of type $E$. We
-have exactly one value of type $E$, namely $e^{:E}$. So the code
+If we did not notice this shortcut, we would reason differently: We
+are required to compute a value of type $B$ given \emph{three} curried
+arguments $r^{:E\Rightarrow A}$, $f^{:A\Rightarrow B}$, and $e^{:E}$.
+Write this requirement as
+\[
+\text{map}\triangleq r^{:E\Rightarrow A}\Rightarrow f^{:A\Rightarrow B}\Rightarrow e^{:E}\Rightarrow???^{:B}\quad,
+\]
+The symbol $\text{???}^{:B}$ is called a \index{typed hole}\textbf{typed
+hole}; it stands for a value that we are still figuring out how to
+compute, but whose type is already known. Typed holes are supported
+in Scala by an experimental compiler plugin.\footnote{\texttt{\href{https://github.com/cb372/scala-typed-holes}{https://github.com/cb372/scala-typed-holes}}}
+The plugin will print the known information about the typed hole.
+
+To fill the typed hole $\text{???}^{:B}$, we need a value of type
+$B$. Since no arguments have type $B$, the only way of getting a
+value of type $B$ is to apply $f^{:A\Rightarrow B}$ to some value
+of type $A$. So we write
+\[
+\text{map}\triangleq r^{:E\Rightarrow A}\Rightarrow f^{:A\Rightarrow B}\Rightarrow e^{:E}\Rightarrow f(???^{:A})\quad.
+\]
+The only way of getting an $A$ is to apply $r$ to a value of type
+$E$,
+\[
+\text{map}\triangleq r^{:E\Rightarrow A}\Rightarrow f^{:A\Rightarrow B}\Rightarrow e^{:E}\Rightarrow f(r(???^{:E}))\quad.
+\]
+We have exactly one value of type $E$, namely $e^{:E}$. So the code
 must be 
 \[
 \text{map}^{E,A,B}\triangleq r^{:E\Rightarrow A}\Rightarrow f^{:A\Rightarrow B}\Rightarrow e^{:E}\Rightarrow f(r(e))\quad.
@@ -3217,29 +3262,37 @@ cannot be implemented as a fully parametric function.
 
 \subparagraph{Solution}
 
-Trying to implement this function will fail:
+Expand the type signature and try to implement this function:
 \begin{lstlisting}
-def m[A,B,T] : (A => T) => (A => B) => B => T = { r => f => b => ??? }
+def m[A, B, T] : (A => T) => (A => B) => B => T = { r => f => b => ??? }
 \end{lstlisting}
 Given values $r^{:A\Rightarrow T}$, $f^{:A\Rightarrow B}$, and $b^{:B}$,
-we need to compute a value of type $T$. The only way of getting a
-$T$ is to apply $r$ to some value of type $A$. However, we do not
-have any values of type $A$. We have a function $f^{:A\Rightarrow B}$
-that consumes values of type $A$, and we cannot use $f$ to produce
-any values of type $A$. So we find ourselves unable to implement
-this function.
+we need to compute a value of type $T$:
+\[
+m=r^{:A\Rightarrow T}\Rightarrow f^{:A\Rightarrow B}\Rightarrow b^{:B}\Rightarrow???^{:T}\quad.
+\]
+The only way of getting a $T$ is to apply $r$ to some value of type
+$A$,
+\[
+m=r^{:A\Rightarrow T}\Rightarrow f^{:A\Rightarrow B}\Rightarrow b^{:B}\Rightarrow r(???^{:A})\quad.
+\]
+However, we do not have any values of type $A$. We have a function
+$f^{:A\Rightarrow B}$ that \emph{consumes} values of type $A$, and
+we cannot use $f$ to produce any values of type $A$. So we seem
+to be unable to fill the typed hole $\text{???}^{:A}$ and implement
+the function \lstinline!m!.
 
-In order to verify that it is unimplementable, we need to prove that
-the logical formula
+In order to verify that \lstinline!m! is unimplementable, we need
+to prove that the logical formula
 \begin{equation}
 \forall(\alpha,\beta,\tau).\,(\alpha\Rightarrow\tau)\Rightarrow(\alpha\Rightarrow\beta)\Rightarrow(\beta\Rightarrow\tau)\label{eq:ch-example-boolean-formula-3}
 \end{equation}
 is not true in the constructive logic. We could use the \texttt{curryhoward}
-library to check that:
+library for that:
 \begin{lstlisting}
-@ def m[A,B,T] : (A => T) => (A => B) => B => T = implement
+@ def m[A, B, T] : (A => T) => (A => B) => B => T = implement
 cmd1.sc:1: type (A => T) => (A => B) => B => T cannot be implemented
-def m[A,B,T] : (A => T) => (A => B) => B => T = implement                                                
+def m[A, B, T] : (A => T) => (A => B) => B => T = implement
                                                 ^
 Compilation Failed
 \end{lstlisting}
@@ -3254,8 +3307,8 @@ It is relatively easy to check whether a given Boolean formula is
 always equal to $True$. Simplifying Eq.~(\ref{eq:ch-example-boolean-formula-3})
 with the rules of Boolean logic, we find
 \begin{align*}
- & (\alpha\Rightarrow\tau)\Rightarrow(\alpha\Rightarrow\beta)\Rightarrow(\beta\Rightarrow\tau)\\
-{\color{greenunder}\text{use Eq.~(\ref{eq:ch-definition-of-implication-in-Boolean-logic})}:}\quad & =\neg(\alpha\Rightarrow\tau)\vee\neg(\alpha\Rightarrow\beta)\vee(\beta\Rightarrow\tau)\\
+ & (\alpha\Rightarrow\tau)\,\gunderline{\Rightarrow}\,(\alpha\Rightarrow\beta)\,\gunderline{\Rightarrow}\,(\beta\Rightarrow\tau)\\
+{\color{greenunder}\text{use Eq.~(\ref{eq:ch-definition-of-implication-in-Boolean-logic})}:}\quad & =\neg(\gunderline{\alpha\Rightarrow\tau})\vee\neg(\gunderline{\alpha\Rightarrow\beta})\vee(\gunderline{\beta\Rightarrow\tau})\\
 {\color{greenunder}\text{use Eq.~(\ref{eq:ch-definition-of-implication-in-Boolean-logic})}:}\quad & =\gunderline{\neg(\neg\alpha\vee\tau)}\vee\gunderline{\neg(\neg\alpha\vee\beta)}\vee(\neg\beta\vee\tau)\\
 {\color{greenunder}\text{use de Morgan's law}:}\quad & =\left(\alpha\wedge\neg\tau\right)\vee\gunderline{\left(\alpha\wedge\neg\beta\right)\vee\neg\beta}\vee\tau\\
 {\color{greenunder}\text{use identity }(p\wedge q)\vee q=q:}\quad & =\gunderline{\left(\alpha\wedge\neg\tau\right)}\vee\neg\beta\vee\gunderline{\tau}\\
@@ -3269,12 +3322,13 @@ of \lstinline!m! cannot be implemented by a fully parametric function.
 
 \subsubsection{Example \label{subsec:ch-solvedExample-7}\ref{subsec:ch-solvedExample-7}}
 
-Define a type $P^{A}\triangleq\bbnum 1+A+A$ and implement the function
+Define the type constructor $P^{A}\triangleq\bbnum 1+A+A$ and implement
+\lstinline!map! for it,
 \[
 \text{map}^{A,B}:P^{A}\Rightarrow(A\Rightarrow B)\Rightarrow P^{B}\quad.
 \]
-As a check that the function \lstinline!map! does not lose information,
-verify the law \lstinline!map(p)(x => x) == p! for any \lstinline!p:P[A]!.
+To check that \lstinline!map! preserves information, verify the law
+\lstinline!map(p)(x => x) == p! for all \lstinline!p: P[A]!.
 
 \subparagraph{Solution}
 
@@ -3302,19 +3356,19 @@ of type $P^{B}$ from a value $x^{:A}$ and a function $f^{:A\Rightarrow B}$.
 Since $P^{B}$ is a disjunctive type with three parts, we can produce
 a value of type $P^{B}$ in three different ways: \lstinline!P1()!,
 \lstinline!P2(...)!, and \lstinline!P3(...)!. If we return \lstinline!P1()!,
-we will satisfy the type but lose the information about the value
-\lstinline!x!. If we return \lstinline!P3(...)!, we will satisfy
-the type signature and preserve the information about \lstinline!x!,
-but we will lose the information that the input value was a \lstinline!P2!
-rather than a \lstinline!P3!. So we should return \lstinline!P2(...)!
-in that scope; in that way, we preserve the entire input information. 
+we will lose the information about the value \lstinline!x!. If we
+return \lstinline!P3(...)!, we will preserve the information about
+\lstinline!x! but lose the information that the input value was a
+\lstinline!P2! rather than a \lstinline!P3!. So we should return
+\lstinline!P2(...)! in that scope; in that way, we preserve the entire
+input information. 
 
 The value under \lstinline!P2(...)! must be of type $B$, and the
 only way of getting a value of type $B$ is to apply $f$ to $x$.
 So, we return \lstinline!P2(f(x))!.
 
 Similarly, in the case \lstinline!P3(x)!, we should return \lstinline!P3(f(x))!.
-So the final code of \lstinline!map! is
+The final code of \lstinline!map! is
 \begin{lstlisting}
 def map[A, B]: P[A] => (A => B) => P[B] = p => f => p match {
   case P1() => P1()         // No choice here.
@@ -3352,7 +3406,7 @@ law:
 
 \subsubsection{Example \label{subsec:ch-solvedExample-8}\ref{subsec:ch-solvedExample-8}}
 
-Implement \lstinline!map! and \lstinline!flatMap! for \lstinline!Either[L,R]!,
+Implement \lstinline!map! and \lstinline!flatMap! for \lstinline!Either[L, R]!,
 applied to the type parameter \lstinline!L!.
 
 \subparagraph{Solution}
@@ -3376,9 +3430,9 @@ type parameters $S,T$ in $P^{A,S,T}$ remain fixed while the type
 parameter $A$ is replaced by $B$ in the type signatures of \lstinline!map!
 and \lstinline!flatMap!.
 
-For the type constructor \lstinline!Either[L, R]! (i.e.~$L+R$),
-we keep the type parameter $R$ fixed while $L$ is replaced by $M$.
-So we obtain the type signatures
+For the type \lstinline!Either[L, R]! (i.e.~$L+R$), we keep the
+type parameter $R$ fixed while $L$ is replaced by $M$. So we obtain
+the type signatures
 \begin{align*}
 \text{map} & :L+R\Rightarrow(L\Rightarrow M)\Rightarrow M+R\quad,\\
 \text{flatMap} & :L+R\Rightarrow(L\Rightarrow M+R)\Rightarrow M+R\quad.
@@ -3436,30 +3490,23 @@ def pure[S, A]: A => State[S, A] = a => s => (a, s)
 \end{lstlisting}
 In the short code notation, this is written as
 \[
-\text{pu}^{S,A}\triangleq a\Rightarrow s\Rightarrow a\times s\quad.
+\text{pu}^{S,A}\triangleq a^{:A}\Rightarrow s^{:A}\Rightarrow a\times s\quad.
 \]
 
 \textbf{(b)} The explicit type signature is 
 \[
 \text{map}^{S,A,B}:(S\Rightarrow A\times S)\Rightarrow(A\Rightarrow B)\Rightarrow S\Rightarrow B\times S\quad.
 \]
-The Scala implementation will be
+Begin writing a Scala implementation:
 \begin{lstlisting}
 def map[S, A, B]: State[S, A] => (A => B) => State[S, B] = { t => f => s => ??? }
 \end{lstlisting}
 We need to compute a value of $B\times S$ from the curried arguments
 $t^{:S\Rightarrow A\times S}$, $f^{:A\Rightarrow B}$, and $s^{:S}$.
-We begin writing the code of \lstinline!map! as
+We begin writing the code of \lstinline!map! as a typed hole,
 \[
 \text{map}\triangleq t^{:S\Rightarrow A\times S}\Rightarrow f^{:A\Rightarrow B}\Rightarrow s^{:S}\Rightarrow\text{???}^{:B}\times\text{???}^{:S}\quad.
 \]
-The symbol $\text{???}^{:B}$ is called a \index{typed hole}\textbf{typed
-hole}; it stands for a value that we are still figuring out how to
-compute, but whose type is already known. Typed holes are supported
-in Scala by an experimental compiler plugin.\footnote{\texttt{\href{https://github.com/cb372/scala-typed-holes}{https://github.com/cb372/scala-typed-holes}}}
-The plugin will print the known type information about the typed hole
-in the code.
-
 The only way of getting a value of type $B$ is by applying $f$ to
 a value of type $A$:
 \[
@@ -3486,13 +3533,18 @@ in the function \lstinline!map!, we will have discarded the computed
 value \lstinline!s2!, which is a loss of information.
 
 To write the code notation for \lstinline!map!, we need to destructure
-the pair that $t(s)$ returns. We can write an explicit destructuring
-function like this:
+the pair that $t(s)$ returns. We can write explicit destructuring
+code like this:
 \[
 \text{map}\triangleq t^{:S\Rightarrow A\times S}\Rightarrow f^{:A\Rightarrow B}\Rightarrow s^{:S}\Rightarrow(a^{:A}\times s_{2}^{:S}\Rightarrow f(a)\times s_{2})(t(s))\quad.
 \]
-We notice that we are applying one function after another to the argument
-$s$, so we can rewrite this code as a shorter formula, 
+If we temporarily denote by $q$ the destructuring function 
+\[
+q\triangleq(a^{:A}\times s_{2}^{:S}\Rightarrow f(a)\times s_{2})\quad,
+\]
+we will notice that the expression $s\Rightarrow q(t(s))$ is a function
+composition applied to $s$. So, we rewrite $s\Rightarrow q(t(s))$
+as the composition $t\bef q$ and obtain shorter code, 
 \[
 \text{map}\triangleq t^{:S\Rightarrow A\times S}\Rightarrow f^{:A\Rightarrow B}\Rightarrow t\bef(a^{:A}\times s^{:S}\Rightarrow f(a)\times s)\quad.
 \]
@@ -3503,19 +3555,20 @@ not necessarily easier to read when converted to program code).
 \[
 \text{flatMap}^{S,A,B}:(S\Rightarrow A\times S)\Rightarrow(A\Rightarrow S\Rightarrow B\times S)\Rightarrow S\Rightarrow B\times S\quad.
 \]
-We perform the same kind of reasoning with a typed hole:
+We perform t reasoning with typed holes:
 \[
 \text{flatMap}\triangleq t^{:S\Rightarrow A\times S}\Rightarrow f^{:A\Rightarrow S\Rightarrow B\times S}\Rightarrow s^{:S}\Rightarrow\text{???}^{:B}\times???^{:S}\quad.
 \]
-To fill $\text{???}^{:B}$, we need to apply $f$ to some arguments;
-a saturated application of $f$ will yield a value of type $B\times S$,
+To fill $\text{???}^{:B}$, we need to apply $f$ to some arguments,
+since $f$ is the only function that returns any values of type $B$.
+A saturated application of $f$ will yield a value of type $B\times S$,
 which we can return without change:
 \[
 \text{flatMap}\triangleq t^{:S\Rightarrow A\times S}\Rightarrow f^{:A\Rightarrow S\Rightarrow B\times S}\Rightarrow s^{:S}\Rightarrow f(\text{???}^{:A})(\text{???}^{:S})\quad.
 \]
 To fill the new typed holes, we need to apply $t$ to an argument
-of type $S$. We have only one given value of type $S$, so there
-is no choice here:
+of type $S$. We have only one given value $s^{:S}$ of type $S$,
+so we must compute $t(s)$ and destructure it:
 \[
 \text{flatMap}\triangleq t^{:S\Rightarrow A\times S}\Rightarrow f^{:A\Rightarrow S\Rightarrow B\times S}\Rightarrow s^{:S}\Rightarrow\left(a\times s_{2}\Rightarrow f(a)(s_{2})\right)(t(s))\quad.
 \]
@@ -3527,8 +3580,8 @@ def flatMap[S,A,B]: State[S, A] => (A => State[S, B]) => State[S, B] = {
     f(a)(s2)            // We could also return `f(a)(s)` here.
 }
 \end{lstlisting}
-As before, we choose not to discard the computed value \lstinline!s2!
-because we aim to preserve information.
+As before, in order to preserve information, we choose not to discard
+the computed value \lstinline!s2!.
 
 The code notation for \lstinline!flatMap! can be simplified to
 \[
@@ -3565,7 +3618,7 @@ Transform this type into an equivalent type of the form $A\times(...)$.
 Define a type $\text{OptE}^{T,A}\triangleq\bbnum 1+T+A$ and implement
 information-preserving \lstinline!map! and \lstinline!flatMap! for
 it, applied to the type parameter $A$. Get the same result using
-the equivalent type $(\bbnum 1+T)+A$, i.e. \lstinline!Either[Option[T], A]!.
+the equivalent type $(\bbnum 1+A)+T$, i.e. \lstinline!Either[Option[A], T]!.
 The required type signatures are
 \begin{align*}
 \text{map}^{A,B,T} & :\text{OptE}^{T,A}\Rightarrow\left(A\Rightarrow B\right)\Rightarrow\text{OptE}^{T,B}\quad,\\
@@ -3594,7 +3647,7 @@ Define a recursive type constructor $\text{Tr}_{3}$ as $\text{Tr}_{3}{}^{A}\tria
 and implement the \lstinline!map! function for it, with the standard
 type signature
 \[
-\text{map}^{A,B}:\text{Tr}_{3}^{A}\Rightarrow\left(A\Rightarrow B\right)\Rightarrow\text{Tr}_{3}^{B}\quad.
+\text{map}^{A,B}:\text{Tr}_{3}{}^{A}\Rightarrow\left(A\Rightarrow B\right)\Rightarrow\text{Tr}_{3}{}^{B}\quad.
 \]
 
 
@@ -3602,44 +3655,44 @@ type signature
 
 Implement fully parametric functions with the following types:
 
-$A+Z\Rightarrow(A\Rightarrow B)\Rightarrow B+Z$
+\textbf{(a)} $A+Z\Rightarrow(A\Rightarrow B)\Rightarrow B+Z$
 
-$A+Z\Rightarrow B+Z\Rightarrow(A\Rightarrow B\Rightarrow C)\Rightarrow C+Z$
+\textbf{(b)} $A+Z\Rightarrow B+Z\Rightarrow(A\Rightarrow B\Rightarrow C)\Rightarrow C+Z$
 
-$\text{flatMap}^{E,A,B}:\text{Read}^{E,A}\Rightarrow(A\Rightarrow\text{Read}^{E,B})\Rightarrow\text{Read}^{E,B}$
+\textbf{(c)} $\text{flatMap}^{E,A,B}:\text{Read}^{E,A}\Rightarrow(A\Rightarrow\text{Read}^{E,B})\Rightarrow\text{Read}^{E,B}$
 
-$\text{State}^{S,A}\Rightarrow\left(S\times A\Rightarrow S\times B\right)\Rightarrow\text{State}^{S,B}$
+\textbf{(d)} $\text{State}^{S,A}\Rightarrow\left(S\times A\Rightarrow S\times B\right)\Rightarrow\text{State}^{S,B}$
 
 \subsubsection{Exercise \label{subsec:ch-Exercise-7}\ref{subsec:ch-Exercise-7}{*}}
 
 Denote $\text{Cont}^{R,T}\triangleq\left(T\Rightarrow R\right)\Rightarrow R$
 and implement the functions:
 
-$\text{map}^{R,T,U}:\text{Cont}^{R,T}\Rightarrow(T\Rightarrow U)\Rightarrow\text{Cont}^{R,U}$
+\textbf{(a)} $\text{map}^{R,T,U}:\text{Cont}^{R,T}\Rightarrow(T\Rightarrow U)\Rightarrow\text{Cont}^{R,U}$
 
-$\text{flatMap}^{R,T,U}:\text{Cont}^{R,T}\Rightarrow(T\Rightarrow\text{Cont}^{R,U})\Rightarrow\text{Cont}^{R,U}$
+\textbf{(b)} $\text{flatMap}^{R,T,U}:\text{Cont}^{R,T}\Rightarrow(T\Rightarrow\text{Cont}^{R,U})\Rightarrow\text{Cont}^{R,U}$
 
 \subsubsection{Exercise \label{subsec:ch-Exercise-8}\ref{subsec:ch-Exercise-8}{*}}
 
 Denote $\text{Search}^{Z,T}\triangleq\left(T\Rightarrow Z\right)\Rightarrow T$
 and implement the functions:
 
-$\text{map}^{Z,A,B}:\text{Search}^{Z,A}\Rightarrow\left(A\Rightarrow B\right)\Rightarrow\text{Search}^{Z,B}$
+\textbf{(a)} $\text{map}^{Z,A,B}:\text{Search}^{Z,A}\Rightarrow\left(A\Rightarrow B\right)\Rightarrow\text{Search}^{Z,B}$
 
-$\text{flatMap}^{Z,A,B}:\text{Search}^{Z,A}\Rightarrow(A\Rightarrow\text{Search}^{Z,B})\Rightarrow\text{Search}^{Z,B}$
+\textbf{(b)} $\text{flatMap}^{Z,A,B}:\text{Search}^{Z,A}\Rightarrow(A\Rightarrow\text{Search}^{Z,B})\Rightarrow\text{Search}^{Z,B}$
 
 \section{Discussion}
 
 \subsection{Using the Curry-Howard correspondence for writing code}
 
-This chapter shows how the CH correspondence performs two kinds of
-practically important tasks of reasoning about types: checking whether
-a type signature can be implemented as a fully parametric function,
-and determining whether two types are equivalent. The first task is
-accomplished by mapping type expressions into formulas in the constructive
-logic and by applying the proof rules of that logic. The second task
-is accomplished by mapping type expressions into \emph{arithmetic}
-formulas and applying the ordinary rules of school mathematics.
+This chapter shows how the CH correspondence performs two practically
+important tasks of type-level reasoning: checking whether a type signature
+can be implemented as a fully parametric function, and determining
+whether two types are equivalent. The first task is accomplished by
+mapping type expressions into formulas in the constructive logic and
+by applying the proof rules of that logic. The second task is accomplished
+by mapping type expressions into \emph{arithmetic} formulas and applying
+the ordinary rules of arithmetic.
 
 Fully parametric functions can be often derived from their type signatures
 alone. It is useful for a programmer to know that certain type signatures,
@@ -3652,22 +3705,22 @@ such as
 \begin{lstlisting}
 def f[A, B]: A => (B => A) => B
 \end{lstlisting}
-cannot be implemented as a fully parametric function.
+cannot be implemented as fully parametric functions.
 
 It is helpful to know that the code derivation can be performed by
 an algorithm using tools such as the \texttt{curryhoward} library.
 However, in most cases it is more beneficial if a programmer is able
 to derive an implementation by hand, or to see quickly that an implementation
-is impossible. Exercises in this chapter will help build up the required
-technique. The type notation introduced in this book is designed for
-recognizing patterns in type expressions and for reasoning about them
+is impossible. Exercises in this chapter build up the required technique.
+The type notation introduced in this book is designed to help programmers
+to recognize patterns in type expressions and to reason about them
 more easily.
 
-Throughout this chapter, we were mostly concerned about fully parametric
-functions. The reason is that the CH correspondence becomes informative
-only with parameterized types and with fully parametric functions.
-For concrete types, e.g.\ \lstinline!Int!, we can always produce
-\emph{some} value even with no previous data, so the proposition $\mathcal{CH}(\text{Int})$
+Throughout this chapter, we required all functions to be fully parametric.
+The reason is that the CH correspondence becomes informative only
+with parameterized types and with fully parametric functions. For
+concrete types, e.g.\ \lstinline!Int!, one can always produce \emph{some}
+value even with no previous data, so the proposition $\mathcal{CH}(\text{Int})$
 is always true within any code.
 
 Consider the function \lstinline!(x:Int) => x + 1! with type signature
@@ -3684,60 +3737,58 @@ or about code derivation.
 Information about the implementability of type signatures is given
 by logical formulas involving ${\cal CH}$-propositions. Generally,
 a ${\cal CH}$-proposition such as ${\cal CH}(A)$ is true when we
-are able to compute any value of type $A$. The validity of ${\cal CH}$-propositions
-means that we can compute \emph{some} values of given types; but it
+are able to compute a value of type $A$. The validity of ${\cal CH}$-propositions
+means that we can compute \emph{some} values of given types, but it
 does not give any information about the properties of those values,
 such as whether they satisfy any additional laws. For this reason,
 type equivalence is not determined by an equivalence of logical formulas.
 
-We have shown that a type equivalence corresponds to each arithmetic
-identity such as $\left(a+b\right)+c=a+\left(b+c\right)$, $\left(a\times b\right)\times c=a\times(b\times c)$,
-$1\times a=a$, $\left(a+b\right)\times c=a\times c+b\times c$, etc.
-So, having an arithmetic identity always corresponds to a type equivalence.
-We are allowed to transform types as if they were arithmetic expressions,
+It is useful for programmers to be able to reason about types and
+transform type expressions to equivalent simpler types before starting
+to write code. We have shown that a type equivalence corresponds to
+\emph{each} standard arithmetic identity such as $\left(a+b\right)+c=a+\left(b+c\right)$,
+$\left(a\times b\right)\times c=a\times(b\times c)$, $1\times a=a$,
+$\left(a+b\right)\times c=a\times c+b\times c$, etc. So, we are allowed
+to transform and simplify types as if they were arithmetic expressions,
 e.g.~to rewrite
 \[
 \left(A+B\right)\times C+D\cong D+A\times C+B\times C\quad.
 \]
-The type notation makes this reasoning easier and more intuitive for
-people familiar with arithmetic. As a result, we can freely use the
-standard rules of school mathematics for deriving type equivalences
-or for simplifying type expressions. It is useful for programmers
-to be able to reason about types and transform type expressions to
-equivalent simpler types before starting to write code. 
+The type notation makes this reasoning more intuitive (for people
+familiar with arithmetic). 
 
-These results apply to any type expressions built up using product
+These results apply to all type expressions built up using product
 types, disjunctive types (also called ``sum'' types because they
 correspond to arithmetic sums), and function types (also called ``exponential''
 types because they correspond to arithmetic exponentials). Such types
-may be called ``exponential-polynomial''\index{exponential-polynomial type}
+may be called \textbf{exponential-polynomial}\index{exponential-polynomial type}
 types.
 
-This ``arithmetic CH correspondence'' allows us to perform type
-manipulations corresponding to any arithmetic transformations that
-involve addition, multiplication, and powers. There is no types corresponding
-to subtraction or division, so equations such as 
+There are no type constructions corresponding to subtraction or division,
+so equations such as 
 \begin{align*}
 \left(1-t\right)\times\left(1+t\right) & =1-t\times t\quad,\\
 \frac{t+t\times t}{t} & =1+t\quad,
 \end{align*}
-do not yield type equivalences. However, consider this standard formula,
+do not directly yield any type equivalences. However, consider this
+well-known formula,
 \[
 \frac{1}{1-t}=1+t+t^{2}+t^{3}+...+t^{n}+...\quad.
 \]
 At first sight, this formula appears to involve subtraction, division,
-and an infinite series. However, this formula can be rewritten as
+and an infinite series, and thus cannot be directly translated into
+a type equivalence. However, this formula can be rewritten as
 \begin{equation}
 L(t)=1+t+t^{2}+t^{3}+...+t^{n}\times L(t)\quad,\label{eq:ch-example-type-formula-list}
 \end{equation}
 which is finite and only contains additions and multiplications. So,
 Eq.~(\ref{eq:ch-example-type-formula-list}) can be translated into
-a type equivalence
+a type equivalence:
 \[
-\text{List}^{A}\cong1+A+A\times A+A\times A\times A+...+A\times...\times A\times\text{List}^{A}\quad.
+L^{A}\cong1+A+A\times A+A\times A\times A+...+\underbrace{A\times...\times A}_{n}\times L^{A}\quad.
 \]
-This type formula is equivalent to the recursive definition of the
-\lstinline!List! type,
+This type formula (with $n=1$) is equivalent to a recursive definition
+of the \lstinline!List! type,
 \[
 \text{List}^{A}\triangleq1+A\times\text{List}^{A}\quad.
 \]
@@ -3748,10 +3799,10 @@ This type formula is equivalent to the recursive definition of the
 The functional programming paradigm assumes that programmers may use
 the seven standard type constructions (Section~\ref{subsec:Type-notation-and-standard-type-constructions})
 and the eight standard code constructions (Section~\ref{subsec:The-rules-of-proof}).
-These constructions are the foundational, in that all types and all
-code is expressed via these constructions. A programming language
-that does not support some of these constructions cannot be considered
-a functional programming language.
+These constructions are foundational in the sense that all types and
+all code can be expressed via these constructions. A programming language
+that does not directly support some of these constructions cannot
+be considered a functional programming language.
 
 A remarkable consequence of the CH correspondence is that the type
 system of any programming language (functional or not) is mapped into
@@ -3759,56 +3810,71 @@ a \emph{certain} \emph{logic}, i.e.~a system of logical operations
 and proof rules. A logical operation will correspond to each of the
 type constructions available in the programming language; a proof
 rule will correspond to each of the available code constructions.
-A functional programming language supporting all the standard type
+Functional programming languages that support all the standard type
 and code constructions \textendash{} for instance, OCaml, Haskell,
-F\#, Scala, Swift, etc., \textendash{} will be mapped into constructive
+F\#, Scala, Swift, etc., \textendash{} will be mapped into the constructive
 logic with all standard logical operations available ($True$, $False$,
 disjunction, conjunction, and implication). Languages such as C, C++,
 Java, C\# are mapped into logics that do not have the disjunction
 operation or the constants $True$ and $False$. In other words, these
-languages are mapped into incomplete logics where some theorems will
-not be provable. Languages such as Python, JavaScript, Ruby, Clojure
-have no type checking and so are mapped to inconsistent logics where
-any proposition can be derived (even propositions normally considered
-$False$). 
+languages are mapped into \emph{incomplete} logics where some theorems
+will not be provable. (If ${\cal CH}(A)$ is true but not provable,
+a value of type $A$ is not directly computable by programs, although
+it could have been.) Languages such as Python, JavaScript, Ruby, Clojure
+have no type checking and so are mapped to \emph{inconsistent} logics
+where any proposition can be derived \textendash{} even propositions
+normally considered $False$. 
 
-The deficiency of the logics is translated into inability of these
-languages to easily express certain computations with data, such as
-handling data that belongs to a disjoint domain. The inconsistency
-of a logic means that a program might ``derive $False$ from $True$'',
-i.e.~the program thinks it has computed a value that is not actually
-there. In practice, this usually means that a program crashes because
-some value is missing, is ``null'', or is represented by an ``invalid
-pointer''.
+Incompleteness of a logic means that the programming language is unable
+to express directly certain computations with data, such as handling
+data that belongs to a disjoint domain. Inconsistency of a logic means
+that a program may ``derive $False$ from $True$'', i.e.~the program
+appears to compute a value that is not actually available. In practice,
+this usually means that a program \emph{crashes} because a value has
+a wrong type, is ``null'', or is a pointer to an invalid memory
+location. 
+
+None of these errors will happen in a programming language whose logic
+is complete and consistent and where types are checked at compile
+time. 
 
 So, the CH correspondence gives a mathematically justified procedure
-for designing the type systems in programming languages. The procedure
-contains these steps:
+for designing type systems in new programming languages. The procedure
+contains the following steps:
 \begin{itemize}
-\item Choose a complete logic that is free of inconsistencies.
-\item For each logical operation, provide a type construction.
-\item For each proof rule, provide a code construction.
+\item Choose a complete formal logic that is free of inconsistencies.
+\item For each logical operation, provide a type construction in the language.
+\item For each proof rule, provide a code construction in the language.
 \end{itemize}
+Programmers benefit if their programming language is designed according
+to these principles.
+
 Mathematicians have studied different logics such as modal logic,
-temporal logic, linear logic, and so on. For each of these logics,
-mathematicians have determined the minimal complete sets of logical
-operations, axioms, and proof rules that do not lead to inconsistency.
-This allows programming language designers to pick and choose logics
-and to routinely translate them into minimal programming languages
-whose programs are guaranteed to have correct types. This mathematical
-guarantee is a powerful help for programmers since it automatically
+temporal logic, or linear logic. For each logic, mathematicians have
+determined the minimal complete sets of logical operations, axioms,
+and proof rules that do not lead to inconsistency. Programming language
+designers can pick and choose logics and translate them into minimal
+programming languages whose programs are guaranteed to have correct
+types. This mathematical guarantee (known as \index{type safety}\textbf{type
+safety}) is a powerful help for programmers since it automatically
 prevents a large class of programming errors.
+
+Practically used programming languages will need to introduce many
+more features than the minimal, mathematically necessary constructions
+that correspond to the chosen logic. Programmers will still benefit
+from type safety as long as the program stays within the mathematically
+consistent subset of the language. 
 
 \subsection{Uses of the void type}
 
-Scala's \index{void type}void type \lstinline!Nothing! corresponds
-to the logical constant $False$; but the practical uses of $False$
-are quite limited. One use case is for a branch of a \lstinline!match!
-/ \lstinline!case! expression that does not return a value (e.g.~because
-it throws an \index{exception}exception). Such branches are considered
+Scala's \index{void type}void type (\lstinline!Nothing!) corresponds
+to the logical constant $False$. The practical uses of $False$ are
+quite limited. One use case is for a branch of a \lstinline!match!
+/ \lstinline!case! expression that does not return a value because
+it throws an \index{exception}exception. Such branches are considered
 formally to return a value of type \lstinline!Nothing!, which can
-then map to a value of any other type (through the function \lstinline!absurd[A]: Nothing => A!,
-see Example~\ref{subsec:ch-Example-type-identity-0-to-A}). 
+then be mapped to a value of any other type (through the function
+\lstinline!absurd[A]: Nothing => A!, see Example~\ref{subsec:ch-Example-type-identity-0-to-A}). 
 
 To see how this trick is used, consider this code defining a value
 \lstinline!x!,
@@ -3817,19 +3883,19 @@ val x: Double = if (t >= 0.0) math.sqrt(t) else { throw new Exception("error") }
 \end{lstlisting}
 The \lstinline!else! branch does not return a value, but \lstinline!x!
 is declared to be of type \lstinline!Double!. For this code to type-check,
-both branches must return values of the same type. So, the Scala compiler
+both branches must return values of the same type. So, the compiler
 needs to pretend that the \lstinline!else! branch also returns a
 value of type \lstinline!Double!. The compiler first assigns the
 type \lstinline!Nothing! to the expression \lstinline!throw ...!
 and then implicitly uses the function \lstinline!absurd: Nothing => Double!
-to convert that type to \lstinline!Double!. In this way, types can
-be made to match in the definition of the value \lstinline!x!. 
+to convert that type to \lstinline!Double!. In this way, types will
+match in the definition of the value \lstinline!x!. 
 
 We will not use exceptions in this book: the functional programming
 paradigm avoids exceptions because their presence significantly complicates
 reasoning about code.
 
-Finally, none of our examples involved the logical \textbf{negation}\index{negation}
+So far, none of our examples involved the logical \textbf{negation}\index{negation}
 operation. It is defined as 
 \[
 \neg A\triangleq A\Rightarrow False\quad,
@@ -3841,32 +3907,165 @@ logic, which we will discuss next.
 \subsection{Relationship between Boolean logic and constructive logic\label{subsec:Relationship-between-Boolean} }
 
 We have seen that some true theorems of Boolean logic are not true
-in constructive logic. However, any theorem of constructive logic
-is also a theorem of Boolean logic.
+in constructive logic. For example, the Boolean identities $\neg\left(\neg\alpha\right)=\alpha$
+and $\left(\alpha\Rightarrow\beta\right)=(\neg\alpha\vee\beta)$ do
+not hold in the constructive logic. However, any theorem of constructive
+logic is also a theorem of Boolean logic. The reason is that all eight
+rules of constructive logic (Section~\ref{subsec:The-rules-of-proof})
+are also true in Boolean logic.
 
-The reason is that each of the rules of constructive logic (Section~\ref{subsec:The-rules-of-proof})
-preserves Boolean truth values. To verify that a formula is true in
-Boolean logic, we only need to check that the truth value of the formula
-is $True$ for all possible truth values of its variables. A sequent
-such as $\alpha,\beta\vdash\gamma$ is true in Boolean logic if and
-only if $\gamma=True$ given that $\alpha=\beta=True$. We can check
-that all proof rules of Section~\ref{subsec:The-rules-of-proof}
-have this property: if the premises are true in the Boolean sense,
-the goal is also true.
+To verify that a formula is true in Boolean logic, we only need to
+check that the value of the formula is $True$ for all possible truth
+values ($True$ or $False$) of its variables. A sequent such as $\alpha,\beta\vdash\gamma$
+is true in Boolean logic if and only if $\gamma=True$ under the assumption
+that $\alpha=\beta=True$. So, the sequent $\alpha,\beta\vdash\gamma$
+is translated into the Boolean formula 
+\[
+\alpha,\beta\vdash\gamma=\left(\left(\alpha\wedge\beta\right)\Rightarrow\gamma\right)=\left(\neg\alpha\vee\neg\beta\vee\gamma\right)\quad.
+\]
+Table~\ref{tab:Proof-rules-of-constructive-and-boolean} translates
+all proof rules of Section~\ref{subsec:The-rules-of-proof} into
+Boolean formulas. The first two lines are axioms, while the subsequent
+lines are Boolean theorems that can be verified by calculation.
 
-It is much easier to check Boolean truth than to find a proof tree
-in constructive logic. So, if we find that a formula is not a theorem
-in Boolean logic, we know it is also not a theorem in constructive
-logic. This gives us a quick way of proving that some type signatures
-are not implementable as fully parametric functions. Examples of formulas
-that are not true in Boolean logic are
+\begin{table}
+\begin{centering}
+\begin{tabular}{|c|c|}
+\hline 
+\textbf{Constructive logic} & \textbf{Boolean logic}\tabularnewline
+\hline 
+\hline 
+$\frac{}{\Gamma\vdash{\cal CH}(\bbnum 1)}\quad(\text{create unit})$ & {\small{}$\neg\Gamma\vee True=True$}\tabularnewline
+\hline 
+$\frac{~}{\Gamma,\alpha\vdash\alpha}\quad(\text{use arg})$ & {\small{}$\neg\Gamma\vee\neg\alpha\vee\alpha=True$}\tabularnewline
+\hline 
+$\frac{\Gamma,\alpha\vdash\beta}{\Gamma\vdash\alpha\Rightarrow\beta}\quad(\text{create function})$ & {\small{}$\left(\neg\Gamma\vee\neg\alpha\vee\beta\right)=\left(\neg\Gamma\vee\left(\alpha\Rightarrow\beta\right)\right)$}\tabularnewline
+\hline 
+$\frac{\Gamma\vdash\alpha\quad\quad\Gamma\vdash\alpha\Rightarrow\beta}{\Gamma\vdash\beta}\quad(\text{use function})$ & {\small{}$\left(\left(\neg\Gamma\vee\alpha\right)\wedge\left(\neg\Gamma\vee\left(\alpha\Rightarrow\beta\right)\right)\right)\Rightarrow\left(\neg\Gamma\vee\beta\right)$}\tabularnewline
+\hline 
+$\frac{\Gamma\vdash\alpha\quad\quad\Gamma\vdash\beta}{\Gamma\vdash\alpha\wedge\beta}\quad(\text{create tuple})$ & {\small{}$\left(\neg\Gamma\vee\alpha\right)\wedge\left(\neg\Gamma\vee\beta\right)=\left(\neg\Gamma\vee\left(\alpha\wedge\beta\right)\right)$}\tabularnewline
+\hline 
+$\frac{\Gamma\vdash\alpha\wedge\beta}{\Gamma\vdash\alpha}\quad(\text{use tuple-}1)$ & {\small{}$\left(\neg\Gamma\vee\left(\alpha\wedge\beta\right)\right)\Rightarrow\left(\neg\Gamma\vee\alpha\right)$}\tabularnewline
+\hline 
+$\frac{\Gamma\vdash\alpha}{\Gamma\vdash\alpha\vee\beta}\quad(\text{create Left})$ & {\small{}$\left(\neg\Gamma\vee\alpha\right)\Rightarrow\left(\neg\Gamma\vee\left(\alpha\vee\beta\right)\right)$}\tabularnewline
+\hline 
+$\frac{\Gamma\vdash\alpha\vee\beta\quad\quad\Gamma,\alpha\vdash\gamma\quad\quad\Gamma,\beta\vdash\gamma}{\Gamma\vdash\gamma}\quad(\text{use Either})$ & {\small{}$\left(\left(\neg\Gamma\vee\alpha\vee\beta\right)\wedge\left(\neg\Gamma\vee\neg\alpha\vee\gamma\right)\wedge\left(\neg\Gamma\vee\neg\beta\vee\gamma\right)\right)\Rightarrow\left(\neg\Gamma\vee\gamma\right)$}\tabularnewline
+\hline 
+\end{tabular}
+\par\end{centering}
+\caption{Proof rules of constructive logic are true also in the Boolean logic.\label{tab:Proof-rules-of-constructive-and-boolean}}
+\end{table}
+
+To simplify the calculations, note that all terms in the formulas
+contain the operation $\left(\neg\Gamma\vee...\right)$ corresponding
+to the context $\Gamma$. Now, if $\Gamma$ is $False$, the entire
+formula becomes automatically $True$, and there is nothing else to
+check. So, it remains to verify the formula in case $\Gamma=True$,
+and then we can simply omit all instances of $\neg\Gamma$ in the
+formulas. Let us show the Boolean derivations for the rules ``$\text{use function}$''
+and ``$\text{use Either}$''; other formulas are checked in a similar
+way. 
+\begin{align*}
+{\color{greenunder}\text{formula ``use function''}:}\quad & \left(\alpha\wedge\left(\alpha\Rightarrow\beta\right)\right)\Rightarrow\beta\\
+{\color{greenunder}\text{use Eq.~(\ref{eq:ch-definition-of-implication-in-Boolean-logic})}:}\quad & =\gunderline{\neg}(\alpha\,\gunderline{\wedge}\,(\neg\alpha\,\gunderline{\vee}\,\beta))\vee\beta\\
+{\color{greenunder}\text{de Morgan's laws}:}\quad & =\gunderline{\neg\alpha\vee(\alpha\wedge\neg\beta)}\vee\beta\\
+{\color{greenunder}\text{identity }p\vee(\neg p\wedge q)=p\vee q\text{ with }p=\neg\alpha\text{ and }q=\beta:}\quad & =\neg\alpha\vee\gunderline{\neg\beta\vee\beta}\\
+{\color{greenunder}\text{axiom ``use arg''}:}\quad & =True\quad.
+\end{align*}
+\begin{align*}
+{\color{greenunder}\text{formula ``use Either''}:}\quad & \left(\left(\alpha\vee\beta\right)\wedge\left(\alpha\Rightarrow\gamma\right)\wedge\left(\beta\Rightarrow\gamma\right)\right)\Rightarrow\gamma\\
+{\color{greenunder}\text{use Eq.~(\ref{eq:ch-definition-of-implication-in-Boolean-logic})}:}\quad & =\neg\left(\left(\alpha\vee\beta\right)\wedge\left(\neg\alpha\vee\gamma\right)\wedge\left(\neg\beta\vee\gamma\right)\right)\vee\gamma\\
+{\color{greenunder}\text{de Morgan's laws}:}\quad & =\left(\neg\alpha\wedge\neg\beta\right)\vee\gunderline{\left(\alpha\wedge\neg\gamma\right)}\vee\gunderline{\left(\beta\wedge\neg\gamma\right)}\vee\gamma\\
+{\color{greenunder}\text{identity }p\vee(\neg p\wedge q)=p\vee q:}\quad & =\gunderline{\left(\neg\alpha\wedge\neg\beta\right)\vee\alpha}\vee\beta\vee\gamma\\
+{\color{greenunder}\text{identity }p\vee(\neg p\wedge q)=p\vee q:}\quad & =\gunderline{\neg\alpha\vee\alpha}\vee\beta\vee\gamma\\
+{\color{greenunder}\text{axiom ``use arg''}:}\quad & =True\quad.
+\end{align*}
+Since each proof rule of the constructive logic is translated into
+a true formula in Boolean logic, it follows that a proof tree in the
+constructive logic will be translated into a tree of Boolean formulas
+that have value $True$ for each axiom or proof rule. The result is
+that any constructive proof for a sequent such as $\emptyset\vdash f(\alpha,\beta,\gamma)$
+is translated into a chain of Boolean implications that look like
+this,
+\[
+True=(...)\Rightarrow(...)\Rightarrow...\Rightarrow f(\alpha,\beta,\gamma)\quad.
+\]
+Since $\left(True\Rightarrow\alpha\right)=\alpha$, this chain proves
+the Boolean formula $f(\alpha,\beta,\gamma)$.
+
+For example, the proof tree shown in Figure~\ref{fig:Proof-of-the-sequent-example-2}
+is translated into
+\begin{align*}
+{\color{greenunder}\text{axiom ``use arg''}:}\quad & True=\left(\neg\left(\left(\alpha\Rightarrow\alpha\right)\Rightarrow\beta\right)\vee\neg\alpha\vee\alpha\right)\\
+{\color{greenunder}\text{rule ``create function''}:}\quad & \Rightarrow\neg\left(\left(\alpha\Rightarrow\alpha\right)\Rightarrow\beta\right)\vee\left(\alpha\Rightarrow\alpha\right)\quad.\\
+{\color{greenunder}\text{axiom ``use arg''}:}\quad & True=\neg\left(\left(\alpha\Rightarrow\alpha\right)\Rightarrow\beta\right)\vee\left(\left(\alpha\Rightarrow\alpha\right)\Rightarrow\beta\right)\quad.\\
+{\color{greenunder}\text{rule ``use function''}:}\quad & True\Rightarrow\left(\neg\left(\left(\alpha\Rightarrow\alpha\right)\Rightarrow\beta\right)\vee\beta\right)\\
+{\color{greenunder}\text{rule ``create function''}:}\quad & \Rightarrow\left(\left(\left(\alpha\Rightarrow\alpha\right)\Rightarrow\beta\right)\Rightarrow\beta\right)\quad.
+\end{align*}
+
+It is easier to check Boolean truth than to find a proof tree in constructive
+logic (or to establish that no proof tree exists). So, if we find
+that a formula is not true in Boolean logic, we know it is also not
+true in constructive logic. This gives us a quick way of proving that
+some type signatures are not implementable as fully parametric functions.
+In addition to formulas shown in Table~\ref{tab:Logical-formulas-not-Boolean-theorems}
+(Section~\ref{subsec:ch-Motivation-and-first-examples}), further
+examples of formulas that are not true in Boolean logic are
 \begin{align*}
  & \forall A.\,A\quad,\\
  & \forall(A,B).\,A\Rightarrow B\quad,\\
- & \forall(A,B).\,(A\Rightarrow B)\Rightarrow B\quad,
+ & \forall(A,B).\,(A\Rightarrow B)\Rightarrow B\quad.
 \end{align*}
-as well as formulas shown in Table~\ref{tab:Logical-formulas-not-Boolean-theorems}
-(Section~\ref{subsec:ch-Motivation-and-first-examples}).
+
+Table~\ref{tab:Proof-rules-of-constructive-and-boolean} uses the
+Boolean identity $\left(\alpha\Rightarrow\beta\right)=(\neg\alpha\vee\beta)$,
+which does not hold in the constructive logic, to translate the constructive
+axiom ``$\text{use arg}$'' into the Boolean axiom $\neg\alpha\vee\alpha=True$.
+The formula $\neg\alpha\vee\alpha=True$ is known as the \textbf{law
+of excluded middle}\footnote{\texttt{\href{https://en.wikipedia.org/wiki/Law_of_excluded_middle}{https://en.wikipedia.org/wiki/Law\_of\_excluded\_middle}}},
+which is equivalent to saying that any proposition $\alpha$ is either
+true or false. It is remarkable that the constructive logic \emph{does
+not have} the ``law of excluded middle''; it is not an axiom nor
+a derived theorem of constructive logic. 
+
+To see why, consider what it would mean for $\neg\alpha\vee\alpha=True$
+to hold in the constructive logic. The negation operation, $\neg\alpha$,
+is defined as the implication $\alpha\Rightarrow False$. So, the
+logical formula $\forall\alpha.\,\neg\alpha\vee\alpha$ corresponds
+to the type $\forall A.\,\left(A\Rightarrow\bbnum 0\right)+A$. Can
+we compute a value of this type in a fully parametric function? We
+would need to compute either a value of type $A\Rightarrow\bbnum 0$
+or a value of type $A$; this decision needs to be made in advance
+independently of $A$, because the code of a fully parametric function
+must operate in the same way for all types. Should we decide to return
+$A$ or $A\Rightarrow\bbnum 0$? We certainly cannot compute a value
+of type $A$ from scratch, since $A$ is a type parameter. As we have
+seen in Example~\ref{subsec:ch-Example-type-identity-A-0}, a value
+of type $A\Rightarrow\bbnum 0$ exists only if the type $A$ is itself
+$\bbnum 0$; but we do not know that, and we are supposed to write
+the same code for all types $A$. Since there are no values of type
+$\bbnum 0$, and the type parameter $A$ could be, say, \lstinline!Int!,
+we cannot compute a value of type $A\Rightarrow\bbnum 0$.
+
+Example~\ref{subsec:ch-Example-type-identity-A-0} showed that the
+type $A\Rightarrow\bbnum 0$ is equivalent to $\bbnum 0$ if $A$
+is not itself void ($A\not\cong\bbnum 0$), and to $\bbnum 1$ otherwise.
+Surely, any type $A$ is either void or not void. So, why exactly
+is it impossible to implement a value of the type $\left(A\Rightarrow\bbnum 0\right)+A$?
+We could say that if $A$ is void then $\left(A\Rightarrow\bbnum 0\right)\cong\bbnum 1$
+is not void, and so at least one of the parts of the disjunction $\left(A\Rightarrow\bbnum 0\right)+A$
+should always exist.
+
+However, this reasoning is incorrect. When we implement functions,
+we need to compute values of the required types and not merely show
+that these values ``should exist''. Moreover, the functions' code
+must work in the same general way for all types; the code cannot decide
+what to do depending on a specific type. So, the requirement is to
+compute a value of type $\left(A\Rightarrow\bbnum 0\right)+A$ in
+the same way for an arbitrary type $A$. Proving that the value ``should
+exist'' is insufficient; we need to know how to ``construct'' that
+value in the code. The ``constructive\index{constructive logic}''
+logic got its name from this requirement.
 
 \begin{comment}
 you have code like this it means that at some point in your program
