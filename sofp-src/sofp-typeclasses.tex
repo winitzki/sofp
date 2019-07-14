@@ -1,0 +1,2467 @@
+
+\chapter{Type-level functions and typeclasses}
+
+\section{Slides}
+
+\subsection{Motivation for type classes I: Restricting type arguments}
+
+We would like a generic \texttt{\textcolor{blue}{\footnotesize{}sum}}
+implementation for \texttt{\textcolor{blue}{\footnotesize{}Seq{[}Int{]},
+Seq{[}Double{]}}}, etc.
+
+but we cannot generalize \texttt{\textcolor{blue}{\footnotesize{}sum}}
+to arbitrary types \texttt{\textcolor{blue}{\footnotesize{}T}} like
+this:
+
+\textcolor{blue}{\footnotesize{}def sum{[}T{]}(s: Seq{[}T{]}): T =
+???}{\footnotesize\par}
+
+this can work only for \texttt{\textcolor{blue}{\footnotesize{}T}}
+that are ``summable'' in some sense
+
+We would like to define \texttt{\textcolor{blue}{\footnotesize{}fmap}}
+for functors, using the available \texttt{\textcolor{blue}{\footnotesize{}map}}
+\ 
+
+but we cannot generalize \texttt{\textcolor{blue}{\footnotesize{}fmap}}
+to arbitrary type constructors \texttt{\textcolor{blue}{\footnotesize{}F{[}\_{]}}}:
+
+\textcolor{blue}{\footnotesize{}def fmap{[}F{[}\_{]}, A, B{]}(f: A
+$\Rightarrow$ B): F{[}A{]} $\Rightarrow$ F{[}B{]} = ???}{\footnotesize\par}
+
+this can work only for type constructors \texttt{\textcolor{blue}{\footnotesize{}F{[}\_{]}}}
+that are functors
+
+We would like to define functions whose type arguments, such as \texttt{\textcolor{blue}{\footnotesize{}T}}
+or \texttt{\textcolor{blue}{\footnotesize{}F{[}\_{]}}}, are required
+to belong to a \emph{certain subset} of possible types
+
+We could then use the known properties of these type arguments
+
+We would also like to add new supported types as needed
+
+This is similar to the concept of \emph{partial functions} \textendash{}
+applied to types
+
+
+\subsection{Motivation for type classes II: Partial functions on types}
+
+Functions can be \textbf{total} or \textbf{partial}
+
+Total function: has a result for all argument values
+
+Partial function: has \emph{no result} for \emph{some} argument values
+
+Also, functions can be, in principle, \{from/to\} \{values/types\}:
+\begin{center}
+\begin{tabular}{|c|c|c|}
+\hline 
+function: & from value & from type\tabularnewline
+\hline 
+\hline 
+to value & \texttt{\textcolor{blue}{\footnotesize{}def f(x:\ Int):\ Int}} & \texttt{\textcolor{blue}{\footnotesize{}def point{[}A{]}: A $\Rightarrow$
+List{[}A{]}}}\tabularnewline
+\hline 
+to type & \emph{dependent type} & \texttt{\textcolor{blue}{\footnotesize{}type MyData{[}A{]} = Either{[}Int,
+A{]}}}\tabularnewline
+\hline 
+\end{tabular}
+\par\end{center}
+
+Evaluation: value-to-value \textendash{} run time, type-to-value \textendash{}
+compile time
+
+if we use type casts, type-to-value can become run-time (\emph{yuck!})
+\begin{center}
+\begin{tabular}{|c|c|c|}
+\hline 
+partial function: &  value-level (PVVF) & from type (PTVF)\tabularnewline
+\hline 
+\hline 
+example: & \texttt{\textcolor{blue}{\footnotesize{}\{ case Some(x) $\Rightarrow$
+x-1 \}}} & \texttt{\textcolor{blue}{\footnotesize{}implicitly{[}T{]}}}\tabularnewline
+\hline 
+when misapplied: & exception at run time & error at compile time\tabularnewline
+\hline 
+\end{tabular}
+\par\end{center}
+
+Type classes provide a systematic way of managing PTVFs
+
+we can apply a PTVF to type \texttt{\textcolor{blue}{\footnotesize{}T}}
+if \texttt{\textcolor{blue}{\footnotesize{}T}} ``belongs to a certain
+type class''
+
+
+\subsection{Example of using value-level PFs: The caveats}
+
+Filter a \texttt{\textcolor{blue}{\footnotesize{}Seq{[}Either{[}Int,
+Boolean{]}{]}}}, then apply \texttt{\textcolor{blue}{\footnotesize{}map}}
+with a PF:
+
+\textcolor{blue}{\footnotesize{}val s: Seq{[}Int{]} = Seq( Left(1),
+Right(true), Left(2) )}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}  .filter(\_.isLeft) }\textcolor{gray}{\footnotesize{}//
+result here is still of type }\textcolor{blue}{\footnotesize{}Seq{[}Either{[}...{]}{]}}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}  .map \{ case Left(x) $\Rightarrow$
+x \} }\textcolor{gray}{\footnotesize{}// result is of type }\textcolor{blue}{\footnotesize{}Seq{[}Int{]}}\textcolor{gray}{\footnotesize{}
+but unsafe}{\footnotesize\par}
+
+``We know'' it is okay to apply this PF here...
+
+but the types do not show this, \textendash{} compile-time checking
+doesn't help
+
+if refactored, the code may become wrong and break \emph{at run time}
+
+The type-safe version uses \texttt{\textcolor{blue}{\footnotesize{}.collect}}
+instead of \texttt{\textcolor{blue}{\footnotesize{}.filter().map()}}:
+
+\textcolor{blue}{\footnotesize{}val s: Seq{[}Int{]} = Seq( Left(1),
+Right(true), Left(2) )}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}  .collect \{ case Left(x) $\Rightarrow$
+x \}}\textcolor{gray}{\footnotesize{}  // result is safe, of type
+}\textcolor{blue}{\footnotesize{}Seq{[}Int{]}}{\footnotesize\par}
+
+PFs are only safe in certain places, such as within \texttt{\textcolor{blue}{\footnotesize{}.collect()}}{\footnotesize\par}
+
+make functions total: either add code, or use \emph{more restrictive
+types}
+
+e.g.\ types such as ``non-empty list'', ``positive number'',
+\texttt{\textcolor{blue}{\footnotesize{}Some{[}T{]}}}, etc.
+
+\textcolor{blue}{\footnotesize{}def f(xs: NonEmptyList{[}Int{]}) =
+\{}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}  val h = xs.head}\textcolor{gray}{\footnotesize{}
+ // safe and checked at compile time}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}\}}{\footnotesize\par}
+
+Can we restrict the \emph{type} \emph{parameter(s)} of a PTVF to a
+subset of types?
+
+
+\subsection{Managing PTFs by hand I: Using GADTs}
+
+PTTFs: Partial Type-to-Type Functions
+
+A type constructor that accepts only certain types as parameters:
+
+\textcolor{blue}{\footnotesize{}sealed trait }\texttt{\textcolor{blue}{\footnotesize{}MyTC}}\textcolor{blue}{\footnotesize{}{[}A{]}
+}\textcolor{gray}{\footnotesize{}// ``sealed'' GADT \textendash{}
+user code can't add cases}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}final case class Case1(d: Double)
+extends }\texttt{\textcolor{blue}{\footnotesize{}MyTC}}\textcolor{blue}{\footnotesize{}{[}Int{]}}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}final case class Case2() extends }\texttt{\textcolor{blue}{\footnotesize{}MyTC}}\textcolor{blue}{\footnotesize{}{[}String{]}}\textcolor{gray}{\footnotesize{}
+// whatever}{\footnotesize\par}
+
+It looks like we have defined \texttt{\textcolor{blue}{\footnotesize{}MyTC{[}}}\textcolor{blue}{\footnotesize{}A}\texttt{\textcolor{blue}{\footnotesize{}{]}}}
+for any type \textcolor{blue}{\footnotesize{}A} ...
+
+actually, we can only ever create values of \texttt{\textcolor{blue}{\footnotesize{}MyTC{[}Int{]}}}
+or \texttt{\textcolor{blue}{\footnotesize{}MyTC{[}String{]}}}{\footnotesize\par}
+
+see example code
+
+$\text{MyTC}^{A}$ is a PTTF because its values exist only for $A\in\left\{ \text{Int};\,\text{String}\right\} $
+
+The \textbf{type domain} $\left\{ \text{Int};\,\text{String}\right\} $
+is defined \emph{at compile time}
+
+Note: $\text{MyTC}^{A}$ cannot be a functor since it is not defined
+for all types $A$
+
+When to use GADTs:
+
+for domain modeling (e.g.\ queries with a fixed set of result types)
+
+for DSLs that represent typed expressions
+
+Alternatively, a PTTF can be a \texttt{\textcolor{blue}{\footnotesize{}trait}}
+with some implementation code
+
+
+\subsection{Managing PTFs by hand II: Using OO method overriding}
+
+PTVFs: Partial Type-to-Value Functions \textendash{} the object-oriented
+way
+
+A trait with \texttt{\textcolor{blue}{\footnotesize{}def}} methods
+that are overridden:
+
+\textcolor{blue}{\footnotesize{}sealed trait HasPlus{[}A{]} \{}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}  def plus(a1: A, a2: A): A}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}\}}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}final case class CaseInt() extends
+HasPlus{[}Int{]} \{}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}  override def plus(a1: Int, a2: Int):
+Int = a1 + a2}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}\}}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}final case class CaseString() extends
+HasPlus{[}String{]} \{}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}  override def plus(a1: String, a2:
+String): String = a1 + a2}{\footnotesize\par}
+
+\textcolor{blue}{\footnotesize{}\}}{\footnotesize\par}
+
+\emph{Similar} to having defined \texttt{\textcolor{blue}{\footnotesize{}plus{[}A{]}}}
+for $A\in\left\{ \text{Int};\,\text{String}\right\} $
+
+Limitations:
+
+We can only call \texttt{\textcolor{blue}{\footnotesize{}plus() }}via
+a value of type \texttt{\textcolor{blue}{\footnotesize{}HasPlus{[}A{]}}}
+\ 
+
+All PTVFs must be declared up front in the trait
+
+Not extensible \textendash{} cannot add new PTVFs later
+
+Not compositional \textendash{} cannot use this in other PTVFs defined
+later
+
+
+\subsection{Managing PTFs by hand III: ``Type Evidence'' arguments}
+
+PTVFs: Partial Type-to-Value Functions \textendash{} the general case
+
+To define a function \texttt{\textcolor{blue}{\footnotesize{}func{[}A{]}(...)}}
+only for certain types \texttt{\textcolor{blue}{\footnotesize{}A}}:
+
+create a PTTF defined only for the relevant types \texttt{\textcolor{blue}{\footnotesize{}A}},
+e.g.\ \texttt{\textcolor{blue}{\footnotesize{}IsGood{[}A{]}}} \ 
+
+create some values of types \texttt{\textcolor{blue}{\footnotesize{}IsGood{[}A{]}}}
+for relevant types \texttt{\textcolor{blue}{\footnotesize{}A}} as
+needed
+
+add an \emph{extra argument} \texttt{\textcolor{blue}{\footnotesize{}ev:\ IsGood{[}A{]}}}
+(\textbf{type evidence}) to \texttt{\textcolor{blue}{\footnotesize{}func{[}A{]}(...)}}\ 
+
+What we gained:
+
+it is now impossible to call \texttt{\textcolor{blue}{\footnotesize{}func{[}A{]}}}
+with an unsupported type \texttt{\textcolor{blue}{\footnotesize{}A}}{\footnotesize\par}
+
+trying to do so will fail \emph{at compile time} \ \textendash{}
+TE values won't type-check
+
+new supported types can be added in user code if \texttt{\textcolor{blue}{\footnotesize{}IsGood}}
+is not \texttt{\textcolor{blue}{\footnotesize{}sealed}}{\footnotesize\par}
+
+The cost:
+
+all calls to \texttt{\textcolor{blue}{\footnotesize{}func{[}A{]}(args)}}
+will now become \texttt{\textcolor{blue}{\footnotesize{}func{[}A{]}(args,
+ev)}}{\footnotesize\par}
+
+one TE value \texttt{\textcolor{blue}{\footnotesize{}ev}} needs to
+be created for \emph{each} supported type \texttt{\textcolor{blue}{\footnotesize{}A}}\ 
+
+we now need to keep passing all these TE values around the code
+
+Mitigate these issues in Scala by using \texttt{\textcolor{blue}{\footnotesize{}implicit}}
+values:
+
+TE arguments are explicit only at \texttt{\textcolor{blue}{\footnotesize{}func}}
+declaration site
+
+once defined as \texttt{\textcolor{blue}{\footnotesize{}implicit}},
+TE values are passed around invisibly
+
+new \texttt{\textcolor{blue}{\footnotesize{}implicit}} values can
+be built up automatically from previous ones
+
+
+\subsection{Scala's mechanism of ``\texttt{implicit} values''}
+
+Implicit values are:
+
+declared as \texttt{\textcolor{blue}{\footnotesize{}implicit val x:\ SomeType
+= ...}}{\footnotesize\par}
+
+also have \texttt{\textcolor{blue}{\footnotesize{}implicit def f{[}T{]}(...)\ =
+...}} and \texttt{\textcolor{blue}{\footnotesize{}implicit class(...)}}{\footnotesize\par}
+
+automatically passed into functions that declare extra arguments as
+
+\texttt{\textcolor{blue}{\footnotesize{}def f(args...)(implicit x: SomeType)
+= ...}}{\footnotesize\par}
+
+searched in local scope, imports, companion objects, parent classes
+
+having $\geq2$ \texttt{\textcolor{blue}{\footnotesize{}implicit}}
+values of the same type is a compile-time error!
+
+Special short syntax for declaring implicit TE arguments in a PTVF:
+
+\texttt{\textcolor{blue}{\footnotesize{}def func{[}A: TC1, B: TC2{]}(args...)
+= ...}}{\footnotesize\par}
+
+This is entirely equivalent to this longer code:
+
+\texttt{\textcolor{blue}{\footnotesize{}def func{[}A, B{]}(args...)(implicit
+evA: TC1{[}A{]}, evB: TC2{[}B{]})= ...}}{\footnotesize\par}
+
+standard library has \texttt{\textcolor{blue}{\footnotesize{}def implicitly{[}A{]}(implicit
+x:\ A):\ A = x}}{\footnotesize\par}
+
+We still need to:
+
+declare \texttt{\textcolor{blue}{\footnotesize{}MyTypeClass{[}A{]}}}
+as a PTTF elsewhere
+
+create TE values of various types and declare them as \texttt{\textcolor{blue}{\footnotesize{}implicit}}
+\ 
+
+
+\subsection{Type classes I}
+
+The general definition
+
+A \textbf{type class} is a set of PTVFs that all have the same type
+domain
+
+In terms of specific code to be written, a type class is:
+
+a PTTF, e.g.\ \texttt{\textcolor{blue}{\footnotesize{}MyTypeClass{[}T{]}}}
+with some code that creates TE values, \emph{and}
+
+the desired PTVFs that use this PTTF to define their type domain
+
+for many important use cases, the PTVFs must also satisfy certain
+laws
+
+A type \texttt{\textcolor{blue}{\footnotesize{}T}} ``\textbf{belongs
+to} the type class \texttt{\textcolor{blue}{\footnotesize{}MyTypeClass}}''
+if a TE value exists
+
+i.e.\ if \emph{some} value of type \texttt{\textcolor{blue}{\footnotesize{}MyTypeClass{[}T{]}}}
+can be found
+
+A function \texttt{\textcolor{blue}{\footnotesize{}func{[}T{]}}} ``\textbf{requires}
+the type class \texttt{\textcolor{blue}{\footnotesize{}MyTypeClass}}
+for \texttt{\textcolor{blue}{\footnotesize{}T}}'' if one of \texttt{\textcolor{blue}{\footnotesize{}func}}'s
+arguments is a value of PTTF-constructed type \texttt{\textcolor{blue}{\footnotesize{}MyTypeClass{[}T{]}}}
+\ 
+
+that argument is the \textbf{type class instance} for the type parameter
+\texttt{\textcolor{blue}{\footnotesize{}T}}{\footnotesize\par}
+
+this \textbf{constrains} the type parameter \texttt{\textcolor{blue}{\footnotesize{}T}}
+to \textbf{belong to} the type class
+
+this is how we know that \texttt{\textcolor{blue}{\footnotesize{}func{[}T{]}}}
+is a PTVF
+
+
+\subsection{Type classes II}
+
+Implementation in Scala
+
+A type class is typically implemented as:
+
+a trait with a type parameter, e.g.\ \texttt{\textcolor{blue}{\footnotesize{}trait
+MyTC{[}T{]}}}{\footnotesize\par}
+
+code that creates values of type \texttt{\textcolor{blue}{\footnotesize{}MyTC{[}T{]}}}
+for various \texttt{\textcolor{blue}{\footnotesize{}T}}{\footnotesize\par}
+
+these values are declared as \texttt{\textcolor{blue}{\footnotesize{}implicit}}
+and made available via imports or in the companion objects for the
+specific types \texttt{\textcolor{blue}{\footnotesize{}T}}{\footnotesize\par}
+
+some functions with implicit argument(s) of type \texttt{\textcolor{blue}{\footnotesize{}MyTC{[}T{]}}}{\footnotesize\par}
+
+these functions are usually \texttt{\textcolor{blue}{\footnotesize{}def}}
+methods in a trait, but don't have to be
+
+laws for these functions may need to be enforced by property tests
+
+A TE value should carry all information the PTVFs need about the type
+\texttt{\textcolor{blue}{\footnotesize{}T}}{\footnotesize\par}
+
+usually, the trait \texttt{\textcolor{blue}{\footnotesize{}MyTC{[}T{]}}}
+contains all the PTVFs as \texttt{\textcolor{blue}{\footnotesize{}def}}
+methods
+
+in simpler cases, TE can be a data type (not a trait with \texttt{\textcolor{blue}{\footnotesize{}def}}
+methods)
+
+a trait with \texttt{\textcolor{blue}{\footnotesize{}def}} methods
+is necessary for \emph{higher-order} type functions
+
+additional PTVFs (with unchanged PTTF) can be added later
+
+no need to modify the code of \texttt{\textcolor{blue}{\footnotesize{}MyTC{[}T{]}}}
+if the type domain is unchanged
+
+can combine with other PTTFs/PTVFs defined later
+
+See example code
+
+
+\subsection{Examples of type classes I}
+
+Some simple PTFs and their use cases
+
+A type \texttt{\textcolor{blue}{\footnotesize{}T}} is a \textbf{semigroup}
+if it has an \emph{associative} binary operation
+
+\texttt{\textcolor{blue}{\footnotesize{}def op{[}T{]}(x: T, y: T): T}}{\footnotesize\par}
+
+a bare-bones operation, no inverse \textendash{} just ``can combine'' 
+
+A type \texttt{\textcolor{blue}{\footnotesize{}T}} is \textbf{pointed}
+if there exists a function \texttt{\textcolor{blue}{\footnotesize{}point{[}T{]}:\ T}}{\footnotesize\par}
+
+This is a special, somehow ``naturally'' selected value of that
+type
+
+Examples: \texttt{\textcolor{blue}{\footnotesize{}0:\ Int}}; \texttt{\textcolor{blue}{\footnotesize{}\textquotedbl\textquotedbl :\ String}};
+\texttt{\textcolor{blue}{\footnotesize{}identity{[}A{]}:\ A $\Rightarrow$
+A}}{\footnotesize\par}
+
+A type \texttt{\textcolor{blue}{\footnotesize{}T}} is a \textbf{monoid}
+if there exist functions
+
+\texttt{\textcolor{blue}{\footnotesize{}def empty{[}T{]}: T}}{\footnotesize\par}
+
+\texttt{\textcolor{blue}{\footnotesize{}def combine{[}T{]}(x: T, y: T): T}}{\footnotesize\par}
+
+such that the usual algebraic laws hold:
+
+\texttt{\textcolor{blue}{\footnotesize{}combine}} is associative
+
+\texttt{\textcolor{black}{\footnotesize{}$\forall x:\text{combine}(\text{empty},x)=\text{combine}(x,\text{empty})=x$ }}{\footnotesize\par}
+
+Monoids are an abstraction for any sort of data aggregation
+
+See example code for implementing the \texttt{\textcolor{blue}{\footnotesize{}Monoid}}
+type class:
+
+by using a case class as a PTTF (instance from scratch)
+
+by assuming \texttt{\textcolor{blue}{\footnotesize{}Pointed}} and
+\texttt{\textcolor{blue}{\footnotesize{}Semigroup}} (``derived''
+instance)
+
+
+\subsection{Examples of type classes II}
+
+Higher-order PTFs
+
+A type constructor $F^{A}$ is a functor if it has a \texttt{\textcolor{blue}{\footnotesize{}map}}
+operation
+
+or, equivalently, \texttt{\textcolor{blue}{\footnotesize{}fmap}} 
+
+that satisfies the functor laws (identity law, composition law)
+
+We would like to write a generic function that tests the functor laws
+
+\texttt{\textcolor{blue}{\footnotesize{}def checkFunctorLaws{[}F{[}\_{]},
+A, B, C{]}(): Assertion = ???}}{\footnotesize\par}
+
+Need to get access to the function \texttt{\textcolor{blue}{\footnotesize{}map}}
+defined for the given \texttt{\textcolor{blue}{\footnotesize{}F}}{\footnotesize\par}
+
+We treat \texttt{\textcolor{blue}{\footnotesize{}map}} as a PTVF whose
+type domain is all functors \texttt{\textcolor{blue}{\footnotesize{}F}}:
+
+\texttt{\textcolor{blue}{\footnotesize{}def map{[}F{[}\_{]}, A, B{]}(fa: F{[}A{]},
+f: A $\Rightarrow$ B): F{[}B{]}}}{\footnotesize\par}
+
+We constrain \texttt{\textcolor{blue}{\footnotesize{}F}} to belong
+to the \texttt{\textcolor{blue}{\footnotesize{}Functor}} type class
+
+by adding \texttt{\textcolor{blue}{\footnotesize{}implicit ev:\ Functor{[}F{]}}}
+as extra argument to \texttt{\textcolor{blue}{\footnotesize{}map}}{\footnotesize\par}
+
+note: \texttt{\textcolor{blue}{\footnotesize{}Functor}} is a \emph{higher-order}
+PTTF \textendash{} its type argument is \texttt{\textcolor{blue}{\footnotesize{}F{[}\_{]}}}{\footnotesize\par}
+
+See test code for implementation and functor laws
+
+
+\subsection{Overview: Types and kinds}
+
+Compare value-to-value functions (VVFs) vs.\ type-to-value functions:
+
+the \textbf{domain} of a VVF is the set of admissible argument \emph{values}
+
+a ``value domain'' (subset of values) is called a \textbf{type}
+
+the VVF is applied safely only to argument values of the right \textbf{type}
+
+\texttt{\textcolor{blue}{\footnotesize{}def f(x: Option{[}Int{]})
+= ...; f(y);}}{\footnotesize\par}
+
+the \textbf{type domain} of a PTVF is the set of admissible argument
+\emph{types}
+
+a ``type domain'' (subset of types) is called a \textbf{kind}
+
+the PTVF is applied safely only to type arguments of the right \textbf{kind}
+
+\texttt{\textcolor{blue}{\footnotesize{}def f{[}T: MyTypeClass{]}(args...)
+= ...; f{[}A{]}(args);}}{\footnotesize\par}
+
+In both cases, the function call's safety is guaranteed \emph{at compile
+time}
+
+Kinds are the ``type system for types''
+
+a type class \texttt{\textcolor{blue}{\footnotesize{}MyTypeClass}}
+defines a new kind (as a subset of types)
+
+suggested \textbf{kind} notation:{\footnotesize{} $(*:\text{MyTypeClass})$}{\footnotesize\par}
+
+another existing kind is the \textbf{type function} kind (notation:
+$*\rightarrow*$)
+
+in \texttt{\textcolor{blue}{\footnotesize{}F{[}T{]}}}, the \texttt{\textcolor{blue}{\footnotesize{}F}}
+and the \texttt{\textcolor{blue}{\footnotesize{}T}} are types of different
+\textbf{kinds} ($*\rightarrow*$ and $*$ resp.)
+
+define \texttt{\textcolor{blue}{\footnotesize{}type Ap{[}F{[}\_{]},
+T{]} = F{[}T{]}}}, then wrong kinds will fail in \texttt{\textcolor{blue}{\footnotesize{}Ap{[}A,
+B{]}}}{\footnotesize\par}
+
+suggested \textbf{kind} notation:{\footnotesize{} $\text{Ap}:(*\rightarrow*,\,*)\rightarrow*$
+}(``higher-kinded type'')
+
+See test code
+
+
+\subsection{Scala's ``implicit method'' syntax for PTVFs}
+
+Two sorts of available syntax for Scala functions:
+
+as in ordinary math: \texttt{\textcolor{blue}{\footnotesize{}func(x,
+y)}} or \texttt{\textcolor{blue}{\footnotesize{}func(x, y)(z)}} etc.
+
+as ``method'': \texttt{\textcolor{blue}{\footnotesize{}x.func(y)}}
+or equivalently \texttt{\textcolor{blue}{\footnotesize{}x func y}}
+\ 
+
+this is similar to \texttt{\textcolor{blue}{\footnotesize{}func(x)(y)}}
+but is implemented differently
+
+It is often convenient to use functions syntactically as methods:
+
+\texttt{\textcolor{blue}{\footnotesize{}def +++{[}T: HasPlusPlusPlus{]}(t: T,
+arg: ...) = ...}}{\footnotesize\par}
+
+\texttt{\textcolor{blue}{\footnotesize{}val t: T = ...}}{\footnotesize\par}
+
+\texttt{\textcolor{blue}{\footnotesize{}+++(t, arg) }}\textcolor{gray}{\footnotesize{}//
+that's how we have to call this function}{\footnotesize\par}
+
+\textcolor{gray}{\footnotesize{}// but instead we want to be able
+to write t +++ arg}{\footnotesize\par}
+
+Implementing the ``implicit method syntax'' for a PTVF \texttt{\textcolor{blue}{\footnotesize{}func}}:
+
+declare \texttt{\textcolor{blue}{\footnotesize{}func}} as a method
+on a new trait or class, say \texttt{\textcolor{blue}{\footnotesize{}MyTCSyntax{[}T{]}}}{\footnotesize\par}
+
+declare an \emph{implicit conversion }function from \texttt{\textcolor{blue}{\footnotesize{}T}}
+to \texttt{\textcolor{blue}{\footnotesize{}MyTCSyntax{[}T{]}}}{\footnotesize\par}
+
+to make the code shorter, use an \texttt{\textcolor{blue}{\footnotesize{}implicit
+class}}{\footnotesize\par}
+
+see example code
+
+What we gained:
+
+the PTVF appears as a method \emph{only} on values of the relevant
+types
+
+the new syntax is defined automatically on \emph{all} the relevant
+types \texttt{\textcolor{blue}{\footnotesize{}T}}{\footnotesize\par}
+
+
+\subsection{Worked examples}
+
+Define a PTVF \texttt{\textcolor{blue}{\footnotesize{}def bitsize{[}T{]}
+= ...}} such that \texttt{\textcolor{blue}{\footnotesize{}bitsize{[}Int{]}}}
+returns $32$ and \texttt{\textcolor{blue}{\footnotesize{}bitsize{[}Long{]}}}
+returns $64$; otherwise \texttt{\textcolor{blue}{\footnotesize{}bitsize{[}T{]}}}
+is undefined
+
+Define a monoid instance for the type $1+\left(\text{String}\Rightarrow\text{String}\right)$
+
+Assuming that $A$ and $B$ are monoids, define monoid instance for
+$A\times B$
+
+Show: If $A$ is a monoid and $B$ is a semigroup then $A+B$ is a
+monoid
+
+Define a functor instance for \texttt{\textcolor{blue}{\footnotesize{}type
+F{[}T{]} = Seq{[}Try{[}T{]}{]}}}{\footnotesize\par}
+
+Define a Cats' \texttt{\textcolor{blue}{\footnotesize{}Bifunctor}}
+instance for $Q^{X,Y}\equiv X+X\times Y$
+
+Define a \texttt{\textcolor{blue}{\footnotesize{}ContraFunctor}} type
+class having \texttt{\textcolor{blue}{\footnotesize{}contrafmap}}:
+
+\texttt{\textcolor{blue}{\footnotesize{}def contrafmap{[}A, B{]}(f: B
+$\Rightarrow$ A): C{[}A{]} $\Rightarrow$ C{[}B{]}}}{\footnotesize\par}
+
+Define a \texttt{\textcolor{blue}{\footnotesize{}ContraFunctor}} instance
+for type constructor $C^{A}\equiv A\Rightarrow\text{Int}$
+
+Define functor instance for recursive type $Q^{A}\equiv\left(\text{Int}\Rightarrow A\right)+\text{Int}+Q^{A}$
+
+{*} If $F^{A}$ and $G^{A}$ are functors, define functor instance
+for $F^{A}+G^{A}$
+
+
+\subsection{Exercises}
+
+Define a PTVF \texttt{\textcolor{blue}{\footnotesize{}def isLong{[}T{]}:\ Boolean}}
+that returns \texttt{\textcolor{blue}{\footnotesize{}true}} for \texttt{\textcolor{blue}{\footnotesize{}Long}}
+and \texttt{\textcolor{blue}{\footnotesize{}Double}}; returns \texttt{\textcolor{blue}{\footnotesize{}false}}
+for \texttt{\textcolor{blue}{\footnotesize{}Int}}, \texttt{\textcolor{blue}{\footnotesize{}Short}},
+and \texttt{\textcolor{blue}{\footnotesize{}Float}}; otherwise undefined
+
+Define a monoid instance for the type $\text{String}\times(1+\text{Int})$
+
+If $A$ is a monoid and $R$ any type, define monoid instance for
+$R\Rightarrow A$
+
+Show: If \texttt{\textcolor{blue}{\footnotesize{}S}} is a semigroup
+then \texttt{\textcolor{blue}{\footnotesize{}Option{[}S{]}}} is a
+monoid
+
+Define a functor instance for \texttt{\textcolor{blue}{\footnotesize{}type
+F{[}T{]} = Future{[}Seq{[}T{]}{]}}}{\footnotesize\par}
+
+Define a Cats' \texttt{\textcolor{blue}{\footnotesize{}Bifunctor}}
+instance for $B^{X,Y}\equiv\left(\text{Int}\Rightarrow X\right)+Y\times Y$
+
+Define a \texttt{\textcolor{blue}{\footnotesize{}ProFunctor}} type
+class having \texttt{\textcolor{blue}{\footnotesize{}dimap}}:
+
+\texttt{\textcolor{blue}{\footnotesize{}def dimap{[}A, B{]}(f: A $\Rightarrow$
+B, g: B $\Rightarrow$ A): F{[}A{]} $\Rightarrow$ F{[}B{]}}}{\footnotesize\par}
+
+Define a \texttt{\textcolor{blue}{\footnotesize{}ProFunctor}} instance
+for $P^{A}\equiv A\Rightarrow\left(\text{Int}\times A\right)$
+
+Define a functor instance for recursive type $Q^{A}\equiv\text{String}+A\times Q^{A}$
+
+{*} If $F^{A}$ and $G^{A}$ are functors, define functor instance
+for $F^{A}\times G^{A}$ 
+
+{*} Define a functor instance for $F^{A}\Rightarrow G^{A}$ where
+$F^{A}$ is a contrafunctor (use Cats' \texttt{\textcolor{blue}{\footnotesize{}Contravariant}}
+type class for $F^{A}$) and $G^{A}$ is a functor
+
+
+\subsection{Further directions}
+
+What problems can we solve now?
+
+Define arbitrary PTTFs and use them to define type classes (PTVFs) 
+
+Define them together or separately, combine them at will
+
+Use the Cats library to define instances for standard type classes
+
+Derive type class instances automatically from previous ones
+
+Reason about higher-order type functions, types, and kinds as necessary
+
+What problems cannot be solved with these tools?
+
+Automatically derive type class instances for polynomial data types
+
+see \href{https://github.com/underscoreio/shapeless-guide}{The guide to ``shapeless''},
+chapter 3
+
+Derive a recursive type generically from an arbitrary type function
+
+Given a type function \texttt{\textcolor{blue}{\footnotesize{}F{[}\_{]}}},
+define a recursive type \texttt{\textcolor{blue}{\footnotesize{}R}}
+via \texttt{\textcolor{blue}{\footnotesize{}R = F{[}R{]}}}{\footnotesize\par}
+
+This \texttt{\textcolor{blue}{\footnotesize{}R}} will be a function
+of \texttt{\textcolor{blue}{\footnotesize{}F}}; denote that type function
+by \texttt{\textcolor{blue}{\footnotesize{}Y{[}F{[}\_{]}{]}}}{\footnotesize\par}
+
+This \texttt{\textcolor{blue}{\footnotesize{}Y}} must be defined by
+a type equation like this,
+
+\texttt{\textcolor{blue}{\footnotesize{}type Y{[}F{[}\_{]}{]} = F{[}Y{[}F{]}{]}}}\textcolor{gray}{\footnotesize{}
+// does not compile (``cyclic type'')}{\footnotesize\par}
+
+Automatically derive type class instances for such recursive types
+
+That requires type-level recursion (type-level fixpoints), see \href{https://github.com/slamdata/matryoshka}{matryoshka}
+
+This and other advanced topics are found in \href{https://apocalisp.wordpress.com/2010/06/08/type-level-programming-in-scala/}{this blog post from 2010}
+
+\section{Combining typeclasses}
+
+\section{Inheritance}
+
+\section{Functional dependencies}
+
+\section{Discussion}
+
+\begin{comment}
+this tutorial is about typeclasses and type level functions to motivate
+why we want to talk about this let's consider what happens if we would
+like to implement the sum function generically so that the same implementation
+code will work for sequence of integers for sequence of doubles and
+so on if we try to do that we find that it doesn't quite work we cannot
+generalize the sum function like this with a type parameter T and
+an argument of type sequence of T because there is no way for us to
+sum or to add values of type T where T is unknown it's arbitrary unknown
+type obviously the sum function can only work for types T that in
+some sense or summable another very similar situation happens if we
+wanted for instance to define the F map function for factors that
+already define the map function as we know F map is equivalent to
+map so for each factor somebody defined already the map function we
+would like to define F map for all of them at once by in the same
+generic code but we cannot generalize F map to arbitrary type constructors
+F here is what we would have to write suppose that we tried we would
+have to put F as a type parameter F being the type constructor of
+the function just as an aside in Scala this syntax is necessary if
+you want to put a type parameter that is itself a type construction
+you can do that just by using this syntax so if we try to write F
+map like this we will have F me up with type parameters and we cannot
+write this code because F in here is an arbitrary type constructor
+parameter and there's no way for us to get the map function for that
+F we don't even know if it exists just like here there's no way for
+us to get the addition operation with some more plus or something
+for the type T and just like in that case the F map could work only
+for certain type constructors F namely for those that are factors
+so our desire to write code more generically leads us to the need
+to define functions whose type arguments for example the T and F are
+not just arbitrary types but there are types that are required to
+have certain properties or to belong to a certain subset of possible
+types here for instance it will be integer double long and so on maybe
+others string could be considered as well and here will be the filter
+types or rather to be precise the factor type constructors that should
+so somehow we should require require that this type parameter in the
+F map implementation is not just any type but it is a sub is belongs
+to a subset a certain subset of possible types which we also have
+to define somehow so if we are able to do that which is the whole
+focus of this tutorial if we're able to do that then we can use known
+properties of this type parameters in implementation of these functions
+also we would like to be able to add new supported types whenever
+it's needed so integer double maybe a library will define this property
+for the type T but we want to add new ones later so wanted to be extensible
+so this is our goal now the first step towards solving it and we will
+be solving this systematically the first step is to realize that this
+is similar to the concept of partial functions except that applied
+to types let me then look at what partial functions are generally
+functions can be total or partial the total function always has a
+result for any argument value the partial function sometimes has no
+result for some argument values it does have a result for others it
+does not an example of a total function would be an integer function
+taking an integer argument with returning that integer multiplied
+by 3 so for any input integer you always have an output integer the
+example of a partial function will be real valued square root it has
+no result for negative arguments no real valued square root from negative
+arguments but it does have a result for non-negative arguments so
+that's a partial function partial function has a domain of its definition
+which is smaller than the all values of that type now we should also
+consider that here we have type parameters so what does it mean that
+we have a function with type parameters it's like a function with
+argument is a type so let's consider functions both from value and
+from type to values in two types and that is the most most general
+kind of situation so we will have this table of all possible functions
+function from value or from type and to value and to type so the function
+fill value to value were value level function or value to value function
+that's just an ordinary function like that it takes a value argument
+of type integer let's say and returns a value of type integer so that's
+a value to value function a function from type to value could be visualized
+like this so it has a type parameter and the result is a value of
+this type now this type depends on the type parameter so first you
+have to give it the type parameter then it knows what type it value
+needs to return and then it creates somehow that value and returns
+it now one important observation here is that these functions are
+the same kind the same sort this function has a type parameter and
+then you can rewrite this in a different syntax by writing some column
+sequence t rlt which will be quite similar to this just a different
+syntax so just like in the example here first you have to get the
+type parameter T then you know which types you're taking in this function
+so the function some can be considered as a function film type from
+t2 value which is a function from sequence T 2 T so this is a value
+which is itself a function on a function at the value level but that's
+a value right so functions at value level or values sequence T 2 T
+where T is already fixed fixed type this type parameter finally we
+also have functions from type 2 type for example if we define this
+type then my data is a function from type 2 type so later in the code
+you could say my data of string and that would be the same as evaluating
+this function substituting string instead of a and the result would
+be either of int and string and there also is a function from value
+to type in principle now in Scala it would be quite hard to come up
+with useful examples of this sort because these are actually dependent
+types so this is this kind of function is called a dependent type
+which means that it's a type that depends on a value and that is not
+very well supported in Scala or in Haskell for that matter so there
+are more advanced experimental aim which is like a dress or Agda not
+have better support for dependent types so we will not talk about
+dependent types here our concern will be mostly this part of the table
+functions from type either from type to value or from type 2 type
+now consider how these functions are being evaluated the value to
+value functions are evaluated at runtime type 2 value functions are
+evaluated at compile time because you cannot really call these functions
+without specifying a type parameter and that is evaluated at compile
+time the compiler will know that you are calling this function with
+string here say instead of a and that would be known at compile time
+as you write your code one caveat here is that if you use type casts
+in the code then you could make a run time evaluation based on types
+so type T value functions can become runtime which is a problem because
+it is possible to have a bug and a bug in a type 2 value or type 2
+type function at compile time that's okay because you you will find
+it before you run your program at runtime it's not okay you already
+deployed your program it's running and three months later it crashes
+because of some bug that's not a good outcome at all so we will avoid
+using type casts or any kind of runtime computation with types we
+want to keep all type computations compile time in this way they are
+safe consider now partial functions so these so far we just considered
+any kind of functions here of all kinds value to value value to type
+type to a value type to type consider now partial functions so partial
+value to value function is something like this it's a partial function
+that takes an argument if the argument here is an option that is not
+empty when it returns the value inside this option but if the argument
+of this function were the empty option which is to say the none value
+then there is no case to match that so this function cannot process
+that argument only so this function considered as a functional options
+is a partial function if you apply this to the room kind of argument
+you get an exception at runtime consider now functions from types
+of partial type the value function is a function that takes a type
+argument and it only works for certain types for certainty types T
+in the view call this function so this is an example of this would
+be this function which I will talk about it later but basically the
+idea is that it's a function that has a type parameter it returns
+a value and when you call this function with the wrong type parameter
+it's an error at compile time otherwise it works so that's a partial
+function at type two value level so partial type two value function
+is what we would like to have like to have those functions and the
+goal of this tutorial is to explain systematically how to create and
+manage partial type two value functions typeclasses is the mechanism
+for doing that and the idea roughly speaking is that the type T should
+belong to a certain typeclass or a certain subset of types or a certain
+type of domain there are certain kind of types and then you can apply
+that partial type to value function to that type if we are able to
+implement this then these problems would be solved we will just say
+well some is not just total type the value function is a partial type
+the value function it's only defined on types T that belong to the
+correct kind or typeclass which are summable in some sense and of
+course this code it won't work it has to be done honest it's like
+a different way which we will find out how to do in a systematic manner
+before we do that let's look at an example of using value level partial
+functions and let's see what's the issue there so imagine we have
+a situation we have a sequence of either end boolean we want to find
+the {[}Music{]} elements in that sequence that are in the left part
+of the disjunction having an integer and we just get one to get a
+sequence of those integers out of this sequence how do we do that
+well we just say take in a sequence we filter those that are on the
+left which is like this maybe and then we map with this partial function
+now after this step the result is still of type sequence of either
+so now we are applying this partial function to arguments of type
+either which is unsafe what about with a right element and there will
+be nothing to match well actually we know in this case it's okay to
+apply this partial function because we just filtered all the elements
+to be on the left side of the disjunction so we know it's safe however
+the types don't show that it is safe the compile-time checking can
+tell you maybe that there is some problem a warning but certain cases
+will not be matched but it doesn't know it's safe and so if you refactor
+this code in some way but say you put this part in one module in this
+part in another module and then different people start to modify this
+and eventually this condition has changed and it has more complicated
+conditions whatever features we need to implement and finally it's
+not always the left and so the other part of the code is also changed
+in some way and you get a runtime error after some refactoring sometime
+later the type side type safe version of this code does not use filter
+milk and sort of filter map you do collect so collect is basically
+a safe version of filtering only those that fit into this partial
+function and then applying the partial function so partial functions
+in Scala are special a special type and this type has a method to
+decide whether the partial function can apply to us and give an argument
+and so that's what we collect is doing and the result is safe it is
+of type sequence int and there's nothing you can refactor here to
+break the safety of this code so partial functions are safe but only
+in certain places where you take care to encapsulate the possible
+breakage so usually we make functions total we either add more code
+to handle other cases or we use more restrictive types so that we
+know that this is not just an either it's really always left and in
+other cases for instance there types such as non-empty list or positive
+number or or even this this is a subtype of option and if you have
+this than you you know it's not empty so instead of using option you
+use this in a specific function or you use known empty list and sort
+of just list and if you do that you can do it dot head on a non empty
+list and it's always safe and the safety is checked at compile time
+you cannot pass here instead of non empty list just arbitrary list
+so that's how we handle the unsafe team partial functions for value
+level functions so for type level functions we would like to restrict
+the type parameters to some restrictive subset of types so that this
+is safe that's our motivation so let's see how this can be done here
+is the first example of a partial type level function consider this
+data type so this is a disjunction the disjunction is paralysed by
+a type parameter a and has two cases in the one case gives you a my
+type constructor of int and the other case gives you my type constructor
+of string well this is just an artificial example but this could occur
+in some applications now notice we have defined the type constructor
+my TC my type constructor as if it's defined for any parameter a as
+any type a actually in code you can only ever create values either
+of my TC event or of type my DCF string you will never be able to
+define any values of any other type like my TC of bullying or mighty
+sea or anything else only either string or integer there is no other
+case and everything is sealed and final and so there's no way to add
+any more cases let's see how a code looks like for this so here's
+the code if I wanted to pretend that I have a value of type my TC
+of a for arbitrary a I cannot do that I have to create it instantly
+the only way to credit is to use case one or case two neither one
+would work so none of them type checks action for example if I did
+this I mean it may get no no no way I can do anything here I could
+say no this one is my t siient so the only thing that can work here
+is this but I cannot put here a equal to int either I have a parameter
+here or not so you can get rid of this parameter there's no way I
+can use this mighty sea with an arbitrary time frame type round you
+can get a value now I can define types such as this one which looks
+like I'm applying the type level function to int and get a type so
+you see I using this type constructor as as if it were a function
+of types I apply this to type into my data type t1 up out of that
+and this works and then I can use t1 and t2 for example in my code
+and it's all compiles when it works so this is to illustrate but the
+type constructor like my TC is quite similar to a function at type
+level since a functional takes types as arguments and returns types
+just that I have to say type instead of well because it's a type level
+function not a value level function otherwise it's very similar to
+a function so that's why I keep calling this a type 2 type function
+or type the value function because I'm I want to think about these
+type constructors in a general way I don't want to think about them
+in some kind of special magic fashion these are just functions their
+arguments are types the results are types and now I can use my mathematical
+intuition about functions to reason about them now here's a way to
+use this in code so for example x2 is of this type I can match this
+and I get a result so it works now what if I wanted to apply this
+function to a different argument so I am applying it to doing now
+there is no way to create a value of type boolean but the Scala compiler
+doesn't know this so in some sense I consider this function as a function
+that is only defined so it's a type 2 type function my TC that's only
+defined for int or string as type arguments but if I write my TC of
+boolean and I evaluate this it compiles so the compiler doesn't know
+doesn't check but there is no way to create this value but actually
+no code would ever compile it creates this value correctly like this
+for example this won't compile now what I can do is I can force the
+type like this using this construction as instance of which breaks
+type checking its runtime typecast and it's completely breaking the
+type checking there is nothing the compiler will check here the results
+are going to be wrong like this is going to be wrong I can't really
+use this in any useful way in other words it doesn't help if you break
+the type checking type checking is your friend this is to be used
+only in very rare situations when the type system is not strong enough
+not powerful enough to do some extremely complicated things and in
+most cases it's not necessary so this is cheating in terms of type
+checking and even this cheating pretend that I created a value of
+type t3 but actually I have not created such a value I cannot use
+it in the code still there's nothing I can do with this in code that
+would be compiled invented working so this motivates me to consider
+that a function my TC is actually a partial type function it is meaningless
+to apply this function to arguments such as doing the type argument
+such as bullying it's only meaningful to apply to arguments integer
+and string so in other words this type function has a domain type
+domain it is set of types to which it can be applied meaningfully
+and this domain contains only two types int and string so become the
+compiler as we have just seen does not enforce this it does not flag
+it immediately as an error however it does enforce that the values
+of this type only exist for the type parameter within the correct
+domain or the type domain and this type domain is defined at compile
+time and is what I mean by the domain of the partial type 2 type function
+just a side note here the type constructor my TC cannot possibly be
+a factor since it's not defined for all type arguments a factor must
+be a total type 2 type function partial type 2 type functions cannot
+be factors so these kind of types where you have partial type 2 type
+functions and case classes they're called generalized algebraic data
+types or generalized means that these types are not the type parameter
+a there are just specific types so there are some cases when they're
+useful they're useful for domain modeling of certain kinds like for
+example you have some kind of query and the result types can be a
+fixed set of different result types then it's useful to have all these
+possible result types modeled directly via cases in the disjunction
+like this for domain-specific languages representing some kind of
+type expressions in some way then it's also useful these are specific
+problems where people have used GE T's in a useful way so this is
+our first example of a partial type function another way of doing
+this is to have a trait with code now here this is just a data type
+there is no code in here so let's see how that works when you have
+trade with code so that's more the object-oriented way because it
+uses method overriding so we start with the trait that has a method
+the trait has a type parameter as well and there are some case classes
+so it's very similar to the previous slide except the trade has code
+the DEF method the inside and the case class has override that def
+method other than that it's good could be case class just like in
+the previous slide and again you see this class extends heads plus
+with integer time from type parameter and not with an arbitrary type
+parameter and this extends with a string not with arbitrary type parameter
+so just as in the previous slide this defines a partial type 2 type
+function and now this is a function that's only defined for a certain
+a for a either int or string so this code is quite similar to having
+defined a function plus with a type parameter a having this type signature
+except that a must be from this type domain it's not quite the same
+as having defined such a function directly because plus doesn't have
+a type parameter and we can only access it by first creating a value
+of this type and I'm doing that value dot plus so because it's a def
+method there must be the syntax value dot plus another limitation
+is that all the functions support so we see this plus is one of the
+partial type to value functions it's a type to value function which
+is defined only for certain types all of these must be defined up
+front in the code of this trait so if I want plus minus times or divide
+or whatever I have to define all of those as def methods up front
+in this train I cannot later defined further partial type two value
+functions here and also I cannot use this partial type two value function
+in a different one defined later so that is quite a significant limitation
+so this mechanism kind of works for implementing a partial type two
+value function but it is limited so the object-oriented way it gives
+us some leverage but it's it's limited we will be using this mechanism
+in many cases but we need to have a more general mechanism for implementing
+partial type two value functions so what is that mechanism to understand
+this mechanism remember these values of type has plus of a here only
+be of two different types as plus event or as possib stream there
+are no other values that your code could possibly define so let's
+use that fact now there are only certain values that your code can
+define and require these values to exist and in this way we will define
+a partial type two value function so here's how it works suppose we
+want to define a function func with type argument a and some whatever
+value arguments and we want to define this only for certain types
+a first we define a partial type two type function that is defined
+only for these types a so we do it in the same way here there's really
+only one way in Scala of doing this make a trait and make some classes
+that extended with specific type parameters like this or like that
+that's it's the same thing it just there's only one way of doing this
+in Scala so it first to create this partial type two type function
+which defines your type domain its defined only for the specific types
+you want let's call this for now is good so it is this type parameter
+good and if so then we can proceed with it we create some specific
+values of these types for all relevant types a would create a specific
+value so this would be to say we create a value of this type you have
+to create a value of this type just you know Val a equals this without
+B equals that and that's what we will do now we will add an extra
+argument to this function func in addition to all the arguments it
+already has or needs we add another argument which we will call the
+type evidence and this argument will be of type is good of a so this
+function cannot be called unless you have a value of this type and
+you can only have values of this type if the type is supported by
+the partial type 2 type function in other words if the type is from
+the correct type domain that you are defining it becomes now impossible
+to call this function with an unsupported type parameter a because
+you will never be able to produce this value type evidence here you
+you can only produce values of these two types even if you define
+the type for a different type argument you can produce the value of
+that type so you could you could define a type of my TC of booing
+but you will never be able to produce a value of that type and calling
+func requires a value of that type so because we added an extra argument
+to funk so the type evidence is that value that is required now with
+a new argument that we have it and that guarantees we will always
+call func value with correct types a trying to call with wrong types
+will failed compile-time you can put some type evidence value for
+the wrong type at the wrong type check so that's a compile-time guarantee
+now you can make the trait not sealed here it was sealed because we
+were just thinking in terms of disjunctions but this trade doesn't
+have to be a disjunction it's just a type constructor it's just a
+type two type function and it doesn't have to be sealed these don't
+have to be final case classes they could be actually traits themselves
+or they could be objects or the case objects or they could be just
+classes not case it could be anything it doesn't have to be a disjunction
+we're not using this as a disjunction really we're using this as a
+partial type to type function so the only thing we want to define
+is a type and some values of that type with specific type parameters
+how we do this is implementation detail one easy way of doing it is
+by using traits and classes that extend the trait we will see in the
+sample code another way of doing this or several other ways of doing
+this that might or might not be convenient for different situations
+let's implementation detail the important thing is if we make this
+a tree that's not sealed we can add new values for new types later
+so in in the libraries say we provide this with some standard types
+in an application we want more types so we just add more values there's
+no need to modify the library code so that's extensible new supported
+types can be added in user code and that's a great advantage so that
+actually is the general solution of the problem of defining a partial
+type two value function now the solution has its cost here is what
+we have to do now first all calls to this function will now become
+calls of this kind we have one more argument for each call this tantrum
+you have to put one more argument now this value this evidence or
+type evidence is the value that we need to create her each supported
+type a so if you have 15 different types that we want to use need
+to create 15 different values a lot of code and that code is probably
+going to be very straightforward just automatic kind of code which
+software engineers call boilerplate boring that is still missed it
+needs to be written and finally all these evidence values have to
+be passed around all the time because you call these functions in
+different places in your code have to get these these type evidence
+values you created created these values in one place but you have
+to pass them all around your code whenever they're needed so that's
+a lot of extra work for if you want to use these functions many times
+them in different places of your code that would be a lot of work
+in Scala these issues can be mitigated and mechanism for mitigating
+these issues is by using implicit values which we will look at very
+soon then we look at specific code the result of using implicit values
+is that type evidence arguments are only explicitly mentioned at the
+declaration side of the function func and when you call it you don't
+write them all so you don't have to pass them around they are already
+passed around invisibly once they are defined as input set these type
+evidence values and also you don't have to write a lot of code to
+define type evidence values for all kinds of types because you can
+define rules by which new implicit values can be built up automatically
+from previously built up implicit values and the compiler will do
+that recursively as much as necessary so that's more or less solves
+all these three issues however I would like to emphasize that these
+are cosmetic issues which make make code better and easier to write
+they do not change the character of the code in a qualitative way
+these gains will stand whether we use this or not so we can use this
+mechanism the partial type 2 type functions so in languages that did
+not support implicit values we can even use this in Java these things
+are just cosmetic issues with their positi of the code and it's not
+changing the fact that we have implemented partial type 2 value functions
+in the most general way possible so what is the scholars mechanism
+of implicit values so here's how they work you declare a value of
+some type as implicit and also there are implicit def methods and
+implicit classes that you can define once you have defined it like
+this you can start defining functions with implicit arguments so like
+this for example and then once you have defined a value of this type
+as implicit you can call this function by you're saying F of args
+you don't have to pass X into it that would be found so the compiler
+at compile time will search in the local scope for this definition
+or in imports or in companion objects or in parent classes and it
+will find a definition like this and it will substitute that value
+silently and invisibly into your function so by the way having more
+than two implicit values of the same type is a compile time here so
+you cannot say implicit well X some type and possess well Y some type
+next to it that would be a compile time here in addition to this Scala
+has a short syntax for declaring type evidence arguments which is
+which is specifically very useful for declaring partial type to value
+functions and the syntax looks like this so it looks like you're saying
+that type parameter a is itself of some type well it's like a type
+4 type notation but actually it's completely equivalent to this code
+take all these arguments that you have and add another list of arguments
+which are all implicit and they will have automatically generated
+names and the types will be this type constructor of a this type constructor
+will be and so on so this code is just shorter easier to read and
+this is longer but in exactly the same is less it it just rewritten
+so you could have some arguments implicit written out like this some
+other arguments written out like that we can combine both they will
+be already written to one big list of implicit arguments at the end
+so the difference between these two is that if you want to use the
+evidence argument in the code of the function you need its name and
+in this definition you have the name you define it yourself in this
+definition you don't see that name so that name would be automatically
+generated you don't see it don't matter another problem there's a
+special method defined in the standard library which covers a scope
+which is called implicitly and that method can grab the implicit argument
+defined for you when they define functions of the syntax the definition
+of implicitly is very simple and you could have defined it yourself
+it's just defined for convenience for you in the standard library
+we'll see how that works in one of the worst examples later so these
+things make the code shorter we still need to declare the trait or
+the type constructor as a partial type two type function and we still
+need to create type of evidence values I am declaring them as implicit
+but passing them around is very simple and calling the function is
+much shorter because of the implicit mechanism so now having done
+all this to let me say what typeclasses are so right now we were talking
+about partial type two value functions and partial type two type functions
+but this is not really the terminology that most people use it is
+just the terminology that I find the most illuminating it tells you
+exactly what we're doing but actually people say typeclass what sorts
+a tight class a typeclass is basically a set of partial type two value
+functions that all have the same time dummy which means that for example
+you can have plus minus times divide let's say and they all have the
+same type domain which is numbers that can be added subtracted divided
+in something so instead of saying typeclass we could say some partial
+type two value functions that somebody has defined that's the same
+thing so in terms of specific code that needs to be written the typeclass
+is two things first it's a partial type two type function so it's
+a type constructor with some code that creates specific type evidence
+values of specific types T and that defines the type domain second
+it is the code for the desired PT lives so whatever functions you
+need to define your write code for them and you use that PT TF in
+that code to define the type domain also for many important use cases
+these functions must satisfy certain laws certain equations for mathematical
+reasons otherwise it would be unusable or programs will have difficult
+bugs so that's what typeclasses are that's a definition of a tag class
+let's fix some terminology people say that a type T belongs to the
+typeclass my tag class what does it mean it means that there is a
+PTT F partial type two type function called the called this and this
+partial type of tag function has a domain to which type T belongs
+so for example integer could be T and then integer belongs to this
+if that type domain includes the integer which means that there is
+a type value sorry type evidence value of type MyType plus int so
+if some value of this type can be found then the type belongs to the
+type cost that's what what it means when people say that now a function
+with type parameter requires for this type parameter the typeclass
+might a class what does it mean well it means that actually one of
+the arguments of this function usually implicit argument is the value
+of a type like this which is constructed using a partial type two
+type function so if you if you see that there is some partial time
+to time function lying around then you know that this is a partial
+type 2 value function that requires F typeclass constraint or it constrains
+a type parameter to belong to the typeclass otherwise it cannot be
+called with that type now another important terminology is that the
+evidence value the type evidence value which is this extra argument
+of this type that value itself is is called not only type evidence
+is also called the typeclass instance now that terminology is completely
+equivalent to type evidence so I prefer evidence but instance is also
+standard terminology I will explain how how to create these things
+in many examples now so typically in Scala you create a trait with
+a type parameter like this then you create code that makes values
+of this type for various types T all these values are declared as
+implicit and somehow you make them available for user code either
+while imports or put them into companion objects for the types T which
+is quite convenient because then you don't need any imports then you
+also write some functions not have implicit arguments of this type
+usually these metals are def methods these functions are def methods
+in this trait we don't have to be but often they are because that's
+sometimes necessary and often convenient so as a rule a type evidence
+value should carry all the information they need about the typed you
+will see why let's look at the examples so semigroup is a typeclass
+that actually let me show you what it is a typeclass that has an associative
+binary operation so in other words there must be this function which
+is a partial type 2 value function it takes two arguments of type
+T and returns a value of type T so it's a any kind of combined operation
+so combine two elements and get another element of the same type combine
+two values in any way as whatsoever as long as it's associative so
+it doesn't have to be commutative doesn't have to be any inverse operation
+to this just can combine two values into one larger value in some
+way doesn't even have to be larger value we don't know anything about
+how it works so that's semigroup it's a very weak very bare-bones
+kind of operation binary operation it just is associative that's the
+only thing we know so let's implement that operation is a partial
+type to value function first step is to implement PDGF so let's just
+do that semi group with parameter T then we have two K subjects let's
+say well we have semi group and semi group string that's all nothing
+else fine so that actually defines PTT F that defines a type constructor
+of which you can only have value semigroup event and semigroup of
+string so that's sufficient in principle to create our partial target
+value function so let's see how we can do this so we can define up
+here the type parameter T it has an x and y as required it returns
+the t as required it also has an implicit argument which is the type
+evidence of type semigroup t so now this is it this is the partial
+type T value function you could not call this function with a type
+parameter T for which you cannot have cannot have a value of semigroup
+T so you could not call this with type parameter T other than int
+instance so this test for example says you can combine ends you can
+combine strings but option event cannot be combined this doesn't even
+compile because the type option int is not within the type domain
+of this partial type function and so you cannot have any type evidence
+for it and so it just won't compile so that's great now how do we
+implement this function well we have to add somehow integers or strings
+but how do you know which is which so let's see this evidence is the
+argument so the only thing we know about type T is this evidence value
+so we can imagine it where two cases so it could be an int or it could
+be a string evidence so if it's an int evidence we know that T is
+actually int so well what can we do well the only thing we can do
+with the force X to be event Y to be event add them together and then
+force their is out to be again of T because we're supposed to return
+T and that's what we have to do and we have to do we can do the same
+for string and actually this code works as the test shows the test
+passes it's a very unsafe code is not great not not not great at all
+because of these as instance of operations which are unsafe and maintaining
+this code is very hard and so don't do that we will never do this
+I'm just showing you an example of how we could do it in some way
+and that actually is an implementation of a typeclass so semigroup
+is a typeclass up rather op is a type course is a partial type to
+value function with a type domain we defined and it works for that
+type domain that's that's the typeclass a semigroup we have implemented
+seven rules on very ugly but we'll do it much better in just a few
+minutes this is our very first example note we derived the requirements
+for this completely systematical there is no there's no guessing so
+we must have a type dummy we must have a type function type constructor
+and we must have the implicit evidence argument well implicit is just
+convenient so we don't have to write this argument here in principle
+we could so the OP function if you look at it it has the second of
+arguments which is this one their evidence and we could put this evidence
+here in parentheses for example sending group into evidence it's exactly
+the same so this is how the function actually must be called and the
+compiler writes that for us we don't have to write that in our code
+so that just makes our cold sugar other than that that's what's going
+on this all right now why is it that we had all this trouble it's
+because we have no idea what tedious we know that it's either int
+or string so in this case it is int in this case it's string but we
+don't have any functions that help us to work with that so the way
+to solve this is to put more information into the evidence so right
+now here evidence is just an empty object it has no information except
+the type we put more information into the evidence we can get it out
+and work on these x and y's so why don't we just put the implementation
+into the evidence instead of putting it here and having all this trouble
+with type custom so that's what we do next we again implement semigroup
+again for empty string now the partial type to type function in our
+case is not going to be a sealed straight it's just going to be a
+type function which we define and it's going to carry this data so
+actually you see what we need is to combine these to fund these two
+elements and that's very natural to put that information directly
+onto the type constructor so now it's very easy for us to do find
+the evidence values so we just say this function which is adding two
+integers has this type and that's correct this function has this type
+that's correct so we have defined values of type semi group in the
+semi group string so that together with the type function defines
+a partial type two type function so now semi group int and semi group
+string are defined and others are not defined we put them as implicit
+now we define the partial type two value function let's say we define
+a sum that's what we wanted there is a sequence of values T and there's
+a default value for empty sequences say then there is an implicit
+type evidence argument so now the implementation is actually very
+easy we just do a fold left with the default element as the initial
+value and the fold has a function argument which is this OP an evidence
+has exactly the right type it is the hope so we just put it in there
+and we're done with no typecasting completely typesafe implementation
+and yet this is a partial type 2 value function because it can only
+be called on integer instrum and this is a test that shows how it
+works so this is a minimum implementation very very bare-bones implementation
+of a typeclass which is the sum a semigroup is the type 2 type function
+and sum is the type 2 value function we can define further type to
+value function functions if we want to use them this type 2 type function
+so that's a second attempt at defining a typeclass and the code is
+very easy as you see now let's try to use traits instead now this
+is a third implementation of second group we put this method which
+used to be here we put it as a def mounted on the trade so we override
+this then in the two specific implementations for integer and string
+evidence so that defines our PTT F and just as in the previous example
+all the data it's necessary for implementing what we want is carried
+by values of this type so all the data is carried by values of this
+straight now we do implicit case object just so that we don't have
+to write more implicit Val's in principle what we could do is we could
+say for example here is taste object not imported and then we said
+well maybe C equals that equals singing group in evidence we could
+do this just as well it's just shorter to write implicit case object
+right here so we have defined a PTT after now we define a PTV F which
+is adding of three numbers let's say and we define it in the same
+way so we have arguments at once and then additionally an implicit
+evidence argument and then we use the evidence dot up to perform the
+computation we see evidence dot what is this op that has been defined
+in the trade and since it's a deft method on the trade we have to
+use it in the syntax F dot op whereas here we didn't so here we could
+define add three C we can define new PTV F very easily so this must
+be of type same in Group G so how do we do that we do F F is a function
+right so that type is this function so we just do have of X or Y Z
+for example random so we can define any number of DVF's externally
+user code just like what we wanted so that's exactly how we expect
+this to work and here instead of saying just F will you have dot off
+every time because here op is a death metal in your trait same things
+should work alright so as we have seen it is quite useful if the type
+evidence value carries all information but the ETF's need to know
+about the type team and in many cases the trait contains these materials
+directly in some simple cases it can be a data type not a trait but
+actually as we will see a treatable death metals is necessary if we
+need higher order type functions it is convenient it's not particularly
+inconvenient to heaven it's just more writing to do trade with death
+metals if you can avoid it you don't have to do it and as we just
+have seen additional partial type 2 value functions using the same
+unchanged type 2 type function can be added later so no need to modify
+the code of this trade if we want to add new partial type 2 value
+functions without changing the type domain so add 3 as an example
+we don't change the type deleting some and add 3 are defined for the
+same type domain for things that can be added no need to modify the
+code of library if we want to add more partial type 2 value functions
+with the same type domain and as we'll see later we can combine this
+with other partial type functions that we define in other code so
+that's exactly what we wanted let's look at some more examples of
+typeclasses semigroup we just saw now another interesting typeclass
+is pointed it's a very simple time code typeclass it just has a function
+point that returns a value of that type so that means somehow there
+is a special and naturally selected value of that type and the function
+gives you that value examples would be 0 integer type or empty string
+so these are naturally selected values of the type or for a function
+type it will be the identity fun for this function type that's also
+naturally selected value so I mean it's still selected in a sense
+that somebody selected it it's just that it's natural to consider
+that value it's useful to to have some kind of value of this sort
+and maybe it will have interesting properties and so if you have a
+value like this then the type is pointed an example of a type that's
+not pointed is a function from A to B there's no way to have some
+kind of natural function from A to B but from a to a there is you
+have the identity function another important typeclass is Mohammed
+monoid is a typeclass that represents data aggregation so data aggregation
+means you have some aggregator that is initially empty and you put
+data into it and it combines everything you put it into it into some
+aggregate value so it has two functions empty and combined so empty
+is just like the point it just gives you the value of that type and
+combined is just like the semigroup takes two values of the type of
+returns one additionally though we require that combine is associative
+just like in a semigroup and this law must hold so the empty value
+combined with anything either to the left or to the right should again
+return the same anything that you passed in so combining an empty
+with X does not change X that is a requirement so the value of the
+empty aggregate is special in the sense that you can combine empty
+aggregate with data and that doesn't change that data so monoids are
+used a lot in different contexts so one obvious context is log aggregation
+so you add logs and it's still log so you can add more you know put
+two logs together still it's a bigger log but it's still a log so
+that's you know you have an empty log or you can combine two logs
+that are maybe empty and you still have a big log as a result so logging
+is one application of this and there are other applications many many
+other occasion so one know it is a is a very useful abstraction so
+now we'll see examples of how to implement the monoi typeclass by
+either just doing it from scratch sorry implementing the PT TF and
+so on or in a very interesting way if we assume pointed and semigroup
+first so so pointed typeclass has this point function seven group
+has the OP function and you know it has these two functions of the
+same types while the names of the functions are completely material
+of course they can rename all you want the types are important so
+types are the same and so monoid is basically a semigroup combining
+is pointed and we can write code exactly saying that and save us the
+trouble of implementing everything from scratch so now we'll see how
+that works so first let's implement monoid from scratch we will not
+use trades will not use any names just the bare-bones implementation
+so the idea of implementation is that first we do a partial type 2
+type functions so we define a type function and the value of this
+type should carry all the information we need to know this information
+consists of two pieces first the empty value remember the specification
+of monoid we need an empty value and we need a combined so empty value
+is just T combine as a function from T and T 2 T so let's put these
+two values in the tuple so we'll have a tuple of T and a function
+from T and T 2 T that's good enough we don't really need any names
+or trades or anything we just need the data the fact that they are
+called empty or combined this fact is immaterial this is not important
+we can rename this you can call us zero instead of empty we can call
+this append instead of combined or add or whatever or op it doesn't
+really matter what matters is the types so let's define the type domain
+for this partial type function that means we defined implicitly of
+type monoid int and 108 string so we define these values these are
+the tuples having the selected int value and the function that combines
+integers and the selected string value and the function that combines
+strings let's do it this way done so now we have the partial type
+2 type function defined now let's define the function sum well we
+have finished defining the monoid typeclass let's define some partial
+functions so the function sum will take an argument of sequence of
+T and T will be constrained to have a monoid instance so or to have
+an evidence of belonging to the monoid typeclass so how do we do the
+implementation while we fold down the sequence the first argument
+of the fold is the initial value which is the first element of the
+tuple the second argument of the fold is the combining function which
+is the second element of the tuple that's it we're done so some is
+implemented and it works let's implement a monoid tie plus in a slightly
+more verbose manner which might be not bad because it documents what
+we're doing it also helps read the code later because this code looks
+a bit cryptic with T comma T comma T parenthesis it's a bit cryptic
+so let's define names so instead of just using a tuple let's use names
+to pull name to post the case class so let's use it in case close
+call it monoid put names empty combined so exactly the same type and
+we define a type function in exactly the same way except now has names
+and these names help to help us document what we're doing exactly
+the same definition of the time to type domain except with the name
+exactly the same definition of the function some except now we have
+F dot empty and F dot combined because the typeclass has names if
+you compare with the previous definition that was f dot underscore
+one F dot underscore two so evidence now is a case closed and we can
+use noise names that's exactly the same code now good let's look at
+defining the pointed and the seven group in the same way so we define
+it as case classes with so this is the partial type two type function
+with its domain this is another partial type two type function with
+its domain now this is the partial type two type function we want
+to define and we want to automatically derive we don't want to repeat
+implicit values at all here how do we do that we use this with we
+use this implicit death so blessed F is a scholar feature which is
+that this function will be called by the compiler whenever necessary
+if it needs to produce an implicit value of this type it will see
+if it can call this function and if implicit value of these types
+are available if so it will insert the code to call this function
+and create these this value and put that into your implicit argument
+all of this will be happening silently and invisible so we define
+the instance is a function with two implicit arguments which returns
+the type evidence so it takes type evidence for semigroup and type
+evidence for pointed and returns type evidence from unalloyed well
+how do we do that well the type evidence from a Lloyd is a value of
+this type so we need to just create a case class value of this sorry
+of this type so we just say monoid which creates a case class value
+and we need to provide it with two values with the empty and that
+is the point from the pointed evidence and the combined function which
+is the cop from the sum of your packages that's it so we have defined
+the monoid instance the test will show that it works so we have not
+defined two different monoid instances for in ten string nevertheless
+we can use int and string in our code because this implicit def will
+generate them so imagine here we have 15 different types it's a big
+savings in code that we can automatically your life cause instances
+typeclass instances from previously defined evidence values now one
+other thing I'd like to show is that all these things are actually
+already defined in the library called cats and also in another library
+called scholar Z so all these typeclasses are pretty standard the
+semigroup the maloik and so on and they're defined in these libraries
+and the difference between these libraries may be names because types
+are the same your standard mathematical structures but the names might
+be different so in the cats library the names are empty and combined
+in the scholars e-library they're different names types are the same
+so how do we use the library to define Illinois so here's a here's
+a test so we want to say that if we have a semigroup and we have appointed
+we want to define a cation or instance so then we do it like this
+we define a value of type Katzman on it and that's a class so we do
+a new and then we override the functions empty and combine now unlike
+what we did here the cat's library does not use keys classes it uses
+traits and death methods so it means you need to override things but
+that's how it is otherwise it's exactly the same thing and then we
+can define some for the cats monoid and we can do the same test as
+before now one another thing that is interesting is that we can check
+laws in a generic way so I implemented this function to check cats
+monoid laws which is a function with a type parameter that takes an
+evidence that M is is from the cat monoid typeclass so these things
+are necessary for law checking all these assertions and arbitrary
+either property checks library notice I'm combining all kinds of syntax
+here I have typeclass syntax like this I have implicit argument of
+another type cost like this it's completely up to me and so this function
+will check their left and right identity laws that combine of empty
+and M is equal to M combined of M and M T is equal to M when the function
+data is equal is a general way of comparing two elements of type M
+it might be non-trivial if M our function types so that's why I have
+this data is equal by definite by default this is just a comparison
+but it could be different for function types we'll see examples for
+this social tivity law also needs to be checked up for all ABC and
+combine a combined BC is equal to combined combined ABC so that's
+associated and then I can call this function for interest ring but
+that won't compile because we didn't define them an audience in school
+double isn't a side here's how we can check laws for the partial type
+two value functions in a typeclass I'm using the Scala check library
+and the typeclasses it uses itself for instance or the arbitrary typeclass
+that typeclass means that the type has a function that produces arbitrary
+values of it or some set of values and that allows me to write for
+all function but of course cannot check all possible values but it
+checks the large number of them so then I write a function like this
+which is a generic function taking any type T as long as this type
+has an arbitrary instance and also a semigroup instance and then I'm
+imposing the condition that for all X Y \& Z of type T the operation
+is associative so the operation of X with Y Z and gives me the same
+result as first combining x and y and then combining that result with
+Z now see I could have rewritten this function in a different way
+in a different syntax like this I can combine the typeclass connotations
+and this is just a different syntax and then I don't need to write
+this however now I need to replace this with something I need to access
+this operation which is the partial type 2 value function in the semigroup
+typeclass previously I had an implicit argument with named semi group
+F now the name is hidden I don't know what that name is so instead
+of doing this I just say implicitly same in group t that's and that's
+exactly the same thing so implicitly fetches the value of the pro
+of the implicit parameter of the given type and there's only one because
+there is a compile time error if they were two different implicit
+values of the same type so that's how I would write the code if I
+didn't want to put an explicit argument argument but actually it's
+exactly the same function that if I look at this function here I use
+it in exactly the same way I don't call it with any arguments so this
+is just syntax I can use this syntax or I can use the syntax I had
+before so once I have defined this function I call it by substituting
+different type parameters and this itself is also a partial type to
+value function that takes a type parameter and returns an assertion
+value and that better be success if it's a failure the test would
+fail so that's the way I can use the the Scala check library to test
+laws similarly I have a function that tests the monoid laws it takes
+an annoyed evidence and then tells me that there is a combined with
+empty which returns me the same value so notice this function is defined
+separately from the typeclass but it uses the same type domain as
+a time code typeclass it does not change the monoid or arbitrary type
+domain so I can combine two different type domains so there's no problem
+in defining partial type two value functions later in the code without
+changing the code of monoid typeclass later I can define further partial
+type two value functions like this one which will work on any type
+belonging to the relevant typeclass so that's the kind of extensibility
+we wanted use that to make my tests that verify with my defined instances
+for the moon the weight of integer in the noid of string they satisfy
+the correct mathematical law laws here's an example when this does
+not happen it does not satisfy the laws I create an instance of semigroup
+for a boolean but I use the operation which is the boolean implication
+if X than Y now this operation is not associative if I define this
+as my semigroup evidence which is the same as to say if I define this
+as my typeclass instance for boolean of semigroup typeclass then my
+law will not be satisfied so the associativity law is not going to
+be satisfied when I call this function this test will fail and it
+will print a counter example let me run this actually the Scala check
+library is such that it doesn't just check the laws for a large number
+of values of the parameters but if it finds some values that do not
+satisfy the law it tells me what those values are it will print the
+counter example values and then I can write a test where I can debug
+to see if this was about to see why it did not satisfy the law or
+I can write a test and that will correctly pass the law so let me
+just wait until this compiles there's a number of things it needs
+to be it needs to do and wellness test runs yeah so it fails it says
+true did not Eagle falls the current past generated values false false
+false so it prints a counter example in the previous run I had a different
+counter example which is false true false but false false cause apparently
+is also a counter example so then I have a test here that verifies
+that the laws are not holding and I use again this implicitly just
+to fetch in this but I could just instead of this since I know what
+that evidence is I can just say that the bad sending your evidence
+with exactly the same thing that's to say I made I declare that as
+implicit so fetching the implicit of this type is the same as just
+using your value of the type so now tests pass so let me undo my change
+alright so now let's consider a different example of typeclass which
+is a typeclass for a type instructor the example is that of a factor
+so the type constructor is a function if it has a map operation equivalently
+in earth map that satisfies the function laws which were they had
+identity law in the composition law now we would like to write a generic
+function that tests the functor laws so this function would look like
+this it will take the type constructor as as well as three types say
+ABC has type parameters and it will then run the tests with various
+values and check that all the laws hold for this type constructor
+this generic function should require that the type constructor F be
+a factor and we need to also access the function map that is defined
+for the given type constructor F so therefore we say that the map
+must be a typeclass so it is a partial type to value function whose
+type domain is following the filter type constructors while the factors
+F that we have declared and then we constrain F to belong to that
+typeclass in this function unit check frontier laws where did we do
+this in exactly the same way as before the only difference is that
+the type construction now is of a different kind is a type parameter
+F is a type constructor and not just a type based type nevertheless
+we just declare a partial type 2 type function called factor which
+will be called like this it's type parameter is this F which is this
+type constructor and this will be well defined only for type constructors
+F which we have defined a functor instance in other words will define
+this implicit evidence value for each functor instance and we will
+then require that this implicit argument be one of the arguments of
+the check functor loss function we will see the implementation in
+a second and for now just note that functor is a higher-order type
+two type function it's a function whose argument it's a type function
+but it's argument is a itself a type function whose effort self the
+type function so just as we do with ordinary functions and we say
+that a function whose argument is itself the function is a higher-order
+function so here we just say this is a higher-order type function
+because it's argument is a type function it's already let's look at
+the test code them so we proceed in exactly the same way if you want
+to implement the Thunderer typeclass there's no matter that it's a
+higher-order type function we do exactly the same thing we define
+a trait let's say with a type rounder which is this F and we need
+to use the syntax with square brackets and underscore to show that
+this type is itself a typed function so this type parameter is itself
+a type function the trade has this def method which has itself to
+further type parameters because the factors map function has this
+type round now having these two type parameters pretty much forces
+us to use the trait with the DEF method for implementing the partial
+type two type function we could not do this within a data type because
+in Scala data values cannot have it themselves type parameters only
+def methods can have type parameters there are some ways of circumventing
+this limitation but they do not significantly change this fact they're
+just hiding the fact that somewhere there is a definite end with type
+parameters so let's not try hide this fact but use the trade with
+definite as very necessary so this is a partial type two type function
+what what is its type domain what are the type constructors for which
+we can have some values of type funky of F well let's say data one
+is one such type constructor so let's define some type constructor
+like this simple one let's define the evidence that this type constructor
+belongs to the type domain of this type function so the evidence means
+that we create a value of type filter of data 1 and this value could
+be anything could be evolved it could be an object so one way to write
+it is to say implicit object another way would be to say implicit
+well and then to say new here it's another different way of doing
+the same thing which one is better it's not so clear right now let's
+just use one of them now in this value when we extend this trait with
+a specific value of the typewriter we need to override this death
+metal because this def method has a different implementation for each
+type for each type constructor here so we need to override it so here
+we just write the implementation of the f map for the data 1 constructor
+so we already know how to do these things and I will not dwell on
+how to implement the factor instance for case closed now this is this
+is the entire definition of the partial function for type 2 type it
+now let's define our type 2 value function the map will use the F
+map will define generically the map so how do we do that well the
+F is one type parameter and we say this must be a functor that close
+and alb are two other type parameters and we define the F map as the
+functors F map so we fetch the implicit value which is this value
+or take the F map of it which is this sniff method apply distill F
+we get F of A to F of B and then apply this function to F a this gives
+us a value of f of B and that's the map method so the map method basically
+by hand we just use the F map and call it first of F and then on data
+and one away but you see this implementation is generic for all factors
+it is not specific to data one so in this way we have defined a generic
+partial type 2 value function where the type constructor is constrained
+to be a factor this is exactly what we wanted it would be impossible
+to call this with a type parameter that is not a factor because there
+is the implicit requirement so it required implicit argument it wouldn't
+be available other words so let's see how to use this so okay so we
+have this map function how do we use it let's create some data of
+this type and we just call that function on that date just an ordinary
+function the fact that this is a partial function is transparent we
+don't have to say what the type is the types are infrared data has
+a specific type data one of int this is a specific function from integer
+string so we transform this and we get data one with values one a
+B C 2 a B C or D 2 this transformation the result is of type data
+one of string so that's a typical result of applying a santur to data
+so as you see using the function map is no different from using a
+loan generic function but the definition of map is a generic one it
+would not have to be extended if we have more data types like data
+to that's safe with another function instance won't have to extend
+this function so this is very good for library design because we can
+put these functions into the library and we'll never have to extend
+them it's only the users code that needs to extend this needs to declare
+functor instances for new data types but this has to be done once
+together with each data type and you're done here's a function that
+can check functor laws it's a bit involved because functor laws involve
+arbitrary functions from A to B and from B to C and so I explicitly
+write down all the arguments that I need so these are the implicit
+arguments of this function factor f is a typeclass for functor then
+there are these arbitrary instances of typeclass so the Scala check
+library needs to use arbitrary values of these types to run the checks
+and if I don't put them here that it doesn't know that they exist
+but finally when I use this function I just give it some specific
+types and I don't have to specify anything more than that all these
+arbitrary instances are implicit values that are defined in the library
+and I don't want to talk about them in my code so for library design
+this is great the library becomes much more powerful and know his
+record needs to be written so just to be sure this is clear what this
+is doing it's checking the factory laws for specific types so data
+one is a factor and for example a the type parameter a here is int
+so here the identity law will be only checked for the int type so
+that into the int identity on data one instances of type data one
+int are preserved after F map that's the only thing that can it will
+check now I can obviously add some more checking here with different
+types with other types it's up to me I I can do this or I can neglect
+doing this but no more no necessary extra code so so let us see how
+the same works with a cat slightly you know the cats library has a
+standard function typeclass which is the cats not funky it works in
+a very different way except that it uses makeup rather than death
+map so the order of arguments is that first there is the data or the
+functor and then there is a function whereas the f map has the opposite
+order first the function and then the data now a convention that I
+follow is that the implicit values should be in the companion object
+of the data type now this is a useful convention because Scala has
+a mechanism for searching for implicit values and it will search in
+the companion objects of the types you are using so there is some
+function that tries to find implicit value of functor theta1 the compiler
+will automatically search in the companion objects of function and
+in the companion object of later one now it makes sense to put data
+one specific stuff in a companion object of data one and functor specific
+stuff into a companion objective factor the factor is in the library
+later one is my own code so that's why I first defined my data 1 as
+as my own custom type and then I define companion object which is
+in Scala just an object with the same name as the type it's a special
+convention in Scala so in this object I have my implicit value I can
+again I can do implicit Val and then equals new if I want or I can
+do implicit object extends this it's up to me there is not a big difference
+and not a very different amount of code to be written when I write
+the implementation of the function instance so I implementing lab
+and then I check the factor laws so this function is very similar
+to what we saw above except it uses the cat's function typeclass within
+map so that's implemented in my test code very similar code checks
+the identity law in the composition law given three arbitrary types
+and a type constructor that must be effective so now having seen this
+let us take an overview of what we have achieved we have been working
+with type 2 value functions and type 2 type functions let's compare
+value to value functions and type 2 value functions now value to value
+functions as the ones that are the ordinary functions the domain of
+a value to value function is the set of its admissible argument values
+we call that a type so the type is the subset of values that are admissible
+as an argument of functions of for example if the function takes an
+integer type of the argument when strings are not admissible arrays
+of something are not admissible nothing else except integers are admissible
+so in the set of all integer values is the value domain of that function
+and that's what we call a type so the function can be applied safely
+only if the argument is of the correct type and this is the example
+of having a function we declare its type and then we apply to some
+Y value and unless Y has this type this is not safe to do so so not
+safe to apply and if Y is not of this type there will be a compile
+time error that's how we use types types prevent applying functions
+to incorrect arguments now let's look at the partial type 2 value
+function it has a type domain which is the set of admissible argument
+types or type parameters the type domain is a sub set of types a sub
+set of type parameters that the function can accept so that is actually
+called a kind this is terminology it is accepted in functional programming
+so we say that the type 2 value function can be applied only to type
+arguments of the right kind similarly to a value to value function
+that can be only applied safely if the argument values are of the
+right type a function like this where we declare it's type parameter
+constrained to be in some typeclass this can be safely applied to
+a type parameter a only if a belongs to this typeclass we say only
+if alias of the right kind and in both cases the error will be caught
+at a compile time so if this is not the right type if this type does
+not belong to this typeclass writing this code will not compile in
+the case of PT BFS that will happen because the implicit argument
+will not be found but no matter it will still be a compile time error
+so kinds are the type system for types values are of the right type
+type arguments are of the right kind so a typeclass such as my typeclass
+defines a new a new kind as a subset of types there is a type notation
+which we use and there's also a kind notation now the kind notation
+is not part of the Scala language but we need a notation over the
+last to talk about kinds so I suggest to use this notation so star
+is a standard kind notation for any type basic type like integer or
+string an actual type that has values so star is a type that has values
+any type that has values and if I denote it like this with a typeclass
+a notation that means I'm only considering types that belong to the
+typeclass another existing available kind is a type function kind
+notation for that is this so let's look at an example consider this
+type and here F and T are types of different kinds F is a type constructor
+T is a type basic type not a type constructor so F is a type constructor
+or type function and so f has this kind is a function kind which is
+similar to function type except for types so it takes a type and returns
+a type a kind of T is the star T is just a basic type the kind of
+F is the function from basic type to basic type so this is the kind
+notation star means the basic type error means a function and colon
+with typeclass I suggest to use that for typeclasses here's an example
+we can define a type like this this is a type this is also type but
+this is a type function this is also type function so the kind of
+this is actually this expression it has two arguments the first argument
+is a type function which is this kind the second argument is a basic
+type which is a star kind and the return of this type function is
+a basic type which is a star called a return is a basic type pretty
+much always and so that would be the kind notation for app if I define
+the up like this note that Scala compiler will not compile if I put
+our own kinds so for example if I put up with two type parameters
+but a and B but a is not a type constructor so the kind of a must
+be the function kind or the type function kind if this is not so the
+Scala compiler will given there let's look at the test code so here
+I define type function just any type function here I define the app
+as in the slide now if I define type X like this I'm applying the
+type function app to the arguments G and int G is itself a type function
+defined here and so that's okay because app has the right kinds of
+arguments here so after I apply this X becomes the result of applying
+G to int which is this that's verified of X indeed is this so let's
+say X of type X is left of that and that compiles now if I were to
+try writing code like this it won't type check because the kinds are
+wrong the first argument of F must be a type function but it is not
+it is a basic type similarly here the second argument of app must
+be a basic type but it is not it is a type function so neither of
+these two will type check let's look at a little more complicated
+example we will write the tag current notation explicitly here again
+first we define a type constructor then we define app which has two
+arguments and the kind of app is this and we can write more verbose
+Li with argument names if we wish so f has the kind start to start
+a has the kind star so actually Scala requires the syntax that shows
+the kind you cannot just say F comma a if you write out of F comma
+a it will assume that F has star kind so you have to write this syntax
+if you want a higher kind higher order type now let me just say the
+terminology in functional programming has higher kind of types I don't
+think it's very limiting types are types are not kind it we don't
+say it's a higher type function we say higher order function because
+it's a function that takes functions as arguments here we have functions
+of types that take other functions of types of arguments why should
+we call it anything else than higher-order type function or higher-order
+type higher kind it is not very illuminating here so here is another
+different where I define up with two peas which is three parameter
+function the first parameter is itself a higher-order type function
+of the same kind as app so I can express it like this in Scala it's
+a little harder to read I have two arguments the first argument is
+a type constructor the second argument is a basic type and the function
+P is a type function of these two arguments so the kind of P is this
+the kind of Q is this and the kind of R is this basic typing so then
+I can define this you see I'm applying when I define the type function
+I said I need to apply P to Q and R and so Q is of the right kind
+to be put into P so now I can say define X the same X that I had here
+defined like this F by G int I can say app of app G and it will be
+exactly the same thing I verified the same things as I verified before
+namely that putting arguments of the wrong kinds does not work now
+there's one other thing that we would have to do if we want to be
+completely free dealing with type functions remember that in functional
+programming it's important to have anonymous functions not just named
+functions anonymous functions enable a lot of freedom in programming
+and without them things are difficult so functional programming really
+wouldn't work well without anonymous functions quite similarly we
+need anonymous type functions until now all we've seen were named
+typed functions all these names but we want also anonymous type functions
+because without them things are just not always possible to express
+anonymous type functions are more difficult to write in Scala but
+it is possible to write and there is a compiler plugin that makes
+the syntax easier it's just the syntax plug-in and I use that plug-in
+which is available and this address it's called the kind projector
+plug-in so let me show you how it works I define a type function just
+a simple one and I define the app just as before now I want to define
+a type function higher-order type function that takes a type constructor
+and applies it twice to its type argument so app two should take a
+P and the Q and then it will put Q twice into P so to speak so you
+see the first argument of P is a type constructor now previously I
+put Q as the first argument but now I want to put Q twice and on the
+SEC U of Q of a type argument to express this I need an anonymous
+type function because I want to put that anonymous type function as
+the first argument of the type function P unless I have that I cannot
+express this behavior this is the syntax of the kind projector it
+has the special single lambda and then it allows me to write my anonymous
+type function like this where X is now a new type variable anonymous
+functions type variable so this is a very similar syntax except under
+lambda and that is what the kind projector provides now instead of
+lambda I can write instead of the Greek letter lambda I can write
+lambda in Latin alphabet like that which is just more verbose no difference
+so this app to has this kind it's the same kind of app from the previous
+example except that here it instead of using Q once it uses Q twice
+it's it composes Q with itself q is a type function it composes that
+type function with itself in order to express such behavior we need
+anonymous type functions so now if I apply this app to using the o2
+type constructor which is just an option of a tuple a a then this
+option of a tuple will be applied to itself twice so it will become
+option of a tuple of option of tuple option of tuple and indeed that's
+what it is x2 has this type and type checks so this is a bit of an
+advanced topic the anonymous type functions but this is similar to
+anonymous functions so just the syntax has to be a little different
+so as a result of this we have a uniform view of values and types
+types are two values as kinds are two types typeclasses are just a
+certain sort of kind function current type function is another sort
+of kind so there are different kinds there's type function kinds and
+typeclass kinds and you can combine them you can have a typeclass
+for type functions which is for instance for the factor factor is
+a type function and we can have a typeclass for it you can of course
+have typeclasses for higher order types as well so the syntax becomes
+a bit more involved but you can still do it if there is a use case
+for it so I showed you that there are some use cases for all these
+generic functions main idea being that you want to save your code
+you want to implementing generically right code once and have it work
+for all factors for all types from a certain typeclass and another
+thing that Scala provides by way of convenience is the implicit method
+syntax so let me show you what that is this is very often used together
+with typeclasses but this is a purely syntactic convenience there's
+no more power that this brings us the partial type 2 value functions
+are exactly the same as before all of these implicit things are just
+syntactic conveniences that make code shorter the basic idea of partial
+type T value functions remains the same so here is how it works in
+Scala in principle there are two sorts of syntax available for functions
+the first is the syntax similar to that of the ordinary mathematics
+where you say function name in parentheses you list the arguments
+Scala also allows you several lists or one or more lists of arguments
+another way is to have a syntax like this X dot func of Y which is
+the method kind of syntax like object-oriented method all pretty much
+object-oriented languages use this syntax in Scala there is another
+equivalent syntax whenever you can say X dot funk of Y you can also
+say X space funk space Y sometimes that's easier to read now these
+functions are similar but they're just implemented differently and
+in some cases you can put you might prefer one in another case another
+so here's an example when it is convenient to have the method like
+syntax imagine we define a function called plus plus plus it is a
+partial type two value function and the type domain for it is this
+typeclass has plus plus plus and then there are some arguments and
+one argument is of type T so you will have to call this function like
+this plus plus plus of T and art now you would like to write this
+instead this is much more readable T plus plus plus Arg whatever plus
+plus plus means in your application this is certainly easier to read
+than this Scala provides a way of implementing that syntax this is
+what I call the implicit method syntax extension syntax so what is
+the implicit method syntax suppose you want to convert func which
+is a partial type to value function to the syntax you declare that
+as a method on a new trait or class well a new trait is necessary
+usually a class is sufficient and you declare an implicit conversion
+function from T to this new class and this implicit conversion function
+is a PTV F using the same typeclass so in this way you automatically
+extend your existing typeclass with new syntax you do not change a
+type domain of your typeclass when you do this since you don't change
+the domain you don't need to change the code of the existing typeclass
+so this can be done in a different piece of code or a different library
+different module and the implicit conversion function can be done
+as an implicit class I will show you the code in a second and that
+makes called shorter action here's how it works suppose we implements
+the monoid typeclass so this is our partial type 2 type function which
+has some methods in the trait here is our syntax so this is this new
+trait or class that we need to implement for the syntax purposes I
+called an implicit class and it has one argument which is so it's
+implicit class is really a function that at the same time defines
+a new type of this name and the function that creates values of this
+type the function has this argument it also has an implicit argument
+of the partial type 2 type per function which means that this is a
+partial type to value function so like I said implicit class means
+you define at once and you type and a function that creates a value
+of this type with this argument so in this way it's doing what I said
+here to do in one step I define a new trailer class a new type and
+I define a function that creates values of that type from values of
+type T so here's type M at the same time I constrain the type parameter
+m to belong to the typeclass la nuit so now it's a very short code
+comparatively all I need to do now is to implement a method that I
+want the method I want is the syntax method so let's call it append
+log I can change the name if I want because this is an extension so
+I do not actually change the functionality of monoid as it was previously
+defined I'm adding new syntax to the previous syntax the previous
+index will still keep working and so I can have a new name if I wish
+for the new syntax so this is the method that will be available on
+108 types and the method will be append log with an argument Y I will
+just use the combined method from the moon wind and there's no new
+functionality here I'm just repackaging the combined in the new syntax
+so how does this work then here's a data type in my application which
+is log data as I mentioned before logging is a typical monoid example
+because there isn't there's an empty log and there's appending to
+log so you can put two logs together and it's a bigger log again so
+let's define what empty log means is the string that says no log so
+far and then let's create a menorah instance which is a monoid of
+type my log data I'm using implicit Val here why not so the combined
+function will check if one of the logs is emptied and I just take
+the other one if not empty I will concatenate logs and add a new line
+between those log lines so this is a little more sophisticated than
+just concatenating strings so my logs will be well formatted will
+always be new lines separated then I import this monoid syntax now
+this is the new thing that I defined here for syntax I import and
+now here's the code of my application I have some log values here
+one log message another log message and then I just say initial log
+a pen log log data wand a pen log log data - so I'm appending all
+these logs so this is the new syntax but I have just defined and it
+works the log result is equal to this string what I could do for instance
+very easily now cuz I could rename the second log to {[}Music{]} plus
+plus plus what happens then I have code like this so this might be
+more readable depending on my application I am free to add new syntax
+without changing the typeclass that was defined before so I'm completely
+open to extension without having to change any of the library code
+for Edmund okay so to summarize what we have gained is that the partial
+function that we defined appears as emitted on values of the relevant
+types and only on those types so the plus plus plus will be only defined
+on those types that have a monoid instance in my previous example
+and the new syntax is defined automatically on all the types I did
+not have to define plus plus plus specifically for my log data not
+like that at all I define it generally for any type M it has a monoid
+instance so this is the power of typeclasses let's now go through
+some worked examples this is going over the entire material of this
+tutorial the first example is that we want to define a partial type
+value function of this kind the bit size has a type parameter T and
+if that's an int type it returns 32 and if it's a long net return
+64 otherwise this type the value function remains undefined how would
+we implement that we go systematically so a partial type 2 value function
+requires first of all the partial type 2 type function to define a
+type domain so let us define this type constructor as a case class
+we could not just use a type definition because that's all going to
+be int for all the types T and so that's going to be a type collision
+so let's do a case class instead so this is a type constructor that
+will be our personal type two type function now we want to define
+this only for intent law so we do implicit Val bit-sized int evidence
+has bit sized with value 34 and long evidence has bit sized with value
+64 32 64 notice we put into the type that will be our type function
+we put the information that this function needs that the function
+we want is the bit size that will return to our 64 this information
+is carried by this type so the f-type evidence value here is the information
+we need that's almost always going to be the case for any partial
+type functions the partial type to type function represents a type
+that carries all the information we'll need about the type that the
+type 2 value functions we'll use later and the only information we're
+required to return is this number so let's put this number as our
+type in here now we define the partial type 2 value function so bit
+size has an implicit argument of type with size T and that returns
+just this evidence value dot size that's enough that's all we need
+to do and indeed this works as expected the test verifies that the
+next example is to define the mono it instance for this type now notice
+this is an option of a function from string to string so I'm going
+to use that as a type and I'm going to use the cats library for the
+standard memory typeclass so my tests here are all going to use the
+law checking for the cats library that I implemented in a different
+file so this is my data type I just define this as an option from
+string to string since this is such a simple type no need to do case
+classes here myself so defining a typeclass instance for the standard
+typeclass in the library means that the type constructor that PT TF
+is already defined in the library it is the monoid already defined
+in the cat's library the type constructor is there but I'm going to
+add more types to the domain so that's always going to be possible
+adding north types to the domain of this portion function and this
+so because the mono it is not sealed trait is just a trait not sealed
+here and so I can always add new new instances or new types to the
+type domain of that partial function so I'm going to so add this type
+to the type domain in order to do this all I need to do is to create
+value of the type monoid of data that's all that is required now so
+here's one value I create on this type I need to override two functions
+empty and combine the empty is a value of this type it combined is
+a function from two values of this type to a third value of this type
+so what is a naturally selected value of this type well I can think
+of many one could be it's an option of identity function so for some
+identity function so that's what I write here and the combined would
+have to be such that if there is a non-empty option then I compose
+these two functions so I have some of one function string to string
+some of another function I can post these two functions so this is
+the code I'm writing here so if there's a sum and the sum and I compose
+these two functions in all other cases I return none so clearly the
+identity function here is a neutral element for this operation so
+if I compose identity with anything I get the same function again
+in all other cases I get none anyway so this will satisfy the laws
+hopefully it's kind of a little boring instance because it very often
+produces none whenever one of the two parts of the combined one of
+the two arguments of the combined function isn't none it will produce
+no another instance would produce not much less frequently how would
+that work well if one of the two arguments of the combined function
+is none then I return the other one and so none becomes the neutral
+element and then I do compose the functions if they have two functions
+so basically I prefer to keep the function if I have one is non-empty
+option I prefer to keep it unless both are empty then the result won't
+be none so that's perhaps a more interesting instance but we're free
+to choose one or the other it's not really clear at this point which
+one would be more interesting so there could be different implementations
+of the same typeclass and there could be use cases for both of them
+because of this I don't make them implicit in my test code I want
+to keep them explicitly implicitly be possible with only one of them
+because I cannot have two positive values of the same type and I check
+that both of these satisfy the monoid laws no the satisfying minora
+Clause requires two implicit arguments of the arbitrary data and non-oil
+instance so I since I'm not doing the implicit I have to put these
+arguments by hand if I look at this function it has an arbitrary typeclass
+and the monoid typeclass so I need to present arguments and the arbitrary
+data I don't know where to get that but it's implicitly available
+so I just say possibly arbitrary data and that's how it works both
+are valid monoid instances it turns out the third example is by assuming
+that a and B are types with monoi oil instance I define a monoid instance
+for the product type so this is a interesting example because it shows
+that I don't have to implement everything from scratch if there are
+monoid instances for some previous types I can just define monoi instance
+for a new type and don't have to write a lot of code maybe those monoid
+instances for the previous types had a lot of code on them but this
+code is not very large so how do I do that well I use this implicit
+death mechanism which is I define a function that produces the type
+evidence for the product type so the type evidence is the value of
+a type monoid of product type so i produce this type evidence given
+the type evidence for monoid a and one going to be so this is what
+it means sure to define the noid instance for product a B if I have
+monoid instances for a and B it means to make a function it takes
+the two monoid instances I remind you that what noid instance is exactly
+the same as a type evidence value it's just for from annoyed so typeclass
+instance is exactly the same as a type evidence value it's a value
+of the type that is the partial type two type function applied to
+the type that were producing evidence for so if you want producing
+evidence for type a and type evidence is something of type one noid
+a and that's something we'll typically carry the entire information
+when to implement know it for type a so that is also called for that
+reason monoid the monoid instance for type a and so our task is to
+implement a function that takes monoid instances for types a and B
+and produces a monoid instance for type product a B well so how do
+we do that we'll just say we're all new monoid which is the way to
+extend the trait very quickly and we override two methods so we need
+to produce a value of type tuple a B and the evidence will give us
+a value of type a and the value of type B so we just put them into
+a tuple and the combine works in a similar way so we know how to combine
+two A's and we know how to combine two B's so let's shows us how to
+combine a tuple a B and another tuple a B or just combine a separately
+and you combine these separately and you use the evidence values to
+fetch the combined functions from the one monoi oil and another monoid
+so that's all let's test so this test is just going very slowly to
+make it clear exactly what we're having achieved well we have achieved
+so first we have no entered uh Balma lloyd instances in scope just
+make sure we don't have them so this would not compile and this would
+not compile now we declare these instances so for int let's say the
+empty value is 1 and combined is product that's fine that works for
+double-amputee is zero and combined as a sum that works to multiplication
+actually wouldn't work because it's not precise enough and it would
+violate associativity by precision errors by by roundoff errors so
+I use addition not multiplication for double alright so after I have
+defined instances as implicit values of these types we have both int
+and double monoid instance event scope in this will compile and work
+whereas here it did not alright so now that should be sufficient for
+us to be able to derive the Malloy instance for the tuple int double
+automatically and that works so the monoid law has work that's this
+test runs and that's how it works the next example is to show that
+if a is a monoid and B is a semigroup then the disjunction a plus
+B is a mohamed now to show this means again to write a function it
+takes a type evidence for monoid of a in the type evidence for semi
+group of b and produces the type evidence of monoid of a plus B were
+using equivalent terminology typeclass instance for monoid of a typeclass
+instance for B as a semi group these are two values these are going
+to be arguments of my function and the result of my function must
+be the typeclass instance from annoyed for type a a plus B just either
+a B so showing this is not some kind of theoretical mathematical exercise
+but it's a specific coding exercise I need to write a function that
+produces the evidence of monoid typeclass given these two evidences
+and I want to check laws so here's how it works this is this function
+has two type parameters and two implicit arguments one is the evidence
+that a E is a monoid and the other is the evidence that B is a semigroup
+remind you the semigroup doesn't have the selected element mono it
+has both a selected element and the binary operation a semigroup just
+has the binary operation no select an element so it's interesting
+that if we combine the two of them with the disjunction and the result
+can be monoid while in the previous example we had a product both
+of them needed to be a monoid for the product okay I'm annoyed because
+we need to produce the empty value so both of them must have an empty
+value but here with disjunction we don't need to produce both empty
+values just one is sufficient so that's why one thing I'm annoyed
+and another is the semigroup is sufficient alright so let's see how
+that works so empty element needs to be of type either a B well obviously
+we don't have selected naturally selected element of B because it's
+a seven group we do have a naturally selected element of monoid so
+we produce that okay now how does combine work all takes X of either
+a B Y of either a B needs to produce again either either a B so we
+have different situations we can have a and a we can combine a a obviously
+because it's a monoid b and b we can also combine b and b obviously
+so these cases are easy another two cases when it's not clear what
+to do now we have a left of XA and the right of YB so how do we combine
+now we can't really combine a and B we have no idea what these types
+are except that one is a semigroup and another is a monoid but they're
+not combined a ball directly one with the other so we have to ignore
+one of them which one know we can think about this but basically things
+don't work unless here you ignore the X and here you ignore the Y
+and let's check that this is correct first we don't have instances
+then we define instances for int so let's see we need something that's
+not a monoid that's a semigroup it's kind of hard to come up with
+such such a thing most operations we know are monoidal like plus because
+as neutral we needed an operation that does not have a neutral element
+but is associative so it's not easy well fortunately there is a paper
+which I'm referring to here it describes a function that is non commutative
+but associative and this function does not have an inverse and it
+does not have a neutral element so I'm using this function which is
+buttons function which is described in this article you find by this
+formula very simple formula kind of curious in this not commutative
+and yet associative in any case this is fine for a semigroup and for
+the double I use the same instances before the addition with zero
+and it works so if you change this to X instead of Y or here to whine
+sin of X it was not work it will break so this is a curious definition
+but that's interesting we have only one choice to define annoying
+instance on the disjunction so think about it option is a disjunction
+so if you have a monoid an option a is a monoid an optional is also
+a monoid disjunction of two monitors I'm annoyed because the second
+group is less than a monoid so that's good conjunction of two Mundo
+videos I'm annoyed so you can combine Malloy's quite easily and this
+is a generic way of defining these combinations the next example is
+to define a functor instance for this type now here were using try
+which is a scholar standard library API just not a data type it's
+a special thing you find in the Scala library sequence is a another
+thing you find in the Scala library so we're just trying to say how
+can we do things with Scala library you find type constructors can
+we make them into functors in terms of cats library let's say yes
+so we say here's this type I use the type definition to define the
+type function f so that F after this becomes a type function defined
+like this and then and in order to define a functor instance I need
+to define an implicit value of type factor of F so that's why first
+I define this name F like this is a type function and then I declare
+the new factor instance by overriding the map now I just implement
+the map so hard way implement the map well FA is this F of a which
+is a sequence of trial of a I can map over a sequence the result will
+be a try I can map over try and the result will be again a try so
+this is a functor because it has a map this is also a function because
+it hasn't helped composition of two funders is a factors because this
+is a functor because I can just compose maps like this and all I'm
+doing here is to make the cat's library aware of this being a factor
+so that's all I need to do I'm not going to check laws here because
+it's quite a lot of work to produce arbitrary values of these types
+especially they try but it is easy to verify that composition of two
+functions is a factor so we could have checked the laws if we wanted
+to the next example is to define a cats by functor instance for this
+type function and notice that this type function has two type parameters
+x and y and by functor is a typeclass defined in cats as a standard
+by standard typeclass that is like functor except with two type parameters
+it's a factor with respect to both of them so to define that first
+we define a type function or type constructor the name of that is
+Q as we are given here and then I'm using either just to reduce typing
+I don't want to declare my own sealed trait and two cases for the
+disjunction but I could of course declare Q as a sealed trait with
+two type parameters all be just more typing then all I need to do
+is to define an implicit value of type by factor of Q so this is code
+that does that to do that I need to override this function by map
+so by map means that it's a factor when you transform both type parameters
+at the same time can that's a factor so by factor means that it's
+a factor with respect to both type parameters at once so you transform
+both of them at the same time and the result transforms as you will
+expect so for instance either of a a be transformed with two functions
+two arbitrary functions one a to C and the other B to D replaces this
+with either CCD so that's what is required now I'm not going to write
+code for this function and we're just going to use my curry Howard
+library to implement the code automatically using the type this is
+possible and it works I'm just trying to reduce the time I'm spending
+writing code now disk this is something we already know how to implement
+functions given their types and this work can be done by the computer
+so why not the non-trivial part here is how to define typeclass of
+instances and that's what we do by hand having done this we have defined
+a simple set value and we check the by funky laws now the checking
+the by funky laws is again a function I implemented in my test code
+the next example is to define a country funkier typeclass so this
+typeclass is like functor except it has contra f map where the direction
+of the arrow visa counter to the direction of the transformation of
+the function values the type constructor values since a contra factor
+and the example consists of first defining a new typeclass having
+this partial type 2 value function and then to define an instance
+of this type laws for the type constructor of this formula which is
+type argument a going to integer so this is a contra funky because
+the type argument is to the left of the function here and we expect
+to be able to define an instance instance of a country funky die class
+for this type of structure so let's see how that works so the given
+country factor is this and let me define the type right away so after
+this I have defined the type function C so first we need to define
+a new typeclass which consists of a partial type two type function
+carrying the data and we're required to carry this this type function
+is contra functor with type variable which is the C now see here is
+a parameter name it's a little confusing perhaps let's call this C
+Bo just so that we don't confuse this with this C over here so this
+is a contra factor this is a trait having a deaf method of the signature
+we're required to help and in order to show that this type domain
+includes this C we are required to produce a value of type control
+factor of C so we do it like this so we we can either do a new country
+factor or we can do an implicit object extends country factor is the
+same thing could you do that it would be equalled we need to override
+this function and this function is to have this type from FB to a
+to a tend to be target again I let my curry Harvard library handle
+this code and once I'm done it will work let's do the same thing with
+cats lightly cats library has a contractor typeclass which is called
+contravariant and it has a different name and a different type of
+the function instead of F myopic as my episode not a flipped argument
+order other than that is very similar so how do I know this well I
+just let me show you how I know this I just do that it's not happy
+because I need to define country map as it tells me so I press this
+button here and I say implement methods tells me what methods I need
+to implement now C of a is a - int as far as I remember and now I
+can just say that's my very hard lighting at work all right the title
+notation which is required and then and then I define equality comparison
+function for this scene it says it's a function so C of int let's
+say is a function and comparing two functions is not immediate need
+to substitute different arguments and compare results so that's this
+C equal code that says for all T C 1 of T must be equal to C 2 of
+T and when the function C 1 is equal to C 2 so that I substitute into
+the law checker and it will check my laws and that works tests lastly
+the next example is to define a functor instance for the recursive
+type we find by this formula so here let me first define this recursive
+type so it's the seal trade with three cases and the third case is
+recursive it contains the same type of the trade itself all the cases
+on the trait are parameterize by the type parameter a and extend cubed
+so this is a functor because any always occurs to the right of the
+error or here but this is the recursive instance so let's find it
+so let's implement the functor instance with a new factor so functor'
+is the cat's functor just to check and needs to override the map let
+me type override it's not necessary to type all right but it's more
+checking this way if I mix up the type it was tell me that I'm not
+overriding it in the right way so with these object oriented things
+more checking has a better so type override make sure that it checks
+that you are overriding it with the correct type okay so what does
+this function do this function takes an FA of type QA it takes a function
+f from A to B and it needs to produce K only so to do that we have
+to match on this value let me rename this to Kiwi for clarity the
+first case is the function from int to a well obviously I need to
+compose this with a function f and then I will have a function from
+int to be as required the second case doesn't have any age so it remains
+unchanged just the type has type parameter is changed there was C
+2 of a now it's C 2 of B ok so this is option int I said option int
+I'm not sure something is fishy here well X is int that's true oh
+I see it's a case it does not tell me the type and it tells me something
+else tells me that possible trying with your types so the interesting
+case is the third case so the Q here is a key of a and I need to produce
+key of B now I know how to produce key of B so I used a recursive
+call to the same map that I'm defining and I call this one q + and
+put this into c3 so in this case I remain in the c3 case and I transform
+this Q by using the recursive definition of the same map so that's
+how I have to do it there's no no other way really so in this way
+we defined a functor instance so let's see how I would check that
+this function works correctly so for example I get this implicitly
+founder Q dot map is the value that I just defined I could have said
+Q functor instance dot map because I just defined it here but I don't
+want to know about these names these names are completely unimportant
+as long as you make them implicit so I'm going to use this as my data
+and put identity function on it and see if that transforms the data
+into the same form and it does so it's just sanity check I'm going
+to check the laws are more systematically in a second to do that I
+need an equality comparison so that's a bit involved because there
+are many cases so I'm going to compare each case and then there's
+a recursive case as well and I need to compare functions so all of
+that requires extra code so here is the case for comparing functions
+here's the recursive call so if I need to compare a c3 with c3 I recursively
+compare their contents of c3 using the same C equal function so that's
+how this works this is just to see that this works this would fail
+is that on the same and finally I call the frontal or checker on this
+type using C equal and the tests pass the final worked example was
+a bit more advanced so I started but it's not so bad it's to show
+that you can define a functor instance for a disjunction if you have
+functor instances for the two type constructors so this is a bit more
+advanced because you need to define a type function that is a disjunction
+of two given type functions so I need to define an implicit def which
+would have to type arguments F and G each of them being type functions
+and two implicit arguments which are the evidence that F is a factor
+and that the G is a function but what am I going to return I'm going
+to return if evidence that F plus G is a function but what is F plus
+G F plus G is a new type constructor in other words a new type function
+but it doesn't have a name yet and I cannot have a name for it because
+F and G are my parameters so the only way I mean to express this is
+to say that this is an anonymous type function so I'm returning type
+evidence that an anonymous type function is of typeclass functor and
+this is this anonymous type function it's X going to either f of X
+and G of X so that's a type X is a type parameter this is type expression
+that defines my type function and so the lambda syntax is syntax for
+anonymous type functions using the kind projector plugin so that is
+the kind of difficult part and other than that the school is quite
+straightforward the difficult part is reasoning about these higher-order
+type functions so for convenience I can put a name on it in the body
+of this function but I cannot put a name on it before I define the
+function return type so that's why this kind projector is important
+but other than that it's not so bad so type either FG is a type function
+that is the same as this anonymous type function over there it just
+has a name now and that's now easier to use I can just put this name
+whenever I need it so now I return this functor instance by overriding
+the map I have can either F G of a and I have a function from A to
+B and I need to return either G only so how do I do that well I get
+this FG a which is either F of T or F of a on G of a I'm matching
+it if it's F of a then I use the evidence for F to get the map of
+F away with less transformation T and if it's in the right I'll use
+the evidence for G to get the map for the functor gene use that map
+on the G value and the transformation T so that's it that's a very
+straightforward code now I test this code I create filter instances
+for some simple data types D 1 and D 2 very very simple data types
+for these data types I can just implement functor instances like that
+automatically and finally I I say well let's call this d1 or d2 so
+funny again for convenience introduced a specific name for the disjunction
+of two factors so this d1 or d2 is now a new type function which has
+a disjunction of the two type functions d1 and d2 and I check the
+function laws for d1 or d2 now the implicit function here was called
+invisibly I didn't have to call it myself to produce the type evidence
+that this is a functor but you see this function requires that evidence
+it wouldn't break even compiling if I didn't have that evidence since
+it compiles them it's correct now in this code I will show you how
+I attempted to do this without the current projector it's kind of
+difficult and the problem is we need to define this name if we cannot
+have anonymous functions anonymous type functions we have to define
+this name somewhere but we cannot define it before we have the type
+constructors F and G and so we have to define it inside the body of
+the function and then we can define the instance like this and check
+the laws but nobody outside of this function can see that instance
+because this is a function this is not an object this is not a well
+is this a function has to be called and when you call us it will define
+the instance and check the laws for it which works but normally outside
+of this code will be able to use this in instance so if you don't
+use the kind projector then you can't really express this situation
+but you actually have defined a functor instance for a disjunction
+of two arbitrary factors given as type parameters and this functor
+instance you see it's usable outside of this code so I can put this
+into a library I can put this into the companion objective factor
+and nobody will have to do any imports or anything just we'll just
+work automatically so that's the power of implicit function definitions
+that can automatically build new implicit evidence value so this is
+this becomes a new impressive evidence value that is automatically
+built up from existing implicit evidence values these two so this
+concludes the worked examples and here are some exercises for you
+that are quite similar to the worked examples and once you go through
+these exercises you will really have a solid understanding of type
+functions and typeclasses by way of conclusion let me summarize what
+are the problems we can solve now we can define arbitrary partial
+type two type functions and partial type two valued functions typeclasses
+are just a way to systematically manage partial type two value functions
+a lot different so just PTDS under student is somewhat more systematic
+way we can define these together or separately we can define some
+of them then later more partial type two values functions we can combine
+them we can use a Katz library to define instances for some standard
+typeclasses such as mono word semigroup functor and so on we can derive
+typeclass instances automatically from previously derived ones or
+previously programmed ones and we can reason about higher type functions
+types and kinds whatever that is necessary so what is it that we cannot
+do at this point no there's still things we cannot do one of these
+things is to derive typeclass instances automatically for polynomial
+data types notice the case classes sealed traits with disjunction
+in case classes with with data in them although that curry Howard
+library can do this in some cases it cannot do this in all cases and
+cannot do this automatically by implicit deaths either this requires
+more advanced tools which are available in the shapeless library and
+I have a link to a book online book a guide to shapeless where it
+is explained in depth how automatically an automatic derivation of
+type last instances works in the shapeless library another thing we
+cannot do is to derive a recursive type generically from an arbitrary
+type function so we have just seen an example of defining a functor
+instance for recursive type but this type was defined by hand so suppose
+we have a type function f given as a parameter and we want to define
+a recursive type R via this equation this is a recursive type equation
+or also called a fixed point equation R is a fixed point of the function
+f so this fixed point is a function of F and that function is usually
+denoted by Y the so called Y Combinator it takes an F which is itself
+a function and it returns its fixed point so the y must be defined
+by type equation of this sort so Y of F must be equal to Y of F is
+that R which is equal to F of R so Y of F must be equal to F of Y
+of F but this doesn't compile Scala doesn't allow us to make things
+like this more work is necessary to even define such things or have
+a generic type function that computes the recursive type and we haven't
+seen how to do it also for such recursive types we cannot derive typeclass
+instances automatically so for instance if F were a functor with some
+other type parameter then R would also be a factor or if if F is a
+mono then I would also be able know either something like this we
+would like to derive automatically typeclass instances whenever they
+exist and we cannot do this with the tools we have seen here now there
+are some advanced libraries like matryoshka that implement type level
+recursion or type level fix points that are able to handle these problems
+giving you a link here also shapeless might help not sure in any case
+these are more advanced topics which are perhaps further away from
+practical applications than I would like and there are some interesting
+discussions there is a blog post very interesting series of explanations
+of this kind of stuff that I encourage you to look at if you're interested
+this concludes chapter 5 
+\end{comment}
+
