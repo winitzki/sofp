@@ -1,527 +1,2078 @@
 
 \chapter{Functors, contrafunctors, and profunctors}
 
-\section{Slides}
+\global\long\def\gunderline#1{\mathunderline{greenunder}{#1}}%
+\global\long\def\bef{\forwardcompose}%
+\global\long\def\bbnum#1{\custombb{#1}}%
+Type constructors such as \lstinline!Seq[A]! or \lstinline!Array[A]!
+are data structures that hold or ``wrap'' zero or more values of
+type \lstinline!A!. These data structures are parametric: they work
+in the same way for every type \lstinline!A!. Working with parametric
+``data wrappers'' turns out to be a powerful design pattern of functional
+programming. To fully realize its benefits, we need to formulate rigorously
+the concept of ``wrapping'' a value of an arbitrary type. Once the
+concept of ``data wrapper'' is formalized through a set of mathematical
+laws, we can extend that design pattern to many other data structures.
 
-\subsection{``Container-like'' type constructors}
+\section{Practical use}
 
-Visualize \texttt{\textcolor{blue}{\footnotesize{}Seq{[}T{]}}} as
-a container with some items of type \texttt{\textcolor{blue}{\footnotesize{}T}}{\footnotesize\par}
+\subsection{Motivation: Type constructors that wrap data}
 
-How to formalize this idea as a property of \texttt{\textcolor{blue}{\footnotesize{}Seq}}?
+How to formalize the idea of ``parametrically wrapping data''? An
+intuition behind ``wrapping'' is that the wrapped data is ``still
+there'', i.e.~we should be able to \emph{manipulate} the data held
+within the wrapper. In functional programming, to ``manipulate''
+means to apply functions to data.
 
-Another example of a container: \texttt{\textcolor{blue}{\footnotesize{}Future{[}T{]}}}{\footnotesize\par}
+Let us look at some type constructors in the Scala library, such as
+\lstinline!Seq[A]!, \lstinline!Try[A]!, and \lstinline!Future[A]!.
+We notice the common features:
+\begin{itemize}
+\item The type constructor can wrap zero or more values of a given type.
+For example, \lstinline!List.fill(10)(0)! creates a sequence with
+ten values of type \lstinline!Int!, each value equal to \lstinline!0!.
+\item There are some methods for reading the wrapped values, if they exist.
+For example, \lstinline!list.headOption!, which returns a non-empty
+option when the first element is not empty.
+\item There are some methods for manipulating the wrapped values while keeping
+them wrapped. For example, \lstinline!List(10, 20, 30).map(_ + 5)!
+evaluates to \lstinline!List(15, 25, 35)!.
+\end{itemize}
+We note that the three data types express quite different kinds of
+``wrapping''. The data structure implementing \lstinline!Seq[A]!
+can hold a variable number of values of type \lstinline!A!. The data
+structure \lstinline!Try[A]! holds either a successfully computed
+value of type \lstinline!A!, or a failure. The data structure \lstinline!Future[A]!
+implements a computation that has been scheduled to run but may not
+have finished yet, and may return a value of type \lstinline!A! (or
+a failure) when finished, at a later time.
 
-a value of type \texttt{\textcolor{blue}{\footnotesize{}T}} will be
-available later, or may fail to arrive
+Since the meaning of the ``wrappers'' \lstinline!Seq!, \lstinline!Try!,
+and \lstinline!Future! is quite different, the methods for creating
+and reading the wrapped values will be specific to each type constructor.
+However, the manipulation method \lstinline!.map! is similar in all
+three examples. We can say generally that the \lstinline!.map! method
+will apply a given function $f^{:A\Rightarrow B}$ to the data of
+type $A$ held inside the wrapper, and the new data (of type $B$)
+will remain within a wrapper of the same type: 
+\begin{lstlisting}
+val a = List(x,y,z).map(f)  // Result is List(f(x), f(y), f(z))
+val b = Try(x).map(f)       // Result is Try(f(x))
+val c = Future(x).map(f)    // Result is Future(f(x))
+\end{lstlisting}
 
-Let us separate the ``bare container'' functionality from other
-functionality
+This motivates us to separate the ``wrapping'' functionality from
+all other features of the data types: A type constructor \lstinline!W[A]!
+is a wrapper if there exists a function called \lstinline!map! with
+the (curried) type signature
+\begin{lstlisting}
+def map[A, B]: Wrap[A] => (A => B) => Wrap[B]
+\end{lstlisting}
 
-A ``bare container'' will allow us to:
+We can see that \lstinline!Seq!, \lstinline!Try!, and \lstinline!Future!
+are ``wrappers'' because they have a suitable \lstinline!map! function.
+The functionality of a ``wrapper'' is quite limited; it can only
+manipulate its data using the \lstinline!.map! method. All other
+features \textendash{} reading data out of the wrapper, adding more
+data or deleting data from the wrapper, waiting until data becomes
+available etc., \textendash{} will be implemented by methods specific
+to each data type.
 
-manipulate items held within the container
+\subsection{Example: \texttt{Option} and the identity law\label{subsec:f-Example:-Option-and}}
 
-In FP, to ``manipulate items'' means to \emph{apply functions to
-values}
-
-``Container holds items'' = we can apply a function to the items
-
-but the new data items \emph{remain} within the same container!
-
-need \texttt{\textcolor{blue}{\footnotesize{}map{[}A,B{]}:\ Container{[}A{]}
-$\Rightarrow$ (A $\Rightarrow$ B) $\Rightarrow$ Container{[}B{]}}}{\footnotesize\par}
-
-A ``bare container'' will \emph{not} allow us to:
-
-make a new container out of a given set of items
-
-read values out of the container
-
-add more items into container, or delete items from container
-
-wait and get notified when new items become available in container
-
-\subsection{\texttt{Option{[}T{]}} as a container I}
-
-In the type notation: $\text{Option}^{A}=1+A$
-
-The \texttt{\textcolor{blue}{\footnotesize{}map}} function is required
-to have the type
+As an example of a ``data wrapper'', consider the type constructor
+\lstinline!Option[A]!, which is written in the type notation as 
 \[
-\text{map}^{A,B}:1+A\Rightarrow\left(A\Rightarrow B\right)\Rightarrow1+B
+\text{Opt}^{A}\triangleq\bbnum 1+A\quad.
+\]
+The type signature of its \lstinline!map! function is
+\[
+\text{map}^{A,B}:\bbnum 1+A\Rightarrow\left(A\Rightarrow B\right)\Rightarrow\bbnum 1+B\quad.
+\]
+This function produces a new \lstinline!Option[B]! value, possibly
+holding transformed data. We will now use this example to develop
+intuition about manipulating data in a wrapper.
+
+There are two possible implementations of \lstinline!map! that fit
+the type signature:
+\begin{lstlisting}
+def mapX[A, B](oa: Option[A])(f: A => B): Option[B] = None
+
+def mapY[A, B](oa: Option[A])(f: A => B): Option[B] = oa match {
+  case None      => None
+  case Some(x)   => Some(f(x))
+}
+\end{lstlisting}
+The implementation \lstinline!mapX! loses information\index{information loss}:
+it ignores all the input data and always returns a constant value
+\lstinline!None!. The implementation \lstinline!mapY! preserves
+information and is clearly a more useful version of \lstinline!map!. 
+
+How can we formulate this property of \lstinline!map! in a rigorous
+way? The trick is to write the expression \lstinline!map(oa)(f)!
+and to choose the argument $f^{:A\Rightarrow B}$ to be the identity
+function $\text{id}^{:A\Rightarrow A}$ (setting the type parameters
+to be equal, $A=B$, so that the types match). If \lstinline!map!
+preserves information then transforming a given value of type \lstinline!Option[A]!
+with an identity function will not change that value. Substituting
+the identity function instead of \lstinline!f! into \lstinline!mapY!,
+we obtain the code
+\begin{lstlisting}
+mapY[A, A](oa: Option[A])(identity[A]: A => A): Option[A] ==
+oa match {
+  case None      => None        // No change.
+  case Some(x)   => Some(x)     // No change.
+} == oa
+\end{lstlisting}
+The result is always equal to \lstinline!oa!. We can write that fact
+as an equation,
+\[
+\forall x^{:A}.\,\text{map}(x)(\text{id})=x\quad.
+\]
+This equation is called the \textbf{identity law}\index{identity law}
+of \lstinline!map!. The identity law is a formal way of expressing
+the information-preserving property of the \lstinline!map! function.
+The implementation \lstinline!mapX! violates the identity law since
+it always returns \lstinline!None! and so cannot return the arbitrary
+value $x$. A data wrapper is useless if manipulating the wrapped
+data will unexpectedly lose information about that data. So, the correct
+implementation of \lstinline!map! is the function we denoted \lstinline!mapY!.
+The code notation for \lstinline!map! is
+\[
+\text{map}^{A,B}\triangleq p^{:\bbnum 1+A}\Rightarrow f^{:A\Rightarrow B}\Rightarrow p\triangleright\begin{array}{|c||cc|}
+ & \bbnum 1 & B\\
+\hline \bbnum 1 & \text{id} & \\
+A &  & f
+\end{array}\quad.
 \]
 
-This function produces a new $\text{Option}^{B}$ value, possibly
-containing transformed data
-
-Main questions:
-
-How to avoid ``information loss'' in this function?
-
-Does this \texttt{\textcolor{blue}{\footnotesize{}map}} allow us to
-``manipulate values within the container''?
-
-
-\subsection{\texttt{Option{[}T{]}} as a container II}
-
-Avoiding ``information loss'' means:
-
-\texttt{\textcolor{blue}{\footnotesize{}map{[}A,A{]}(opt)(x$\Rightarrow$x)
-== opt}} \textendash{} ``\textbf{identity law}'' for \texttt{\textcolor{blue}{\footnotesize{}map}}{\footnotesize\par}
-
-Actually, we have two implementations of the type: 
+When writing code, it is convenient to use is the \lstinline!.map!
+method defined by the Scala library. However, when reasoning about
+the properties of \lstinline!map!, it turns out to be more convenient
+to flip the order of the curried arguments and to use the equivalent
+function, called \lstinline!fmap!, with the type signature
 \[
-\text{map}^{[A,B]}=(1+a^{A})\Rightarrow(f^{A\Rightarrow B})\Rightarrow1+f(a)
+\text{fmap}^{A,B}:\left(A\Rightarrow B\right)\Rightarrow\bbnum 1+A\Rightarrow\bbnum 1+B\quad.
 \]
-and
+The Scala implementation of \lstinline!fmap! is shorter than that
+of \lstinline!map!:
+\begin{lstlisting}
+def fmap[A, B](f: A => B): Option[A] => Option[B] = {
+  case None      => None
+  case Some(x)   => Some(f(x))
+}
+\end{lstlisting}
+The code notation for this function can be written in this way,
+\begin{equation}
+\text{fmap}\,(f^{:A\Rightarrow B})\triangleq\begin{array}{|c||cc|}
+ & \bbnum 1 & B\\
+\hline \bbnum 1 & \text{id} & \\
+A &  & f
+\end{array}\quad.\label{eq:f-def-opt-fmap-matrix-notation}
+\end{equation}
+The identity law also looks simpler if expressed in terms of \lstinline!fmap!:
 \[
-\text{map}^{[A,B]}=(1+a^{A})\Rightarrow(f^{A\Rightarrow B})\Rightarrow1+0^{B}
+\text{fmap}\,(\text{id})=\text{id}\quad.
 \]
-The second implementation has ``information loss''!
+Here we omit the type parameters $A$ and $B$, which must be both
+equal.
 
-Short notation for code (type annotations are optional):
-\begin{center}
-\begin{tabular}{|c|c|}
-\hline 
-\textbf{Short notation} & \textbf{Scala code}\tabularnewline
-\hline 
-\hline 
-$a^{A}$ & \texttt{\textcolor{blue}{\footnotesize{}val a: A}}\tabularnewline
-\hline 
-$f^{:B\Rightarrow C}=...$ & \texttt{\textcolor{blue}{\footnotesize{}def f{[}A{]}: B $\Rightarrow$
-C = \{...\}}}\tabularnewline
-\hline 
-$(a^{A}\boxplus b^{B})\Rightarrow...$ & \texttt{\textcolor{blue}{\footnotesize{}x: Either{[}A, B{]} match
-\{...\}}}\tabularnewline
-\hline 
-$a^{A}+\bbnum 0^{B}$ & \texttt{\textcolor{blue}{\footnotesize{}Left(a):\ Either{[}A, B{]}}}\tabularnewline
-\hline 
-$1$ & \texttt{\textcolor{blue}{\footnotesize{}()}}, also \texttt{\textcolor{blue}{\footnotesize{}None}}\tabularnewline
-\hline 
-\end{tabular}
-\par\end{center}
-
-
-\subsection{\texttt{Option{[}T{]}} as a container III}
-
-What it means to ``be able to manipulate values in a container''
-
-Flip the two curried arguments in the type signature of \texttt{\textcolor{blue}{\footnotesize{}map}}:{\footnotesize{}
+The type signature of \lstinline!fmap!,
 \[
-\text{fmap}^{[A,B]}:\left(A\Rightarrow B\right)\Rightarrow\text{Option}^{A}\Rightarrow\text{Option}^{B}
+\text{fmap}^{A,B}:\left(A\Rightarrow B\right)\Rightarrow\text{Opt}^{A}\Rightarrow\text{Opt}^{B}\quad,
 \]
-}{\footnotesize\par}
+looks like a transformation from functions of type \lstinline!A => B!
+to functions of type \lstinline!Option[A] => Option[B]!. This transformation
+is called \textbf{lifting}\index{lifting} because it ``lifts''
+a function operating on simple values into a function operating on
+wrapped values. For a function $f^{:A\Rightarrow B}$, the corresponding
+lifted function $\text{fmap}\,(f)$ has type \lstinline!Option[A] => Option[B]!.
+We could say that lifted functions operate on \lstinline!Option!-wrapped
+values.
 
-A function $f$ is ``\textbf{lifted}'' from $A\Rightarrow B$ to
-$\text{Option}^{A}\Rightarrow\text{Option}^{B}$ by \texttt{\textcolor{blue}{\footnotesize{}fmap}}:{\footnotesize{}
+So, the identity law can be formulated as ``lifted identity function
+is also an identity function''.
+
+\subsection{Motivation for the composition law}
+
+The main feature of a ``data wrapper'' is to allow us to manipulate
+the data inside it by applying functions to that data. A function
+$f$ works on wrapped data through lifting: the lifted function operates
+on wrapped data. It is natural to expect that lifted functions behave
+in the same way as the ``unlifted'' ones. For example, suppose we
+need to increment a counter \lstinline!c! of type \lstinline!Option[Int]!.
+The \lstinline!Option! type means that the counter may be empty or
+non-empty; if it is non-empty, we increment the integer value wrapped
+inside the \lstinline!Option!. To achieve this functionality, we
+lift the incrementing function
 \[
-\text{fmap}(f^{A\Rightarrow B}):\text{Option}^{A}\Rightarrow\text{Option}^{B}
+\text{incr}\triangleq x^{:\text{Int}}\Rightarrow x+1
 \]
-}{\footnotesize\par}
+and apply it to the counter \lstinline!c!. The Scala code is
+\begin{lstlisting}
+def incr: Int => Int = x => x + 1
+val c: Option[Int] = Some(0)
 
-Being able to manipulate values means that functions \emph{behave
-normally when lifted}, i.e.\ when applied within the container
+scala> c.map(incr)
+res0: Option[Int] = Some(1) 
+\end{lstlisting}
+If we apply the lifted function twice, we expect that the counter
+will be incremented twice:
+\begin{lstlisting}
+scala> c.map(incr).map(incr)
+res1: Option[Int] = Some(2)
+\end{lstlisting}
+This result is the same as lifting the function $x\Rightarrow x+2$:
+\begin{lstlisting}
+scala> c.map(x => x + 2)
+res2: Option[Int] = Some(2)
+\end{lstlisting}
+It would be confusing and counter-intuitive if \lstinline!c.map(x => x + 2)!
+did not give the same result. 
 
-The standard properties of function composition are{\footnotesize{}
+We can formulate this property more generally by saying that lifting
+should preserve function composition for arbitrary functions $f^{:A\Rightarrow B}$
+and $g^{:B\Rightarrow C}$:
+\[
+\text{fmap}(f^{:A\Rightarrow B}\bef g^{:B\Rightarrow C})=\text{fmap}(f^{:A\Rightarrow B})\bef\text{fmap}(g^{:B\Rightarrow C})\quad.
+\]
+This is called the \textbf{composition law}\index{composition law}.
+
+Let us formally verify the composition law for the \lstinline!Option!
+type. To practice the code derivations, we will perform the calculations
+both by writing Scala code fragments and by writing expressions in
+the code notation.
+
+The Scala code for the function \lstinline!fmap! was given in Section~\ref{subsec:f-Example:-Option-and}.
+To evaluate $\text{fmap}(f\bef g$), we apply \lstinline!fmap(f andThen g)!
+to an arbitrary value \lstinline!oa:Option[A]!, where \lstinline!f: A => B!
+and \lstinline!g: B => C! are arbitrary functions. In Scala code,
+it is more convenient to use the infix method \lstinline!.map! and
+write \lstinline!oa.map(f)! instead of the equivalent expression
+\lstinline!fmap(f)(oa)!:
+\begin{lstlisting}
+fmap(f andThen g)(oa) == oa.map(f andThen g) == oa match {
+  case None      => None
+  case Some(x)   => (f andThen g)(x)
+}
+\end{lstlisting}
+Since \lstinline!(f andThen g)(x) = g(f(x))!, we rewrite the result
+as
+\begin{lstlisting}
+oa.map(f andThen g) == oa match {
+  case None      => None
+  case Some(x)   => g(f(x))
+}
+\end{lstlisting}
+Now we consider the right-hand side of the law, $\text{fmap}(f)\bef\text{fmap}(g)$,
+and write the Scala code
+\begin{lstlisting}
+oa.map(f).map(g) == (oa match {
+  case None      => None
+  case Some(x)   => f(x)
+}).map(g) == (oa match {
+  case None      => None
+  case Some(x)   => f(x)
+}) match {
+  case None      => None
+  case Some(y)   => g(y)
+} == oa match {
+  case None      => None
+  case Some(x)   => g(f(x))
+}
+\end{lstlisting}
+So we find that the two sides of the law have identical code.
+
+This derivation is much shorter in the matrix notation; we use Eq.~(\ref{eq:f-def-opt-fmap-matrix-notation})
+as the definition of \lstinline!fmap! and omit the types:
 \begin{align*}
-f^{A\Rightarrow B}\bef id^{B\Rightarrow B} & =f^{A\Rightarrow B}\\
-id^{A\Rightarrow A}\bef f^{A\Rightarrow B} & =f^{A\Rightarrow B}\\
-f^{A\Rightarrow B}\bef(g^{B\Rightarrow C}\bef h^{C\Rightarrow D}) & =(f^{A\Rightarrow B}\bef g^{B\Rightarrow C})\bef h^{C\Rightarrow D}
+ & \text{fmap}(f)\bef\text{fmap}(g)=\begin{array}{||cc|}
+\text{id} & \\
+ & f
+\end{array}\bef\begin{array}{||cc|}
+\text{id} & \\
+ & g
+\end{array}\\
+{\color{greenunder}\text{matrix composition}:}\quad & =\begin{array}{||cc|}
+\text{id}\bef\text{id} & \\
+ & f\bef g
+\end{array}=\begin{array}{||cc|}
+\text{id} & \\
+ & f\bef g
+\end{array}\\
+{\color{greenunder}\text{definition of fmap}:}\quad & =\text{fmap}(f\bef g)\quad.
 \end{align*}
-}and should hold for the ``lifted'' functions as well!
 
-The ``identity law'' already requires that {\footnotesize{}$\text{fmap}(\text{id}^{A\Rightarrow A})=\text{id}^{\text{Option}^{A}\Rightarrow\text{Option}^{A}}$}{\footnotesize\par}
+These calculations prove that the \lstinline!map! method of the \lstinline!Option!
+type satisfies the composition law. If the composition law did not
+hold, we would not be able to understand how \lstinline!map! manipulates
+data within the \lstinline!Option! wrapper. Looking at the Scala
+code example above, we expect \lstinline!c.map(incr).map(incr)! to
+apply the transformation \lstinline!incr! twice in a row to the data
+wrapped by \lstinline!c!. If the result of \lstinline!c.map(incr).map(incr)!
+were not \lstinline!Some(2)! but, say, \lstinline!Some(0)! or \lstinline!None!,
+our ordinary intuitions about data transformations would be incorrect.
+In other words, violations of the composition law prevent us from
+analyzing the code via mathematical reasoning about the transformation
+of data values.
 
-It remains to require that \texttt{\textcolor{blue}{\footnotesize{}fmap}}
-should preserve function composition:{\footnotesize{}
+So, the composition law is a rigorous formulation of the requirement
+that wrapped data should be transformed (by lifted functions) in the
+same way as ordinary data. For example, the following associativity
+property holds for lifted functions:
+
+\subsubsection{Statement \label{subsec:f-Statement-composition-associativy-law}\ref{subsec:f-Statement-composition-associativy-law}}
+
+A consequence of the composition law is the associativity property
 \[
-\text{fmap}(f^{A\Rightarrow B}\bef g^{B\Rightarrow C})=\text{fmap}(f^{A\Rightarrow B})\bef\text{fmap}(g^{B\Rightarrow C})
+\text{fmap}(f)\bef\text{fmap}(g\bef h)=\text{fmap}(f\bef g)\bef\text{fmap}(h)
 \]
-}{\footnotesize\par}
+that holds for arbitrary functions $f^{:A\Rightarrow B}$, $g^{:B\Rightarrow C}$,
+and $h^{:C\Rightarrow D}$.
 
+\subparagraph{Proof}
 
-\subsection{Functor: the definition}
-
-An abstraction for the functionality of a ``bare container'' 
-
-A \textbf{functor} is:
-
-a data type with a type parameter, e.g.\ \texttt{\textcolor{blue}{\footnotesize{}MyData{[}T{]}}}{\footnotesize\par}
-
-such that a function \texttt{\textcolor{blue}{\footnotesize{}map}}
-or, equivalently, \texttt{\textcolor{blue}{\footnotesize{}fmap}} is
-available:{\footnotesize{}
+The left-hand side is rewritten as
 \begin{align*}
-\text{map}^{[A,B]}:\  & \text{MyData}^{A}\Rightarrow\left(A\Rightarrow B\right)\Rightarrow\text{MyData}^{B}\\
-\text{fmap}^{[A,B]}: & \left(A\Rightarrow B\right)\Rightarrow\text{MyData}^{A}\Rightarrow\text{MyData}^{B}
+ & \text{fmap}(f)\bef\,\gunderline{\text{fmap}(g\bef h)}\\
+{\color{greenunder}\text{composition law for }\left(g\bef h\right):}\quad & =\text{fmap}(f)\bef\left(\text{fmap}(g)\bef\text{fmap}(h)\right)\\
+{\color{greenunder}\text{associativity law (\ref{eq:associativity-of-function-composition})}:}\quad & =\gunderline{\left(\text{fmap}(f)\bef\text{fmap}(g)\right)}\bef\text{fmap}(h)\\
+{\color{greenunder}\text{composition law for }\left(f\bef g\right):}\quad & =\text{fmap}(f\bef g)\bef\text{fmap}(h)\quad,
 \end{align*}
-}{\footnotesize\par}
+which now equals the right-hand side. This proves the property.
 
-such that the identity law and the composition law hold
+\subsection{Functors: definition and examples\label{subsec:Functors:-definition-and-examples}}
 
-The laws are easier to formulate in terms of \texttt{\textcolor{blue}{\footnotesize{}fmap}}:\texttt{\textcolor{blue}{\footnotesize{}
+If we separate the functionality of ``data wrapper'' from all other
+features of a data constructor, we obtain:
+\begin{itemize}
+\item a data type with a type parameter, e.g.~\lstinline!L[A]!,
+\item a fully parametric function \lstinline!fmap! with type signature
+\[
+\text{fmap}_{L}:\left(A\Rightarrow B\right)\Rightarrow L^{A}\Rightarrow L^{B}\quad,
+\]
+\item such that both the identity law and the composition law hold:
+\begin{align}
+\text{fmap}_{L}\,(\text{id}^{:A\Rightarrow A}) & =\text{id}^{:L^{A}\Rightarrow L^{A}}\quad,\label{eq:f-identity-law-functor-fmap}\\
+\text{fmap}_{L}(f^{:A\Rightarrow B}\bef g^{:B\Rightarrow C}) & =\text{fmap}_{L}(f^{:A\Rightarrow B})\bef\text{fmap}_{L}(g^{:B\Rightarrow C})\quad.\label{eq:f-composition-law-functor-fmap}
+\end{align}
+\end{itemize}
+A type constructor $L$ with these properties is called a \textbf{functor}\index{functor}.
+The laws~(\ref{eq:f-identity-law-functor-fmap})\textendash (\ref{eq:f-composition-law-functor-fmap})
+are the functor laws of identity and composition. 
+
+The function \lstinline!map! is computationally equivalent to \lstinline!fmap!
+and can be defined by
 \begin{align*}
-\text{fmap}^{A,A}\,(\text{id}^{A\Rightarrow A}) & =\text{id}^{F^{A}\Rightarrow F^{A}}\\
-\text{fmap}(f^{A\Rightarrow B}\bef g^{B\Rightarrow C}) & =\text{fmap}(f^{A\Rightarrow B})\bef\text{fmap}(g^{B\Rightarrow C})
+ & \text{map}_{L}:L^{A}\Rightarrow\left(A\Rightarrow B\right)\Rightarrow L^{B}\quad,\\
+ & \text{map}_{L}(x^{:L^{A}})(f^{:A\Rightarrow B})=\text{fmap}_{L}(f^{:A\Rightarrow B})(x^{:L^{A}})\quad.
 \end{align*}
-}}{\footnotesize\par}
 
-Verify the laws for \texttt{\textcolor{blue}{\footnotesize{}Option{[}A{]}}}:
-see test code
+Each of the type constructors \lstinline!Option!, \lstinline!Seq!,
+\lstinline!Try!, and \lstinline!Future! has its own definition of
+\lstinline!map!; but the functor laws remain the same. We use the
+subscript $L$ when writing $\text{map}_{L}$ and $\text{fmap}_{L}$,
+in order to indicate clearly the type constructor for which those
+functions are defined.
 
-\texttt{\textcolor{blue}{\footnotesize{}def fmap{[}A,B{]}(f: (A $\Rightarrow$
-B)): Option{[}A{]} $\Rightarrow$ Option{[}B{]} = \{}}{\footnotesize\par}
+We will now look at some examples of type constructors that are functors.
+We will verify the functor laws for these type constructors in later
+parts of this chapter.
 
-\texttt{\textcolor{blue}{\footnotesize{}  case Some(x) $\Rightarrow$
-Some(f(x))}}{\footnotesize\par}
+\paragraph{Library types}
 
-\texttt{\textcolor{blue}{\footnotesize{}  case None $\Rightarrow$
-None}}{\footnotesize\par}
+Many type constructors defined in the Scala library have a \lstinline!.map!
+method, and almost all of them are functors. The most often used functors
+are:
+\begin{itemize}
+\item The standard disjunctive types \lstinline!Option!, \lstinline!Either[A, B]!
+(by default, transformations apply to the type parameter \lstinline!B!),
+and \lstinline!Try!.
+\item The linear sequence \lstinline!Seq! and its various specific derived
+classes such as \lstinline!List!, \lstinline!Range!, \lstinline!Vector!,
+\lstinline!IndexedSeq!, and \lstinline!Stream!.
+\item The ``task-like'' constructors: \lstinline!Future! and its alternatives:
+\lstinline!Task! (provided by the \texttt{monix} library), \lstinline!Async!
+and \lstinline!Concurrent! (provided by the \texttt{cats-effect}
+library), \lstinline!ZIO! (provided by the \texttt{zio} library).
+\item Dictionaries: \lstinline!Map[K, V]! with respect to the type parameter
+\lstinline!V!. The relevant method is called \lstinline!.mapValues!
+rather than \lstinline!.map!, and transforms only the values in the
+dictionary (leaving the keys unchanged).
+\end{itemize}
 
-\texttt{\textcolor{blue}{\footnotesize{}\}}}{\footnotesize\par}
+\paragraph{Functor blocks}
+
+Computations with wrapped values often require a chain of \lstinline!.map!
+methods,
+\begin{lstlisting}
+scala> val result = List(10, 20, 30)
+  .map(x => x * 2)
+  .map(y => ("result", y))
+  .map{ case (name, z) => s"$z named $name" }
+result: List[String] = List(20 named result, 40 named result, 60 named result)
+\end{lstlisting}
+Such code can be rewritten equivalently in the \index{functor block}\textbf{functor
+block} syntax:
+\begin{lstlisting}
+scala> val result = for {
+  x <- List(10, 20, 30)     // For each `x` from this list...
+  y = x * 2                 // define `y` ...
+  (name, z) = (s"$x*2", y)  // define `name` and `z` ...
+} yield s"$z is $name"      // and replace `x` by this expression. 
+result: List[String] = List(20 is 10*2, 40 is 20*2, 60 is 30*2)
+\end{lstlisting}
+The functor block is an important idiom in functional programming
+because it replaces a chain of \lstinline!.map! methods (as well
+as \lstinline!.filter! and \lstinline!.flatMap! methods, as we will
+see in later chapters) by a visually clear sequence of definitions
+and expressions. Scala uses the keywords \lstinline!for! and \lstinline!yield!
+to define a functor block. We will see many examples of functor blocks
+throughout this book. For now, we note that any chain of \lstinline!.map!
+operations on a functor value \lstinline!p:L[A]! can be replaced
+by a functor block of the form
+\begin{lstlisting}
+val result: L[B] = for {
+  x <- p           // The first line must contain a left arrow.
+  y = f(x)         // Some computation involving `x`.
+  z = g(x, y)      // Another computation, may use `x` and `y`.
+  ...
+} yield q(x, y, z) // May use `x`, `y`, `z` and any other defined variables.
+\end{lstlisting}
+assuming that \lstinline!q(x, y, z)! has type \lstinline!B!. The
+above code is equivalent to
+\begin{lstlisting}
+val result: L[B] = p
+  .map(f => (x, f(x)))
+  .map { case (x, y) => (x, y, g(x, y)) }
+  ...
+  .map { case (x, y, z) => q(x, y, z) }
+\end{lstlisting}
+but is easier to read and to write.
+
+Functor blocks can be used with any functors, not only with library-defined
+type constructors such as \lstinline!Seq! or \lstinline!Future!.
+Application-specific, custom type constructors defined in the application
+code, such as case classes with type parameters are often functors.
+Their structure is simple and helps build intuition for functors,
+so let us now consider some examples of case classes that are functors.
+
+\paragraph{Polynomial functors}
+
+Applications often use polynomial type\index{types!polynomial} constructors
+(whose type expressions involve constant types, type parameters, products,
+and disjunctions or ``sums'') to represent application-specific
+data. Consider the following Scala code:
+\begin{lstlisting}
+case class Counted[A](n: Int, a: A) {
+  def map[B](f: A => B): Counted[B] = Counted(n, f(a))
+}
+\end{lstlisting}
+This data type may be used to describe \lstinline!n! repetitions
+of a given value \lstinline!a:A!. The code already defines the infix
+method \lstinline!.map! for the \lstinline!Counted! class, which
+can be used like this,
+\begin{lstlisting}
+scala> Counted(10, "abc").map(s => "prefix " + s)
+res0: Counted[String] = Counted(10,prefix abc) 
+\end{lstlisting}
+Writing \lstinline!.map! as an infix method is equivalent to implementing
+\lstinline!map! as a function,
+\begin{lstlisting}
+def map[A, B](c: Counted[A])(f: A => B): Counted[B] = c match {
+  case Counted(n, a) => Counted(n, f(a))
+}
+\end{lstlisting}
+The type notation for \lstinline!Counted! is
+\[
+\text{Counted}^{A}\triangleq\text{Int}\times A\quad,
+\]
+showing that \lstinline!Counted! is a polynomial\index{types!polynomial}
+type constructor. The existence of a \lstinline!map! method suggests
+that \lstinline!Counted[A]! is a functor. To be sure, we need to
+check that the functor laws hold for this implementation of \lstinline!map!.
+
+\subsubsection{Example \label{subsec:f-Example-Int-x-A}\ref{subsec:f-Example-Int-x-A}\index{solved examples}}
+
+Verify that the implementation of \lstinline!map! for \lstinline!Counted!
+shown above satisfies the functor laws. 
+
+\subparagraph{Solution}
+
+The implementation of \lstinline!map! is fully parametric since it
+does not perform any type-specific operations; it uses the value \lstinline!n:Int!
+as if \lstinline!Int! were a type parameter. It remains to check
+that the laws hold. We will first verify the laws using the Scala
+syntax and then using the code notation.
+
+In Scala, the identity law means that for all \lstinline!n:Int! and
+\lstinline!a:A! we must have
+\begin{lstlisting}
+Counted(n, a).map(identity) == Counted(n, a)
+\end{lstlisting}
+To verify this, we substitute the code of \lstinline!.map! and find
+\begin{lstlisting}
+Counted(n, a).map(identity) == Counted(n, identity(a)) == Counted(n, a)
+\end{lstlisting}
+
+The composition law means that for all \lstinline!n:Int!, \lstinline!a:A!,
+\lstinline!f: A => B!, and \lstinline!g: B => C!, we must have
+\begin{lstlisting}
+Counted(n, a).map(f).map(g) == Counted(n, a).map(f andThen g)
+\end{lstlisting}
+Substitute the Scala code of \lstinline!.map! into the left-hand
+side:
+\begin{lstlisting}
+Counted(n, a).map(f).map(g) == Counted(n, f(a)).map(g) == Counted(n, g(f(a)))
+\end{lstlisting}
+The right-hand side:
+\begin{lstlisting}
+Counted(n, a).map(f andThen g) == Counted(n, (f andThen g)(a))
+  == Counted(n, g(f(a)))
+\end{lstlisting}
+
+Let us now write a proof in the code notation using the \lstinline!fmap!
+method:
+\[
+\text{fmap}_{\text{Counted}}(f^{:A\Rightarrow B})\triangleq\big(n^{:\text{Int}}\times a^{:A}\Rightarrow n\times f(a)\big)\quad.
+\]
+The identity law holds because
+\begin{align*}
+{\color{greenunder}\text{expect to equal }\text{id}:}\quad & \text{fmap}_{\text{Counted}}(\text{id})\\
+{\color{greenunder}\text{definition of }\text{fmap}_{\text{Counted}}:}\quad & =\big(n\times a\Rightarrow n\times\gunderline{\text{id}(a)}\big)\\
+{\color{greenunder}\text{definition of }\text{id}:}\quad & =\left(n\times a\Rightarrow n\times a\right)=\text{id}\quad.
+\end{align*}
+The composition law holds because
+\begin{align*}
+{\color{greenunder}\text{expect to equal }\text{fmap}_{\text{Counted}}(f\bef g):}\quad & \text{fmap}_{\text{Counted}}(f)\bef\text{fmap}_{\text{Counted}}(g)\\
+{\color{greenunder}\text{definition of }\text{fmap}_{\text{Counted}}:}\quad & =\left(n\times a\Rightarrow n\times f(a)\right)\bef\left(n\times b\Rightarrow n\times g(b)\right)\\
+{\color{greenunder}\text{compute composition}:}\quad & =n\times a\Rightarrow n\times\gunderline{g(f(a))}\\
+{\color{greenunder}\text{definition of }\left(f\bef g\right):}\quad & =\left(n\times a\Rightarrow n\times(f\bef g)(a)\right)=\text{fmap}_{\text{Counted}}(f\bef g)\quad.
+\end{align*}
+
+We will prove later that all polynomial type constructors have a unique
+definition of \lstinline!map! that satisfies the functor laws. It
+will be clear that we defined \lstinline!map! for \lstinline!Counted!
+correctly here. 
+
+What could be an \emph{incorrect} implementation of \lstinline!map!?
+Suppose that we want to count the number of times \lstinline!map!
+is applied:
+\begin{lstlisting}
+def map_bad[A, B](c: Counted[A])(f: A => B): Counted[B] = c match {
+  case Counted(n, a) => Counted(n + 1, f(a))
+}
+\end{lstlisting}
+This implementation may appear reasonable. However, it violates both
+functor laws; for instance,
+\begin{lstlisting}
+Counter(n, a) != map_bad(Counter(n, a))(identity) == Counter(n + 1, a)
+\end{lstlisting}
+The failure of functor laws leads to surprising behavior of code because
+simple refactorings will not work as expected:
+\begin{lstlisting}
+Counter(n, a).map(incr).map(incr) != Counter(n, a).map(x => x + 2)
+\end{lstlisting}
+
+Let us look at some other simple examples of polynomial type constructors.
+
+\subsubsection{Example \label{subsec:f-Example-A-A-A}\ref{subsec:f-Example-A-A-A}}
+
+Implement the \lstinline!fmap! function for the type constructor
+\begin{lstlisting}
+case class Vec3[A](x: A, y: A, z: A)
+\end{lstlisting}
 
 
-\subsection{Examples of functors I}
+\subparagraph{Solution}
 
-(Almost) everything that has a ``\texttt{map}'' is a functor
+Begin by implementing a fully parametric function:
+\begin{lstlisting}
+def fmap[A, B](f: A => B): Vec3[A] => Vec3[B] = {
+  case Vec3(x, y, z) => Vec3(f(x), f(y), f(z))
+}
+\end{lstlisting}
+Since all three values \lstinline!f(x)!, \lstinline!f(y)!, \lstinline!f(z)!
+have type \lstinline!B!, the code of \lstinline!fmap! would still
+satisfy the required type signature by returning, say, \lstinline!Vec3(f(z), f(x), f(x))!
+or some other combination of these values. However, that implementation
+would not preserve information about the values \lstinline!x!, \lstinline!y!,
+\lstinline!z! and about the ordering of these values in the original
+data \lstinline!Vec(x, y, z)!. For this reason, we choose the implementation
+of \lstinline!fmap! shown above.
 
-Specific functors will have methods for creating them, reading values
-out of them, adding / removing items, waiting for items to arrive,
-etc.
+The type notation for the type constructor \lstinline!Vec3[A]! is
+\[
+\text{Vec}_{3}{}^{A}\triangleq A\times A\times A\quad,
+\]
+and the code notation for \lstinline!fmap! is
+\[
+\text{fmap}_{\text{Vec}_{3}}(f^{:A\Rightarrow B})\triangleq x^{:A}\times y^{:A}\times z^{:A}\Rightarrow f(x)\times f(y)\times f(z)\quad.
+\]
 
-Common to all functors is the \texttt{\textcolor{blue}{\footnotesize{}map}}
+
+\subsubsection{Example \label{subsec:f-Example-P+QxA}\ref{subsec:f-Example-P+QxA}}
+
+Implement the \lstinline!fmap! function for the type constructor
+\[
+\text{QueryResult}^{A}\triangleq\text{String}+\text{String}\times\text{Long}\times A\quad.
+\]
+
+
+\subparagraph{Solution}
+
+Begin by implementing the type constructor in Scala,
+\begin{lstlisting}
+sealed trait QueryResult[A]
+case class Error[A](message: String)                    extends QueryResult[A]
+case class Success[A](name: String, time: Long, data: A) extends QueryResult[A]
+\end{lstlisting}
+Now implement a fully parametric, information-preserving function
+with the type signature of \lstinline!fmap! for this type constructor:
+\begin{lstlisting}
+def fmap[A, B](f: A => B): QueryResult[A] => QueryResult[B] = {
+  case Error(message)              => Error(message)
+  case Success(name, time, data)   => Success(name, time, f(data))
+}
+\end{lstlisting}
+As in the previous example, we treat specific types (\lstinline!Long!,
+\lstinline!String!) as if they were type parameters. In this way,
+we obtain the correct implementation of \lstinline!fmap! that satisfies
+the functor laws.
+
+For convenience, we may define the \lstinline!.map! method on the
+trait itself and split its implementation between the case classes
+like this:
+\begin{lstlisting}
+sealed trait QueryResult[A] {
+  def map[B](f: A => B): QueryResult[B] // No implementation here.
+}
+case class Error[A](message: String)                    extends QueryResult[A] {
+  def map[B](f: A => B): QueryResult[B] = Error(message)
+}
+case class Success[A](name: String, time: Long, data: A) extends QueryResult[A] {
+  def map[B](f: A => B): QueryResult[B] = Success(name, time, f(data))
+}
+\end{lstlisting}
+With this definition, we can now use \lstinline!QueryResult! in functor
+blocks:
+\begin{lstlisting}
+val q: QueryResult[Int] = Success("addresses", 123456L, 10)
+
+scala> val result = for {
+  x <- q
+  y = x + 2
+  z = s"$y addresses"
+} yield z
+result: QueryResult[String] = Success(addresses,123456,12 addresses)
+\end{lstlisting}
+
+
+\paragraph{Recursive polynomial functors}
+
+Recursive disjunctive type constructors shown in Section~\ref{sec:Lists-and-trees:recursive-disjunctive-types},
+such as lists and trees, are functors. Their \lstinline!fmap! methods
+are recursive functions, and they usually \emph{cannot} be directly
+implemented with tail recursion. 
+
+\subsubsection{Example }
+
+Define a list of odd length as a recursive type $\text{LO}^{A}$,
+\begin{align}
+\text{LO}^{A} & \triangleq A+A\times A\times\text{LO}^{A}\label{eq:f-lo-def}\\
+ & \cong A+A\times A\times A+A\times A\times A\times A\times A+...\nonumber 
+\end{align}
+and implement \lstinline!fmap! for it.
+
+\subparagraph{Solution}
+
+The Scala definition of the type constructor \lstinline!LO[A]! is
+
+\begin{lstlisting}
+sealed trait LO[A]
+final case class LO1[A](x: A)                    extends LO[A]
+final case class LO2[A](x: A, y: A, tail: LO[A]) extends LO[A]
+\end{lstlisting}
+
+We can implement \lstinline!fmap! as a recursive function:
+\begin{lstlisting}
+def fmap[A, B](f: A => B): LO[A] => LO[B] = {
+  case LO1(x)            => LO1[B](f(x))
+  case LO2(x, y, tail)   => LO2[B](f(x), f(y), fmap(f)(tail))
+}
+\end{lstlisting}
+This code for \lstinline!fmap! is not tail-recursive because \lstinline!fmap!
+is called inside the case class constructor \lstinline!LO2!. 
+
+For convenience, we can define the \lstinline!.map! method on the
+\lstinline!LO! trait:
+\begin{lstlisting}
+sealed trait LO[A] {
+  def map[B](f: A => B): LO[B]
+}
+final case class LO1[A](x: A)                    extends LO[A] {
+  def map[B](f: A => B): LO[B] = LO1[B](f(x))
+}
+final case class LO2[A](x: A, y: A, tail: LO[A]) extends LO[A] {
+  def map[B](f: A => B): LO[B] = LO2[B](f(x), f(y), tail.map(f))
+}
+\end{lstlisting}
+After this definition, we may use values of type \lstinline!LO[A]!
+in functor blocks:
+\begin{lstlisting}
+scala> val result = for {
+         x <- LO2("a", "quick", LO2("brown", "fox", LO1("jumped")))
+         y = x.capitalize
+         z = y + "/"
+       } yield (z, z.length)
+result: LO[(String, Int)] = LO2((A/,2),(Quick/,6),LO2((Brown/,6),(Fox/,4),LO1((Jumped/,7))))
+\end{lstlisting}
+
+The type constructor \lstinline!LO[A]! is a \textbf{recursive} \index{polynomial functors!recursive}\textbf{polynomial}
+\textbf{functor} because it is defined by a recursive type equation~(\ref{eq:f-lo-def})
+that uses only polynomial type operations (sums and products) in its
+right-hand side. For the same reason, lists and trees are recursive
+polynomial functors.
+
+\subsection{Examples of non-functors\label{subsec:Examples-of-non-functors}}
+
+What properties of a data type make it a functor? To build an intuition,
+it is helpful to see examples of data types that are \emph{not} functors.
+
+There are four ways for a type constructor to fail being a functor:
+\begin{itemize}
+\item A \lstinline!map! function's type signature cannot be implemented
+at all.
+\item A \lstinline!map! function can be implemented but cannot satisfy
+the functor laws.
+\item A given \lstinline!map! function is incorrect (does not satisfy the
+laws), but the error can be fixed \textendash{} a different implementation
+of \lstinline!map! would satisfy the laws.
+\item A given \lstinline!map[A, B]! function satisfies the laws for most
+types \lstinline!A! and \lstinline!B!, but violates the laws for
+certain specially chosen types.
+\end{itemize}
+We will now look at examples illustrating these possibilities.
+
+\paragraph{Cannot implement \lstinline!map!'s type signature}
+
+Consider the type constructor
+\[
+C^{A}\triangleq A\Rightarrow\text{Int}\quad.
+\]
+Scala code for this type notation can be
+\begin{lstlisting}
+final case class C[A](r: A => Int)
+\end{lstlisting}
+The data type \lstinline!C[A]! does not actually wrap data of type
+$A$; instead, it is a function that \emph{consumes} data of type
+$A$. One cannot implement a fully parametric \lstinline!map! function
+with the required type signature 
+\[
+\text{map}^{A,B}:\left(A\Rightarrow\text{Int}\right)\Rightarrow\left(A\Rightarrow B\right)\Rightarrow\left(B\Rightarrow\text{Int}\right)\quad.
+\]
+To see this, recall that a \index{fully parametric function}fully
+parametric function needs to treat all types as type parameters, including
+the primitive type \lstinline!Int!. So the code
+\begin{lstlisting}
+def map[A, B]: C[A] => (A => B) => C[B] = { r => f => C(_ => 123) }
+\end{lstlisting}
+satisfies the type signature of \lstinline!map! but is not fully
+parametric because it returns a specific value \lstinline!123! of
+type \lstinline!Int!, which is not allowed. Replacing the type \lstinline!Int!
+by a new type parameter $N$, we obtain the type signature
+\[
+\text{map}^{A,B,N}:\left(A\Rightarrow N\right)\Rightarrow\left(A\Rightarrow B\right)\Rightarrow B\Rightarrow N\quad.
+\]
+We have seen in Example~\ref{subsec:ch-solvedExample-6} that this
+type signature is not implementable. So, the type constructor $C$
+is not a functor.
+
+Another important example of type constructors where the \lstinline!map!'s
+type signature cannot be implemented are \index{generalized algebraic data types}\textbf{generalized
+algebraic data types} (GADTs\index{GADT}). In this book, they are
+called \textbf{unfunctors}\index{unfunctors}. An unfunctor is a type
+constructor that has specially constructed values when its type parameter
+is set only to certain specific types. An example of an unfunctor
+defined in Scala is
+\begin{lstlisting}
+sealed trait ServerAction[R]
+final case class GetResult[R](r: String => R) extends ServerAction[R]
+final case class StoreId(x: Long, y: String)  extends ServerAction[Boolean]
+final case class StoreName(name: String)      extends ServerAction[Unit]
+\end{lstlisting}
+We see that some parts of the disjunctive type \lstinline!ServerAction[R]!
+do not carry the type parameter \lstinline!R! but instead set \lstinline!R!
+to a specific type, such as \lstinline!R=Boolean! or \lstinline!R=Unit!.
+As a consequence, the case class \lstinline!StoreName! has no type
+parameters and can only represent values of type \lstinline!ServerAction[Unit]!
+and not, say, \lstinline!ServerAction[Int]!. To implement a fully
+parametric function with type signature
+\begin{lstlisting}
+def map[A, B]: ServerAction[A] => (A => B) => ServerAction[B]
+\end{lstlisting}
+we are required to support any choice of the type parameters \lstinline!A!
+and \lstinline!B!. For example, with \lstinline!A=Unit!, we must
+be able to transform a \lstinline!StoreName("abc")! from its fixed
+type \lstinline!ServerAction[Unit]! to a value of type \lstinline!ServerAction[B]!
+with an arbitrary type \lstinline!B!. However, the only way of creating
+a value of type \lstinline!ServerAction[B]! with an arbitrary \lstinline!B!
+is to use the \lstinline!GetResult[B]! case class, which requires
+us to have a function of type \lstinline!String => B!. It is impossible
+for us to produce such a function, since the type \lstinline!B! is
+unknown, and we have no given data of type \lstinline!B!. 
+
+We see that implementing \lstinline!map! is impossible because some
+type parameters are set already in the definition of \lstinline!ServerAction[R]!.
+One can say that the type constructor \lstinline!ServerAction[R]!
+fails to be fully parametric already in its type definition. This
+behavior of unfunctors is typical, and unfunctors are only used in
+situations where the lack of type parametricity does not lead to problems
+(see Chapter~\ref{chap:Free-type-constructions}).
+
+\paragraph{Cannot implement a lawful \lstinline!map! }
+
+An example of a non-functor of the second kind is 
+\[
+Q^{A}\triangleq\left(A\Rightarrow\text{Int}\right)\times A\quad.
+\]
+Scala code for this type constructor is
+\begin{lstlisting}
+final case class Q[A](q: A => Int, a: A)
+\end{lstlisting}
+A fully parametric \lstinline!map! function with the correct type
+signature \emph{can} be implemented (and there is only one fully parametric
+implementation):
+\[
+\text{map}^{A,B}\triangleq q^{:A\Rightarrow\text{Int}}\times a^{:A}\Rightarrow f^{:A\Rightarrow B}\Rightarrow(\_\Rightarrow q(a))^{:B\Rightarrow\text{Int}}\times f(a)\quad.
+\]
+The corresponding Scala code is
+\begin{lstlisting}
+def map[A, B]: Q[A] => (A => B) => Q[B] = { qa => f =>
+  Q[B](_ => qa.q(qa.a), f(qa.a)) 
+}
+\end{lstlisting}
+This \lstinline!map! function is fully parametric (since it treats
+the type \lstinline!Int! as a type parameter) and has the right type
+signature, but the functor laws do not hold. To see the violation
+of the identity law, we consider an arbitrary value $q^{:A\Rightarrow\text{Int}}\times a^{:A}$
+and compute:
+\begin{align*}
+{\color{greenunder}\text{expect to equal }q\times a:}\quad & \text{map}(q\times a)(\text{id})\\
+{\color{greenunder}\text{definition of }\text{map}:}\quad & =(\_\Rightarrow q(a))\times\text{id}(a)\\
+{\color{greenunder}\text{definition of }\text{id}:}\quad & =(\_\Rightarrow q(a))\times a\\
+{\color{greenunder}\text{function expansion, }q=\left(x\Rightarrow q(x)\right):}\quad & \neq(x\Rightarrow q(x))\times a=q\times a\quad.
+\end{align*}
+The law must hold for arbitrary functions $q^{:A\Rightarrow\text{Int}}$,
+but the function $\left(\_\Rightarrow q(a)\right)$ always returns
+the same value $q(a)$, and thus is not equal to the original function
+$q$. Thus, the result of $\text{map}(q\times a)(\text{id})$ is not
+always equal to the original value $q\times a$. 
+
+Since this \lstinline!map! function is the only available implementation
+of the required type signature, we conclude that $Q^{A}$ is not a
+functor (since there is no available implementation of \lstinline!map!
+that satisfies the laws).
+
+\paragraph{Mistakes in implementing \lstinline!map!}
+
+Non-functors of the third kind are type constructors with incorrectly
+implemented \lstinline!map! functions. A simple example is the type
+constructor $P^{A}\triangleq A\times A$ with the \lstinline!map!
 function
-
-Right now we are only concerned about the properties of \texttt{\textcolor{blue}{\footnotesize{}map}}{\footnotesize\par}
-
-Examples of functors in the Scala standard library:
-
-\texttt{\textcolor{blue}{\footnotesize{}Option{[}T{]}}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}Either{[}L, R{]}}} with respect
-to \texttt{\textcolor{blue}{\footnotesize{}R}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}Seq{[}T{]}}} and \texttt{\textcolor{blue}{\footnotesize{}Iterator{[}T{]} }}{\footnotesize\par}
-
-various subtypes of \texttt{\textcolor{blue}{\footnotesize{}Seq}}
-(\texttt{\textcolor{blue}{\footnotesize{}Range}}, \texttt{\textcolor{blue}{\footnotesize{}List}},
-\texttt{\textcolor{blue}{\footnotesize{}Vector}}, \texttt{\textcolor{blue}{\footnotesize{}IndexedSeq}},
-etc.)
-
-\texttt{\textcolor{blue}{\footnotesize{}Future{[}T{]}}}, \texttt{\textcolor{blue}{\footnotesize{}Try{[}T{]}}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}Map{[}K, V{]}}} with respect
-to \texttt{\textcolor{blue}{\footnotesize{}V}} (using \texttt{\textcolor{blue}{\footnotesize{}mapValues}})
-
-Examples of \emph{not-really-functors} that have a \texttt{\textcolor{blue}{\footnotesize{}map}}:
-
-\texttt{\textcolor{blue}{\footnotesize{}Set{[}T{]}}} \textendash{}
-it works only when \texttt{\textcolor{blue}{\footnotesize{}T}} has
-a well-behaved ``\texttt{\textcolor{blue}{\footnotesize{}==}}''
-operation
-
-\texttt{\textcolor{blue}{\footnotesize{}Map{[}K, V{]}}} with respect
-to both \texttt{\textcolor{blue}{\footnotesize{}K}} and \texttt{\textcolor{blue}{\footnotesize{}V}},
-because it is a \texttt{\textcolor{blue}{\footnotesize{}Set}} w.r.t.
-\texttt{\textcolor{blue}{\footnotesize{}K}}{\footnotesize\par}
-
-See test code
-
-
-\subsection{Examples of functors II}
-
-Polynomial type constructors as functors
-
-Short notation: $\text{QueryResult}^{A}=\text{String}\times\text{Int}\times A$
-
-\texttt{\textcolor{blue}{\footnotesize{}case class QueryResult{[}A{]}(name: String,
-time: Int, data: A)}}{\footnotesize\par}
-
-Short notation: $\text{Vec3}^{A}=A\times A\times A$
-
-\texttt{\textcolor{blue}{\footnotesize{}case class Vec3{[}A{]}(x: A,
-y: A, z: A)}}{\footnotesize\par}
-
-Short notation: $\text{QueryResult}^{A}=\text{String}+\text{String}\times\text{Int}\times A$
-
-\texttt{\textcolor{blue}{\footnotesize{}sealed trait QueryResult{[}A{]}}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}case class Error{[}A{]}(message: String)
-extends QueryResult{[}A{]}}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}case class Success{[}A{]}(name: String,
-time: Int, data: A) }}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}                     extends
-QueryResult{[}A{]}}}{\footnotesize\par}
-
-See test code
-
-
-\subsection{Examples of functors III: non-functors I}
-
-Data types that cannot have ``\texttt{map}'' at all, due to type
-problems
-
-Data types that \emph{consume} a value of the parameter type
 \[
-\text{NotContainer}^{A}=\left(A\Rightarrow\text{Int}\right)\times A
+\text{map}\triangleq x^{:A}\times y^{:A}\Rightarrow f^{:A\Rightarrow B}\Rightarrow f(y)\times f(x)\quad.
 \]
-Note: we can implement map for it, but laws do not hold
-
-\texttt{\textcolor{blue}{\footnotesize{}case class NotContainer{[}A{]}(x: A
-$\Rightarrow$ Int, y: A)}}{\footnotesize\par}
-
-Disjunction types with non-parametric type values
-
-\texttt{\textcolor{blue}{\footnotesize{}sealed trait ServerAction{[}Res{]}}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}case class GetResult{[}Res{]}(r: Long
-$\Rightarrow$ Res) extends ServerAction{[}Res{]}}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}case class StoreId(x: Long,
-y: String) extends ServerAction{[}Long{]}}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}case class StoreName(name: String)
-extends ServerAction{[}String{]}}}{\footnotesize\par}
-
-The type \texttt{\textcolor{blue}{\footnotesize{}ServerAction{[}Res{]}}}
-is called a GADT (``generalized algebraic data type'')
-
-Not sure what the short notation should be for GADTs!
-
-
-\subsection{Examples of functors III: non-functors II}
-
-These \emph{could} be functors, except for incorrect implementations
-of ``\texttt{map}''
-
-We need a well-behaved $\text{fmap}\,(f^{A\Rightarrow B}):\text{Container}^{A}\Rightarrow\text{Container}^{B}$
-
-What could go wrong?
-
-\texttt{\textcolor{blue}{\footnotesize{}fmap(f)}} ignores \texttt{\textcolor{blue}{\footnotesize{}f}}
-\textendash{} e.g.\ always returns \texttt{\textcolor{blue}{\footnotesize{}None}}
-for \texttt{\textcolor{blue}{\footnotesize{}Option{[}B{]}}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}fmap(f)}} reorders data items
-in a container: 
-\[
-\text{Container}^{A}\equiv A\times A;\qquad\text{fmap}^{A,B}\,(f^{A\Rightarrow B})({\color{blue}x}^{A},{\color{blue}y}^{A})=\left(f({\color{blue}y}),f({\color{blue}x})\right)
-\]
-e.g.\ swaps some elements in $A\times A\times A$:
-
-\texttt{\textcolor{blue}{\footnotesize{}def fmap{[}A, B{]}(f: A $\Rightarrow$
-B): Vec3{[}A{]} $\Rightarrow$ Vec3{[}B{]} =}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}  \{ case Vec3(x, y, z) $\Rightarrow$
-Vec3(f(y), f(x), f(z)) \}}}{\footnotesize\par}
-
-Does a special computation if types are equal: if \texttt{\textcolor{blue}{\footnotesize{}A}}
-and \texttt{\textcolor{blue}{\footnotesize{}B}} are the same type,
-do \texttt{\textcolor{blue}{\footnotesize{}fmap{[}A, A{]}(f) = identity}},
-otherwise $f(x)$ is applied
-
-Does a special computation if type is equal to a specific type, e.g.\ if
-\texttt{\textcolor{blue}{\footnotesize{}A = B = Int}} then do $f(f(x))$
-else $f(x)$
-
-Does a special computation if $f$ is equal to some $f_{0}$, otherwise
-use $f(x)$
-
-See test code
-
-
-\subsection{Recursive polynomial types as functors}
-
-Example: List of even length is a recursive type,
+Here is the Scala code corresponding to this code notation:
+\begin{lstlisting}
+def map[A, B](p: (A, A))(f: A => B): (B, B) = p match {
+  case (x, y) => (f(y), f(x))
+}
+\end{lstlisting}
+This code swaps the values in the pair \lstinline!(x, y)!, which
+does not preserve information about the ordering of these values and
+is not consistent with the functor laws, e.g.~with the identity law:
 \begin{align*}
-LP^{A} & \equiv1+A\times A\times LP^{A}\\
- & =1+A\times A+A\times A\times A\times A+...
+{\color{greenunder}\text{expect to equal }x\times y:}\quad & \text{map}(x^{:A}\times y^{:A})(\text{id}^{A})\\
+{\color{greenunder}\text{definition of }\text{map}:}\quad & =\text{id}(y)\times\text{id}(x)\\
+{\color{greenunder}\text{definition of }\text{id}:}\quad & =y\times x\neq x\times y\quad.
 \end{align*}
+We should not have swapped the values in the pair. The fully information-preserving
+implementation of \lstinline!map!,
+\[
+\text{map}\triangleq x^{:A}\times y^{:A}\Rightarrow f^{:A\Rightarrow B}\Rightarrow f(x)\times f(y)\quad,
+\]
+satisfies the functor laws.
 
-\texttt{\textcolor{blue}{\footnotesize{}sealed trait LP{[}A{]}}}{\footnotesize\par}
+Example \ref{subsec:f-Example-A-A-A} shows the type constructor \lstinline!Vec3!
+with an incorrect implementation of \lstinline!map! that reorders
+some parts of a tuple and duplicates other parts. The correct implementation
+preserves the order of parts and does not duplicate or omit any parts.
 
-\texttt{\textcolor{blue}{\footnotesize{}final case class LPempty{[}A{]}()
-extends LP{[}A{]}}}{\footnotesize\par}
+Another case of an an incorrect implementation is the following \lstinline!map!
+function for \lstinline!Option[A]!:
+\begin{lstlisting}
+def map_bad[A, B]: Option[A] => (A => B) => Option[B] = { _ => _ => None }
+\end{lstlisting}
+This function always returns \lstinline!None!, losing information,
+and violates the identity law. However, we have already seen that
+\lstinline!Option[A]! has a different implementation of \lstinline!map!
+that satisfies the functor laws.
 
-\texttt{\textcolor{blue}{\footnotesize{}final case class LPpair{[}A{]}(x: A,
-y: A, tail: LP{[}A{]}) extends LP{[}A{]}}}{\footnotesize\par}
+Similarly, one could define the map method for the List{[}A{]} type
+constructor to always return an empty list:
+\begin{lstlisting}
+def map_bad[A, B]: List[A] => (A => B) => List[B] = { _ => _ => List() }
+\end{lstlisting}
+This implementation loses information and violates the functor laws.
+Of course, the Scala library provides a correct implementation of
+\lstinline!map! for \lstinline!List!.
 
-We can implement \texttt{\textcolor{blue}{\footnotesize{}fmap}} as
-a recursive function:
+Example~\ref{subsec:f-Example-Int-x-A} is another situation in which
+a mistake in implementing \lstinline!map! violates functor laws.
 
-\texttt{\textcolor{blue}{\footnotesize{}def fmap{[}A, B{]}(f: A $\Rightarrow$
-B): LP{[}A{]} $\Rightarrow$ LP{[}B{]} = \{}}{\footnotesize\par}
+Functor laws will also be violated when \lstinline!map! is not fully
+parametric. For instance, consider an implementation of \lstinline!fmap[A, B](f)!
+that checks whether the two type parameters $A$ and $B$ are equal
+to each other \emph{as types}, and if so, applies the function argument
+\lstinline!f! twice. We need to use special features of Scala for
+comparing two type parameters as types:
+\begin{lstlisting}
+import scala.reflect.runtime.universe._
+def getType[T: TypeTag](x: T): Type = weakTypeOf[T]
 
-\texttt{\textcolor{blue}{\footnotesize{}  case LPempty() $\Rightarrow$
-LPempty{[}B{]}()}}{\footnotesize\par}
+def fmap_bad[A: TypeTag, B: TypeTag](f: A => B)(oa: Option[A]): Option[B] = oa match {
+  case None      => None
+  case Some(x)   =>     // If A = B, return f(f(x)), else return f(x).
+    val y: B = f(x)
+    val z: B = if (getType(x) =:= getType(y)) f(y.asInstanceOf[A]) else y
+    Some(z)
+}
+\end{lstlisting}
+Testing shows that this function works as designed:
+\begin{lstlisting}
+scala> fmap_bad[Int, String](_ + " a")(Some(123))
+res0: Option[String] = Some(123 a)
 
-\texttt{\textcolor{blue}{\footnotesize{}  case LPpair(x, y, tail)
-$\Rightarrow$ LPpair{[}B{]}(f(x), f(y), fmap(f)(tail))}}{\footnotesize\par}
+scala> fmap_bad[String, String](_ + " a")(Some("123"))
+res1: Option[String] = Some(123 a a)
+\end{lstlisting}
+The function \lstinline!fmap_bad! satisfies the identity law but
+violates the composition law:
+\begin{lstlisting}
+scala> fmap_bad[String, String](_ + " b")(Some("123 a a"))
+res2: Option[String] = Some(123 a a b b)
 
-\texttt{\textcolor{blue}{\footnotesize{}\}}}{\footnotesize\par}
+scala> fmap_bad[String, String](_ + " a b")(Some("123"))
+res3: Option[String] = Some(123 a b a b)
+\end{lstlisting}
 
-This is the only way to implement \texttt{\textcolor{blue}{\footnotesize{}fmap}}
-that satisfies the functor laws!
+In all these examples, we can implement a different \lstinline!map!
+function that satisfies the laws. Strictly speaking, a functor is
+a type constructor \emph{together with} a \lstinline!map! function.
+So, it is not precise to say that a type constructor such as \lstinline!Vec3!
+is by itself a functor: being a functor depends on the given \lstinline!map!
+function. However, we will say ``the type constructor \lstinline!L!
+is a functor'' meaning that a correct implementation of \lstinline!map!
+can be found. In this sense, we say that e.g.~the type constructors
+\lstinline!Option! and \lstinline!List! are functors.
 
-See test code for checking the functor laws
+\paragraph{Laws hold for some types but not for others}
 
+The Scala standard library contains \lstinline!map! methods for the
+type constructors \lstinline!Set[K]! (transforming the values in
+a set) and \lstinline!Map[K, V]! (transforming both the keys and
+values in a dictionary). However, the type constructors \lstinline!Set!
+and \lstinline!Map! fail to be lawful functors with respect to the
+type parameter \lstinline!K!. The reason for the failure is complicated.\footnote{The code was published by Pawel Szulc at \texttt{\href{https://gist.github.com/tpolecat/7401433}{https://gist.github.com/tpolecat/7401433}}}
+A value of type \lstinline!Set[K]! represents a set of zero or more
+values of type \lstinline!K!, and it is implied that all values in
+the set are distinct. So, the correct functionality of \lstinline!Set!
+implies that we are able to compare two values of type \lstinline!K!
+for equality. A standard way of comparing values for equality is the
+\lstinline!equals! method defined in the Scala library:
+\begin{lstlisting}
+scala>  List(1, 2, 3).equals(List(1, 2, 3))
+res0: Boolean = true
+
+scala>  List(1, 2, 3).equals(List(1, 2, 3, 4))
+res1: Boolean = false
+\end{lstlisting}
+However, the \lstinline!equals! operation needs to obey the appropriate
+mathematical laws (reflexivity and transitivity) that may or may not
+be implemented correctly by the \lstinline!equals! method of a given
+type \lstinline!K!. In most practical applications, the specific
+type \lstinline!K! (such as \lstinline!String! or \lstinline!Int!)
+will have a mathematically correct \lstinline!equals! operator. However,
+one can define an artificial example of a type that does not have
+the expected properties:
+\begin{lstlisting}
+final case class Weird(n: Int) {
+  override def equals(obj: Any): Boolean = obj match {
+    case w: Weird if(n == 1 && w.n == 1) => true
+    case _ => false
+  }
+}
+\end{lstlisting}
+Values of type \lstinline!Set[Weird]! do not satisfy the composition
+law of functors:
+\begin{lstlisting}
+val f: Int => Weird = { a => Weird(a % 2) }
+val g: Weird => Weird = { w => if(w.n == 1) Weird(2) else w }
+val ws: Set[Int] = (1 to 10).toSet
+
+scala> ws.map(f andThen g).toList.map(_.n)
+res2: List[Int] = List(0, 0, 0, 0, 0, 2, 2, 2, 2, 2)
+
+scala> ws.map(f).map(g).toList.map(_.n)
+res3: List[Int] = List(0, 0, 0, 0, 0, 2)
+\end{lstlisting}
+The law does not hold because \lstinline!Set[Weird]! fails to see
+that the five values \lstinline!Weird(2)! are equal, due to the mathematically
+invalid implementation of \lstinline!equals! violating the reflexivity
+law ($\forall x.\,x=x$):
+\begin{lstlisting}
+scala> Weird(2) equals Weird(2)
+res4: Boolean = false
+\end{lstlisting}
+However, the functor laws for a type constructor \lstinline!L[A]!
+do not asssume that the type \lstinline!A! should have a valid definition
+of the \lstinline!equals! operation (or of any other operation).
+The \lstinline!map! operation of a functor \lstinline!L[A]! must
+be \textbf{lawful}\index{lawful functor}, i.e.~must satisfy the
+functor laws~(\ref{eq:f-identity-law-functor-fmap})\textendash (\ref{eq:f-composition-law-functor-fmap})
+regardless of the type \lstinline!A!. The functor laws must hold
+even if the type \lstinline!A!'s implementation of certain operations
+violate some other laws. For this reason, \lstinline!Set[A]! cannot
+be considered a functor in a rigorous sense.
+
+The \lstinline!map! method for dictionaries shows similar behavior
+because the ``keys'' of a dictionary must be distinct and are compared
+using the \lstinline!equals! method. In other words, a dictionary
+\lstinline!Map[K, V]! behaves as a set with respect to the type \lstinline!K!
+of the dictionary's ``keys'' and thus is not a rigorous functor
+with respect to the type parameter \lstinline!K!.
+
+The Scala library still provides the \lstinline!.map!, \lstinline!.flatMap!,
+and other methods for sets \lstinline!Set[K]! and dictionaries \lstinline!Map[K, V]!
+because in most practical applications the type \lstinline!K! will
+have a correctly defined \lstinline!.equals! method, and so it is
+likely that we will not see any violations of the functor laws.
 
 \subsection{Contrafunctors}
 
-The type  $C^{A}\equiv A\Rightarrow\text{Int}$ is not a functor (impossible
-to implement \texttt{\textcolor{blue}{\footnotesize{}map}}), but we
-can implement \texttt{\textcolor{blue}{\footnotesize{}contrafmap}}:
+As we have seen in Section~\ref{subsec:Examples-of-non-functors},
+the type constructor
 \[
-\text{contrafmap}^{A,B}:\left({\color{blue}B\Rightarrow A}\right)\Rightarrow C^{A}\Rightarrow C^{B}
+C^{A}\triangleq A\Rightarrow\text{Int}
 \]
-
-The contrafunctor laws are analogous to functor laws:\texttt{\textcolor{blue}{\footnotesize{}
+is not a functor because it is impossible to implement the type signature
+of \lstinline!map! for it,
+\[
+\text{map}^{A,B}:\left(A\Rightarrow\text{Int}\right)\Rightarrow\left(A\Rightarrow B\right)\Rightarrow B\Rightarrow\text{Int}\quad.
+\]
+The reason for this impossibility is that $C^{A}$ consumes values
+of type $A$, and the function $A\Rightarrow B$ cannot be applied
+since no values of type $A$ are available. However, it would be possible
+to apply a function of type $B\Rightarrow A$ since a value of type
+$B$ is available as one of the curried arguments. So, we can implement
+a function called \lstinline!contramap! with a different type signature
+where the function type is $B\Rightarrow A$ instead of $A\Rightarrow B$:
+\[
+\text{contramap}^{A,B}:\left(A\Rightarrow\text{Int}\right)\Rightarrow\left(B\Rightarrow A\right)\Rightarrow B\Rightarrow\text{Int}\quad.
+\]
+The implementation of this function is written in the code notation
+as
+\[
+\text{contramap}\triangleq c^{:A\Rightarrow\text{Int}}\Rightarrow f^{:B\Rightarrow A}\Rightarrow\left(f\bef c\right)^{:B\Rightarrow\text{Int}}\quad,
+\]
+and the corresponding Scala code is
+\begin{lstlisting}
+def contramap[A, B](ca: C[A])(f: B => A): C[B] = { f andThen ca }
+\end{lstlisting}
+Flipping the order of the curried arguments in \lstinline!contramap!,
+we define \lstinline!contrafmap! as
+\begin{align}
+\text{contrafmap}^{A,B} & :\left(B\Rightarrow A\right)\Rightarrow C^{A}\Rightarrow C^{B}\quad,\nonumber \\
+\text{contrafmap} & \triangleq f^{:B\Rightarrow A}\Rightarrow c^{:A\Rightarrow\text{Int}}\Rightarrow\left(f\bef c\right)^{:B\Rightarrow\text{Int}}\quad.\label{eq:f-example-1-contrafmap}
+\end{align}
+We can check that this implementation satisfies two laws analogous
+to the functor laws:
 \begin{align*}
-\text{contrafmap}^{A,A}(\text{id}^{A\Rightarrow A}) & =\text{id}^{C^{A}\Rightarrow C^{A}}\\
-\text{contrafmap}\left(g\bef f\right) & =\text{contrafmap}\left(f\right)\bef\text{contrafmap}\left(g\right)
+{\color{greenunder}\text{identity law}:}\quad & \text{contrafmap}^{A,A}(\text{id}^{:A\Rightarrow A})=\text{id}^{:C^{A}\Rightarrow C^{A}}\quad,\\
+{\color{greenunder}\text{composition law}:}\quad & \text{contrafmap}^{A,B}(f^{:B\Rightarrow A})\bef\text{contrafmap}^{B,C}(g^{:C\Rightarrow B})=\text{contrafmap}(g\bef f)\quad.
 \end{align*}
-}}The ``contra-'' reverses the arrow between $A$ and $B$
+Since the function argument $f^{:B\Rightarrow A}$ has the reverse
+order of types, the composition law reverses the order of composition
+$\left(g\bef f\right)$ on one side; otherwise, the types would not
+match. To verify the identity law:
+\begin{align*}
+{\color{greenunder}\text{expect to equal }\text{id}:}\quad & \text{contrafmap}\left(\text{id}\right)\\
+{\color{greenunder}\text{use Eq.~(\ref{eq:f-example-1-contrafmap})}:}\quad & =c\Rightarrow(\text{id}\bef c)\\
+{\color{greenunder}\text{definition of }\text{id}:}\quad & =\left(c\Rightarrow c\right)=\text{id}\quad.
+\end{align*}
+To verify the composition law:
+\begin{align*}
+{\color{greenunder}\text{expect to equal }\text{contrafmap}\left(g\bef f\right):}\quad & \text{contrafmap}\left(f\right)\bef\text{contrafmap}\left(g\right)\\
+{\color{greenunder}\text{use Eq.~(\ref{eq:f-example-1-contrafmap})}:}\quad & =\left(c\Rightarrow(f\bef c)\right)\bef\left(c\Rightarrow(g\bef c)\right)\\
+{\color{greenunder}\text{rename }c\text{ to }d\text{ for clarity}:}\quad & =\left(c\Rightarrow(f\bef c)\right)\bef\left(d\Rightarrow(g\bef d)\right)\\
+{\color{greenunder}\text{compute composition}:}\quad & =\left(c\Rightarrow g\bef f\bef c\right)\\
+{\color{greenunder}\text{use Eq.~(\ref{eq:f-example-1-contrafmap})}:}\quad & =\text{contrafmap}\left(g\bef f\right)\quad.
+\end{align*}
 
-The type parameter $A$ is to the left of the function arrow (``consumed'')
+A type constructor is called a \textbf{contrafunctor}\index{contrafunctor}
+if a fully parametric \lstinline!contrafmap! function with this type
+signature exists and satisfies these laws.
 
-``Functors contain data; contrafunctors consume data''
+\subsubsection{Example \label{subsec:f-Example-contrafunctor}\ref{subsec:f-Example-contrafunctor}}
 
-Example of non-contrafunctor:
-
-The type $\text{NotContainer}^{A}=\left(A\Rightarrow\text{Int}\right)\times A$
-is neither a functor nor a contrafunctor
-
-
-\subsection{Covariance, contravariance, and subtyping}
-
-Example of subtyping:
-
-\texttt{\textcolor{blue}{\footnotesize{}sealed trait AtMostTwo}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}final case class Zero() extends
-AtMostTwo}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}final case class One(x: Int)
-extends AtMostTwo}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}final case class Two(x: Int,
-y: Int) extends AtMostTwo}}{\footnotesize\par}
-
-Here \texttt{\textcolor{blue}{\footnotesize{}Zero}}, \texttt{\textcolor{blue}{\footnotesize{}One}},
-and \texttt{\textcolor{blue}{\footnotesize{}Two}} are \textbf{subtypes}
-of \texttt{\textcolor{blue}{\footnotesize{}AtMostTwo}}{\footnotesize\par}
-
-We can pass \texttt{\textcolor{blue}{\footnotesize{}Two(10, 20)}}
-to a function that takes an \texttt{\textcolor{blue}{\footnotesize{}AtMostTwo}}{\footnotesize\par}
-
-This is equivalent to an automatic type conversion \texttt{\textcolor{blue}{\footnotesize{}Two
-$\Rightarrow$ AtMostTwo}}{\footnotesize\par}
-
-A container \texttt{\textcolor{blue}{\footnotesize{}C{[}A{]}}} is
-\textbf{covariant} if \texttt{\textcolor{blue}{\footnotesize{}C{[}Two{]}}}
-is a subtype of \texttt{\textcolor{blue}{\footnotesize{}C{[}AtMostTwo{]}}}{\footnotesize\par}
-
-And then a type conversion function\texttt{\textcolor{blue}{\footnotesize{}
-C{[}Two{]} $\Rightarrow$ C{[}AtMostTwo{]}}} exists
-
-More generally, when \texttt{\textcolor{blue}{\footnotesize{}X}} is
-a subtype of \texttt{\textcolor{blue}{\footnotesize{}Y}} then we have
-\texttt{\textcolor{blue}{\footnotesize{}X $\Rightarrow$ Y}} and we
-need \texttt{\textcolor{blue}{\footnotesize{}C{[}X{]} $\Rightarrow$
-C{[}Y{]}}}, which is guaranteed if we have a function of type
+Show that the type constructor 
 \[
-\left(X\Rightarrow Y\right)\Rightarrow(C^{X}\Rightarrow C^{Y})
+D^{A}\triangleq A\Rightarrow A\Rightarrow\text{Int}
 \]
+is a contrafunctor.
 
-Scala supports covariance annotations on types: \texttt{\textcolor{blue}{\footnotesize{}sealed
-trait C{[}+T{]}}}{\footnotesize\par}
+\subparagraph{Solution}
 
-Functors are covariant, contrafunctors are contravariant
+The required type signature for \lstinline!contramap! is
+\begin{lstlisting}
+def contramap[A, B](d: A => A => Int)(f: B => A): B => B => Int = ???
+\end{lstlisting}
+We begin implementing \lstinline!contramap! by writing code with
+a typed hole:
+\[
+\text{contramap}^{A,B}\triangleq d^{:A\Rightarrow A\Rightarrow\text{Int}}\Rightarrow f^{:B\Rightarrow A}\Rightarrow b_{1}^{:B}\Rightarrow b_{2}^{:B}\Rightarrow\text{???}^{:\text{Int}}\quad.
+\]
+To fill the typed hole, we need to compute a value of type \lstinline!Int!.
+The only possibility is to apply $d$ to two curried arguments of
+type $A$, while we have two curried arguments of type $B$. So we
+apply $f^{:B\Rightarrow A}$ to those arguments, obtaining two values
+of type $A$. To avoid information loss, we need to preserve the order
+of the curried arguments. So the result is
+\[
+\text{contramap}^{A,B}\triangleq d^{:A\Rightarrow A\Rightarrow\text{Int}}\Rightarrow f^{:B\Rightarrow A}\Rightarrow b_{1}^{:B}\Rightarrow b_{2}^{:B}\Rightarrow d\left(f(b_{1})\right)\left(f(b_{2})\right)\quad.
+\]
+The corresponding Scala code is 
+\begin{lstlisting}
+def contramap[A, B](d: A => A => Int)(f: B => A): B => B => Int = {
+  b1 => b2 => d(f(b1))(f(b2))
+}
+\end{lstlisting}
+To verify the laws, it is easier to use the equivalent \lstinline!contrafmap!
+defined by
+\begin{equation}
+\text{contrafmap}^{A,B}(f^{:B\Rightarrow A})\triangleq d^{:A\Rightarrow A\Rightarrow\text{Int}}\Rightarrow b_{1}^{:B}\Rightarrow b_{2}^{:B}\Rightarrow d\left(f(b_{1})\right)\left(f(b_{2})\right)\quad.\label{eq:f-example-2-contrafmap}
+\end{equation}
+To verify the identity law:
+\begin{align*}
+{\color{greenunder}\text{expect to equal }\text{id}:}\quad & \text{contrafmap}\left(\text{id}\right)\\
+{\color{greenunder}\text{use Eq.~(\ref{eq:f-example-2-contrafmap})}:}\quad & =d\Rightarrow b_{1}\Rightarrow b_{2}\Rightarrow d\left(\text{id}(b_{1})\right)\left(\text{id}(b_{2})\right)\\
+{\color{greenunder}\text{definition of }\text{id}:}\quad & =d\Rightarrow b_{1}\Rightarrow b_{2}\Rightarrow d(b_{1})(b_{2})\\
+{\color{greenunder}\text{simplify curried function}:}\quad & =\left(d\Rightarrow d\right)=\text{id}\quad.
+\end{align*}
+To verify the composition law, we rewrite its left-hand side into
+the right-hand side:
+\begin{align*}
+ & \text{contrafmap}\left(f\right)\bef\text{contrafmap}\left(g\right)\\
+{\color{greenunder}\text{use Eq.~(\ref{eq:f-example-2-contrafmap})}:}\quad & =\left(d\Rightarrow b_{1}\Rightarrow b_{2}\Rightarrow d\left(f(b_{1})\right)\left(f(b_{2})\right)\right)\bef\left(d\Rightarrow b_{1}\Rightarrow b_{2}\Rightarrow d\left(g(b_{1})\right)\left(g(b_{2})\right)\right)\\
+{\color{greenunder}\text{rename }d\text{ to }e:}\quad & =\left(d\Rightarrow b_{1}\Rightarrow b_{2}\Rightarrow d\left(f(b_{1})\right)\left(f(b_{2})\right)\right)\bef\left(e\Rightarrow b_{1}\Rightarrow b_{2}\Rightarrow e\left(g(b_{1})\right)\left(g(b_{2})\right)\right)\\
+{\color{greenunder}\text{compute composition}:}\quad & =d\Rightarrow b_{1}\Rightarrow b_{2}\Rightarrow d\left(f(g(b_{1}))\right)\left(f(g(b_{2}))\right)\\
+{\color{greenunder}\text{use Eq.~(\ref{eq:f-example-2-contrafmap})}:}\quad & =\text{contrafmap}(b\Rightarrow f(g(b)))=\text{contrafmap}(g\bef f)\quad.
+\end{align*}
 
-\subsection{Worked examples I}
+The type constructor $C^{A}$ consumes a value of type $A$ to produce
+an integer; the type constructor $D^{A}$ is a curried function consuming
+\emph{two} values of type $A$. These examples suggest the intuitive
+view that contrafunctors ``consume'' data while functors ``wrap''
+data. By looking at the position of a given type parameter in a type
+expression such as $A\Rightarrow A\Rightarrow\text{Int}$, we can
+see whether the type parameter is ``consumed'' or ``wrapped'':
+A type parameter to the left of a function arrow is being ``consumed'';
+a type parameter to the right of a function arrow (or used without
+a function arrow) is being ``wrapped''. We will make this intuition
+precise in Section~\ref{sec:f-Laws-and-structure}.
 
-Decide if a data type is a functor, a contrafunctor, or neither
+\paragraph{Type constructors that are not contrafunctors }
 
-Implement a \texttt{\textcolor{blue}{\footnotesize{}fmap}} or a \texttt{\textcolor{blue}{\footnotesize{}contrafmap}}
-function that satisfies the laws
+A type constructor that both consumes \emph{and} wraps data is neither
+a functor nor a contrafunctor. An example of such a type constructor
+is
+\[
+N^{A}\triangleq\left(A\Rightarrow\text{Int}\right)\times\left(\bbnum 1+A\right)\quad.
+\]
+We can implement neither \lstinline!map! nor \lstinline!contramap!
+for this type constructor. Intuitively, the type parameter $A$ is
+used both to the left of a function arrow (being ``consumed'') and
+outside of a function (being ``wrapped'').
 
-Define case classes for these types, and implement \texttt{\textcolor{blue}{\footnotesize{}fmap}}:
+Unfunctors\index{unfunctor} (type constructors that violate parametricity)
+also cannot be contrafunctors because the required type signature
+for \lstinline!contramap! cannot be implemented by a fully parametric
+function. To show that \lstinline!ServerAction[R]! cannot be a contrafunctor,
+we can straightforwardly adapt the reasoning used in Section~\ref{subsec:Examples-of-non-functors}
+for showing that it cannot be a functor.
 
-$\text{Data}^{A}\equiv\text{String}+A\times\text{Int}+A\times A\times A$
+\subsection{Subtyping, covariance, and contravariance}
 
-$\text{Data}^{A}\equiv1+A\times(\text{Int}\times\text{String}+A)$
+A type $P$ is called a \textbf{subtype}\index{type!subtype of} of
+a type $Q$ if there exists a\index{type conversion function} \textbf{type
+conversion} function of type $P\Rightarrow Q$, whose implementation
+in code is an identity function. To see how this is possible, we begin
+with some examples of such type conversion functions. 
 
-$\text{Data}^{A}\equiv\left(\text{String}\Rightarrow\text{Int}\Rightarrow A\right)\times A+\left(\text{Boolean}\Rightarrow\text{Double}\Rightarrow A\right)\times A$
+Within the focus of this book, the main example of subtyping is with
+disjunctive types. Consider this definition,
+\begin{lstlisting}
+sealed trait AtMostTwo
+final case class Zero()               extends AtMostTwo
+final case class One(x: Int)          extends AtMostTwo
+final case class Two(x: Int, y: Int)  extends AtMostTwo
+\end{lstlisting}
+The corresponding type notation is 
+\[
+\text{AtMostTwo}\triangleq\bbnum 1+\text{Int}+\text{Int}\times\text{Int}\quad.
+\]
+Each of the case classes (\lstinline!Zero!, \lstinline!One!, and
+\lstinline!Two!) defines a type that is a subtype of \lstinline!AtMostTwo!.
+To see that, we need to produce type conversion functions from each
+of the three case classes to \lstinline!AtMostTwo!. The required
+functions are implemented by reassigning the types but performing
+no transformations on the data:
+\begin{lstlisting}
+def f0: Zero => AtMostTwo  = { case Zero()    => Zero()    }
+def f1: One  => AtMostTwo  = { case One(x)    => One(x)    }
+def f2: Two  => AtMostTwo  = { case Two(x, y) => Two(x, y) }
+\end{lstlisting}
+The implementation of these type conversion functions looks like the
+code of \emph{identity} functions. In the matrix notation, we can
+write
+\begin{align*}
+f_{0} & \triangleq\begin{array}{|c||ccc|}
+ & \text{Zero} & \text{One} & \text{Two}\\
+\hline \text{Zero} & \text{id} &  & 
+\end{array}\quad,\\
+f_{1} & \triangleq\begin{array}{|c||ccc|}
+ & \text{Zero} & \text{One} & \text{Two}\\
+\hline \text{One} &  & \text{id} & 
+\end{array}\quad,\\
+f_{2} & \triangleq\begin{array}{|c||ccc|}
+ & \text{Zero} & \text{One} & \text{Two}\\
+\hline \text{Two} &  &  & \text{id}
+\end{array}\quad.
+\end{align*}
+This notation emphasizes that the code consists of identity functions
+with reassigned types.
+
+Another example is a subtyping relation between function types. Consider
+the types
+\begin{lstlisting}
+type P = (AtMostTwo => Int)
+type Q = (Two => Int)
+\end{lstlisting}
+We can convert a function $f$ of type $P$ into a function $g$ of
+type $Q$ because $f$ includes all the information necessary to define
+$g$. The Scala code for the type conversion is
+\begin{lstlisting}
+def p2q(f: P): Q = { t: Two => f(t) }
+\end{lstlisting}
+This is written in the code notation as
+\[
+\text{p2q}(f^{:\text{AtMostTwo}\Rightarrow\text{Int}})\triangleq t^{:\text{Two}}\Rightarrow f(t)\quad.
+\]
+Note that $t^{:\text{Two}}\Rightarrow f(t)$ is the same function
+as $f$, except applied to a subtype \lstinline!Two! of \lstinline!AtMostTwo!.
+So, the implementation of \lstinline!p2q! is an identity function
+with reassigned types.
+
+In these cases, it is useful if the compiler could insert the appropriate
+conversion functions automatically whenever necessary. Any function
+that consumes an argument of type $Q$ could be then automatically
+applicable to an argument of type $P$. The compiler could also remove
+the identity functions from the code, since they do not perform any
+data transformations. In this way, code involving subtypes becomes
+more concise with no decrease in performance.
+
+To achieve this, we need to declare to the Scala compiler that certain
+types have a subtyping relation involving an identity function as
+the type conversion. This can be done in one of three ways depending
+on the situation at hand:
+\begin{enumerate}
+\item Declaring a class that \lstinline!extends! another class (as we have
+just seen).
+\item Declaring a type parameter with a ``variance annotation'' such as
+\lstinline!L[+A]! or \lstinline!L[-B]!.
+\item Declaring type parameters with a ``subtyping annotation'' (\lstinline!A <: B!);
+not used in this book.
+\end{enumerate}
+
+\paragraph{Subtyping for disjunctive types }
+
+A function with argument of type \lstinline!AtMostTwo! can be applied
+to a value of type \lstinline!Two! with no additional code written
+by the programmer:
+\begin{lstlisting}
+def head: AtMostTwo => Option[Int] = {
+  case Zero()      => None
+  case One(x)      => Some(x)
+  case Two(x, y)   => Some(x)
+}
+
+scala> head(Two(10, 20))
+res0: Option[Int] = Some(10)
+\end{lstlisting}
+We may imagine that the compiler automatically used the type conversion
+function \lstinline!f2! shown above to convert a value of the type
+\lstinline!Two! into a value of the type \lstinline!AtMostTwo!.
+Since the code of \lstinline!f2! is equivalent to an identity function,
+the type conversion does not change any data and only reassigns the
+types of the given values.
+
+\paragraph{Subtyping for type constructors}
+
+If a type constructor $L^{A}$ is a functor, we can use its $\text{fmap}_{L}$
+method to lift a type conversion function $f:P\Rightarrow Q$ into
+\[
+\text{fmap}_{L}(f):L^{P}\Rightarrow L^{Q}\quad,
+\]
+which gives a type conversion function from $L^{P}$ to $L^{Q}$.
+This gives a subtyping relation between the types $L^{P}$ and $L^{Q}$
+because the code of the lifted function $\text{fmap}_{L}(f)$ is an
+identity function, due to functor $L$'s identity law $\text{fmap}_{L}(\text{id})=\text{id}$. 
+
+Similarly, if a type constructor $C^{A}$ is a contrafunctor, a type
+conversion function $f^{:P\Rightarrow Q}$ can be lifted to 
+\[
+\text{contrafmap}_{C}(f):C^{Q}\Rightarrow C^{P}\quad,
+\]
+showing that $C^{Q}$ is a subtype of $C^{P}$. The identity law of
+the contrafunctor $C$, 
+\[
+\text{contrafmap}_{C}(\text{id})=\text{id}\quad,
+\]
+shows that the lifted conversion function is an identity function
+with reassigned types.
+
+A type constructor $F$ is called \textbf{covariant}\index{type constructor!covariant}
+if $F^{A}$ is a subtype of $F^{B}$ whenever $A$ is a subtype of
+$B$. A \textbf{contravariant}\index{type constructor!contravariant}
+type constructor $C$ has the subtype relation in the opposite direction:
+$C^{B}$ is a subtype of $C^{A}$. So, we have established that all
+functors are covariant type constructors, and all contrafunctors are
+contravariant type constructors.\footnote{The name ``contrafunctor'' was chosen in this book as a shortened
+form of ``contravariant functor''.} 
+
+The Scala compiler does not automatically determine whether a given
+type constructor \lstinline!F[A]! is covariant with respect to a
+given type parameter \lstinline!A!. To indicate the covariance property,
+the programmer needs to use a covariance annotation, which looks like
+\lstinline!F[+A]!, on the relevant type parameters. For example,
+the type constructor \lstinline!Counted[A]! defined in Section~\ref{subsec:Functors:-definition-and-examples}
+is a functor and so is covariant in its type parameter \lstinline!A!.
+If we use a covariance annotation when defining \lstinline!Counted!,
+we will obtain the effect that the type \lstinline!Counted[Two]!
+is automatically considered a subtype of \lstinline!Counted[AtMostTwo]!:
+\begin{lstlisting}
+final case class Counted[+A](n: Int, a: A)
+
+def total(c: Counted[AtMostTwo]): Int = c match {
+  case Counted(n, Zero())      => 0
+  case Counted(n, One(_))      => n
+  case Counted(n, Two(_, _))   => n * 2
+}
+
+scala> total(Counted(2, Two(10, 20)))
+res1: Int = 4
+\end{lstlisting}
+Since \lstinline!Two! is a subtype of \lstinline!AtMostTwo!, we
+may now apply a function to a value of type \lstinline!Counted[Two]!
+as if it had type \lstinline!Counted[AtMostTwo]!.
+
+The contravariance property for contrafunctors can be annotated using
+the syntax \lstinline!F[-A]!.
+
+A given type constructor may have several type parameters and may
+be covariant with respect to some of them and contravariant with respect
+to others. As we have seen, the position of a type parameter in a
+type expression indicates whether the value is ``wrapped'' (used
+in a \textbf{covariant position}\index{covariant position}) or ``consumed''
+(used in a \textbf{contravariant position}\index{contravariant position}).
+Covariant positions are to the right of function arrows, or outside
+function arrows; contravariant positions are to the left of a function
+arrow. The next examples confirm this intuition, which will be made
+rigorous in Section~\ref{sec:f-Laws-and-structure}.
+
+\subsection{Solved examples: functors and contrafunctors\index{solved examples}}
+
+\subsubsection{Example \label{subsec:f-Example-functors}\ref{subsec:f-Example-functors}}
+
+Consider this implementation of \lstinline!map! for the type \lstinline!Option[A]!:
+\begin{lstlisting}
+def map[A, B](oa: Option[A])(f: A => B): Option[B] = oa match {
+  case None           => None
+  case Some(x: Int)   => Some(f((x+1).asInstanceOf[A]))
+  case Some(x)        => Some(f(x))
+}
+\end{lstlisting}
+This code performs a special computation if the type parameter \lstinline!A!
+is set to \lstinline!Int!. Show that this implementation of \lstinline!map!
+violates the functor laws.
+
+\subparagraph{Solution}
+
+If the type parameter \lstinline!A! is not \lstinline!Int!, or if
+the argument \lstinline!oa! is \lstinline!None!, the given code
+is the same as the standard (correct) implementation of \lstinline!map!
+for \lstinline!Option!. Clearly, the function does something non-standard
+when e.g.~\lstinline!oa == Some(123)!. Substitute this value of
+\lstinline!oa! into the identity law, \lstinline!map(oa)(identity) == oa!,
+and compute symbolically (using Scala syntax)
+\begin{lstlisting}
+map(oa)(identity) == Some(identity((123+1).asInstanceOf[Int])) == Some(124) != oa
+\end{lstlisting}
+This shows a violation of the functor identity law.
+
+\subsubsection{Example \label{subsec:f-Example-functors-1}\ref{subsec:f-Example-functors-1}}
+
+Define case classes and implement \lstinline!fmap! for the given
+type constructors:
+
+\textbf{(a)} $\text{Data}^{A}\triangleq\text{String}+A\times\text{Int}+A\times A\times A$
+
+\textbf{(b)} $\text{Data}^{A}\triangleq\bbnum 1+A\times(\text{Int}\times\text{String}+A)$ 
+
+\textbf{(c)} $\text{Data}^{A}\triangleq(\text{String}\Rightarrow\text{Int}\Rightarrow A)\times A+(\text{Bool}\Rightarrow\text{Double}\Rightarrow A)\times A$
+
+\subparagraph{Solution}
+
+\textbf{(a)} Begin by defining a case class for each part of the disjunctive
+type:
+\begin{lstlisting}
+sealed trait Data[A] 
+final case class Message[A](message: String)  extends Data[A]
+final case class Have1[A](x: A, n: Int)       extends Data[A]  
+final case class Have3[A](x: A, y: A, z: A)   extends Data[A]
+\end{lstlisting}
+The names \lstinline!Message!, \lstinline!Have1!, \lstinline!Have3!,
+\lstinline!n!, \lstinline!x!, \lstinline!y!, \lstinline!z! were
+chosen arbitrarily. The function \lstinline!fmap! must have the type
+signature
+\[
+\text{fmap}^{A,B}:f^{:A\Rightarrow B}\Rightarrow\text{Data}^{A}\Rightarrow\text{Data}^{B}\quad.
+\]
+To implement \lstinline!fmap! correctly, we need to transform each
+part of the disjunctive type \lstinline!Data[A]! into the corresponding
+part of \lstinline!Data[B]! without loss of information. To clarify
+where the transformation $f^{:A\Rightarrow B}$ need to be applied,
+let us write the type notation for $\text{Data}^{A}$ and $\text{Data}^{B}$
+side by side:
+\begin{align*}
+\text{Data}^{A} & \triangleq\text{String}+A\times\text{Int}+A\times A\times A\quad,\\
+\text{Data}^{B} & \triangleq\text{String}+B\times\text{Int}+B\times B\times B\quad.
+\end{align*}
+Now it is clear that we need to apply $f$ to each value of type $A$
+present in $\text{Data}^{A}$, preserving the order of values. The
+Scala code is
+\begin{lstlisting}
+def fmap[A, B](f: A => B): Data[A] => Data[B] = {
+  case Message(message)   => Message(message)
+  case Have1(x, n)        => Have1(f(x), n)
+  case Have3(x, y, z)     => Have3(f(x), f(y), f(z))
+}
+\end{lstlisting}
+
+\textbf{(b)} It is convenient to define the disjunctive type $\text{Int}\times\text{String}+A$
+separately as $P^{A}$:
+\begin{lstlisting}
+sealed trait P[A]
+final case class Message[A](code: Int, message: String)  extends P[A]
+final case class Value[A](x: A)                          extends P[A]
+\end{lstlisting}
+Now we notice that the type expression $\left(\bbnum 1+...\right)$
+can be encoded via the standard \lstinline!Option! type. So, the
+Scala code for $\text{Data}^{A}$ is
+\begin{lstlisting}
+final case class Data[A](d: Option[(A, P[A])])
+\end{lstlisting}
+To help us implement \lstinline!fmap! correctly, we write the type
+expressions 
+\begin{align*}
+\text{Data}^{A} & \triangleq\bbnum 1+A\times(\text{Int}\times\text{String}+A)\quad,\\
+\text{Data}^{B} & \triangleq\bbnum 1+B\times(\text{Int}\times\text{String}+B)\quad,
+\end{align*}
+and transform $\text{Data}^{A}$ into $\text{Data}^{B}$ by applying
+$f^{:A\Rightarrow B}$ at the correct places:
+\begin{lstlisting}
+def fmap[A, B](f: A => B): Data[A] => Data[B] = {
+  case Data(None)                                => Data(None)
+  case Data(Some((x, Message(code, message))))   => Data(Some((f(x), Message(code, message))))
+  case Data(Some((x, Value(y))))                 => Data(Some((f(x), Value(f(y)))))
+}
+\end{lstlisting}
+When deeply nested patterns become hard to read, we may handle the
+nested structure separately:
+\begin{lstlisting}
+def fmap[A, B](f: A => B): Data[A] => Data[B] = {
+  case Data(None)           => Data(None)
+  case Data(Some((x, p)))   =>
+      val newP: P[B] = p match {
+        case Message(code, message)   => Message(code, message) // Only types changed.
+        case Value(x)                 => Value(f(x))
+      }
+      Data(Some((f(x), newP)))
+}
+\end{lstlisting}
+
+\textbf{(c)} Since the type structures $(\text{String}\Rightarrow\text{Int}\Rightarrow A)\times A$
+and $(\text{Bool}\Rightarrow\text{Double}\Rightarrow A)\times A$
+have a similar pattern, let us define a parameterized type
+\[
+Q^{X,Y,A}\triangleq\left(X\Rightarrow Y\Rightarrow A\right)\times A\quad,
+\]
+and express the given type expression as 
+\[
+\text{Data}^{A}\triangleq Q^{\text{String},\text{Int},A}+Q^{\text{Bool},\text{Double},A}\quad.
+\]
+It is then convenient to define \lstinline!Data[A]! using the standard
+disjunctive type \lstinline!Either!: 
+\begin{lstlisting}
+type Q[X, Y, A] = (X => Y => A, A)
+type Data[A] = Either[Q[String, Int, A], Q[Boolean, Double, A]]
+\end{lstlisting}
+It is easier to implement \lstinline!fmap! separately for the type
+constructors \lstinline!Q! and \lstinline!Data!.
+
+To derive the code of \lstinline!fmap! for \lstinline!Q!, we begin
+with the type signature
+\[
+\text{fmap}_{Q}^{A,B}:\left(A\Rightarrow B\right)\Rightarrow\left(X\Rightarrow Y\Rightarrow A\right)\times A\Rightarrow\left(X\Rightarrow Y\Rightarrow B\right)\times B
+\]
+and start writing the code using typed holes,
+\[
+\text{fmap}_{Q}(f^{:A\Rightarrow B})\triangleq g^{:X\Rightarrow Y\Rightarrow A}\times a^{:A}\Rightarrow\text{???}^{:X\Rightarrow Y\Rightarrow B}\times\text{???}^{:B}\quad.
+\]
+The typed hole $\text{???}^{:B}$ is filled by $f(a)$. To fill the
+remaining type hole, we write
+\begin{align*}
+ & \text{???}^{:X\Rightarrow Y\Rightarrow B}\\
+ & =x^{:X}\Rightarrow y^{:Y}\Rightarrow\text{???}^{:B}\\
+ & =x^{:X}\Rightarrow y^{:Y}\Rightarrow f(\text{???}^{:A})\quad.
+\end{align*}
+It would be wrong to fill the typed hole $\text{???}^{:A}$ by $a^{:A}$
+because a value of type $X\Rightarrow Y\Rightarrow B$ should be computed
+using the given data $g^{:X\Rightarrow Y\Rightarrow A}$ of type $X\Rightarrow Y\Rightarrow A$.
+So we write
+\[
+\text{???}^{:X\Rightarrow Y\Rightarrow B}=x^{:X}\Rightarrow y^{:Y}\Rightarrow f(g(x)(y))\quad.
+\]
+The corresponding Scala code is
+\begin{lstlisting}
+def fmapQ[A, B, X, Y](f: A => B): Q[X, Y, A] => Q[X, Y, B] = {
+  case (g, a) => (x => y => f(g(x)(y)), f(a))
+  // Could also write the code as
+  //   case (g, a) => (x => g(x) andThen f, f(a))
+}
+\end{lstlisting}
+Finally, we can write the code for $\text{fmap}_{\text{Data}}$:
+\begin{lstlisting}
+def fmapData[A, B](f: A => B): Data[A] => Data[B] = {
+  case Left(q)    => Left(fmapQ(f)(q))
+  case Right(q)   => Right(fmapQ(f)(q))
+}
+\end{lstlisting}
+The Scala compiler will automatically infer the type parameters required
+by \lstinline!fmapQ! and check that all types match. With all inferred
+types written out, the code above would be
+\begin{lstlisting}
+def fmapData[A, B](f: A => B): Data[A] => Data[B] = {
+  case Left(q: Q[String, Int, A])            =>
+         Left[Q[String, Int, B]](fmapQ[A, B, String, Int](f)(q))
+  case Right(q: Q[Boolean, Double, A])       =>
+         Right[Q[Boolean, Double, B]](fmapQ[A, B, Boolean, Double](f)(q))
+}
+\end{lstlisting}
+When types become complicated, it may help to write out some of the
+type parameters in the code.
+
+\subsubsection{Example \label{subsec:f-Example-functors-4}\ref{subsec:f-Example-functors-4}}
 
 Decide which of these types are functors or contrafunctors, and implement
-\texttt{\textcolor{blue}{\footnotesize{}fmap}} or \texttt{\textcolor{blue}{\footnotesize{}contrafmap}}
-respectively:
+\lstinline!fmap! or \lstinline!contrafmap! as appropriate:
 
-$\text{Data}^{A}\equiv\left(A\Rightarrow\text{Int}\right)+\left(A\Rightarrow A\Rightarrow\text{String}\right)$
+\textbf{(a)} $\text{Data}^{A}\triangleq\left(A\Rightarrow\text{Int}\right)+(A\Rightarrow A\Rightarrow\text{String})$ 
 
-$\text{Data}^{A,B}\equiv\left(A+B\right)\times\left(\left(A\Rightarrow\text{Int}\right)\Rightarrow B\right)$
+\textbf{(b)} $\text{Data}^{A,B}\triangleq\left(A+B\right)\times\left(\left(A\Rightarrow\text{Int}\right)\Rightarrow B\right)$
 
-Rewrite this code in the short notation; identify covariant and contravariant
-type usages; verify that with covariance annotations:
+\subparagraph{Solution}
 
-\texttt{\textcolor{blue}{\footnotesize{}sealed trait Coi{[}A, B{]}}}{\footnotesize\par}
+\textbf{(a)} The type constructor $\text{Data}^{A}$ uses its type
+parameter $A$ always as an argument of some functions, i.e.~to the
+left of function arrows:
+\begin{lstlisting}
+type Data[A] = Either[A => Int, A => A => String]
+\end{lstlisting}
+So, $\text{Data}^{A}$ \emph{consumes} values of type $A$, and we
+expect that $\text{Data}^{A}$ is a contrafunctor. Indeed, we can
+implement \lstinline!contrafmap!:
+\begin{lstlisting}
+def contrafmap[A, B](f: B => A): Data[A] => Data[B] = {
+  case Left(a2Int)          => Left(b => a2Int(f(b)))
+  case Right(a2a2String)    => Right(b1 => b2 => a2a2String(f(b1))(f(b2)))
+}
+\end{lstlisting}
 
-\texttt{\textcolor{blue}{\footnotesize{}case class Pa{[}A, B{]}(b: (A,
-B), c: B$\Rightarrow$Int)  extends Coi{[}A, B{]}}}{\footnotesize\par}
+\textbf{(b)} The type constructor $\text{Data}^{A,B}$ has \emph{two}
+type parameters, and so we need to answer the question separately
+for each of them. Write the Scala type definition as
+\begin{lstlisting}
+type Data[A, B] = (Either[A, B], (A => Int) => B)
+\end{lstlisting}
 
-\texttt{\textcolor{blue}{\footnotesize{}case class Re{[}A, B{]}(d: A,
-e: B, c: Int)    extends Coi{[}A, B{]}}}{\footnotesize\par}
+Begin with the type parameter $A$, and notice that a value of type
+$\text{Data}^{A,B}$ possibly contains a value of type $A$ within
+\lstinline!Either[A, B]!. In other words, $A$ is ``wrapped'',
+i.e.~it is in a covariant position within the first part of the tuple.
+It remains to check the second part of the tuple, which is a higher-order
+function of type $\left(A\Rightarrow\text{Int}\right)\Rightarrow B$.
+This function consumes a function of type $A\Rightarrow\text{Int}$,
+which in turn consumes a value of type $A$. Consumers of $A$ are
+contravariant in $A$, but it turns out that a ``consumer of a consumer
+of $A$'' is covariant in $A$. So we will be able to implement \lstinline!fmap!
+that applies to the type parameter $A$ of $\text{Data}^{A,B}$. Renaming
+the type parameter $B$ to $Z$ for clarity, we write the type signature
+for \lstinline!fmap!,
+\[
+\text{fmap}^{A,C,Z}:\left(A\Rightarrow C\right)\Rightarrow\left(A+Z\right)\times\left(\left(A\Rightarrow\text{Int}\right)\Rightarrow Z\right)\Rightarrow\left(C+Z\right)\times\left(\left(C\Rightarrow\text{Int}\right)\Rightarrow Z\right)\quad.
+\]
+We need to transform each part of the tuple separately. Transforming
+$A+Z$ into $C+Z$ is straightforward via the function
+\[
+\begin{array}{|c||cc|}
+ & B & Z\\
+\hline A & f & \\
+Z &  & \text{id}
+\end{array}\quad.
+\]
+We use typed holes to derive code transforming $\left(A\Rightarrow\text{Int}\right)\Rightarrow Z$
+into $\left(C\Rightarrow\text{Int}\right)\Rightarrow Z$:
+\begin{align*}
+ & f^{:A\Rightarrow C}\Rightarrow g^{:\left(A\Rightarrow\text{Int}\right)\Rightarrow Z}\Rightarrow\text{???}^{:\left(C\Rightarrow\text{Int}\right)\Rightarrow Z}\\
+{\color{greenunder}\text{nameless function}:}\quad & =f^{:A\Rightarrow C}\Rightarrow g^{:\left(A\Rightarrow\text{Int}\right)\Rightarrow Z}\Rightarrow p^{:C\Rightarrow\text{Int}}\Rightarrow\text{???}^{:Z}\\
+{\color{greenunder}\text{get a }Z\text{ by applying }g:}\quad & =f\Rightarrow g\Rightarrow p\Rightarrow g(\text{???}^{:A\Rightarrow\text{Int}})\\
+{\color{greenunder}\text{nameless function}:}\quad & =f\Rightarrow g\Rightarrow p\Rightarrow g(a^{:A}\Rightarrow\text{???}^{:\text{Int}})\\
+{\color{greenunder}\text{get an Int by applying }p:}\quad & =f\Rightarrow g\Rightarrow p\Rightarrow g(a\Rightarrow p(\text{???}^{:C}))\\
+{\color{greenunder}\text{get a }C\text{ by applying }f:}\quad & =f\Rightarrow g\Rightarrow p\Rightarrow g(a\Rightarrow p(f(\text{???}^{:A})))\\
+{\color{greenunder}\text{use argument }a^{:A}:}\quad & =f\Rightarrow g\Rightarrow p\Rightarrow g(a\Rightarrow p(f(a))\quad.
+\end{align*}
+In the resulting Scala code for \lstinline!fmap!, we write out some
+types for clarity:
+\begin{lstlisting}
+def fmapA[A, Z, C](f: A => C): Data[A, Z] => Data[C, Z] = {
+  case (e: Either[A, Z], g: ((A => Int) => Z)) =>
+    val newE: Either[C, Z] = e match {
+      case Left(x)    => Left(f(x))
+      case Right(z)   => Right(z)
+    }
+    val newG: (C => Int) => Z = { p => g(a => p(f(a))) }
+    (newE, newG) // This has type Data[C, Z].
+}
+\end{lstlisting}
+This suggests that $\text{Data}^{A,Z}$ is covariant with respect
+to the type parameter $A$. We will see in Section~\ref{sec:f-Laws-and-structure}
+that the functor laws hold for this implementation of \lstinline!fmap!.
 
-\texttt{\textcolor{blue}{\footnotesize{}case class Ci{[}A, B{]}(f: String$\Rightarrow$A,
-g: B$\Rightarrow$A) extends Coi{[}A, B{]}}}{\footnotesize\par}
+The analysis is simpler for the type parameter $B$ because it is
+always used in ``wrapped'' positions and never to the left of a
+function arrow. So we expect $\text{Data}^{A,B}$ to be a functor
+with respect to $B$. Implementing the corresponding \lstinline!fmap!
+is straightforward:
+\begin{lstlisting}
+def fmapB[Z, B, C](f: B => C): Data[Z, A] => Data[Z, B] = {
+  case (e: Either[Z, B], g: ((Z => Int) => B)) =>
+    val newE: Either[Z, B] = e match {
+      case Left(x)    => Left(f(x))
+      case Right(z)   => Right(z)
+    }
+    val newG: (C => Int) => Z = { p => g(a => p(f(a))) }
+    (newE, newG) // This has type Data[C, Z].
+}
+\end{lstlisting}
+
+The code indicates that $\text{Data}^{A,B}$ is a functor with respect
+to both $A$ and $B$.
+
+\subsubsection{Example \label{subsec:f-Example-functors-6}\ref{subsec:f-Example-functors-6}}
+
+Rewrite the following code in the type notation; identify covariant
+and contravariant type usages; verify with thte Scala compiler that
+the variance annotations are correct:
+\begin{lstlisting}
+sealed trait Coi[A, B]
+final case class Pa[A, B](b: (A, B), c: B => Int)     extends Coi[A, B]
+final case class Re[A, B](d: A, e: B, c: Int)         extends Coi[A, B]
+final case class Ci[A, B](f: String => A, g: B => A)  extends Coi[A, B]
+\end{lstlisting}
 
 
-\subsection{Exercises I}
+\subparagraph{Solution}
 
-Define case classes for these types, decide if they are covariant
-or contravariant, and implement \texttt{\textcolor{blue}{\footnotesize{}fmap}}
-or \texttt{\textcolor{blue}{\footnotesize{}contrafmap}} as needed:
+The type notation puts together all parts of the disjunctive type:
+\[
+\text{Coi}^{A,B}\triangleq A\times B\times(B\Rightarrow\text{Int})+A\times B\times\text{Int}+(\text{String}\Rightarrow A)\times(B\Rightarrow A)\quad.
+\]
+Now find which types are wrapped and which are consumed in this type
+expression. We find that the type parameter $A$ is wrapped and never
+consumed, but $B$ is both wrapped and consumed (in $B\Rightarrow A$).
+So, the type constructor \lstinline!Coi! is covariant in $A$ but
+neither covariant nor contravariant in $B$. We can check this by
+compiling the corresponding Scala code with variance annotations:
+\begin{lstlisting}
+sealed trait Coi[+A, B]
+case class Pa[+A, B](b: (A, B), c: B => Int)     extends Coi[A, B]
+case class Re[+A, B](d: A, e: B, c: Int)         extends Coi[A, B]
+case class Ci[+A, B](f: String => A, g: B => A)  extends Coi[A, B]
+\end{lstlisting}
+We could also replace the fixed types \lstinline!Int! and \lstinline!String!
+by type parameters \lstinline!N! and \lstinline!S!. A similar analysis
+shows that \lstinline!N! is in covariant positions while \lstinline!S!
+is in a contravariant position. We can then check that Scala accepts
+the following type definition with variance annotations:
+\begin{lstlisting}
+sealed trait Coi2[+A, B, +N, -S]
+case class Pa2[+A, B, +N, -S](b: (A, B), c: B => N)  extends Coi[A, B, N, S]
+case class Re2[+A, B, +N, -S](d: A, e: B, c: N)      extends Coi[A, B, N, S]
+case class Ci2[+A, B, +N, -S](f: S => A, g: B => A)  extends Coi[A, B, N, S]
+\end{lstlisting}
 
-$\text{Data}^{A}\equiv\left(1+A\right)\times\left(1+A\right)\times\text{String}$
 
-$\text{Data}^{A}\equiv\left(A\Rightarrow\text{String}\right)\Rightarrow\left(A\times\left(\text{Int}+A\right)\right)$
+\subsection{Exercises: functors and contrafunctors\index{exercises}}
 
-$\text{Data}^{A,B}\equiv\left(A\Rightarrow\text{String}\right)\times\left(\left(A+B\right)\Rightarrow\text{Int}\right)$
+\subsubsection{Exercise \label{subsec:f-Exercise-functors}\ref{subsec:f-Exercise-functors}}
 
-$\text{Data}^{A}\equiv\left(1+\left(A\Rightarrow\text{String}\right)\right)\Rightarrow\left(1+\left(A\Rightarrow\text{Int}\right)\right)\Rightarrow\text{Int}$
+An implementation of \lstinline!fmap! for the type \lstinline!Either[A, A]!
+is given as
+\begin{lstlisting}
+def fmap[A, B](f: A => B): Either[A, A] => Either[B, B] = {
+  case Left(a: Int)   => Right(f(a))
+  case Left(a)        => Left(f(a))
+  case Right(a)       => Right(f(a))
+}
+\end{lstlisting}
+Show that this implementation of \lstinline!fmap! violates the functor
+laws. Implement \lstinline!fmap! correctly for this type constructor.
 
-$\text{Data}^{B}\equiv\left(B+\left(\text{Int}\Rightarrow B\right)\right)\times\left(B+\left(\text{String}\Rightarrow B\right)\right)$
+\subsubsection{Exercise \label{subsec:f-Exercise-functors-1}\ref{subsec:f-Exercise-functors-1}}
 
-Rewrite this code in the short notation; identify covariant and contravariant
-type usages; verify that with covariance annotations:
+Define these types in Scala, decide if they are covariant or contravariant,
+and implement \lstinline!fmap! or \lstinline!contrafmap! as appropriate:
 
-\texttt{\textcolor{blue}{\footnotesize{}sealed trait Result{[}A,B{]}}}{\footnotesize\par}
+\textbf{(a)} $\text{Data}^{A}\triangleq\left(\bbnum 1+A\right)\times\left(\bbnum 1+A\right)\times\text{String}$
 
-\texttt{\textcolor{blue}{\footnotesize{}case class P{[}A,B{]}(a: A,
-b: B, c: Int)   extends Result{[}A,B{]}}}{\footnotesize\par}
+\textbf{(b)} $\text{Data}^{A}\triangleq(A\Rightarrow\text{Bool})\Rightarrow\left(A\times\left(\text{Int}+A\right)\right)$
 
-\texttt{\textcolor{blue}{\footnotesize{}case class Q{[}A,B{]}(d: Int$\Rightarrow$A,
-e: Int$\Rightarrow$B) extends Result{[}A,B{]}}}{\footnotesize\par}
+\textbf{(c)} $\text{Data}^{A,B}\triangleq(A\Rightarrow\text{Bool})\times\left((A+B)\Rightarrow\text{Int}\right)$
 
-\texttt{\textcolor{blue}{\footnotesize{}case class R{[}A,B{]}(f: A$\Rightarrow$A,
-g: A$\Rightarrow$B)     extends Result{[}A,B{]}}}{\footnotesize\par}
+\textbf{(d)} $\text{Data}^{A}\triangleq(\bbnum 1+(A\Rightarrow\text{Bool}))\Rightarrow(\bbnum 1+(A\Rightarrow\text{Int}))\Rightarrow\text{Int}$
 
+\textbf{(e)} $\text{Data}^{B}\triangleq(B+(\text{Int}\Rightarrow B))\times(B+(\text{String}\Rightarrow B))$
+
+\subsubsection{Exercise \label{subsec:f-Exercise-functors-2}\ref{subsec:f-Exercise-functors-2}}
+
+Rewrite the following code in the type notation; identify covariant
+and contravariant type usages; add variance annotations and verify
+that the resulting code compiles:
+
+\begin{lstlisting}
+sealed trait Result[A,B]
+final case class P[A,B](a: A, b: B, c: Int)        extends Result[A,B]
+final case class Q[A,B](d: Int => A, e: Int => B)  extends Result[A,B]
+final case class R[A,B](f: A => A, g: A => B)      extends Result[A,B]
+\end{lstlisting}
+
+
+\section{Laws and structure\label{sec:f-Laws-and-structure}}
+
+A type constructor is a functor if it admits a lawful \lstinline!map!
+function. For example, consider the type constructor $Z^{A,R}$ defined
+by 
+\[
+Z^{A,R}\triangleq\left(\left(A\Rightarrow A\Rightarrow R\right)\Rightarrow R\right)\times A+\left(R\Rightarrow A+\text{Int}\right)+A\times A\times\text{Int}\times\text{Int}\quad.
+\]
+Is $Z^{A,R}$ a functor with respect to $A$ or with respect to $R$?
+How can we recognize quickly that a given type constructor is a functor
+or a contrafunctor? Is it always true that a type constructor is a
+functor when its type parameter is used in covariant positions? To
+answer these questions, we will systematically build up various type
+expressions for which the functor or contrafunctor laws hold. 
+
+\subsection{Formulation of laws}
+
+We begin by introducing a more convenient notation for the functor
+laws. The laws~(\ref{eq:f-identity-law-functor-fmap})\textendash (\ref{eq:f-composition-law-functor-fmap})
+were defined in terms of the function \lstinline!fmap!. When written
+in terms of the curried function \lstinline!map!, the structure of
+the laws becomes less clear:
+\begin{align*}
+ & \text{map}_{L}(x^{:L^{A}})(\text{id}^{:A\Rightarrow A})=x\quad,\\
+ & \text{map}_{L}(x^{:L^{A}})(f^{:A\Rightarrow B}\bef g^{:B\Rightarrow C})=\text{map}_{L}\left(\text{map}_{L}(x)(f)\right)(g)\quad.
+\end{align*}
+However, the laws again look clearer when using the infix method \lstinline!.map!:
+\begin{lstlisting}
+x.map(identity) == x
+x.map(f).map(g) == x.map(f andThen g)
+\end{lstlisting}
+To take advantage of this syntax, we can use the \index{forward notation}forward
+notation where $x\triangleright\text{fmap}(f)$ means \lstinline!x.map(f)!,
+and write the laws as
+\begin{align*}
+ & x\triangleright\text{fmap}_{L}(\text{id})=x\quad,\\
+ & x\triangleright\text{fmap}_{L}(f)\triangleright\text{fmap}_{L}(g)=x\triangleright\text{fmap}_{L}(f\bef g)\quad.
+\end{align*}
+In later chapters of this book, we will find that the \lstinline!.map!
+methods (equivalently, the \lstinline!fmap! function) are used so
+often in different contexts that the notation $\text{fmap}_{L}(f)$
+is too verbose. To make code expressions visually easy to manipulate,
+we need a shorter notation. At the same time, it is important to denote
+clearly the relevant type constructor $L$; dropping the symbol $L$
+can easily lead to errors. For these reasons, we introduce the superscript
+notation $^{\uparrow L}$ (pronounced ``lifted to $L$'') defined,
+for any function $f$, by
+\[
+f^{\uparrow L}\triangleq\text{fmap}_{L}(f)\quad.
+\]
+Now we can write 
+\begin{align*}
+\\
+x\triangleright\text{fmap}_{L}(f) & \triangleq x\triangleright f^{\uparrow L}\triangleq f^{\uparrow L}(x)\quad,\\
+\text{map}_{L}(x)(f) & \triangleq f^{\uparrow L}(x)\quad.
+\end{align*}
+In this notation, the identity and composition laws for a functor
+$L$ are 
+\begin{align*}
+ & \text{id}^{\uparrow L}=\text{id}\quad,\\
+ & \left(f\bef g\right)^{\uparrow L}=f^{\uparrow L}\bef g^{\uparrow L}\quad.
+\end{align*}
+Applying a composition of lifted functions to a value looks like this,
+\[
+x\triangleright\left(f\bef g\right)^{\uparrow L}=x\triangleright f^{\uparrow L}\bef g^{\uparrow L}=x\triangleright f^{\uparrow L}\triangleright g^{\uparrow L}\quad.
+\]
+This equation represents the Scala code syntax
+\begin{lstlisting}
+x.map(f andThen g) == x.map(f).map(g)
+\end{lstlisting}
+since in the code notation, the piping symbol $\left(\triangleright\right)$
+groups weaker than the composition symbol $\left(\bef\right)$.
+
+Written in the \emph{backward} notation ($f\circ g$), the functor
+composition law is
+\[
+\left(g\circ f\right)^{\uparrow L}=g^{\uparrow L}\circ f^{\uparrow L}\quad.
+\]
+
+The analogous notation for a contrafunctor $C$ is
+\[
+f^{\downarrow C}\triangleq\text{contrafmap}_{C}(f)\quad.
+\]
+The contrafunctor laws are then written as
+\begin{align*}
+\text{id}^{\downarrow C} & =\text{id}\quad,\\
+\left(f\bef g\right)^{\downarrow C} & =g^{\downarrow C}\bef f^{\downarrow C}\quad,\\
+\left(g\circ f\right)^{\downarrow C} & =f^{\downarrow C}\circ g^{\downarrow C}\quad.
+\end{align*}
+
+We will mostly use the forward composition $f\bef g$ in this book,
+keeping in mind that one can straightforwardly and mechanically translate
+between forward and backward notations by using the definitions 
+\begin{align*}
+f\bef g & \triangleq g\circ f\quad,\\
+x\triangleright f & \triangleq f(x)\quad.
+\end{align*}
+
+
+\subsection{Functor constructions}
+
+Functional programming languages support the seven type constructions
+defined in Table~\ref{tab:ch-correspondence-type-notation-CH-propositions}
+(Section~\ref{subsec:Type-notation-and-standard-type-constructions}).
+To find out what type expressions are functors, a straightforward
+approach is to check all the available type constructions for obeying
+the functor laws. The results are summarized in Table~\ref{tab:f-Functor-constructions}. 
+
+\begin{table}
+\begin{centering}
+\begin{tabular}{|c|c|c|}
+\hline 
+\textbf{Construction} & \textbf{Type notation} & \textbf{Comment}\tabularnewline
+\hline 
+\hline 
+{\footnotesize{}type parameter} & {\footnotesize{}$L^{A}\triangleq A$} & {\footnotesize{}the identity functor}\tabularnewline
+\hline 
+{\footnotesize{}tuple} & {\footnotesize{}$L^{A}\triangleq P^{A}\times Q^{A}$} & {\footnotesize{}the product functor; $P$ and $Q$ must be functors}\tabularnewline
+\hline 
+{\footnotesize{}disjunctive type} & {\footnotesize{}$L^{A}\triangleq P^{A}+Q^{A}$} & {\footnotesize{}the co-product functor; $P$ and $Q$ must be functors}\tabularnewline
+\hline 
+{\footnotesize{}function type} & {\footnotesize{}$L^{A}\triangleq H^{A}\Rightarrow P^{A}$} & {\footnotesize{}the exponential functor; $P$ is a functor and $H$
+a contrafunctor}\tabularnewline
+\hline 
+{\footnotesize{}}\lstinline!Unit!{\footnotesize{} type} & {\footnotesize{}$L^{A}\triangleq Z$} & {\footnotesize{}the constant functor; $Z$ is a fixed type (may be
+$\bbnum 1$)}\tabularnewline
+\hline 
+{\footnotesize{}type constructor} & {\footnotesize{}$L^{A}\triangleq P^{Q^{A}}$} & {\footnotesize{}the functor composition; $P$ and $Q$ must be functors}\tabularnewline
+\hline 
+{\footnotesize{}type recursion} & {\footnotesize{}$L^{A}\triangleq S^{A,L^{A}}$} & {\footnotesize{}recursive functor; $S^{A,B}$ is a functor w.r.t.~both
+$A$ and $B$}\tabularnewline
+\hline 
+\end{tabular}
+\par\end{centering}
+\caption{Functor constructions, defining a functor $L^{A}$.\label{tab:f-Functor-constructions}}
+\end{table}
+
+For each of these constructions, the \lstinline!fmap! function for
+the new functor can be defined either from scratch or by using the
+known \lstinline!fmap! functions for previously defined type constructors.
+We will now show the code for these constructions and prove their
+validity. We will use the code notation for brevity, occasionally
+showing the translation into the Scala syntax.
+
+\subsubsection{Statement \label{subsec:f-Statement-identity-functor}\ref{subsec:f-Statement-identity-functor}}
+
+The type\index{identity functor} constructor $\text{Id}^{A}\triangleq A$
+is a lawful functor (the \textbf{identity functor}).
+
+\subparagraph{Proof}
+
+The \lstinline!fmap! function is defined by
+\begin{align*}
+ & \text{fmap}_{\text{Id}}:\left(A\Rightarrow B\right)\Rightarrow\text{Id}^{A}\Rightarrow\text{Id}^{B}\cong\left(A\Rightarrow B\right)\Rightarrow A\Rightarrow B\quad,\\
+ & \text{fmap}_{\text{Id}}\triangleq f^{:A\Rightarrow B}\Rightarrow\gunderline{x^{:A}\Rightarrow f(x)}\\
+{\color{greenunder}\text{simplify function}:}\quad & =\left(f\Rightarrow f\right)=\text{id}\quad.
+\end{align*}
+Since the code of \lstinline!fmap! is the identity function, the
+laws are satisfied automatically:
+\begin{align*}
+{\color{greenunder}\text{identity law}:}\quad & \text{fmap}_{\text{Id}}(\text{id})=\text{id}(\text{id})=\text{id}\quad,\\
+{\color{greenunder}\text{composition law}:}\quad & \text{\ensuremath{\text{fmap}_{\text{Id}}}}(f\bef g)=f\bef g=\text{fmap}_{\text{Id}}(f)\bef\text{fmap}_{\text{Id}}(g)\quad.
+\end{align*}
+
+
+\subsubsection{Statement \label{subsec:f-Statement-constant-functor}\ref{subsec:f-Statement-constant-functor}}
+
+The type\index{constant functor} constructor $\text{Const}^{Z,A}\triangleq Z$
+is a lawful functor (the \textbf{constant functor}) with respect to
+the type parameter $A$.
+
+\subparagraph{Proof}
+
+The \lstinline!fmap! function is defined by
+\begin{align*}
+\text{fmap}_{\text{Const}} & :\left(A\Rightarrow B\right)\Rightarrow\text{Const}^{Z,A}\Rightarrow\text{Const}^{Z,B}\cong\left(A\Rightarrow B\right)\Rightarrow Z\Rightarrow Z\quad,\\
+\text{fmap}_{\text{Const}} & \triangleq f^{:A\Rightarrow B}\Rightarrow z^{:Z}\Rightarrow z\\
+ & =\left(f\Rightarrow\text{id}\right)=\left(\_\Rightarrow\text{id}\right)\quad.
+\end{align*}
+It is a constant function that always returns the identity function.
+The laws are satisfied:
+\begin{align*}
+{\color{greenunder}\text{identity law}:}\quad & \text{fmap}_{\text{Const}}(\text{id})=\text{id}\quad,\\
+{\color{greenunder}\text{composition law}:}\quad & \text{\ensuremath{\text{fmap}_{\text{Const}}}}(f\bef g)=\text{id}=\text{fmap}_{\text{Const}}(f)\bef\text{fmap}_{\text{Const}}(g)=\text{id}\bef\text{id}\quad.
+\end{align*}
+
+
+\subsubsection{Statement \label{subsec:functor-Statement-functor-product}\ref{subsec:functor-Statement-functor-product}}
+
+If $L^{A}$ and $M^{A}$ are two functors then $P^{A}\triangleq L^{A}\times M^{A}$
+is also a functor.
+
+\subparagraph{Proof}
+
+The \lstinline!fmap! function for $P^{A}$ is defined by
+\begin{lstlisting}
+def fmap[A, B](f: A => B): (L[A],M[A]) => (L[B],M[B]) = {
+  case (la, ma) => (la.map(f), ma.map(f))
+}
+\end{lstlisting}
+The corresponding code notation is
+\[
+f^{\uparrow P}\triangleq l^{:L^{A}}\times m^{:M^{A}}\Rightarrow f^{\uparrow L}(l)\times f^{\uparrow M}(m)\quad.
+\]
+In the forward notation,
+\begin{equation}
+(l^{:L^{A}}\times m^{:M^{A}})\triangleright f^{\uparrow P}\triangleq(l\triangleright f^{\uparrow L})\times(m\triangleright f^{\uparrow M})\quad.\label{eq:f-def-of-functor-product-lift}
+\end{equation}
+We need to show that the identity law and the composition law hold.
+
+To verify the identity law for $P$:
+\begin{align*}
+{\color{greenunder}\text{expect to equal }\text{id}:}\quad & \text{id}^{\uparrow P}\\
+{\color{greenunder}\text{definition of }f^{\uparrow P}:}\quad & =l^{:L^{A}}\times m^{:M^{A}}\Rightarrow(l\triangleright\text{id}^{\uparrow L})\times(m\triangleright\text{id}^{\uparrow M})\\
+{\color{greenunder}\text{identity laws for }L,M:}\quad & =l^{:L^{A}}\times m^{:M^{A}}\Rightarrow(l\triangleright\text{id})\times(m\triangleright\text{id})\\
+{\color{greenunder}\text{definition of }\boxtimes:}\quad & =\big(l^{:L^{A}}\times m^{:M^{A}}\Rightarrow l\times m\big)=\text{id}\quad.
+\end{align*}
+To verify the composition law for $P$, we need to show that
+\[
+f^{\uparrow P}\bef g^{\uparrow P}=\left(f\bef g\right)^{\uparrow P}\quad.
+\]
+Apply both sides of this equation to an arbitrary value of type $L^{A}\times M^{A}$:
+\begin{align*}
+{\color{greenunder}\text{expect to equal }(l\times m)\triangleright(f\bef g)^{\uparrow P}:}\quad & (l^{:L^{A}}\times m^{:M^{A}})\triangleright(f^{\uparrow P}\gunderline{\,\bef\,}g^{\uparrow P})\\
+{\color{greenunder}\triangleright\text{ notation}:}\quad & =\gunderline (l^{:L^{A}}\times m^{:M^{A}}\gunderline{)\triangleright f^{\uparrow P}}\triangleright g^{\uparrow P}\\
+{\color{greenunder}\text{use Eq.~(\ref{eq:f-def-of-functor-product-lift})}:}\quad & =\gunderline{\big(}(l\triangleright f^{\uparrow L})\times(m\triangleright f^{\uparrow M})\gunderline{\big)\triangleright g^{\uparrow P}}\\
+{\color{greenunder}\text{use Eq.~(\ref{eq:f-def-of-functor-product-lift})}:}\quad & =(l\triangleright f^{\uparrow L}\gunderline{\,\triangleright\,}g^{\uparrow L})\times(m\triangleright f^{\uparrow M}\gunderline{\,\triangleright\,}g^{\uparrow M})\\
+{\color{greenunder}\triangleright\text{ notation}:}\quad & =(l\triangleright\gunderline{f^{\uparrow L}\bef g^{\uparrow L}})\times(m\triangleright\gunderline{f^{\uparrow M}\bef g^{\uparrow M}})\\
+{\color{greenunder}\text{composition laws for }L,M:}\quad & =(l\triangleright(f\bef g)^{\uparrow L})\times(m\triangleright(f\bef g)^{\uparrow M})\\
+{\color{greenunder}\text{use Eq.~(\ref{eq:f-def-of-functor-product-lift})}:}\quad & =(l\times m)\triangleright(f\bef g)^{\uparrow P}\quad.
+\end{align*}
+For comparison, the same derivation using the Scala code syntax will
+look like this,
+\begin{lstlisting}
+(( l, m )).map(f).map(g) == (( l.map(f), m.map(f) )).map(g)
+  == (( l.map(f).map(g), m.map(f).map(g) )) == (( l.map(f andThen g), m.map(f andThen g) )) 
+\end{lstlisting}
+assuming that we have defined the \lstinline!.map! method on pairs
+by Eq.~(\ref{eq:f-def-of-functor-product-lift}),
+\begin{lstlisting}
+(( l, m )).map(f) == (( l.map(f), m.map(f) ))
+\end{lstlisting}
+The proof written in the Scala syntax does not show the type constructor
+whose \lstinline!.map! method is being used in a given place. For
+instance, it is not immediately clear that the two \lstinline!.map!
+methods used in \lstinline!m.map(f).map(g)! belong to the same type
+constructor and thus obey the composition law. The code notation shows
+this more concisely and more clearly, helping us to avoid errors in
+reasoning.
+
+\subsection{Contrafunctor constructions}
+
+\begin{table}
+\begin{centering}
+\begin{tabular}{|c|c|c|}
+\hline 
+\textbf{Construction} & \textbf{Type notation} & \textbf{Comment}\tabularnewline
+\hline 
+\hline 
+{\footnotesize{}tuple} & {\footnotesize{}$C^{A}\triangleq P^{A}\times Q^{A}$} & {\footnotesize{}the product contrafunctor; $P$ and $Q$ must be contrafunctors}\tabularnewline
+\hline 
+{\footnotesize{}disjunctive type} & {\footnotesize{}$C^{A}\triangleq P^{A}+Q^{A}$} & {\footnotesize{}the co-product contrafunctor; $P$ and $Q$ must be
+contrafunctors}\tabularnewline
+\hline 
+{\footnotesize{}function type} & {\footnotesize{}$C^{A}\triangleq P^{A}\Rightarrow H^{A}$} & {\footnotesize{}the exponential contrafunctor; $P$ is a functor and
+$H$ a contrafunctor}\tabularnewline
+\hline 
+{\footnotesize{}}\lstinline!Unit!{\footnotesize{} type} & {\footnotesize{}$C^{A}\triangleq Z$} & {\footnotesize{}the constant contrafunctor; $Z$ is a fixed type (may
+be $\bbnum 1$)}\tabularnewline
+\hline 
+{\footnotesize{}type constructor} & {\footnotesize{}$C^{A}\triangleq P^{Q^{A}}$} & {\footnotesize{}the composition; $P$ is a functor and $Q$ a contrafunctor
+(or vice versa)}\tabularnewline
+\hline 
+\end{tabular}
+\par\end{centering}
+\caption{Contrafunctor constructions, defining a contrafunctor $C^{A}$.\label{tab:f-Contrafunctor-constructions}}
+\end{table}
+
+
+\section{Slides }
 
 \subsection{The structure of functor types I}
 
 How to build new functors out of old ones
-
-Main question:
-
-Is any data type $Z^{A}$ with $A$ in covariant positions always
-a functor? {\footnotesize{}
-\[
-Z^{A,R}\equiv\left(\left(A\Rightarrow R\right)\Rightarrow R\right)\times A+\left(R\Rightarrow A+\text{Int}\right)+A\times A\times\text{Int}\times\text{Int}
-\]
-}{\footnotesize\par}
 
 ``Elementary'' data types are built from parts:
 
@@ -548,7 +2099,7 @@ This yields polynomial type constructors = \textbf{polynomial functors}
 To answer the question:
 
 Build \texttt{\textcolor{blue}{\footnotesize{}fmap}} incrementally
-as we build up the type expression
+as we build up the type expression - show this on examples
 
 Verify that the laws hold at every step
 
@@ -593,15 +2144,14 @@ in $A$ and $X$
 \texttt{\textcolor{blue}{\footnotesize{}fmap}} for $F^{A}$ is recursive,
 uses the two \texttt{\textcolor{blue}{\footnotesize{}fmap}}s of $R^{A,X}$
 
-Similar constructions hold for contrafunctors, \emph{mutatis mutandis}
+\emph{Mutatis mutandis}, similar constructions hold for contrafunctors\emph{ }
 
 Will now check that the functor laws still hold after each operation
 
-
 \subsection{Worked examples II: Checking the functor laws}
 
-To check that the \texttt{\textcolor{blue}{\footnotesize{}fmap}} laws
-hold for $F^{A}+G^{A}$ if they hold for $F^{A}$ and $G^{A}$
+To check that the contrafunctor laws hold for $F^{A}+G^{A}$ if they
+hold for $F^{A}$ and $G^{A}$
 
 From $f:A\Rightarrow B$, get $\text{fmap}_{F}(f):F^{A}\Rightarrow F^{B}$
 and $\text{fmap}_{G}(f):G^{A}\Rightarrow G^{B}$
@@ -656,8 +2206,11 @@ a functor
 
 \subsection{Exercises II}
 
-Check that the \texttt{\textcolor{blue}{\footnotesize{}fmap}} laws
-hold for $F^{A}\times G^{A}$ if they hold for $F^{A}$ and $G^{A}$
+Check that the contrafunctor laws hold for $F^{A}\times G^{A}$ if
+they hold for $F^{A}$ and $G^{A}$
+
+Check that the functor laws hold for $F^{A}+G^{A}$ if they hold for
+$F^{A}$ and $G^{A}$
 
 Show that $F^{A}\Rightarrow G^{A}$ is, in general, neither a functor
 nor a contrafunctor when both $F^{A}$ and $G^{A}$ are functors or
@@ -668,8 +2221,119 @@ Show that $F^{A}\Rightarrow G^{A}$ is a contrafunctor if $F^{A}$
 is a functor and $G^{A}$ is a contrafunctor, by checking the \texttt{\textcolor{blue}{\footnotesize{}contrafmap}}
 laws for $F^{A}\Rightarrow G^{A}$ 
 
+For each of the Scala type constructors defined below, formulate the
+definition in the type notation and decide whether the type constructors
+are functors, contrafunctors, or neither.
+\begin{lstlisting}
+type F[A] = Int => (Option[A], Either[A, Int], Either[A, A])
+type G[A] = (Int, A) => Either[Int, A]
+type H[A] = Either[A, (A, Option[A])] => Int => Int
+\end{lstlisting}
+
+Use the known constructions to determine which of the following type
+constructors are functors or contrafunctors (or neither), and to implement
+fmap or contrafmap if appropriate:
+
+\textbf{(a)} $F^{A}\triangleq\text{Int}\times A\times A+\left(\text{String}\Rightarrow A\right)\times A$.
+
+\textbf{(b)} $G^{A,B}\triangleq\left(A\Rightarrow\text{Int}\Rightarrow\bbnum 1+B\right)+\left(A\Rightarrow\bbnum 1+A\Rightarrow\text{Int}\right)$
+with respect to the type parameter $A$; answer the same question
+with respect to the type parameter $B$.
+
+\textbf{(c)} $H^{A,B,C}\triangleq\left(A\Rightarrow A\Rightarrow B\Rightarrow C\right)\times C+\left(B\Rightarrow A\right)$;
+answer the question with respect to each of the type parameters $A$,
+$B$, $C$ separately.
+
+\textbf{(d)} $P^{A,B}\triangleq\left(\left(\left(A\Rightarrow B\right)\Rightarrow A\right)\Rightarrow B\right)\Rightarrow A$
+with respect to the type parameter $A$; same question with respect
+to the type parameter $B$.
+
+
+\section{Summary}
+
+Decide if a data type is a functor, a contrafunctor, or neither
+
+Implement a \lstinline!fmap! or a \lstinline!contrafmap! function
+that satisfies the laws
+
+Use constructions to derive the correct code of \lstinline!fmap!
+or \lstinline!contrafmap! without trial and error
+
+\subsection{Solved examples}
+
+\subsection{Exercises}
 
 \section{Discussion}
+
+The term ``functor'' comes from category theory, and does not have
+the same meaning as ``functors'' in C++ or in OCaml.
+
+\subsection{Subtyping with injective or surjective conversion functions}
+
+\subsubsection{Statement \label{subsec:f-Statement-functor-preserves-injective}\ref{subsec:f-Statement-functor-preserves-injective}}
+
+If $L^{A}$ is a lawful functor and $f^{:A\Rightarrow B}$ is an injective
+function then $\text{fmap}_{L}(f)$ is also injective.
+
+Proof
+
+We begin by noting that an injective function $f^{:A\Rightarrow B}$
+must somehow embed all information from a value of type $A$ into
+a value of type $B$. The \textbf{image} of $f$ (the subset of all
+values of type $B$ that can be obtained as $f(a)$ for some $a^{:A}$)
+thus contans a distinct value of type $B$ for each distinct value
+of type $A$. So, there exists a function that maps any $b$ from
+the image of $f$ back to a value $a^{:A}$ it came from; call that
+function $g^{:B\Rightarrow A}$. The function $g$ must satisfy 
+\[
+\forall a^{:A}.\,g(f(a))=a\quad;
+\]
+equivalently written as 
+\[
+f\bef g=\text{id}\quad.
+\]
+In other words, $g$ is a partial function that works similarly to
+an inverse function to $f$. The function $g$ is partial because
+it is defined only for a subset of values of type $B$, which are
+in the image of $f$. The function $g$ is called a \textbf{left inverse}
+for $f$ because $g\bef f\neq\text{id}$, since $g\bef f$ is only
+a partial function. A two-sided inverse function to $f$ must be a
+\emph{total} (not a partial) function.
+
+The fact that $f$ has a left inverse is \emph{equivalent} to the
+assumption that $f$ is injective. Indeed, if any function $f$ has
+a left inverse $g$, we can show that $f$ is injective. Assume some
+$x$ and $y$ such that $f(x)=f(y)$; we will prove that $f$ is injective
+if we show that $x=y$. Apply $g$ to both sides of $f(x)=f(y)$ and
+get
+\[
+x=g(f(x))=g(f(y))=y\quad.
+\]
+
+Now it remains to apply this trick to functions lifted into the functor
+$L$. To prove that $\text{fmap}_{L}(f)$ is injective, we need to
+show that it has a left inverse. We can lift both sides of the equation
+$f\bef g=\text{id}$ to get
+\begin{align*}
+ & \text{fmap}_{L}(f\bef g)\\
+{\color{greenunder}\text{composition law for }L:}\quad & =\text{fmap}_{L}(f)\bef\text{fmap}_{L}(g)\\
+{\color{greenunder}\text{use }f\bef g=\text{id}:}\quad & =\text{fmap}_{L}(\text{id})\\
+{\color{greenunder}\text{identity law for }L:}\quad & =\text{id}\quad.
+\end{align*}
+It follows that $\text{fmap}_{L}(f)\bef\text{fmap}_{L}(g)=\text{id}$,
+i.e.~$\text{fmap}_{L}(g)$ is a left inverse for $\text{fmap}_{L}(f)$.
+Since $\text{fmap}_{L}(f)$ has a left inverse, it is injective.
+
+Similarly, contrafunctors preserve surjective functions.
+
+Note: subtype conversion functions are not necessarily injective or
+surjective. The example $\text{Two}\Rightarrow\text{AtMostTwo}$ has
+an injective conversion function, but the example $P\Rightarrow Q$
+has a surjective one. Now, if we take a product of these types, we
+will have a conversion function $\text{Two}\times P\Rightarrow\text{AtMostTwo}\times Q$,
+and that function will be neither injective nor surjective. So, it
+is not true that P<:Q means that all the information in P is preserved
+in Q or vice versa.
 
 \begin{comment}
 this is chapter four all about functors functors are an abstraction

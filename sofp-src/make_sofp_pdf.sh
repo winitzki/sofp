@@ -15,8 +15,8 @@ function make_pdf_with_index {
 	run_latex_many_times "$base"
 	makeindex "$base.idx"
 	run_latex_many_times "$base"
-        dvips "$base.dvi" 2>&1 >> $base.log
-        ps2pdf "$base.ps" 2>&1 >> $base.log
+        (dvips "$base.dvi") 2>&1 >> $base.log
+        (ps2pdf "$base.ps") 2>&1 >> $base.log
 }
 
 function add_color {
@@ -51,8 +51,8 @@ cp $name*lyx $name*tex $name*dvi `fgrep includegraphics $name*tex | sed -e 's,[^
 tar jcvf "$name-src.tar.bz2" "$srcbase"/
 rm -rf "$srcbase"/
 
-"$pdftk" "$name.pdf" attach_files "$name-src.tar.bz2" output "1$name.pdf"
-mv "1$name.pdf" "$name.pdf"
+#"$pdftk" "$name.pdf" attach_files "$name-src.tar.bz2" output "1$name.pdf"
+#mv "1$name.pdf" "$name.pdf"
 echo Result is "$name.pdf" having `pdftk "$name.pdf" dump_data | fgrep NumberOfPages | sed -e 's,^.* ,,'` pages.
 # Cleanup.
 tar jcvf "$name-logs.tar.bz2" $name*log $name*ilg $name*idx
