@@ -57,4 +57,4 @@ echo Result is "$name.pdf" having `pdftk "$name.pdf" dump_data | fgrep NumberOfP
 # Cleanup.
 tar jcvf "$name-logs.tar.bz2" $name*log $name*ilg $name*idx
 echo "Log files are found in $name-logs.tar.bz2"
-rm -f $name*{idx,ind,aux,dvi,ilg,out,toc,log,ps}
+rm -f $name*{idx,ind,aux,dvi,ilg,out,toc,log,ps,lof,lot}
