@@ -43,17 +43,22 @@ rm -f $name*tex
 for f in $name*tex; do add_color "$f"; done
 make_pdf_with_index "$name" # Output is $name.pdf, main file is $name.tex, and other .tex files are \include'd.
 
-#tar jcvf "$name-src.tar.bz2" $name*lyx $name*tex $name*dvi `fgrep includegraphics $name*tex | sed -e 's,[^{]*{\([^}]*\)},\1.*,' |while read f; do ls $f ; done` "$0"
 srcbase="sofp-src"
 rm -rf "$srcbase"
 mkdir "$srcbase"
-cp $name*lyx $name*tex $name*dvi `fgrep includegraphics $name*tex | sed -e 's,[^{]*{\([^}]*\)},\1.*,' |while read f; do ls $f ; done` *.sh "$srcbase"/
+# Copy the required source files to "$srcbase"/.
+cp ../README.md $name*lyx $name*tex $name*dvi `fgrep includegraphics $name*tex | sed -e 's,[^{]*{\([^}]*\)}.*,\1.*,' |while read f; do ls $f ; done` *.sh "$srcbase"/
 tar jcvf "$name-src.tar.bz2" "$srcbase"/
 rm -rf "$srcbase"/
 
-#"$pdftk" "$name.pdf" attach_files "$name-src.tar.bz2" output "1$name.pdf"
-#mv "1$name.pdf" "$name.pdf"
-echo Result is "$name.pdf" having `pdftk "$name.pdf" dump_data | fgrep NumberOfPages | sed -e 's,^.* ,,'` pages.
+function kbSize {
+ local file="$1"
+ ls -l -n "$file"|sed -e 's/  */ /g'|cut -f5 -d ' '
+}
+
+"$pdftk" "$name.pdf" attach_files "$name-src.tar.bz2" output "1$name.pdf"
+mv "1$name.pdf" "$name.pdf"
+echo Result is "$name.pdf", size `kbSize "$name.pdf"` bytes, with `pdftk "$name.pdf" dump_data | fgrep NumberOfPages | sed -e 's,^.* ,,'` pages.
 # Cleanup.
 tar jcvf "$name-logs.tar.bz2" $name*log $name*ilg $name*idx
 echo "Log files are found in $name-logs.tar.bz2"
