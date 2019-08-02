@@ -29,4 +29,8 @@ dvips sofp.dvi
 ps2pdf sofp.ps
 ```
 
+# Printed version of the draft
 
+A printed version of the draft can be purchased at []().
+
+This printed version contains only the chapters whose text has been edited and proofread, and corresponds to the PDF file [](). 
