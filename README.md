@@ -31,6 +31,6 @@ ps2pdf sofp.ps
 
 # Printed version of the draft
 
-A printed version of the draft can be purchased at []().
+A printed version of the draft can be purchased at lulu.com: [http://www.lulu.com/content/paperback-book/the-science-of-functional-programming/24915714](http://www.lulu.com/content/paperback-book/the-science-of-functional-programming/24915714).
 
-This printed version contains only the chapters whose text has been edited and proofread, and corresponds to the PDF file [](). 
+This printed version contains only the chapters whose text has been edited and proofread, and corresponds to the PDF file [sofp-src/sofp-draft.pdf](sofp-src/sofp-draft.pdf). 
