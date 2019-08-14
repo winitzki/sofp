@@ -76,9 +76,8 @@ egrep -v 'Bookmark(Level|Begin)' $name.data|fgrep Bookmark|perl -e 'undef $/; wh
    (read b1; read e1; read b2; read e2; pdftk sofp.pdf cat 1-$((b1-1)) $e1-$((b2-1)) $e2-end output $draft.pdf; echo Draft page ranges 1-$((b1-1)) $e1-$((b2-1)) $e2-end )
 rm -f $name*{idx,ind,aux,dvi,ilg,out,toc,log,ps,lof,lot,data}
 
-# Attach sources to the draft file.
-
-"$pdftk" $draft.pdf attach_files "$name-src.tar.bz2" output 1$draft.pdf
-mv 1$draft.pdf $draft.pdf
 echo Draft file created as $draft.pdf, size `kbSize $draft.pdf` bytes, with `pdfPages $draft.pdf` pages.
+
+# Attach sources to the draft file.
+"$pdftk" $draft.pdf attach_files "$name-src.tar.bz2" output $draft-src.pdf
 
