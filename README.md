@@ -4,6 +4,10 @@ This is the official source repository for the book _The Science of Functional P
 
 The book is a tutorial exposition of the theoretical knowledge that functional programmers need. The material is developed from first principles and shows complete derivations and proofs of substantially all results.
 
+A recorded slide presentation, ["Reasoning about types and code"](https://www.youtube.com/watch?v=tgr_dV7_53s), gives examples of the topics and methods of this book.
+
+# Source code
+
 The book is published under the GNU Free Documentation License. Permission is granted to copy, distribute and/or modify this book under the terms of that license.
 
 This repository contains the full source code for the book (LyX and LaTeX / jpg / eps) and shell scripts for building a PDF version of the book. (So this is a "transparent" copy in the sense of the GNU license.)
