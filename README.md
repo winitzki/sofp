@@ -1,14 +1,14 @@
 # The Science of Functional Programming
 
-This is the official source repository for the book _The Science of Functional Programming: A tutorial, with examples in Scala_.
+This is the official source repository for the new book _The Science of Functional Programming: A tutorial, with examples in Scala_.
 
-The book is a tutorial exposition of the theoretical knowledge that functional programmers need. The material is developed from first principles and shows complete derivations and proofs of substantially all results.
+The book is a tutorial exposition of the theoretical knowledge that functional programmers need. The material is developed from first principles and contains complete explanations, derivations, and proofs of almost all required results.
 
-A recorded slide presentation, ["Reasoning about types and code"](https://www.youtube.com/watch?v=tgr_dV7_53s), gives examples of the topics and methods of this book.
+A recorded slide presentation, ["Reasoning about types and code"](https://www.youtube.com/watch?v=tgr_dV7_53s), illustrates some of the topics and methods of this book.
 
 # Source code
 
-The book is published under the GNU Free Documentation License. Permission is granted to copy, distribute and/or modify this book under the terms of that license.
+The book is published under the [GNU Free Documentation License](https://www.gnu.org/licenses/old-licenses/fdl-1.2.en.html). Permission is granted to _copy, distribute and/or modify_ this book under the terms of that license.
 
 This repository contains the full source code for the book (LyX and LaTeX / jpg / eps) and shell scripts for building a PDF version of the book. (So this is a "transparent" copy in the sense of the GNU license.)
 
@@ -46,3 +46,9 @@ Readers are invited to create github issues in this repository if they wish to m
 # Current status of the draft
 
 Chapters 1-6 as well as some appendices and discussion chapters are ready after a second proofreading of the draft. Chapter 13 is in preparation.
+
+# Roadmap
+
+- Milestone 1 (achieved as of August 2019): chapters 1-6 are completed and available for purchase at lulu.com as a cheap (black/white) paperback.
+- Milestone 2 (ETA: end of 2019): chapters 1-13 are completed and available for purchase at lulu.com (black/white, cheaper) and blurb.com (color, more expensive) as both paperback and hardcover versions.
+- Milestone 3 (ETA: mid-2020): possibly adding chapters 14-16, the entire book is completed after possible revisions and input from readers.
