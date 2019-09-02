@@ -22,9 +22,9 @@ How to formalize the idea of ``wrapped data''? An intuitive view
 is that the data is ``still there'', i.e.~we should be able to
 manipulate the data held within the wrapper. In functional programming,
 to ``manipulate'' means to apply functions to data. So, if an integer
-value $10$ is ``wrapped'', we should be able somehow to apply a
-function \lstinline!{x => x + 1}! and obtain a ``wrapped'' value
-$11$.
+value $123$ is ``wrapped'', we should be able somehow to apply
+a function such as \lstinline!{x => x * 2}! and obtain a ``wrapped''
+value $246$.
 
 Let us look at some often used type constructors defined in the Scala
 standard library, such as \lstinline!Seq[A]!, \lstinline!Try[A]!,
@@ -52,21 +52,21 @@ at a later time.
 
 Since the meaning of the ``wrappers'' \lstinline!Seq!, \lstinline!Try!,
 and \lstinline!Future! is quite different, the methods for creating
-and reading the wrapped values are specific to each type constructor.
-However, the manipulation method \lstinline!.map! is similar in all
-three examples. We can say generally that the \lstinline!.map! method
-will apply a given function $f^{:A\Rightarrow B}$ to the data of
-type $A$ held inside the wrapper, and the new data (of type $B$)
+and reading the wrapped values have different type signatures for
+each ``wrapper''. However, the method \lstinline!.map! is similar
+in all three examples. We can say generally that the \lstinline!.map!
+method will apply a given function $f^{:A\Rightarrow B}$ to the data
+of type $A$ held inside the wrapper, and the new data (of type $B$)
 will remain within a wrapper of the same type:
 \begin{lstlisting}
 val a = List(x,y,z).map(f) // Result is List(f(x), f(y), f(z)).
 val b = Try(x).map(f)      // Result is Try(f(x)).
 val c = Future(x).map(f)   // Result is Future(f(x)).
 \end{lstlisting}
-This motivates us to separate the ``wrapping'' functionality from
-all other features of the data types: A type constructor \lstinline!W[A]!
-is a ``wrapper'' if there exists a function called \lstinline!map!
-with the  type signature
+This motivates us to use the \lstinline!map! function as the requirement
+for the ``wrapping'' functionality: A type constructor \lstinline!Wrap[A]!
+is a ``wrapper'' if there exists a function \lstinline!map! with
+the  type signature
 \begin{lstlisting}
 def map[A, B]: Wrap[A] => (A => B) => Wrap[B]
 \end{lstlisting}
@@ -186,6 +186,8 @@ The code notation for this function is
 A &  & f
 \end{array}\quad.\label{eq:f-def-opt-fmap-matrix-notation}
 \end{equation}
+\vspace{-0.5\baselineskip}
+
 The identity law also looks simpler if expressed in terms of \lstinline!fmap!,
 namely $\text{fmap}\,(\text{id})=\text{id}$. Here we omit the type
 parameters $A$ and $B$, which must be both equal.
@@ -197,7 +199,10 @@ it ``lifts'' a function $f^{:A\Rightarrow B}$ operating on simple
 values into a function operating on \lstinline!Option!-wrapped values. 
 
 So, the identity law can be formulated as ``a lifted identity function
-is also an identity function''.
+is also an identity function''. If we lift an identity function (or
+a composition of functions that equals an identity), we expect the
+wrapped data not to change. The identity law expresses this expectation
+in a mathematical equation.
 
 \subsection{Motivation for the composition law}
 
@@ -365,9 +370,10 @@ which now equals the right-hand side. This proves the statement.
 Separating the functionality of ``data wrapper'' from any other
 features of a data type, we obtain:
 \begin{itemize}
-\item A data type with a type parameter, e.g.~\lstinline!L[A]!. We may
-also denote it by $L^{\bullet}$ (in Scala, \lstinline!L[_]!) if
-we do not need to specify the name of its type parameter.
+\item A data type with a type parameter, e.g.~\lstinline!L[A]!. We will
+use the notation $L^{\bullet}$ (in Scala, \lstinline!L[_]!) for
+the type constructor itself, and also when the name of the type parameter
+is not needed.
 \item A fully parametric function \lstinline!fmap! with type signature
 \[
 \text{fmap}_{L}:\left(A\Rightarrow B\right)\Rightarrow L^{A}\Rightarrow L^{B}\quad,
@@ -564,8 +570,8 @@ functor laws; for instance,
 \begin{lstlisting}
 Counter(n, a) != map_bad(Counter(n, a))(identity) == Counter(n + 1, a)
 \end{lstlisting}
-The failure of functor laws leads to surprising behavior because code
-refactorings change the result:
+The failure of functor laws leads to surprising behavior because a
+code refactoring changes the result:
 \begin{lstlisting}
 Counter(n, a).map(incr).map(incr) != Counter(n, a).map(x => x + 2)
 \end{lstlisting}
@@ -719,11 +725,11 @@ and \lstinline!yield!. We will see many examples of functor blocks
 throughout this book. In this chapter, we only consider functor blocks
 that are equivalent to a chain of \lstinline!.map! operations on
 a functor value \lstinline!p:L[A]!. These functor blocks can be recognized
-because they contain only one left arrow (in the first line). Here
-is how to replace a chain of \lstinline!.map! operations by a functor
-block:
+because they contain \emph{only one} left arrow (in the first line).
+Here is how to replace a chain of \lstinline!.map! operations by
+a functor block:
 \begin{lstlisting}
-p.map(f).map(g).map(h) == for {
+p.map(x => f(x)).map(y => g(y)).map(z => h(z)) == for {
    x <- p           // The first line must contain a left arrow.
    y = f(x)         // Some computation involving `x`.
    z = g(y)         // Another computation, uses `y`.
@@ -920,8 +926,9 @@ affecting the results.
 \textbf{\small{}Functor block syntax} & \textbf{\small{}Chains of }\lstinline!.map!\textbf{\small{} methods}\tabularnewline
 \hline 
 \hline 
-\noindent\begin{minipage}[t]{1\linewidth}%
-\vspace{-0.8\baselineskip}
+\hspace*{-0.0278\linewidth}%
+\begin{minipage}[t]{1.06\linewidth}%
+\vspace{-0.86\baselineskip}
 \begin{lstlisting}
 for {  // Code fragment 1a.
   y <- List(10, 20, 30)
@@ -929,11 +936,11 @@ for {  // Code fragment 1a.
   z = f(x)
 } yield g(z)
 \end{lstlisting}
-\vspace{-0.2\baselineskip}
+\vspace{-0.25\baselineskip}
 %
-\end{minipage} & %
-\noindent\begin{minipage}[t]{1\linewidth}%
-\vspace{-0.8\baselineskip}
+\end{minipage} & \hspace*{-0.0278\linewidth}%
+\begin{minipage}[t]{1.06\linewidth}%
+\vspace{-0.86\baselineskip}
 \begin{lstlisting}
 List(10, 20, 30)  // Code fragment 1b.
   .map(y => y)
@@ -941,35 +948,37 @@ List(10, 20, 30)  // Code fragment 1b.
   .map(z =>
             g(z))
 \end{lstlisting}
-\vspace{-0.2\baselineskip}
+\vspace{-0.25\baselineskip}
 %
 \end{minipage}\tabularnewline
 \hline 
-\noindent\begin{minipage}[t]{1\linewidth}%
-\vspace{-0.8\baselineskip}
+\hspace*{-0.0278\linewidth}%
+\begin{minipage}[t]{1.06\linewidth}%
+\vspace{-0.86\baselineskip}
 \begin{lstlisting}
 for {  // Code fragment 2a.
   x <- List(10, 20, 30)
   z = f(x)
 } yield g(z)
 \end{lstlisting}
-\vspace{-0.2\baselineskip}
+\vspace{-0.25\baselineskip}
 %
-\end{minipage} & %
-\noindent\begin{minipage}[t]{1\linewidth}%
-\vspace{-0.8\baselineskip}
+\end{minipage} & \hspace*{-0.0278\linewidth}%
+\begin{minipage}[t]{1.06\linewidth}%
+\vspace{-0.86\baselineskip}
 \begin{lstlisting}
 List(10, 20, 30)  // Code fragment 2b.
   .map(x => f(x))
   .map(z =>
             g(z))
 \end{lstlisting}
-\vspace{-0.2\baselineskip}
+\vspace{-0.25\baselineskip}
 %
 \end{minipage}\tabularnewline
 \hline 
-\noindent\begin{minipage}[t]{1\linewidth}%
-\vspace{-0.8\baselineskip}
+\hspace*{-0.0278\linewidth}%
+\begin{minipage}[t]{1.06\linewidth}%
+\vspace{-0.86\baselineskip}
 \begin{lstlisting}
 for {  // Code fragment 3a.
   x <- List(10, 20, 30)
@@ -977,11 +986,11 @@ for {  // Code fragment 3a.
   z = f(y)
 } yield g(z)
 \end{lstlisting}
-\vspace{-0.2\baselineskip}
+\vspace{-0.25\baselineskip}
 %
-\end{minipage} & %
-\noindent\begin{minipage}[t]{1\linewidth}%
-\vspace{-0.8\baselineskip}
+\end{minipage} & \hspace*{-0.0278\linewidth}%
+\begin{minipage}[t]{1.06\linewidth}%
+\vspace{-0.86\baselineskip}
 \begin{lstlisting}
 List(10, 20, 30)  // Code fragment 3b.
   .map(x => x + 1)
@@ -989,30 +998,31 @@ List(10, 20, 30)  // Code fragment 3b.
   .map(z =>
             g(z))
 \end{lstlisting}
-\vspace{-0.2\baselineskip}
+\vspace{-0.25\baselineskip}
 %
 \end{minipage}\tabularnewline
 \hline 
-\noindent\begin{minipage}[t]{1\linewidth}%
-\vspace{-0.8\baselineskip}
+\hspace*{-0.0278\linewidth}%
+\begin{minipage}[t]{1.06\linewidth}%
+\vspace{-0.86\baselineskip}
 \begin{lstlisting}
 for {  // Code fragment 4a.
   x <- List(10, 20, 30)
   z = f(x + 1)
 } yield g(z)
 \end{lstlisting}
-\vspace{-0.2\baselineskip}
+\vspace{-0.1\baselineskip}
 %
-\end{minipage} & %
-\noindent\begin{minipage}[t]{1\linewidth}%
-\vspace{-0.8\baselineskip}
+\end{minipage} & \hspace*{-0.0278\linewidth}%
+\begin{minipage}[t]{1.06\linewidth}%
+\vspace{-0.86\baselineskip}
 \begin{lstlisting}
 List(10, 20, 30)  // Code fragment 4b.
   .map(x => f(x + 1))
   .map(z =>
             g(z))
 \end{lstlisting}
-\vspace{-0.2\baselineskip}
+\vspace{-0.1\baselineskip}
 %
 \end{minipage}\tabularnewline
 \hline 
@@ -1544,8 +1554,8 @@ for showing that \lstinline!ServerAction[_]! cannot be a functor.
 
 \subsection{Subtyping, covariance, and contravariance}
 
-A type $P$ is called a \textbf{subtype}\index{type!subtype of} of
-a type $Q$ if there exists a designated\index{type conversion function}
+A type $P$ is called a \textbf{subtype}\index{types!subtype of}
+of a type $Q$ if there exists a designated\index{type conversion function}
 \textbf{type conversion} function of type $P\Rightarrow Q$ that the
 compiler will automatically use whenever necessary to match types.
 For instance, applying a function of type $Q\Rightarrow Z$ to a value
@@ -2411,12 +2421,11 @@ in those cases.
 
 \subsection{Functor constructions\label{subsec:f-Functor-constructions}}
 
-Functional programming languages support the five main type constructions
-shown in Table~\ref{tab:ch-correspondence-type-notation-CH-propositions}
+What type expressions will give us a functor? Functional programming
+languages support the five main type constructions shown in Table~\ref{tab:ch-correspondence-type-notation-CH-propositions}
 (page~\pageref{tab:ch-correspondence-type-notation-CH-propositions}).
-To find out what type expressions are functors, we may check all the
-available type constructions for obeying the functor laws. The results
-are summarized in Table~\ref{tab:f-Functor-constructions}. 
+We can check all the available type constructions for obeying the
+functor laws. The results are summarized in Table~\ref{tab:f-Functor-constructions}. 
 
 \begin{table}
 \begin{centering}
@@ -2427,17 +2436,17 @@ are summarized in Table~\ref{tab:f-Functor-constructions}.
 \hline 
 {\footnotesize{}type parameter} & {\footnotesize{}$L^{A}\triangleq A$} & {\footnotesize{}the identity functor}\tabularnewline
 \hline 
-{\footnotesize{}tuple} & {\footnotesize{}$L^{A}\triangleq P^{A}\times Q^{A}$} & {\footnotesize{}the product functor; $P$ and $Q$ must be functors}\tabularnewline
+{\footnotesize{}tuple} & {\footnotesize{}$L^{A}\triangleq P^{A}\times Q^{A}$} & {\footnotesize{}the functor product; $P$ and $Q$ must be functors}\tabularnewline
 \hline 
-{\footnotesize{}disjunctive type} & {\footnotesize{}$L^{A}\triangleq P^{A}+Q^{A}$} & {\footnotesize{}the co-product functor; $P$ and $Q$ must be functors}\tabularnewline
+{\footnotesize{}disjunctive type} & {\footnotesize{}$L^{A}\triangleq P^{A}+Q^{A}$} & {\footnotesize{}the functor co-product; $P$ and $Q$ must be functors}\tabularnewline
 \hline 
 {\footnotesize{}function type} & {\footnotesize{}$L^{A}\triangleq C^{A}\Rightarrow P^{A}$} & {\footnotesize{}the exponential functor; $P$ is a functor and $C$
 a contrafunctor}\tabularnewline
 \hline 
 {\footnotesize{}primitive type} & {\footnotesize{}$L^{A}\triangleq Z$} & {\footnotesize{}the constant functor; $Z$ is a fixed type}\tabularnewline
 \hline 
-{\footnotesize{}type constructor} & {\footnotesize{}$L^{A}\triangleq P^{Q^{A}}$} & {\footnotesize{}the composition; $P$ and $Q$ are both functors or
-both contrafunctors}\tabularnewline
+{\footnotesize{}type constructor} & {\footnotesize{}$L^{A}\triangleq P^{Q^{A}}$} & {\footnotesize{}functor composition; $P$ and $Q$ are both functors
+or both contrafunctors}\tabularnewline
 \hline 
 {\footnotesize{}type recursion} & {\footnotesize{}$L^{A}\triangleq S^{A,L^{A}}$} & {\footnotesize{}recursive functor; $S^{A,B}$ must be a functor w.r.t.~both
 $A$ and $B$}\tabularnewline
@@ -2506,11 +2515,11 @@ $\text{Const}^{Z,\bullet}$ are not often used: their \lstinline!fmap!
 implementations are identity functions, and so they rarely provide
 useful functionality. 
 
-\paragraph{Product functor}
+\paragraph{Functor product}
 
 We have seen that type constructors with product types, such as $L^{A}\triangleq A\times A\times A$,
-are functors. The next construction (the \index{product functor}\textbf{product
-functor}) explains why.
+are functors. The next construction (the \index{functor product}\textbf{functor
+product}) explains why.
 
 \subsubsection{Statement \label{subsec:functor-Statement-functor-product}\ref{subsec:functor-Statement-functor-product}}
 
@@ -2597,11 +2606,11 @@ Eq.~(\ref{eq:f-def-of-functor-product-lift}),
 \end{lstlisting}
 The proof written in the Scala syntax does not show the type constructors
 whose \lstinline!.map! methods are used in each expression. For instance,
-it is not immediately clear that the two \lstinline!.map! methods
-used in the expression \lstinline!m.map(f).map(g)! belong to the
-\emph{same} type constructor $M$ and thus obey $M$'s composition
-law. The code notation shows this more concisely and more clearly,
-helping us in reasoning:
+it is not indicated that the two \lstinline!.map! methods used in
+the expression \lstinline!m.map(f).map(g)! belong to the \emph{same}
+type constructor $M$ and thus obey $M$'s composition law. The code
+notation shows this more concisely and more clearly, helping us in
+reasoning:
 \[
 m\triangleright f^{\uparrow M}\triangleright g^{\uparrow M}=m\triangleright f^{\uparrow M}\bef g^{\uparrow M}=m\triangleright(f\bef g)^{\uparrow M}\quad.
 \]
@@ -2621,7 +2630,9 @@ def fmap[A, B](f: A => B): Either[P[A], Q[A]] => Either[P[B], Q[B]] = {
   case Right(qa)   => Right(fmap_Q(f)(qa))  // Use fmap for Q.
 }
 \end{lstlisting}
-The code notation for this \lstinline!fmap! function is
+The functor $L^{\bullet}$ is the \textbf{functor co-product}\index{functor co-product}
+of $P^{\bullet}$ and $Q^{\bullet}$. The code notation for the \lstinline!fmap!
+function is
 \[
 \text{fmap}_{L}(f^{:A\Rightarrow B})=f^{\uparrow L}\triangleq\begin{array}{|c||cc|}
  & P^{B} & Q^{B}\\
@@ -2746,7 +2757,7 @@ If $C$ were a functor, the proof would not work: we would have obtained
 $f^{\uparrow C}\bef g^{\uparrow C}$ instead of $g^{\downarrow C}\bef f^{\downarrow C}$,
 and we would not be able to group $f^{\downarrow C}\bef h\bef f^{\uparrow P}$
 together (the order of composition cannot be permuted for arbitrary
-funtions $f$, $g$).
+functions $f$, $g$).
 
 Examples of functors obtained via the exponential\index{exponential functor}
 functor construction are $L^{A}\triangleq Z\Rightarrow A$ (with the
@@ -2879,9 +2890,9 @@ defined class L
 Table~\ref{tab:Examples-of-recursive-disjunctive-type-equations}
 summarizes our previous examples of recursive types and shows the
 relevant choices of $S^{A,R}$, which turns out to be always a bifunctor.
-For the abstract syntax tree, the type constructors $P^{\bullet}$
-and $Q^{\bullet}$ must be given; they specify the available shapes
-of leaves and branches respectively. 
+For abstract syntax trees, the functors $P^{\bullet}$ and $Q^{\bullet}$
+must be given; they specify the available shapes of leaves and branches
+respectively. 
 
 \begin{table}
 \begin{centering}
@@ -3394,7 +3405,6 @@ or \lstinline!contrafmap! without trial and error.
 readable code.
 \end{itemize}
 
-
 \subsection{Exercises: Functor and contrafunctor constructions \index{exercises}}
 
 \subsubsection{Exercise \label{subsec:functor-Exercise-contrafunctor-exponential}\ref{subsec:functor-Exercise-contrafunctor-exponential}}
@@ -3544,6 +3554,9 @@ made into a profunctor. The type signature of \lstinline!xmap! cannot
 be implemented for \lstinline!ServerAction[R]! because it is not
 a fully parametric type constructor (and so is not exponential-polynomial).
 
+Profunctors are not often used in practical coding. We will occasionally
+see profunctors in later chapters.
+
 \subsection{Subtyping with injective or surjective conversion functions}
 
 In some cases, $P$ is a subtype of $Q$ when the set of values of
@@ -3609,7 +3622,7 @@ We begin by noting that an injective function $f^{:A\Rightarrow B}$
 must somehow embed all information from a value of type $A$ into
 a value of type $B$. The \textbf{image} of $f$ (the subset of all
 values of type $B$ that can be obtained as $f(a)$ for some $a^{:A}$)
-thus contans a distinct value of type $B$ for each distinct value
+thus contains a distinct value of type $B$ for each distinct value
 of type $A$. So, there exists a function that maps any $b$ from
 the image of $f$ back to a value $a^{:A}$ it came from; call that
 function $g^{:B\Rightarrow A}$. The function $g$ must satisfy 

@@ -72,7 +72,7 @@ echo "Log files are found in $name-logs.tar.bz2"
 # Create draft file.
 "$pdftk" $name.pdf dump_data output $name.data
 egrep -v 'Bookmark(Level|Begin)' $name.data|fgrep Bookmark|perl -e 'undef $/; while(<>){ s/\nBookmarkPageNumber/ BookmarkPageNumber/ig; print; }' | \
-   egrep '(Type-level functions|Applied functional type theory|C The Curry-Howard |E A humorous disclaimer)' | egrep -o '[0-9]+$' | \
+   egrep '(Typeclasses and functions|Applied functional type theory|C The Curry-Howard |E A humorous disclaimer)' | egrep -o '[0-9]+$' | \
    (read b1; read e1; read b2; read e2; pdftk sofp.pdf cat 1-$((b1-1)) $e1-$((b2-1)) $e2-end output $draft.pdf; echo Draft page ranges 1-$((b1-1)) $e1-$((b2-1)) $e2-end )
 rm -f $name*{idx,ind,aux,dvi,ilg,out,toc,log,ps,lof,lot,data}
 

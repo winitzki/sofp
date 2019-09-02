@@ -50,5 +50,6 @@ Chapters 1-6 as well as some appendices and discussion chapters are ready after 
 # Roadmap
 
 - Milestone 1 (achieved as of August 2019): chapters 1-6 are completed and available for purchase at lulu.com as a cheap (black/white) paperback.
-- Milestone 2 (ETA: end of 2019): chapters 1-13 are completed and available for purchase at lulu.com (black/white, cheaper) and blurb.com (color, more expensive) as both paperback and hardcover versions.
-- Milestone 3 (ETA: mid-2020): possibly adding chapters 14-16, the entire book is completed after possible revisions and input from readers.
+- Milestone 2 (ETA: November 2019): chapters 7, 8, 9, 13 are completed. The draft is available for purchase at lulu.com (black/white, cheaper) and at blurb.com (color, more expensive) in paperback.
+- Milestone 3 (ETA: end of 2019): chapters 1-13 are completed and available for purchase at lulu.com (black/white, cheaper) and blurb.com (color, more expensive) as both paperback and hardcover versions.
+- Milestone 4 (ETA: mid-2020): possibly adding chapters 14-16, the entire book is completed after possible revisions and input from readers.
