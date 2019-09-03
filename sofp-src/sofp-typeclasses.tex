@@ -1393,15 +1393,15 @@ checkFunctorLaws[Seq, Int, String, Double]
 
 The \texttt{scalacheck} library will substitute a large number of
 random values into the given conditions, hoping to discover a set
-of values for which some condition fails. While an automatic check
-of this kind is useful, it does not provide a rigorous proof that
-the laws hold, because it only tests the laws in a finite number of
-cases and with type parameters set to specific types.
+of values for which some condition fails. While a test of this kind
+is useful (it might find a bug), it does not provide a rigorous proof
+that the laws hold, because the laws are tested only in a finite number
+of cases and with type parameters set to specific types.
 
 \section{Deriving typeclass instances via structural analysis of types}
 
 In Chapter~\ref{chap:Functors,-contrafunctors,-and} we analyzed
-the structure of functors by checking whether the five standard type
+the structure of functors by checking whether the six standard type
 constructions can make new functors and contrafunctors out of previous
 ones. We will now apply the same \index{types!structural analysis}\textbf{structural
 analysis} to various typeclasses. Is a product of two monoids a monoid?
@@ -1446,11 +1446,10 @@ of type $Z$. With a fixed type $Z$, we denote the typeclass by
 \begin{lstlisting}
 final case class Extractor[Z, T](extract: T => Z)
 \end{lstlisting}
-
-To apply structural analysis, we check whether the five standard type
-constructions produce new typeclass instances. The results are summarized
-in Table~\ref{tab:Type-constructions-for-Extractor}. Let us show
-the required calculations.
+To apply structural analysis, we check whether any of the standard
+type constructions produce new typeclass instances. The results are
+summarized in Table~\ref{tab:Type-constructions-for-Extractor}.
+Let us show the required calculations.
 
 \begin{table}
 \begin{centering}
@@ -1462,12 +1461,15 @@ the required calculations.
 {\footnotesize{}The }\lstinline!Unit!{\footnotesize{} type, or other
 fixed type $C$} & {\footnotesize{}$\text{Extractor}^{\bbnum 1}$ or $\text{Extractor}^{C}$} & {\footnotesize{}$\text{Extractor}^{Z}$}\tabularnewline
 \hline 
-{\footnotesize{}Product of two extractor types} & {\footnotesize{}$\text{Extractor}^{A}\times\text{Extractor}^{B}\Rightarrow\text{Extractor}^{A\times B}$} & {\footnotesize{}two possibilities}\tabularnewline
+{\footnotesize{}Product of extractor type $A$ and any $B$} & {\footnotesize{}$\text{Extractor}^{A}\Rightarrow\text{Extractor}^{A\times B}$} & {\footnotesize{}one possibility}\tabularnewline
 \hline 
 {\footnotesize{}Co-product of two extractor types} & {\footnotesize{}$\text{Extractor}^{A}\times\text{Extractor}^{B}\Rightarrow\text{Extractor}^{A+B}$} & {\footnotesize{}one possibility}\tabularnewline
 \hline 
 {\footnotesize{}Function from or to another type $C$} & {\footnotesize{}$\text{Extractor}^{A}\Rightarrow\text{Extractor}^{A\Rightarrow C}$
 or $\text{Extractor}^{C\Rightarrow A}$ } & {\footnotesize{}$\text{Extractor}^{C\times\left(C\Rightarrow A\right)}$}\tabularnewline
+\hline 
+{\footnotesize{}Recursive types} & {\footnotesize{}$\text{Extractor}^{T}\Rightarrow\text{Extractor}^{S^{T}}$
+where $T\triangleq S^{T}$ } & {\footnotesize{}$\text{Extractor}^{T}$}\tabularnewline
 \hline 
 \end{tabular}
 \par\end{centering}
@@ -1514,21 +1516,27 @@ requires implementing a conversion function with type signature
 \[
 \forall(A,B,Z).\,\text{Extractor}^{A}\times\text{Extractor}^{B}\Rightarrow\text{Extractor}^{A\times B}=\left(A\Rightarrow Z\right)\times\left(B\Rightarrow Z\right)\Rightarrow A\times B\Rightarrow Z\quad.
 \]
-There are only two fully parametric implementations of this function:
+We can derive only two fully parametric implementations of this type
+signature: 
 \[
 f^{:A\Rightarrow Z}\times g^{:B\Rightarrow Z}\Rightarrow a\times b\Rightarrow f(a)\quad\quad\text{ and }\quad\quad f^{:A\Rightarrow Z}\times g^{:B\Rightarrow Z}\Rightarrow a\times b\Rightarrow g(b)\quad.
 \]
-Both give a valid \lstinline!Extractor! instance (since there are
-no laws to check). However, every choice will use one of the two \lstinline!Extractor!
-instances and ignore the other. So, we can simplify this construction
-to keep only the typeclass constraint on $A$, and allowing any type
-$B$. Translating to Scala:
+Both implementations give a valid \lstinline!Extractor! instance
+(since there are no laws to check). However, every choice will use
+one of the two \lstinline!Extractor! instances and ignore the other.
+So, we can simplify this construction by keeping the typeclass constraint
+only for $A$ and allowing \emph{any} type $B$,
+\[
+\forall(A,B,Z).\,\text{Extractor}^{A}\Rightarrow\text{Extractor}^{A\times B}\quad.
+\]
 \begin{lstlisting}
 def extractorProduct[Z, A, B](implicit ti: Extractor[Z, A]) =
   Extractor[Z, (A, B)]{ case (a, b) => ti.extract(a) }
 \end{lstlisting}
 If $A$ has an \lstinline!Extractor! instance, the product of $A$
-with any type $B$ also has an \lstinline!Extractor! instance.
+with any type $B$ also has an \lstinline!Extractor! instance. Examples
+of this construction are $Z\times B$ and $P\times Q\times Z$ (where,
+as we know, the type $Z$ has an \lstinline!Extractor! instance).
 
 \paragraph{Co-product types}
 
@@ -1538,8 +1546,15 @@ out the types, we get
 \[
 \forall(A,B,Z).\,\text{Extractor}^{A}\times\text{Extractor}^{B}\Rightarrow\text{Extractor}^{A+B}=\left(A\Rightarrow Z\right)\times\left(B\Rightarrow Z\right)\Rightarrow A+B\Rightarrow Z\quad.
 \]
-From the known type equivalence (Table~\ref{tab:Logical-identities-with-function-types}),
-we have a unique implementation of this function.
+From a known type equivalence (Table~\ref{tab:Logical-identities-with-function-types}),
+we have a unique implementation of this function:
+\[
+f^{:A\Rightarrow Z}\times g^{:B\Rightarrow Z}\Rightarrow\begin{array}{|c||c|}
+ & Z\\
+\hline A & a\Rightarrow f(a)\\
+B & b\Rightarrow g(b)
+\end{array}\quad.
+\]
 \begin{lstlisting}
 def extractorEither[Z, A, B](implicit ti1: Extractor[Z, A], ti2: Extractor[Z, B]) =
   Extractor[Z, Either[A, B]] {
@@ -1549,6 +1564,16 @@ def extractorEither[Z, A, B](implicit ti1: Extractor[Z, A], ti2: Extractor[Z, B]
 \end{lstlisting}
 So, the co-product of $A$ and $B$ can be given a unique \lstinline!Extractor!
 instance.
+
+Since the product and the co-product constructions preserve \lstinline!Extractor!
+instances, we conclude that any polynomial type expression has an
+\lstinline!Extractor! instance as long as every product type contains
+at least one $Z$ or another \lstinline!Extractor! type. For example,
+the type expression 
+\[
+A\times Z+Z\times(P+Z\times Q)+B\times C\times Z
+\]
+is of that form and therefore has an \lstinline!Extractor! instance.
 
 \paragraph{Function types}
 
@@ -1578,22 +1603,163 @@ f^{:A\Rightarrow Z}\Rightarrow c^{:C}\times g^{:C\Rightarrow A}\Rightarrow f(g(c
 def extractorFunc[Z, A, C](implicit ti: Extractor[Z, A]) =
   Extractor[Z, (C, C => A)] { case (c, g) => ti.extract(g(c)) }
 \end{lstlisting}
+Examples of this construction are the type expressions $C\times\left(C\Rightarrow Z\right)$
+and $D\times\left(D\Rightarrow Z\times P\right)$.
+
+\paragraph{Recursive types}
+
+We can apply type recursion to any of the non-recursive constructions
+that create a new type with an \lstinline!Extractor! instance out
+of a previous extractor type. For clarity, let us use a \emph{type
+constructor} denoted $F^{A}$ for describing the produced new type
+out of a previous extractor type $A$. 
+
+For the product construction, we define $F_{1}^{B,A}\triangleq A\times B$.
+For the co-product construction, $F_{2}^{B,A}\triangleq B+A$ (where
+$B$ must be also an extractor type). For the function construction,
+$F_{3}^{C,A}\triangleq C\times\left(C\Rightarrow A\right)$.
+
+Any recursive type equation that uses $F_{1}$, $F_{2}$, and/or $F_{3}$
+will define a new recursive type with an \lstinline!Extractor! instance.
+An example of such a recursive type is a composition of $F_{2}$ and
+$F_{1}$ defined by
+\begin{equation}
+T\triangleq F_{2}^{Z\times P,F_{1}^{T,Q}}=Z\times P+Q\times T\quad.\label{eq:example-recursive-equation-extractor}
+\end{equation}
+We can visualize this recursive type as an ``infinite disjunction''
+\begin{align*}
+ & T\cong Z\times P+Q\times T\\
+ & \cong Z\times P+Q\times\left(Z\times P+Q\times\left(Z\times P+...\right)\right)\\
+ & \cong Z\times P\times(\bbnum 1+Q+Q\times Q+...)\\
+ & \cong Z\times P\times\text{List}^{Q}\quad.
+\end{align*}
+Since the resulting type is equivalent to $Z\times C$ where $C\triangleq P\times\text{List}^{Q}$,
+we find that the recursive equation~(\ref{eq:example-recursive-equation-extractor})
+is equivalent to the product construction with a different type.
+
+This will happen with any recursive equation containing $F_{1}$ and
+$F_{2}$ (but no $F_{3}$): since $F_{1}$ and $F_{2}$ are polynomial
+functors, the resulting type $T$ will be a recursive polynomial in
+$Z$. A polynomial in $Z$ will have an \lstinline!Extractor! instance
+only if it is of the form $Z\times C$ for some type $C$.
+
+Recursive equations involving $F_{3}$ will produce new examples of
+\lstinline!Extractor! types, such as
+\begin{equation}
+T\triangleq F_{3}^{C,F_{2}^{Z,F_{1}^{T,P}}}=C\times\left(C\Rightarrow Z+P\times T\right)\quad.\label{eq:example-good-recursive-equation-extractor}
+\end{equation}
+Heuristically, this type can be seen as an ``infinite'' exponential-polynomial
+type expression
+\[
+T=C\times\left(C\Rightarrow Z+P\times C\times\left(C\Rightarrow Z+P\times C\times\left(C\Rightarrow Z+...\right)\right)\right)\quad.
+\]
+It remains to be seen whether types of this form are useful in applications.
+
+We will now show how to define an \lstinline!Extractor! instance
+for any recursive type defined using $F_{1}$, $F_{2}$, and/or $F_{3}$.
+A recursive type equation defining a type $T$ can be written generally
+as
+\[
+T\triangleq S^{T}\quad,
+\]
+where $S^{\bullet}$ is a type constructor that is built up by composing
+$F_{1}$, $F_{2}$, and/or $F_{3}$ in some way. (The type constructor
+$S^{\bullet}$ may use $Z$ as well as other fixed types, which is
+not indicated for brevity.) For each of $F_{1}$, $F_{2}$, and/or
+$F_{3}$, we implemented a function with type 
+\[
+\text{extractorF}:\text{Extractor}^{A}\Rightarrow\text{Extractor}^{F^{A}}\quad.
+\]
+Since $S^{\bullet}$ is a composition of $F_{1}$, $F_{2}$, and/or
+$F_{3}$, we are able to implement a function 
+\[
+\text{extractorS}:\text{Extractor}^{A}\Rightarrow\text{Extractor}^{S^{A}}\quad.
+\]
+The \lstinline!Extractor! instance for the recursive type $T$ is
+then defined recursively as
+\[
+x^{:T\Rightarrow Z}\triangleq\text{extractorS}(x)\quad.
+\]
+The types match because the type $T$ is equivalent to the type $S^{T}$.
+As long as the definition of the recursive type $T$ is valid (i.e.~the
+type recursion terminates), the extractor function will also terminate.
+
+To illustrate this construction, let us derive an \lstinline!Extractor!
+instance for the type $T$ defined by Eq.~(\ref{eq:example-good-recursive-equation-extractor}).
+
+The type constructor $S^{\bullet}$ is defined by
+\[
+S^{A}\triangleq C\times\left(C\Rightarrow Z+P\times A\right)\quad.
+\]
+\begin{lstlisting}
+type S[A] = (C, C => Either[Z, (P, A)])
+final case class TypeT(t: S[TypeT])   // Define the recursive type `T`. 
+\end{lstlisting}
+To implement the function of type \lstinline!Extractor[T] => Extractor[S[T]]!,
+which is $\left(T\Rightarrow Z\right)\Rightarrow S^{T}\Rightarrow Z$,
+we begin with a typed hole
+\[
+f^{:T\Rightarrow Z}\Rightarrow s^{:C\times\left(C\Rightarrow Z+P\times T\right)}\Rightarrow\text{???}^{:Z}\quad.
+\]
+To fill $\text{???}^{:Z}$, we could apply $f^{:T\Rightarrow Z}$
+to some value of type $T$; but the only value of type $T$ can be
+obtained if we apply the function of type $C\Rightarrow Z+P\times T$
+to the given value of type $C$. So we write
+\[
+f^{:T\Rightarrow Z}\Rightarrow c^{:C}\times g^{:C\Rightarrow Z+P\times T}\Rightarrow g(c)\triangleright\text{???}^{:Z+P\times T\Rightarrow Z}\quad.
+\]
+The new typed hole has a function type. We can write the code in matrix
+notation as
+\[
+\text{extractorS}\triangleq f^{:T\Rightarrow Z}\Rightarrow c^{:C}\times g^{:C\Rightarrow Z+P\times T}\Rightarrow g(c)\triangleright\begin{array}{|c||c|}
+ & Z\\
+\hline Z & \text{id}\\
+P\times T & p^{:P}\times t^{:T}\Rightarrow f(t)
+\end{array}\quad.
+\]
+\begin{lstlisting}
+def extractorS[A](f: Extractor[A]): Extractor[S[A]] = Extractor[S[A]] { case (c, g) =>
+  g(c) match {
+    case Left(z)         => z
+    case Right((p, t))   => f.extract(t)
+  }
+}
+\end{lstlisting}
+
+The recursive construction defines an \lstinline!Extractor! instance
+for $T$ by a recursive function,
+\[
+\text{extractorT}\triangleq\text{extractorS}(\text{extractorT})\quad.
+\]
+\begin{lstlisting}
+def extractorT: Extractor[TypeT] = Extractor[TypeT] { case TypeT(t) =>
+  extractorS(extractorT).extract(t)
+}
+\end{lstlisting}
+To test this code, we define a value of type $T$ while setting \lstinline!C = Int!,
+\lstinline!P = Boolean!, and \lstinline!Z = String!:
+\begin{lstlisting}
+val t = TypeT((10, x => Right((true, TypeT((x * 2, y => Left("abc")))))))
+
+scala> extractorT.extract(t) // The recursion terminates.
+res0: String = abc
+\end{lstlisting}
 
 
 \paragraph{Summary}
 
 We derived the constructions that create new types with \lstinline!Extractor!
-typeclass instances from previous ones. Any type expression built
-via these constructions will have an \lstinline!Extractor! instance.
-An example is a complicated-looking type expression
+typeclass instances from previous ones. Any number of these constructions
+can be combined to create a new type expression that will always have
+an \lstinline!Extractor! instance. An example is the type expression
 \[
 K^{Z,P,Q,R,S}\triangleq Z\times P+Q\times\left(Q\Rightarrow Z+R\times\left(R\Rightarrow Z\times S\right)\right)\quad.
 \]
-As the type $K$ is evidently build up step by step from fixed types
-via the product, co-product, and function constructions, an \lstinline!Extractor!
+Since the type $K$ is built up step by step from fixed types via
+the product, co-product, and function constructions, an \lstinline!Extractor!
 instance for $K$ can be derived systematically with no guessing:
 \begin{lstlisting}[mathescape=true]
-type K[Z,P,Q,R,S] = Either[(Z,P), (Q, Q => Either[Z, (R, R => (Z, S))])]
+type K[Z,P,Q,R,S] = Either[(Z, P), (Q, Q => Either[Z, (R, R => (Z, S))])]
 implicit def extractorK[Z,P,Q,R,S]: Extractor[Z, K[Z,P,Q,R,S]] = {    // Create Extractor for types:
   implicit val e1 = extractorProduct[Z, Z, S]                         // $ Z \times S $.
   implicit val e2 = extractorFunc[Z, (Z, S), R]                       // $ R\times\left(R\Rightarrow Z\times S\right) $.
@@ -1603,6 +1769,143 @@ implicit def extractorK[Z,P,Q,R,S]: Extractor[Z, K[Z,P,Q,R,S]] = {    // Create 
   extractorEither[Z, (Z,P), (Q, Q => Either[Z, (R, R => (Z, S))])]    // Extractor for type $ K $.
 }
 \end{lstlisting}
+
+
+\subsection{The \texttt{Eq} typeclass}
+
+In Scala, the built-in operation \lstinline!==! is not type-safe
+because the code \lstinline!x == y! will compile regardless of the
+types of x and y. W can replace \lstinline!==! by a new operation
+\lstinline!===! constrained to a typeclass called \lstinline!Eq!,
+ensuring that types can be meaningfully compared for equality. The
+equality comparison for values of type $A$ is a function of type
+$A\times A\Rightarrow\bbnum 2$ (where $\bbnum 2$ denotes the \lstinline!Boolean!
+type). A function of that type is wrapped by typeclass instances of
+\lstinline!Eq!. We also define \lstinline!===! as an extension method:
+\begin{lstlisting}
+final case class Eq[A](equal: (A, A) => Boolean)
+object Eq {
+  implicit class EqOps[A: Eq](a: A) {
+    def ===(b: A): Boolean = implicitly[Eq[A]].equal(a, b)
+  }
+  implicit val eqInt = Eq[Int](_ == _)
+  implicit val eqString = Eq[String](_ == _)
+  // Other typeclass instances to be defined here.
+}
+\end{lstlisting}
+We may, if desired, define an \lstinline!Eq! typeclass instance for
+all types at once through the code
+\begin{lstlisting}
+implicit def eqTypeA[A] = Eq[A](_ == _)
+\end{lstlisting}
+However, this will not always work as expected:
+\begin{lstlisting}
+import Eq._
+
+scala> ((n: Int) => n) === ((n: Int) => n)
+res1: Boolean = false 
+\end{lstlisting}
+The operations \lstinline!==! and \lstinline!===! do not seem to
+compare function values correctly. The equality comparison must satisfy
+the laws of reflexivity and transitivity. The law of \textbf{transitivity}\index{transitivity law}
+states that $x=y$ and $y=z$ entails $x=z$. The law of \textbf{reflexivity}\index{reflexivity law}
+states that $x=x$ for every $x$; so the comparison \lstinline!x === x!
+should always return \lstinline!true!. The example shown above clearly
+violates this law when we choose $x\triangleq n^{:\text{Int}}\Rightarrow n$.
+
+Let us perform structural analysis for the \lstinline!Eq! typeclass.
+The results will show which types can be meaningfully compared for
+equality.
+
+\paragraph{Fixed types}
+
+All primitive types have \lstinline!Eq! instances that use type-specific
+equality comparisons.
+
+\paragraph{Products}
+
+If $A$ and $B$ have equality comparisons, we can compare pairs of
+type $A\times B$ by comparing each part of the pair separately:
+\begin{lstlisting}
+implicit def eqPair[A: Eq, B: Eq] = Eq[(A,B)]{ case ((a1, b1), (a2, b2)) => a1 === a2 && b1 === b2 } 
+\end{lstlisting}
+It is easy to check that the reflexivity and transitivity laws hold
+for the new comparison operation if they hold for comparisons of $A$
+and $B$ separately.
+
+\paragraph{Co-products}
+
+If $A$ and $B$ have equality comparisons, we can compare values
+of type $A+B$ while ensuring that a value of type $A+\bbnum 0$ is
+never equal to a value of type $\bbnum 0+B$:
+\begin{lstlisting}[mathescape=true]
+implicit def eqEither[A: Eq, B: Eq] = Eq[Either[A, B]] {
+  case (Left(a1), Left(a2))     => a1 === a2    // Compare $a_1 + \bbnum0$ and $a_2 + \bbnum0$.
+  case (Right(b1), Right(b2))   => b1 === b2    // Compare $\bbnum0 + b_1$ and $\bbnum0 + b_2$.
+  case _                        => false   // $a + \bbnum0$ is never equal to $\bbnum0 + b$.
+}
+\end{lstlisting}
+The laws hold for the new operation because the code makes sure that
+values of type \lstinline!Either[A, B]! can be equal only when they
+are all of type \lstinline!Left! or all of type \lstinline!Right!.
+If the comparisons of types $A$ and $B$ satisfy the laws separately,
+the laws for $A+B$ will be satisfied separately for values of type
+\lstinline!Left! and of type \lstinline!Right!.
+
+Since both products and co-products preserve equality, any polynomial
+type expression made of primitive types will also have an \lstinline!Eq!
+typeclass instance.
+
+\paragraph{Functions}
+
+If $A$ has equality comparisons, can we create an \lstinline!Eq!
+instance for $R\Rightarrow A$ where $R$ is some other type? This
+would be possible with a function of type
+\begin{equation}
+\forall A.\,(A\times A\Rightarrow\bbnum 2)\Rightarrow\left(R\Rightarrow A\right)\times\left(R\Rightarrow A\right)\Rightarrow\bbnum 2\quad.\label{eq:type-signature-function-comparison}
+\end{equation}
+Here we assume that the type $R$ is an arbitrary chosen type, so
+no values of type $R$ can be computed from scratch. (This would not
+be the case when $R=\bbnum 1$ or $R=\bbnum 2$, say. But in those
+cases the type $R\Rightarrow A$ can be simplified to a polynomial
+type, e.g.~$\bbnum 1\Rightarrow A\cong A$ and $\bbnum 2\Rightarrow A\cong A\times A$,
+etc.) Without values of type $R$, we cannot compute any values of
+type $A$ and cannot apply comparisons to them. Then the only possible
+implementations of the type signature~(\ref{eq:type-signature-function-comparison})
+are constant functions returning \lstinline!true! or \lstinline!false!.
+However, the implementation that always returns \lstinline!false!
+will violate the reflexivity law $x=x$. The implementation that always
+returns \lstinline!true! is not useful. So, functions of type $R\Rightarrow A$
+cannot have an \lstinline!Eq! instance for a general type $R$. A
+similar argument shows that functions of type $A\Rightarrow R$ also
+cannot have a useful \lstinline!Eq! instance.
+
+\paragraph{Recursive types}
+
+Since all polynomial type expressions preserve \lstinline!Eq! instances,
+the same logic can be applied to recursive polynomial types. For instance,
+lists and trees with \lstinline!Eq!-comparable values are also \lstinline!Eq!-comparable. 
+
+Consider a recursive polynomial type $T$ defined using a polynomial
+functor $S^{\bullet}$,
+\[
+T\triangleq S^{T}\quad.
+\]
+The functor $S^{\bullet}$ may use other fixed types that have \lstinline!Eq!
+instances. To construct the typeclass instance for $T$, we first
+implement a function $\text{eqS}$ of type
+\[
+\text{eqS}:\text{Eq}^{A}\Rightarrow\text{Eq}^{S^{A}}\quad.
+\]
+This function produces an \lstinline!Eq! instance for $S^{A}$ using
+\lstinline!Eq! instances of $A$ and of all other types that $S^{A}$
+depends on. The product and co-product constructions guarantee that
+it is always possible to implement this function for a polynomial
+functor $S^{\bullet}$. Then we define an \lstinline!Eq! instance
+for $T$ recursively:
+\[
+\text{eqT}:\text{Eq}^{T}\quad,\quad\quad\text{eqT}\triangleq\text{eqS}(\text{eqT})\quad.
+\]
 
 
 \subsection{Semigroups\label{subsec:Semigroups-constructions}}
@@ -1636,7 +1939,7 @@ Both provide an associative binary operation, as we showed in Example~\ref{subse
 In this way, any type $T$ can be made into a semigroup. (Semigroups
 of this kind are rarely useful.)
 
-\paragraph{Product types}
+\paragraph{Products}
 
 If types $A$ and $B$ are semigroups, the product $A\times B$ can
 be also given a \lstinline!Semigroup! typeclass instance. To compute
@@ -1650,15 +1953,19 @@ Writing out the type expressions, we get the type signature
 \]
 While this type signature can be implemented in a number of ways,
 we look for code that preserves information, in hopes of satisfying
-the associativity law. It is natural to use the component-wise product
-of the functions $A\times A\Rightarrow A$ and $B\times B\Rightarrow B$
-to get a function of type $A\times A\times B\times B\Rightarrow A\times B$,
-which is equivalent to the result type we need:
+the associativity law. The code should be a function of the form
+\[
+f^{:A\times A\Rightarrow A}\times g^{:B\times B\Rightarrow B}\Rightarrow a_{1}^{:A}\times b_{1}^{:B}\times a_{2}^{:A}\times b_{2}^{:B}\Rightarrow???^{:A}\times???^{:B}\quad.
+\]
+Since we are trying to define the new semigroup operation through
+the previously given operations $f$ and $g$, it is natural to apply
+$f$ and $g$ to the given data $a_{1}$, $a_{2}$, $b_{1}$, $b_{2}$
+and write 
 \[
 f^{:A\times A\Rightarrow A}\times g^{:B\times B\Rightarrow B}\Rightarrow a_{1}^{:A}\times b_{1}^{:B}\times a_{2}^{:A}\times b_{2}^{:B}\Rightarrow f(a_{1},a_{2})\times g(b_{1},b_{2})\quad.
 \]
-In the $\oplus$ notation, the new binary operation $\oplus_{A\times B}$
-is defined via the previously given $\oplus_{A}$ and $\oplus_{B}$:
+This code defines a new binary operation $\oplus_{A\times B}$ via
+the previously given $\oplus_{A}$ and $\oplus_{B}$ as
 \[
 (a_{1}^{:A}\times b_{1}^{:B})\oplus_{A\times B}(a_{2}^{:A}\times b_{2}^{:B})=(a_{1}\oplus_{A}a_{2})\times(b_{1}\oplus_{B}b_{2})\quad.
 \]
@@ -1667,9 +1974,9 @@ def semigroupProduct[A: Semigroup, B: Semigroup] =
   Semigroup[(A, B)]{ case ((a1, b1),(a2, b2)) => (a1 |+| a2, b1 |+| b2) }
 \end{lstlisting}
 This implementation satisfies the associativity law if the operations
-$\oplus_{A}$, $\oplus_{B}$ already do, i.e.~the results of computing
+$\oplus_{A}$, $\oplus_{B}$ already do, i.e.~if the results of computing
 $a_{1}\oplus_{A}a_{2}\oplus_{A}a_{3}$ and $b_{1}\oplus_{B}b_{2}\oplus_{B}b_{3}$
-do not depend on the order of parentheses. A proof:
+do not depend on the order of parentheses:
 \begin{align*}
  & \left(\left(a_{1}\times b_{1}\right)\oplus_{A\times B}\left(a_{2}\times b_{2}\right)\right)\oplus_{A\times B}\left(a_{3}\times b_{3}\right)=\left((a_{1}\oplus_{A}a_{2})\times(b_{1}\oplus_{B}b_{2})\right)\oplus_{A\times B}\left(a_{3}\times b_{3}\right)\\
  & \quad\quad=\left(a_{1}\oplus_{A}a_{2}\oplus_{A}a_{3}\right)\times\left(b_{1}\oplus_{B}b_{2}\oplus_{B}b_{3}\right)\quad,\\
@@ -1678,9 +1985,112 @@ do not depend on the order of parentheses. A proof:
 \end{align*}
 
 
-\paragraph{Co-product types}
+\paragraph{Co-products}
 
-\paragraph{Function types}
+To compute a \lstinline!Semigroup! instance for the co-product $A+B$
+of two semigroups, we need
+\[
+\forall(A,B).\,\text{Semigroup}^{A}\times\text{Semigroup}^{B}\Rightarrow\text{Semigroup}^{A+B}\quad.
+\]
+Writing out the type expressions, we get the type signature
+\[
+\forall(A,B).\,\left(A\times A\Rightarrow A\right)\times\left(B\times B\Rightarrow B\right)\Rightarrow\left(A+B\right)\times\left(A+B\right)\Rightarrow A+B\quad.
+\]
+Begin by writing a function with a typed hole:
+\[
+f^{:A\times A\Rightarrow A}\times g^{:B\times B\Rightarrow B}\Rightarrow c^{:\left(A+B\right)\times\left(A+B\right)}\Rightarrow\text{???}^{:A+B}\quad.
+\]
+Transforming the type expression $\left(A+B\right)\times\left(A+B\right)$
+into an equivalent disjunctive type,
+\[
+\left(A+B\right)\times\left(A+B\right)\cong A\times A+A\times B+B\times A+B\times B\quad,
+\]
+we can continue to write the function's code in matrix notation,
+\[
+f^{:A\times A\Rightarrow A}\times g^{:B\times B\Rightarrow B}\Rightarrow\begin{array}{|c||cc|}
+ & A & B\\
+\hline A\times A & \text{???}^{:A\times A\Rightarrow A} & \text{???}^{:A\times A\Rightarrow B}\\
+A\times B & \text{???}^{:A\times B\Rightarrow A} & \text{???}^{:A\times B\Rightarrow B}\\
+B\times A & \text{???}^{:B\times A\Rightarrow A} & \text{???}^{:B\times A\Rightarrow B}\\
+B\times B & \text{???}^{:B\times B\Rightarrow A} & \text{???}^{:B\times B\Rightarrow B}
+\end{array}\quad.
+\]
+The matrix is $4\times2$ because the input type, $A\times A+A\times B+B\times A+B\times B$,
+is a disjunction with $4$ parts, while the result type $A+B$ is
+a disjunction with $2$ parts. In each row, we need to fill only one
+of the two typed holes because only one part of the disjunction $A+B$
+can have a value.
+
+To save space, we will omit the types in the matrices. The first and
+the last rows of the matrix leave us no choice and can be filled first,
+\[
+f^{:A\times A\Rightarrow A}\times g^{:B\times B\Rightarrow B}\Rightarrow\begin{array}{||cc|}
+f^{:A\times A\Rightarrow A} & \bbnum 0\\
+\text{???}^{:A\times B\Rightarrow A} & \text{???}^{:A\times B\Rightarrow B}\\
+\text{???}^{:B\times A\Rightarrow A} & \text{???}^{:B\times A\Rightarrow B}\\
+\bbnum 0 & g^{:B\times B\Rightarrow B}
+\end{array}\quad.
+\]
+The remaining two rows can be filled in four different ways:
+\begin{align*}
+f\times g\Rightarrow\begin{array}{||cc|}
+f^{:A\times A\Rightarrow A} & \bbnum 0\\
+a^{:A}\times b^{:B}\Rightarrow a & \bbnum 0\\
+b^{:B}\times a^{:A}\Rightarrow a & \bbnum 0\\
+\bbnum 0 & g^{:B\times B\Rightarrow B}
+\end{array}~\quad,\quad\quad & f\times g\Rightarrow\begin{array}{||cc|}
+f & \bbnum 0\\
+a^{:A}\times b^{:B}\Rightarrow a & \bbnum 0\\
+\bbnum 0 & b^{:B}\times a^{:A}\Rightarrow b\\
+\bbnum 0 & g
+\end{array}\quad,\\
+f\times g\Rightarrow\begin{array}{||cc|}
+f^{:A\times A\Rightarrow A} & \bbnum 0\\
+\bbnum 0 & a^{:A}\times b^{:B}\Rightarrow b\\
+b^{:B}\times a^{:A}\Rightarrow a & \bbnum 0\\
+\bbnum 0 & g^{:B\times B\Rightarrow B}
+\end{array}\quad,\quad\quad & ~f\times g\Rightarrow\begin{array}{||cc|}
+f & \bbnum 0\\
+\bbnum 0 & a^{:A}\times b^{:B}\Rightarrow b\\
+\bbnum 0 & b^{:B}\times a^{:A}\Rightarrow b\\
+\bbnum 0 & g
+\end{array}\quad.
+\end{align*}
+Does the semigroup law~(\ref{eq:associativity-law-semigroup}) hold
+for the new typeclass instance with any of these implementations? 
+
+It turns out that \emph{all} \emph{four} implementations are lawful.
+The difference is in how the binary operation works on two different
+parts of the disjunction, $a^{:A}+\bbnum 0$ and $\bbnum 0+b^{:B}$.
+The possibilities are:
+\begin{enumerate}
+\item (``Take $A$'') Result is always of type $A$: $(a^{:A}+\bbnum 0)\oplus(\bbnum 0+b^{:B})=a$
+and $(\bbnum 0+b^{:B})\oplus(a^{:A}+\bbnum 0)=a$.
+\item (``Take left'') $x\oplus y$ discards $y$: $(a^{:A}+\bbnum 0)\oplus(\bbnum 0+b^{:B})=a$
+and $(\bbnum 0+b^{:B})\oplus(a^{:A}+\bbnum 0)=b$.
+\item (``Take right'') $x\oplus y$ discards $x$: $(a^{:A}+\bbnum 0)\oplus(\bbnum 0+b^{:B})=b$
+and $(\bbnum 0+b^{:B})\oplus(a^{:A}+\bbnum 0)=a$.
+\item (``Take $B$'') Result is always of type $B$: $(a^{:A}+\bbnum 0)\oplus(\bbnum 0+b^{:B})=b$
+and $(\bbnum 0+b^{:B})\oplus(a^{:A}+\bbnum 0)=b$.
+\end{enumerate}
+To verify the associativity law, we need to show that the values of
+expressions such as $(a_{1}+\bbnum 0)\oplus(a_{2}+\bbnum 0)\oplus(\bbnum 0+b_{1})$
+or $(a_{1}+\bbnum 0)\oplus(\bbnum 0+b_{1})\oplus(\bbnum 0+b_{2})$,
+etc., does not depend on the order of inserted parentheses.
+
+First consider the case when all three values are of type $A+\bbnum 0$;
+then the binary operation reduces to the binary operation of the semigroup
+$A$:
+\[
+(a_{1}+\bbnum 0)\oplus(a_{2}+\bbnum 0)\oplus(a_{3}+\bbnum 0)=(a_{1}\oplus_{A}a_{2}\oplus_{A}a_{3})+\bbnum 0\quad,
+\]
+which is associative since we assume that $A$ is a lawful semigroup.
+The same argument applies to three values of type $\bbnum 0+B$. It
+remains to consider the ``mixed'' cases. {*}{*}{*}
+
+\paragraph{Functions}
+
+\paragraph{Recursive types}
 
 \subsection{Monoids\label{subsec:Monoids-constructions}}
 
@@ -1694,6 +2104,8 @@ do not depend on the order of parentheses. A proof:
 
 \paragraph{Function types}
 
+\paragraph{Recursive types}
+
 \subsection{Pointed functors}
 
 \paragraph{Fixed types}
@@ -1705,6 +2117,8 @@ do not depend on the order of parentheses. A proof:
 \paragraph{Co-product types}
 
 \paragraph{Function types}
+
+\paragraph{Recursive types}
 
 \subsection{Co-pointed functors}
 
@@ -1718,11 +2132,13 @@ do not depend on the order of parentheses. A proof:
 
 \paragraph{Function types}
 
+\paragraph{Recursive types}
+
 \section{Typeclass inheritance}
 
-\section{Slides }
+\section{Summary}
 
-\subsection{Worked examples}
+\subsection{Solved examples\index{solved examples}}
 
 Define a PTVF \texttt{\textcolor{blue}{\footnotesize{}def bitsize{[}T{]}
 = ...}} such that \texttt{\textcolor{blue}{\footnotesize{}bitsize{[}Int{]}}}
@@ -1755,13 +2171,12 @@ $\Rightarrow$ A): C{[}A{]} $\Rightarrow$ C{[}B{]}}}{\footnotesize\par}
 Define a \texttt{\textcolor{blue}{\footnotesize{}ContraFunctor}} instance
 for type constructor $C^{A}\equiv A\Rightarrow\text{Int}$
 
-Define functor instance for recursive type $Q^{A}\equiv\left(\text{Int}\Rightarrow A\right)+\text{Int}+Q^{A}$
+Define \lstinline!Functor! instance for recursive type $Q^{A}\equiv\left(\text{Int}\Rightarrow A\right)+\text{Int}+Q^{A}$
 
 {*} If $F^{A}$ and $G^{A}$ are functors, define functor instance
 for $F^{A}+G^{A}$
 
-
-\subsection{Exercises}
+\subsection{Exercises\index{Exercises}}
 
 Define a PTVF \texttt{\textcolor{blue}{\footnotesize{}def isLong{[}T{]}:\ Boolean}}
 that returns \texttt{\textcolor{blue}{\footnotesize{}true}} for \texttt{\textcolor{blue}{\footnotesize{}Long}}
@@ -1784,13 +2199,13 @@ F{[}T{]} = Future{[}Seq{[}T{]}{]}}}{\footnotesize\par}
 Define a Cats' \texttt{\textcolor{blue}{\footnotesize{}Bifunctor}}
 instance for $B^{X,Y}\equiv\left(\text{Int}\Rightarrow X\right)+Y\times Y$
 
-Define a \texttt{\textcolor{blue}{\footnotesize{}ProFunctor}} type
-class having \texttt{\textcolor{blue}{\footnotesize{}dimap}}:
+Define a \texttt{\textcolor{blue}{\footnotesize{}Profunctor}} type
+class having \texttt{\textcolor{blue}{\footnotesize{}xmap}}:
 
-\texttt{\textcolor{blue}{\footnotesize{}def dimap{[}A, B{]}(f: A $\Rightarrow$
+\texttt{\textcolor{blue}{\footnotesize{}def xmap{[}A, B{]}(f: A $\Rightarrow$
 B, g: B $\Rightarrow$ A): F{[}A{]} $\Rightarrow$ F{[}B{]}}}{\footnotesize\par}
 
-Define a \texttt{\textcolor{blue}{\footnotesize{}ProFunctor}} instance
+Define a \texttt{\textcolor{blue}{\footnotesize{}Profunctor}} instance
 for $P^{A}\equiv A\Rightarrow\left(\text{Int}\times A\right)$
 
 Define a functor instance for recursive type $Q^{A}\equiv\text{String}+A\times Q^{A}$
@@ -1798,12 +2213,11 @@ Define a functor instance for recursive type $Q^{A}\equiv\text{String}+A\times Q
 {*} If $F^{A}$ and $G^{A}$ are functors, define functor instance
 for $F^{A}\times G^{A}$ 
 
-{*} Define a functor instance for $F^{A}\Rightarrow G^{A}$ where
-$F^{A}$ is a contrafunctor (use Cats' \texttt{\textcolor{blue}{\footnotesize{}Contravariant}}
+{*} Define a \lstinline!Functor! instance for $F^{A}\Rightarrow G^{A}$
+where $F^{A}$ is a contrafunctor (use Cats' \texttt{\textcolor{blue}{\footnotesize{}Contravariant}}
 type class for $F^{A}$) and $G^{A}$ is a functor
 
-
-\subsection{Further directions}
+\paragraph{Further directions}
 
 What problems can we solve now?
 
@@ -1845,10 +2259,6 @@ Automatically derive type class instances for such recursive types
 That requires type-level recursion (type-level fixpoints), see \href{https://github.com/slamdata/matryoshka}{matryoshka}
 
 This and other advanced topics are found in \href{https://apocalisp.wordpress.com/2010/06/08/type-level-programming-in-scala/}{this blog post from 2010}
-
-\section{Combining typeclasses}
-
-\section{Inheritance}
 
 \section{Functional dependencies}
 
