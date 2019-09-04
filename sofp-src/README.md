@@ -130,7 +130,9 @@ This is so because AFTT is not specific to Scala or Haskell, -- a serious user o
 
 All lecture content is authored by [Sergei Winitzki, Ph.D](https://sites.google.com/site/winitzki).
 
-The lecture materials are released into the public domain under a [CC-0 license, which is an "uncopyright"](https://github.com/winitzki/talks/blob/master/LICENSE).
+The lecture materials (slides and video recordings only) are released into the public domain under a [CC-0 license, which is an "uncopyright"](https://github.com/winitzki/talks/blob/master/LICENSE).
+
+The materials are being written up as a new book, "The Science of Functional Programming", which is released under GNU Free Documentation License.
 
 ## Intended audience
 
