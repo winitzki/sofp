@@ -16,7 +16,7 @@ function make_pdf_with_index {
 	makeindex "$base.idx"
 	run_latex_many_times "$base"
         (dvips "$base.dvi") 2>&1 >> $base.log
-        (ps2pdf "$base.ps") 2>&1 >> $base.log
+        (ps2pdf -dPDFSETTINGS=/prepress -dEmbedAllFonts=true "$base.ps") 2>&1 >> $base.log
 }
 
 function add_color {
