@@ -2766,12 +2766,12 @@ will be equal to the originally given value $\text{wu}_{F}$.
 So, the function $\text{pu}_{F}$ and the value $\text{wu}_{F}$ are
 \textbf{computationally equivalent}\index{computational equivalence}:
 each one can be converted into the other and back, with no loss of
-information. We can define a pointed functor equivalently as a functor
+information. We may define a pointed functor equivalently as a functor
 with a chosen value $\text{wu}_{F}$ of type $F^{\bbnum 1}$. When
 reasoning about pointed functors, it is simpler to use the definition
-via the ``wrapped unit'' \lstinline!wu! because it has a simple
-type and no laws. For practical programming, however, the \lstinline!pure!
-method is preferable.
+via the ``wrapped unit'' \lstinline!wu! because it has a simpler
+type and no laws. When writing code, the \lstinline!pure! method
+is more convenient.
 
 \subsection{Pointed functors: structural analysis\label{subsec:Pointed-functors:-structural-analysis}}
 
@@ -2787,6 +2787,55 @@ def pure[F[_]: Pointed : Functor, A](a: A): F[A] = implicitly[Pointed[F]].wu.map
 \end{lstlisting}
 
 
+\paragraph{Nameless type-to-type functions}
+
+To implement the \lstinline!Pointed! typeclass instances for the
+following constructions, we need to use more advanced syntax features
+of Scala. In the previous sections, we wrote PTVFs parameterized by
+a type built out of other types, for example
+\begin{lstlisting}
+def monoidPair[A: Monoid, B: Monoid]: Monoid[(A, B)] = ???
+\end{lstlisting}
+The function \lstinline!monoidPair! creates a typeclass instance
+for the type $A\times B$, which is built out of the types $A$ and
+$B$. In Scala, the typeclass instance is a value of type \lstinline!Monoid[(A, B)]!.
+The analog for type constructors is a value of type \lstinline!Pointed[L]!
+where the type constructor \lstinline!L! is defined by the type alias
+\begin{lstlisting}
+type L[A] = (F[A], G[A])
+\end{lstlisting}
+However, the following declaration of the analogous function \lstinline!pointedPair!
+is invalid in Scala:
+\begin{lstlisting}
+def pointedPair[F[_]: Pointed, G[_]: Pointed]: Pointed[L]     // Not valid in Scala.
+\end{lstlisting}
+It is not possible to use the type alias \lstinline!L! within this
+function declaration, because the type alias needs to use the type
+parameters \lstinline!F! and \lstinline!G! that are only defined
+within the type signature of the function. To achieve that, we would
+need somehow to insert a new type alias declaration within the type
+signature of \lstinline!pointedPair!, but the syntax of Scala does
+not support that. The return type is required to be \lstinline!Pointed[L]!
+where \lstinline!L! needs to be a type expression that defines a
+type constructor, i.e.~a type-to-type function with a \emph{single}
+type parameter. We cannot define a new type name (such as \lstinline!L!)
+within the type signature; what we need is a \emph{nameless} type-to-type
+function (i.e.~a nameless type constructor).
+
+The special Scala plugin called the ``kind projector''\footnote{\texttt{\href{https://github.com/typelevel/kind-projector}{https://github.com/typelevel/kind-projector}}}
+adds syntax for nameless type constructors. The syntax is similar
+to defining a nameless function: for instance, the pair functor is
+defined as \lstinline!Lambda[X => (F[X], G[X])]!. Such type expressions
+can be understood as nameless type-to-type functions. When using the
+``kind projector'' plugin, the syntax for defining \lstinline!pointedPair!
+is
+\begin{lstlisting}
+def pointedPair[F[_]: Pointed, G[_]: Pointed]: Pointed[Lambda[X => (F[X],G[X])]] = ???
+\end{lstlisting}
+Scala 3 will support a shorter syntax for nameless type-to-type functions,
+\lstinline![X] => (F[X], G[X])!. We will use the ``kind projector''
+syntax in the following code examples.
+
 \paragraph{Fixed types}
 
 A constant functor $\text{Const}^{Z,\bullet}$ is defined as $\text{Const}^{Z,A}\triangleq Z$,
@@ -2800,7 +2849,7 @@ to $\bbnum 1+U$, we will be able to produce a value of type $Z$
 as $1+\bbnum 0^{:U}$. In that case, we set $\text{wu}_{\text{Const}^{Z,\bullet}}=1+\bbnum 0^{:U}$.
 \begin{lstlisting}
 type Const[Z, A] = Z
-def pointedOption[U]: Pointed[Const[Option[U], ?]] = Pointed(None: Const[Option[U], Unit])
+def pointedOpt[U]: Pointed[Lambda[X => Const[Option[U], X]]] = Pointed(None: Const[Option[U], Unit])
 \end{lstlisting}
 
 
@@ -3047,11 +3096,21 @@ of a fixed type $Z$).
 The identity functor $\text{Id}^{A}\triangleq A$ is co-pointed with
 $\text{ex}\triangleq\text{id}^{:A\Rightarrow A}$. An identity function
 will always satisfy any naturality law.
+\begin{lstlisting}
+type Id[A] = A
+def copointedId: Copointed[Id] = new Copointed[Id] { def ex[A]: Id[A] => A = identity }
+\end{lstlisting}
 
 Composition of two co-pointed functors $F$, $G$ is co-pointed:
 \[
 \text{ex}_{F\circ G}\triangleq h^{:F^{G^{A}}}\Rightarrow\text{ex}_{G}(\text{ex}_{F}(h))\quad\text{ or equivalently }\quad\text{ex}_{F\circ G}=\text{ex}_{F}\bef\text{ex}_{G}\quad.
 \]
+\begin{lstlisting}
+def copointedFoG[F[_]: Copointed, G[_]: Copointed]: Copointed[Lambda[X => F[G[X]]]] =     
+  new Copointed[Lambda[X => F[G[X]]]] {
+    def ex[A]: F[G[A]] => A = extract[F,G[A]] _ andThen extract[G, A]
+  }
+\end{lstlisting}
 The naturality law holds for $\text{ex}_{F\circ G}$ because
 \begin{align*}
 {\color{greenunder}\text{expect to equal }\text{ex}_{F\circ G}\bef f:}\quad & \gunderline{f^{\uparrow F\circ G}}\bef\gunderline{\text{ex}_{F\circ G}}\\
@@ -3068,12 +3127,19 @@ of type $F^{A}\times G^{A}\Rightarrow A$ in two different ways: by
 discarding $F^{A}$ or by discarding $G^{A}$. With either choice,
 the functor product $F^{\bullet}\times G^{\bullet}$ is made into
 a co-pointed functor. For instance, if we choose to discard $G^{A}$
-, the code for the \lstinline!extract! method will be 
+then the functor $G$ will not need to be co-pointed, and the code
+for the \lstinline!extract! method will be 
 \[
 \text{ex}_{F\times G}\triangleq f^{:F^{A}}\times g^{:G^{A}}\Rightarrow\text{ex}_{F}(f)=\nabla_{1}\bef\text{ex}_{F}\quad,
 \]
 where we used the pair projection function $\nabla_{1}\triangleq(a\times b\Rightarrow a)$.
-The following calculation verifies the naturality law\ref{eq:naturality-law-of-extract}
+\begin{lstlisting}
+def copointedFxG[F[_]: Copointed, G[_]]: Copointed[Lambda[X => (F[X],G[X])]] =
+  new Copointed[Lambda[X => (F[X], G[X])]] {
+    def ex[A]: ((F[A], G[A])) => A = { case (f, g) => extract(f) }
+  }
+\end{lstlisting}
+The following calculation verifies the naturality law~(\ref{eq:naturality-law-of-extract})
 for this definition of $\text{ex}_{F\times G}$:
 \begin{align*}
 {\color{greenunder}\text{expect to equal }\text{ex}_{F\times G}\bef f:}\quad & \gunderline{f^{\uparrow F\times G}}\bef\text{ex}_{F\times G}\\
@@ -3083,12 +3149,19 @@ for this definition of $\text{ex}_{F\times G}$:
 {\color{greenunder}\text{naturality law of }\text{ex}_{F}:}\quad & =\gunderline{\nabla_{1}\bef\text{ex}_{F}}\bef f\\
 {\color{greenunder}\text{definition of }\text{ex}_{F\times G}:}\quad & =\text{ex}_{F\times G}\bef f\quad.
 \end{align*}
+To demonstrate the property $(p\boxtimes q)\bef\nabla_{1}=\nabla_{1}\bef p$
+used in this proof, apply both sides to $a\times b$:
+\begin{align*}
+ & (a\times b)\triangleright(p\boxtimes q)\,\gunderline{\bef}\,\nabla_{1}=\gunderline{(a\times b)\triangleright(p\boxtimes q)}\triangleright\nabla_{1}=(p(a)\times q(b))\triangleright\nabla_{1}=p(a)\quad,\\
+ & (a\times b)\triangleright\nabla_{1}\,\gunderline{\bef}\,p=\gunderline{(a\times b)\triangleright\nabla_{1}}\triangleright p=a\triangleright p=p(a)\quad.
+\end{align*}
 
 
 \paragraph{Co-products}
 
-For co-pointed functors $F$ and $G$, the implementation of $\text{ex}_{F+G}:F^{A}+G^{A}\Rightarrow A$
-is
+For co-pointed functors $F$ and $G$, there is only one possible
+implementation of the type signature $\text{ex}_{F+G}:F^{A}+G^{A}\Rightarrow A$,
+given that we have functions $\text{ex}_{F}$ and $\text{ex}_{G}$:
 \[
 \text{ex}_{F+G}\triangleq\begin{array}{|c||c|}
  & A\\
@@ -3096,12 +3169,19 @@ is
 G^{A} & \text{ex}_{G}
 \end{array}\quad.
 \]
-This is the only possible implementation for this type signature,
-given that we have functions $\text{ex}_{F}$ and $\text{ex}_{G}$.
+\begin{lstlisting}
+def copointedEitherFG[F[_]: Copointed, G[_]: Copointed]: Copointed[Lambda[X => Either[F[X],G[X]]]] =
+  new Copointed[Lambda[X => Either[F[X],G[X]]]] {
+    def ex[A]: Either[F[A], G[A]] => A = {
+      case Left(f)    => extract(f)
+      case Right(g)   => extract(g)
+    }
+  }
+\end{lstlisting}
 To verify that $\text{ex}_{F+G}$ satisfies the naturality law, we
 compute
 \begin{align*}
-{\color{greenunder}\text{expect to equal }\text{ex}_{F+G}\bef f:}\quad & f^{\uparrow F+G}\bef\text{ex}_{F+G}\\
+{\color{greenunder}\text{expect to equal }\text{ex}_{F+G}\bef f:}\quad & \gunderline{f^{\uparrow F+G}}\bef\gunderline{\text{ex}_{F+G}}\\
 {\color{greenunder}\text{definition of }f^{\uparrow F+G},\text{ see Eq.~(\ref{eq:f-coproduct-functor-def-fmap})}:}\quad & =\begin{array}{||cc|}
 f^{\uparrow F} & \bbnum 0\\
 \bbnum 0 & f^{\uparrow G}
@@ -3151,7 +3231,7 @@ $h^{:C^{A}\Rightarrow P^{A}}$ and compute
 \begin{align*}
 {\color{greenunder}\text{expect to equal }h\triangleright\text{ex}_{L}\bef f:}\quad & h\triangleright f^{\uparrow L}\bef\text{ex}_{L}=(h\triangleright f^{\uparrow L})\,\gunderline{\triangleright\text{ex}_{L}}\\
 {\color{greenunder}\text{use Eq.~(\ref{eq:def-of-ex-for-C-mapsto-P})}:}\quad & =\text{pu}_{C}\triangleright(h\triangleright f^{\uparrow L})\triangleright\text{ex}_{P}=\text{pu}_{C}\triangleright\gunderline{(h\triangleright f^{\uparrow L})}\bef\text{ex}_{P}\\
-{\color{greenunder}\text{definition of }f^{\uparrow L},\text{ see Eq.~(\ref{eq:f-functor-exponential-def-fmap-f-h})}:}\quad & =\text{pu}_{C}\triangleright f^{\downarrow C}\bef h\bef f^{\uparrow P}\bef\text{ex}_{P}\\
+{\color{greenunder}\text{definition of }f^{\uparrow L},\text{ see Eq.~(\ref{eq:f-functor-exponential-def-fmap-f-h})}:}\quad & =\text{pu}_{C}\triangleright f^{\downarrow C}\bef h\bef\gunderline{f^{\uparrow P}\bef\text{ex}_{P}}\\
 {\color{greenunder}\text{naturality law for }\text{ex}_{P}:}\quad & =\text{pu}_{C}\triangleright f^{\downarrow C}\bef h\bef\text{ex}_{P}\bef f\quad.
 \end{align*}
 We expect the last expression to equal 
@@ -3159,15 +3239,19 @@ We expect the last expression to equal
 h\triangleright\text{ex}_{L}\bef f=\text{pu}_{C}\triangleright h\triangleright\text{ex}_{P}\bef f=\text{pu}_{C}\triangleright h\bef\text{ex}_{P}\bef f\quad.
 \]
 This is possible only if $\text{pu}_{C}\triangleright f^{\downarrow C}=\text{pu}_{C}$
-for all $f$. This motivates us to assume this law as the \index{naturality law!of pure for contrafunctors@of \texttt{pure} for contrafunctors}\textbf{naturality
-law} of $\text{pu}_{C}$ for pointed contrafunctors. With this last
+for all $f$. This motivates us to assume that law as the \index{naturality law!of pure for contrafunctors@of \texttt{pure} for contrafunctors}\textbf{naturality
+law} of $\text{pu}_{C}$ for pointed contrafunctors. With that last
 assumption, we have finished proving the naturality law for $\text{ex}_{L}$.
 The code for $\text{ex}_{L}$ is
-\begin{lstlisting}
-def ???
+\begin{lstlisting}[mathescape=true]
+def copointedFunc[C[_]: Pointed, P[_]: Copointed]: Copointed[Lambda[X => C[X] => P[X]]] =
+  new Copointed[Lambda[X => C[X] => P[X]]] {
+    def ex[A]: (C[A] => P[A]) => A = h => extract[P, A](h(purec[C, A]))
+  }      // In Scala 2.13: h => purec[C, A] pipe h pipe extract[P, A] as in $ h\Rightarrow\text{pu}_{C}\triangleright h\bef\text{ex}_{P} $
 \end{lstlisting}
 
-We will analyze pointed contrafunctors in Section~\ref{subsec:Pointed-contrafunctors}.
+We will analyze pointed contrafunctors and their naturality law in
+Section~\ref{subsec:Pointed-contrafunctors}.
 
 \paragraph{Recursive types}
 
@@ -3181,15 +3265,15 @@ when applied to the recursively used $F^{A}$. Then we can use the
 \lstinline!bimap! method of $S$ to map $S^{A,F^{A}}\Rightarrow S^{A,A}$.
 It remains to extract a value of type $A$ out of a bifunctor value
 $S^{A,A}$. We call a bifunctor $S$ \textbf{co-pointed}\index{co-pointed bifunctor}
-if a method $\text{ex}_{S}:S^{A,A}\Rightarrow A$ exists satisfying
-the corresponding naturality law
+if a fully parametric function $\text{ex}_{S}:S^{A,A}\Rightarrow A$
+exists satisfying the corresponding naturality law
 \begin{equation}
 \text{ex}_{S}\bef f=\text{bimap}_{s}(f)(f)\bef\text{ex}_{S}\quad.\label{eq:copointed-bifunctor-naturality-law}
 \end{equation}
 Assuming that $S$ is co-pointed, we can finally define $\text{ex}_{F}$
 by recursion,
 \[
-\text{ex}_{F}\triangleq s^{:S^{A,F^{A}}}\Rightarrow s\triangleright\left(\text{bimap}_{S}(\text{id})(\text{ex}_{F})\right)\triangleright\text{ex}_{S}\quad\text{ or equivalently}\quad\text{ex}_{F}=\text{bimap}_{S}(\text{id})(\text{ex}_{F})\bef\text{ex}_{S}\quad.
+\text{ex}_{F}\triangleq s^{:S^{A,F^{A}}}\Rightarrow s\triangleright\left(\text{bimap}_{S}(\text{id})(\text{ex}_{F})\right)\triangleright\text{ex}_{S}\quad\text{ or equivalently}\quad\text{ex}_{F}\triangleq\text{bimap}_{S}(\text{id})(\text{ex}_{F})\bef\text{ex}_{S}\quad.
 \]
 To verify the naturality law for $\text{ex}_{F}$, we denote recursive
 uses by an overline and compute:
@@ -3203,6 +3287,56 @@ uses by an overline and compute:
 {\color{greenunder}\text{naturality law~(\ref{eq:copointed-bifunctor-naturality-law}) of }\text{ex}_{S}:}\quad & =\gunderline{\text{bimap}_{S}(\text{id})(\overline{\text{ex}_{F}})\bef\text{ex}_{S}}\bef f\\
 {\color{greenunder}\text{definition of }\text{ex}_{F}:}\quad & =\text{ex}_{F}\bef f\quad.
 \end{align*}
+An example to illustrate the recursive construction is the bifunctor
+$S^{A,R}\triangleq A+R\times R$ that defines $F^{A}$ to be the binary
+tree functor, 
+\[
+F^{A}\triangleq S^{A,F^{A}}=A+F^{A}\times F^{A}\quad.
+\]
+The bifunctor $S$ is co-pointed because there exists a suitable function
+$\text{ex}_{S}:S^{A,A}\Rightarrow A$,
+
+\begin{wrapfigure}{l}{0.48\columnwidth}%
+\vspace{-0.35\baselineskip}
+\begin{lstlisting}
+type S[A, R] = Either[A, (R, R)]
+def exS[A]: S[A, A] => A = {
+  case Left(a)           => a
+  case Right((a1, a2))   => a1  // Could be a2.
+}
+\end{lstlisting}
+
+\vspace{-3.75\baselineskip}
+\end{wrapfigure}%
+
+\noindent In the code notation, the function $\text{ex}_{S}$ is written
+as\vspace{-0.35\baselineskip}
+\[
+\text{ex}_{S}\triangleq\begin{array}{|c||c|}
+ & A\\
+\hline A & \text{id}\\
+A\times A & \nabla_{1}
+\end{array}\quad.
+\]
+
+\noindent This function extracts the left-most leaf of a binary tree.
+
+To implement the co-pointed instance $\text{ex}_{F}$ for the binary
+tree functor, we need to use the implementation of $\text{bimap}_{S}$,
+\begin{lstlisting}
+def bimap_S[A,B,P,Q](f: A => B)(g: P => Q): S[A, P] => S[B, Q] = {
+  case Left(a)         => Left(f(a))
+  case Right((x, y))   => Right((g(x), g(y)))
+}
+\end{lstlisting}
+Now we can define the recursive type constructor $F^{\bullet}$ and
+a co-pointed instance for it,
+\begin{lstlisting}
+final case class F[A](s: S[A, F[A]])
+val copointedF: Copointed[F] = new Copointed[F1] {
+  def ex[A]: F1[A] => A = { case F1(s) => exS1(bimap_S(identity[A], ex[A])(s)) }
+}
+\end{lstlisting}
 
 
 \subsection{Pointed contrafunctors\label{subsec:Pointed-contrafunctors}}
@@ -3212,18 +3346,17 @@ contrafunctor $C$ to have a method $\text{pu}_{C}$ of type $\forall A.\,C^{A}$;
 we called such contrafunctors \textbf{pointed}. It was also necessary
 to assume that the naturality law holds for all functions $f^{:A\Rightarrow B}$,
 \begin{equation}
-\text{pu}_{C}\triangleright f^{\downarrow C}=\text{pu}_{C}\label{eq:naturality-law-for-pure-for-contrafunctors}
+\text{pu}_{C}\triangleright f^{\downarrow C}=\text{pu}_{C}\quad\text{ or equivalently }\quad\text{contramap}_{C}(f^{:A\Rightarrow B})(\text{pu}_{C}^{:C^{B}})=\text{pu}_{C}^{:C^{A}}\quad.\label{eq:naturality-law-for-pure-for-contrafunctors}
 \end{equation}
 \[
 \xymatrix{\xyScaleY{2.0pc}\xyScaleX{3.0pc}\text{pu}_{C}:C^{B}\ar[d]\sb(0.45){\text{contramap}_{C}(f)} & B\\
 \text{pu}_{C}:C^{A} & A\ar[u]\sp(0.45){~f}
 }
 \]
-Beginning with this definition of pointed contrafunctors, we may simplify
-the formulation of the typeclass by setting $B=\bbnum 1$ in the naturality
-law~(\ref{eq:naturality-law-for-pure-for-contrafunctors}) and denoting
-$\text{wu}_{C}\triangleq\text{pu}_{C}^{\bbnum 1}$. The law~(\ref{eq:naturality-law-for-pure-for-contrafunctors})
-then gives 
+We may simplify the formulation of the typeclass by setting $B=\bbnum 1$
+in the naturality law~(\ref{eq:naturality-law-for-pure-for-contrafunctors})
+and denoting $\text{wu}_{C}\triangleq\text{pu}_{C}^{\bbnum 1}$. The
+law~(\ref{eq:naturality-law-for-pure-for-contrafunctors}) then gives
 \begin{equation}
 \text{pu}_{C}^{A}=\text{wu}_{C}\triangleright(\_^{:A}\Rightarrow1)^{\downarrow C}\quad.\label{eq:def-pure-via-wu-for-contrafunctor}
 \end{equation}
