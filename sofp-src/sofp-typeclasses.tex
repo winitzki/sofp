@@ -80,7 +80,7 @@ of possible types, because types from that subset have certain properties
 that we require. A subset of types, together with the required properties
 that those types must satisfy, is called a \textbf{typeclass}\index{typeclass}.
 The syntax such as \lstinline![T: Fractional]! is a \textbf{typeclass
-constraint}\index{typeclass constraint}. 
+constraint}\index{typeclass!constraint}. 
 
 This chapter focuses on defining and using typeclasses and on understanding
 their properties. We will see in detail how the syntax such as \lstinline![T: Fractional]!
@@ -324,8 +324,8 @@ in any further computations.
 The type $\text{Frac}^{A}$ is non-void (i.e.~has values) only for
 $A$ belonging to the set $\{\text{BigDecimal},\text{Double}\}$ of
 types. This set is called the \textbf{type domain}\index{type domain}
-of the partial type function \lstinline!Frac!. We now need to define
-the function \lstinline!avg[T]! with a type parameter $T$ constrained
+of the type function \lstinline!Frac!. We now need to define the
+function \lstinline!avg[T]! with a type parameter $T$ constrained
 to that type domain. The type constraint $T\in\{\text{BigDecimal},\text{Double}\}$
 is equivalent to the requirement that a value of type $\text{Frac}^{T}$
 should exist. So, we will implement the type constraint by including
@@ -334,7 +334,7 @@ type signature of \lstinline!avg!:
 \begin{lstlisting}
 def avg[T](s: Seq[T], frac: Frac[T]): T = ???
 \end{lstlisting}
-The value \lstinline!frac:Frac[T]! is called a \index{typeclass intance}\textbf{typeclass
+The value \lstinline!frac:Frac[T]! is called a \index{typeclass!instance}\textbf{typeclass
 instance} value. Because that value will have to be passed to every
 application of \lstinline!avg[T]!, we will be unable to use types
 \lstinline!T! for which \lstinline!Frac[T]! is void. 
@@ -1865,7 +1865,7 @@ all types at once through the code
 \begin{lstlisting}
 implicit def eqTypeA[A] = Eq[A](_ == _)
 \end{lstlisting}
-However, this will not always work as expected:
+However, this will not work as expected for function types:
 \begin{lstlisting}
 import Eq._
 
@@ -1900,6 +1900,15 @@ It is easy to check that the identity, reflexivity, and transitivity
 laws hold for the new comparison operation if they hold for comparisons
 of $A$ and $B$ separately.
 
+In this construction, it is important that both types $A$ and $B$
+should have an \lstinline!Eq! instance. If the above code contained
+only, say, the comparison \lstinline!a1 === a2!, the resulting comparison
+operation would have violated the \index{identity laws!of equality}identity
+law of the equality operation (if $x=y$ then $f(x)=f(y)$ for any
+function $f$): we would have pairs such as $a\times b_{1}$ and $a\times b_{2}$
+that would be ``equal'' according to this definition, and yet many
+functions $f^{:A\times B\Rightarrow C}$ exist such that $f(a\times b_{1})\neq f(a\times b_{2})$.
+
 \paragraph{Co-products}
 
 If $A$ and $B$ have equality comparisons, we can compare values
@@ -1919,13 +1928,19 @@ If the comparisons of types $A$ and $B$ satisfy the laws separately,
 the laws for $A+B$ will be satisfied separately for values of type
 \lstinline!Left! and of type \lstinline!Right!.
 
-Since both products and co-products preserve equality, any polynomial
-type expression made of primitive types will also have an \lstinline!Eq!
-typeclass instance.
+Defining the comparison operation in any other way (e.g., setting
+$a_{1}+\bbnum 0\neq a_{2}+\bbnum 0$ for all $a_{1}^{:A}$ and $a_{2}^{:A}$,
+or $\bbnum 0+b_{1}=\bbnum 0+b_{2}$ for all $b_{1}^{:B}$ and $b_{2}^{:B}$)
+would have violated the \index{reflexivity law}reflexivity law or
+the identity law.
+
+Since the \lstinline!Eq! typeclass has both the product and the co-product
+constructions, any polynomial type expression made of primitive types
+will also have an \lstinline!Eq! typeclass instance.
 
 \paragraph{Functions}
 
-If $A$ has equality comparisons, can we create an \lstinline!Eq!
+If $A$ has an \lstinline!Eq! instance, can we create an \lstinline!Eq!
 instance for $R\Rightarrow A$ where $R$ is some other type? This
 would be possible with a function of type
 \begin{equation}
@@ -1942,10 +1957,48 @@ implementations of the type signature~(\ref{eq:type-signature-function-compariso
 are constant functions returning \lstinline!true! or \lstinline!false!.
 However, the implementation that always returns \lstinline!false!
 will violate the reflexivity law $x=x$. The implementation that always
-returns \lstinline!true! is not useful. So, functions of type $R\Rightarrow A$
-cannot have an \lstinline!Eq! instance for a general type $R$. A
-similar argument shows that functions of type $A\Rightarrow R$ also
-cannot have a useful \lstinline!Eq! instance.
+returns \lstinline!true! is not useful.
+
+We will be able to evaluate functions of type $R\Rightarrow A$ if
+some chosen values of type $R$ are available. Examples of that situation
+are types $R$ of the form $R\cong\bbnum 1+S$ for some type $S$;
+we then always have a chosen value $r_{1}\triangleq1+\bbnum 0^{:S}$
+of type $R$. Could we define comparisons of functions only via their
+values at $r_{1}$?
+\begin{lstlisting}
+def equals[R, A: Eq](f: R => A, g: R => A): Boolean = f(r1) === g(r1)
+\end{lstlisting}
+That would define a comparison operation that violates the identity
+law: there are many functions \lstinline!f! and \lstinline!g! that
+will give different results for arguments not equal to $r_{1}$. Another
+way to see the problem is to write the type equivalence
+\[
+R\Rightarrow A\cong\bbnum 1+S\Rightarrow A\cong A\times(S\Rightarrow A)\quad,
+\]
+which reduces this case to the product construction we saw above.
+It follows that we need to have an \lstinline!Eq! instance for $S\Rightarrow A$
+to define the equality operation for $R\Rightarrow A$. If we have
+a chosen value of type $S$, e.g.~if $S\cong\bbnum 1+T$, we will
+again reduce the situation to the product construction with the function
+type $T\Rightarrow A$. This process will end only if the type $R$
+has the form 
+\[
+R\cong\bbnum 1+\bbnum 1+...+\bbnum 1\quad,
+\]
+i.e.~if $R$ has a known and finite number of distinct values. In
+that case, we can apply a function of type $R\Rightarrow A$ to every
+possible value of its argument $R$ and compare all the resulting
+values of type $A$. This argument shows that functions e.g.~$f_{1}^{:R\Rightarrow A}$
+and $f_{2}^{:R\Rightarrow A}$ will be found to be equal only if we
+are able to check that $f_{1}(r)=f_{2}(r)$ for \emph{every} possible
+value of type $R$. We cannot implement such a comparison for a general
+type $R$.
+
+So, functions of type $R\Rightarrow A$ cannot have an \lstinline!Eq!
+instance for a general type $R$. A similar argument shows that functions
+of type $A\Rightarrow R$ also cannot have a useful \lstinline!Eq!
+instance. The only exceptions are types $R\Rightarrow A$ or $A\Rightarrow R$
+that are equivalent to some polynomial types.
 
 \paragraph{Recursive types}
 
@@ -2815,11 +2868,24 @@ parameters \lstinline!F! and \lstinline!G! that are only defined
 within the type signature of the function. To achieve that, we would
 need somehow to insert a new type alias declaration within the type
 signature of \lstinline!pointedPair!, but the syntax of Scala does
-not support that. The return type is required to be \lstinline!Pointed[L]!
-where \lstinline!L! needs to be a type expression that defines a
-type constructor, i.e.~a type-to-type function with a \emph{single}
-type parameter. We cannot define a new type name (such as \lstinline!L!)
-within the type signature; what we need is a \emph{nameless} type-to-type
+not support that:
+\begin{lstlisting}
+def pointedPair[F[_]: Pointed, G[_]: Pointed]: {
+type L[A] = (F[A], G[A]) // Defined a type constructor L, now use it:
+Pointed[L] }    // Not a valid Scala syntax.
+\end{lstlisting}
+The return type is required to be \lstinline!Pointed[L]! where \lstinline!L!
+needs to be a type expression that defines a type constructor, i.e.~a
+type-to-type function with a \emph{single} type parameter. Writing
+a type alias with parameters \lstinline!F! and \lstinline!G!,
+\begin{lstlisting}
+type L[F[_], G[_], A] = (F[A], G[A])
+def pointedPair[F[_]: Pointed, G[_]: Pointed]: Pointed[L]     // Still incorrect.
+\end{lstlisting}
+will not help because the parameter \lstinline!L! in \lstinline!Pointed[L]!
+is not a type constructor: it has $3$ type parameters rather than
+$1$. We cannot define a new type name (such as \lstinline!L!) within
+the type signature; what we need is a \emph{nameless} type-to-type
 function (i.e.~a nameless type constructor).
 
 The special Scala plugin called the ``kind projector''\footnote{\texttt{\href{https://github.com/typelevel/kind-projector}{https://github.com/typelevel/kind-projector}}}
@@ -2851,7 +2917,8 @@ as $1+\bbnum 0^{:U}$. In that case, we set $\text{wu}_{\text{Const}^{Z,\bullet}}
 type Const[Z, A] = Z
 def pointedOpt[U]: Pointed[Lambda[X => Const[Option[U], X]]] = Pointed(None: Const[Option[U], Unit])
 \end{lstlisting}
-
+Other cases are types such as $Z=\text{Int}$, $Z=\text{String}$,
+etc., that have well-known ``default'' values.
 
 \paragraph{Type parameters}
 
@@ -3015,6 +3082,15 @@ a+\bbnum 0+\bbnum 0+...:A+A\times A+A\times A\times A+...\quad.
 So, the \lstinline!pure! method of $F$ creates a non-empty list
 with a single element $a^{:A}$.
 
+\paragraph{Summary}
+
+Can we recognize a pointed functor $F$ by looking at its type expression,
+e.g.
+\[
+F^{A,B}\triangleq\left(\bbnum 1+A\Rightarrow\text{Int}\Rightarrow A\times B\right)+\text{String}\times A\times A\quad?
+\]
+We {*}{*}{*}
+
 \subsection{Co-pointed functors}
 
 Pointed functors provide the functionality of wrapping a given value
@@ -3044,13 +3120,13 @@ F^{B}\ar[r]\sb(0.5){\text{ex}_{F}} & B
 }
 \]
 The naturality law formulates our expectation that the extractor function
-somehow ``selects'' a value of type $A$ among all the values possibly
-wrapped by $F^{A}$, and the ``selection'' works independently of
-the values. If all wrapped values are transformed by a function $f$
-into values of type $B$, the extractor function will still select
-a value of type $B$ in the same way as it did for values of type
-$A$. So, the result will be the same as if we first selected a value
-of type $A$ and then transformed it with $f$.
+somehow ``selects'' a value of type $A$ among all the values wrapped
+by $F^{A}$, and the ``selection'' works independently of the values.
+If all wrapped values are transformed by a function $f$ into wrapped
+values of type $B$, the extractor function will still select a value
+of type $B$ in the same way as it did for values of type $A$. So,
+the result will be the same as if we first extracted a value of type
+$A$ and then transformed it with $f$.
 
 Both sides of the law~(\ref{eq:naturality-law-of-extract}) are functions
 of type $F^{A}\Rightarrow B$. We saw in the previous section that
@@ -3339,12 +3415,21 @@ val copointedF: Copointed[F] = new Copointed[F1] {
 \end{lstlisting}
 
 
+\paragraph{Summary}
+
+Can we recognize a co-pointed functor $F$ by looking at its type
+expression, e.g.
+\[
+F^{A,B}\triangleq\left(\bbnum 1+A\Rightarrow\text{Int}\Rightarrow A\times B\right)+\text{String}\times A\times A\quad?
+\]
+We {*}{*}{*}
+
 \subsection{Pointed contrafunctors\label{subsec:Pointed-contrafunctors}}
 
 In the previous section, the function-type construction required a
 contrafunctor $C$ to have a method $\text{pu}_{C}$ of type $\forall A.\,C^{A}$;
-we called such contrafunctors \textbf{pointed}. It was also necessary
-to assume that the naturality law holds for all functions $f^{:A\Rightarrow B}$,
+we called such contrafunctors \textbf{pointed}. We also needed to
+assume that the naturality law holds for all functions $f^{:A\Rightarrow B}$,
 \begin{equation}
 \text{pu}_{C}\triangleright f^{\downarrow C}=\text{pu}_{C}\quad\text{ or equivalently }\quad\text{contramap}_{C}(f^{:A\Rightarrow B})(\text{pu}_{C}^{:C^{B}})=\text{pu}_{C}^{:C^{A}}\quad.\label{eq:naturality-law-for-pure-for-contrafunctors}
 \end{equation}
@@ -3460,43 +3545,47 @@ equation $T\triangleq S^{\bbnum 1,T}$ defines a non-void type $T$.
 This condition is similar to what we saw for pointed functors, and
 the resulting construction is the same.
 
+\paragraph{Summary}
+
+Can we recognize a pointed contrafunctor $C$ by looking at its type
+expression, e.g.
+\[
+C^{A,B}\triangleq\left(\bbnum 1+A\Rightarrow\text{Int}\right)+(\text{String}\times A\times A\Rightarrow\text{String})\quad?
+\]
+We {*}{*}{*}
+
 \section{Summary}
 
-{*}{*}{*}What problems can we solve now?
-
-Define arbitrary PTTFs and use them to define type classes (PTVFs) 
-
-Define them together or separately, combine them at will
-
-Use the Cats library to define instances for standard type classes
-
-Derive type class instances automatically from previous ones
-
-Reason about higher-order type functions, types, and kinds as necessary
-
+What problems can we solve now?
+\begin{itemize}
+\item Define arbitrary PTVFs using typeclass constraints on type parameters.
+\item Define typeclasses and typeclass instances for types and for type
+constructors.
+\item Implement \lstinline!Monoid!, \lstinline!Functor!, and other standard
+typeclasses, and prove their laws.
+\item Use known constructions to derive typeclass instances from previous
+ones.
+\end{itemize}
 What problems cannot be solved with these tools?
+\begin{itemize}
+\item \emph{Automatically} derive type class instances for given data types
+or type constructors.
+\item Combine typeclasses and express dependencies, e.g.~typeclasses \lstinline!TC1!
+requires \lstinline!TC2! and \lstinline!TC3!.
+\end{itemize}
+We may want to write code such as
+\begin{lstlisting}
+type F[A] = (A => Int) => A                     // Define a type constructor.
+implicit val functorF: Functor[F] = implement   // Automatically implement typeclass instances for F.
+implicit val pointedF: Pointed[F] = implement
+\end{lstlisting}
+However, no currently available library provides such functionality.
+Also, typeclass instances are not always derived uniquely, as we have
+seen in several cases (e.g.~the coproduct construction for monoids
+or pointed functors).
 
-Automatically derive type class instances for polynomial data types
-
-see \href{https://github.com/underscoreio/shapeless-guide}{The guide to ``shapeless''},
-chapter 3
-
-Derive a recursive type generically from an arbitrary type function
-
-Given a type function F{[}\_{]}, define a recursive type R via R =
-F{[}R{]}
-
-This R will be a function of F; denote that type function by Y{[}F{[}\_{]}{]}
-
-This Y must be defined by a type equation like this,
-
-\lstinline!type Y[F[_]] = F[Y[F]] // Does not compile ("cyclic type").!
-
-Automatically derive type class instances for such recursive types
-
-That requires type-level recursion (type-level fixpoints), see \href{https://github.com/slamdata/matryoshka}{matryoshka}
-
-This and other advanced topics are found in \href{https://apocalisp.wordpress.com/2010/06/08/type-level-programming-in-scala/}{this blog post from 2010}
+We will discuss how to combine typeclasses in Section~\ref{subsec:Inheritance-and-automatic-typeclass}
+below.
 
 \subsection{Solved examples\index{solved examples}}
 
@@ -3509,6 +3598,83 @@ other types \lstinline!T!, the expression \lstinline!bitsize[T]!
 should remain undefined.
 
 \subparagraph{Solution}
+
+The function \lstinline!bitsize[T]! needs to take an additional implicit
+argument that will be available only for \lstinline!T = Short!, \lstinline!T = Int!,
+and \lstinline!T = Long!. To implement that, we need to define a
+new type constructor, say \lstinline!HasBitsize[T]!, and create implicit
+values of the corresponding types. The new type constructor defines
+a typeclass, and values need to carry the information about the bit
+size:
+\begin{lstlisting}
+final case class HasBitsize[T](size: Int)
+object HasBitsize {
+  implicit val bitsizeShort = HasBitsize[Short](16)
+  implicit val bitsizeInt   = HasBitsize[Int]  (32)
+  implicit val bitsizeLong  = HasBitsize[Long] (64)
+}
+\end{lstlisting}
+Now we can define the function \lstinline!bitsize! as a PTVF,
+\begin{lstlisting}
+def bitsize[T: HasBitsize]: Int = implicitly[HasBitsize[T]].size
+\end{lstlisting}
+We can check that the function is only defined for supported types:
+\begin{lstlisting}
+scala> bitsize[Long]
+res0: Int = 64
+
+scala> bitsize[String]
+<console>:15: error: could not find implicit value for evidence parameter of type HasBitsize[String]
+       bitsize[String]
+              ^ 
+\end{lstlisting}
+The typeclass instance argument such as \lstinline!HasBitsize[T]!
+is sometimes called the ``evidence'' argument\index{typeclass!evidence argument}
+because its presence provides ``evidence'' that the type \lstinline!T!
+belongs to the typeclass.
+
+In some applications, it is important to be able to add new types
+to the type domain whenever necessary. For instance, suppose we would
+like to add support for the \lstinline!Boolean! type so that \lstinline!bitsize[Boolean]!
+returns \lstinline!1!. To add \lstinline!Boolean! to the type domain
+of \lstinline!HasBitsize!, we need to add this code,
+\begin{lstlisting}
+implicit val bitsizeBoolean = HasBitsize[Boolean](1)
+\end{lstlisting}
+In other applications, it is important that a PTVF should remain undefined
+for types other than the initially supported ones. To prevent the
+programmer from creating any further values of type \lstinline!HasBitsize!,
+we make it a non-case class whose constructor is declared as a \lstinline!private!
+function,
+\begin{lstlisting}
+final class HasBitsize[T] private (val size: Int) // Not a case class; the constructor is private.
+object HasBitsize {            // The companion object is allowed to call the private constructor.
+  implicit val bitsizeShort = new HasBitsize[Short](16)
+  implicit val bitsizeInt   = new HasBitsize[Int]  (32)
+  implicit val bitsizeLong  = new HasBitsize[Long] (64)
+}
+\end{lstlisting}
+The code of \lstinline!bitsize[T]! remains unchanged. With these
+definitions, no further typeclass instances can be created by any
+code outside of the companion object \lstinline!HasBitsize!:
+\begin{lstlisting}
+scala> implicit val bitsizeBoolean = new HasBitsize[Boolean](1)
+<console>:16: error: constructor HasBitsize in class HasBitsize cannot be accessed in object $iw
+       implicit val bitsizeBoolean = new HasBitsize[Boolean](1)
+                                     ^
+\end{lstlisting}
+
+An alternative implementation via a \lstinline!trait! requires longer
+code but brings no advantages:
+\begin{lstlisting}
+trait HasBitsize[T] { def size: Int } // Declare the trait as `sealed` to prohibit further instances.
+object HasBitsize {
+  implicit val bitsizeShort = new HasBitsize[Short]{ def size: Int = 16 }
+  implicit val bitsizeInt   = new HasBitsize[Int]  { def size: Int = 32 }
+  implicit val bitsizeLong  = new HasBitsize[Long] { def size: Int = 64 }
+}
+\end{lstlisting}
+
 
 \subsubsection{Example \label{subsec:tc-Example-2}\ref{subsec:tc-Example-2}}
 
@@ -3713,7 +3879,7 @@ Co-product works for co-inductive typeclasses, rather than the product
 construction. The \lstinline!Eq! typeclass is neither inductive nor
 co-inductive.
 
-\subsection{Inheritance and automatic conversions of typeclasses}
+\subsection{Inheritance and automatic conversions of typeclasses\label{subsec:Inheritance-and-automatic-typeclass}}
 
 \subsection{Typeclasses with more than one type parameter (type relations)}
 
