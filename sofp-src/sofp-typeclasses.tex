@@ -5184,13 +5184,13 @@ type X = Ap2[Ap, G, Int]   // OK; X is now Either[(Int, Int, String), Int]
 type Y = Ap2[Ap, Ap, Int]  // Type error: the second argument of Ap2 has wrong kind.
 type Z = Ap2[G, G, Int]    // Type error: the first argument of Ap2 has wrong kind.
 \end{lstlisting}
-The ``kind projector'' plugin is often necessary when writing code
-involving higher-order type functions:
+The ``kind projector'' plugin is often needed when writing code
+with higher-order type functions:
 \begin{lstlisting}[mathescape=true]
    // `Twice` will apply the type constructor Q twice to its type argument, and substitute into P.
 type Twice[P[_[_], _], Q[_], R] = P[Lambda[X => Q[Q[X]]], R] // $\text{Twice}: (((*\rightarrow*)\times*\rightarrow*)\times(*\rightarrow*)\times*)\rightarrow* $
 type O2[A] = Option[(A, A)]                      // $\text{O2}: * \rightarrow *$
-type X2 = Twice[Ap, O2, Int]        // X2 is now Option[(Option[(Int, Int)], Option[(Int, Int)])]
+type X2 = Twice[Ap1, O2, Int]        // X2 is now Option[(Option[(Int, Int)], Option[(Int, Int)])]
 val x2: X2 = Some((Some((1, 2)), Some((3, 4))))   // Types match for `x2`.
 \end{lstlisting}
 
@@ -5387,10 +5387,319 @@ or \lstinline!Traversable! typeclasses.
 
 \subsection{Typeclasses with more than one type parameter (type relations)}
 
+A typeclass constraint in a function, such as \lstinline!func[A: Monoid]!,
+restricts a type parameter to a certain type domain. Sometimes it
+is necessary to restrict \emph{several} type parameters to satisfy
+some conditions together. Let us look at two simple examples of this. 
+
+The first example is converting integer numbers to floating point.
+The ranges of the available types allow us to convert a \lstinline!Short!
+to a \lstinline!Float! and an \lstinline!Int! to a \lstinline!Double!.
+Can we implement the type signature 
+\begin{lstlisting}
+def convertNumber[M, N](x: M): N
+\end{lstlisting}
+where the type parameters \lstinline!M!, \lstinline!N! are constrained
+to be either \lstinline!M = Short! and \lstinline!N = Float!, or
+\lstinline!M = Int! and \lstinline!N = Double!? (Of course, we will
+want to be able to add further supported pairs of types to this code.)
+
+A condition that constrains both type parameters at once is called
+a \index{type relation}\textbf{type relation}. 
+
+The second example is converting mutable data structures into the
+corresponding immutable ones. The Scala library supports data structures
+such as sequences, sets, and dictionaries, each having a mutable and
+an immutable version. Can we implement a function with type signature
+\begin{lstlisting}
+def convertData[Mut[_], Immut[_], A](data: Mut[A]): Immut[A]
+\end{lstlisting}
+where the type parameters \lstinline!Mut! and \lstinline!Immut!
+are constrained to represent the mutable / immutable versions of a
+supported data structure (for example, \lstinline!Mut = mutable.Set!
+and \lstinline!Immut = immutable.Set!, etc.)?
+
+As we have seen, an ordinary typeclass constraint (for a single type
+parameter), such as \lstinline!func[A: Monoid]!, is implemented by
+requiring an ``evidence'' value of type \lstinline!Monoid[A]! as
+an additional argument of a function \lstinline!func!. Implementing
+a type relation for \emph{two} type parameters \lstinline!A!, \lstinline!B!
+is similar: We first define a type constructor, say \lstinline!Rel[A, B]!,
+and create some evidence values of that type, with specific chosen
+type parameters \lstinline!A!, \lstinline!B!. Any function that
+requires the relation constraint on its type parameters \lstinline!A!,
+\lstinline!B! will receive an implicit ``evidence argument'' of
+type \lstinline!Rel[A, B]!. This will prevent using that function
+for types \lstinline!A!, \lstinline!B! that are not in the required
+relation.
+
+The code for \lstinline!convertNumber! can be written like this:
+\begin{lstlisting}
+final case class MayConvert[A, B](convert: A => B)  // Evidence value contains a conversion function.
+implicit val ev1 = MayConvert[Short, Float](_.toFloat)          // Evidence value for [Short, Float].
+implicit val ev2 = MayConvert[Int, Double](_.toDouble)          // Evidence value for [Int, Double].
+def convertNumber[M, N](x: M)(implicit ev: MayConvert[M, N]): N = ev.convert(x)
+\end{lstlisting}
+With these definitions, it will be a compile-time error to use \lstinline!convertNumber!
+on unsupported types:
+\begin{lstlisting}
+scala> convertNumber(123)
+res0: Double = 123.0
+
+scala> convertNumber(123:Short)
+res1: Float = 123.0
+
+scala> convertNumber("abc")
+<console>:17: error: could not find implicit value for parameter ev: MayConvert[String,N]
+       convertNumber("abc")
+                    ^
+\end{lstlisting}
+
+As we have just seen, a type relation is defined by creating a set
+of evidence values. The code defines \lstinline!MayConvert! as a
+$1$-to-$1$ relation because the evidence values (or ``relation
+instances'') \lstinline!ev1! and \lstinline!ev2! do not have any
+type parameters in common. So, \lstinline!MayConvert! is equivalent
+to a type-to-type \emph{function} that maps \lstinline!Short! to
+\lstinline!Float! and \lstinline!Int! to \lstinline!Double!. However,
+type relations are not limited to $1$-to-$1$ relations or to type
+functions. By creating suitable implicit evidence values, we can implement
+$1$-to-many or many-to-many relations when needed. 
+
+A practical example of a many-to-many type relation is seen in conversion
+rules between physical units. Miles can be converted to kilometers,
+while pounds can be converted to ounces or kilograms, but kilograms
+cannot be converted into kilometers. Type relations allow us to implement
+type-safe operations for quantities with units. Adding kilograms to
+pounds will automatically convert the quantity to a common unit, while
+adding kilograms to kilometers will raise a compile-time error.
+
+Begin by declaring a type for ``quantity with units'' and some type
+names for the supported units:\index{constant functor}
+\begin{lstlisting}
+trait KG; trait LB; trait OZ; trait KM; trait MI; trait FT
+final case class Quantity[U](value: Double)   // Constant functor: No values of type U are stored.
+def add[U1, U2](x: Quantity[U1], y: Quantity[U2]): Quantity[U2] = ???
+\end{lstlisting}
+The \lstinline!add! function must have a type relation constraint
+for its type parameters \lstinline!U! and \lstinline!U2!, so that
+only quantities with compatible units may be added. To implement that,
+we define a type constructor with two type parameters. A relation
+instance will contain a multiplier for converting the units:
+\begin{lstlisting}
+final case class Convertible[U, U2](multiplier: Double)
+implicit val c1 = Convertible[KG, KG](1.0)
+implicit val c2 = Convertible[LB, KG](0.453592)
+implicit val c3 = Convertible[KM, KM](1.0)
+implicit val c4 = Convertible[MI, KM](1.60934)
+// Add many more definitions here...
+\end{lstlisting}
+Now we can implement the \lstinline!add! function and verify that
+the type relation works as we intended:
+\begin{lstlisting}
+def add[U1, U2](x: Quantity[U1], y: Quantity[U2])(implicit ev: Convertible[U1, U2]): Quantity[U2] =
+  Quantity(x.value * ev.multiplier + y.value)
+
+scala> add(Quantity[LB](1), Quantity[KG](1)) // 1 pound + 1 kg = 1.453592 kg
+res0: Quantity[KG] = Quantity(1.453592)
+
+scala> add(Quantity[MI](1), Quantity[KG](1))   // Compile-time error: cannot add miles to kilograms.
+<console>:25: error: could not find implicit value for parameter ev: Convertible[MI,KG]
+       add(Quantity[MI](1), Quantity[KG](1))
+          ^
+\end{lstlisting}
+
+To make this code more convenient for practical use, we can shorten
+the syntax from \lstinline!Quantity[KG](1)! to \lstinline!1.kg!
+and from \lstinline!add(2.lb, 2.kg)! to a more readable \lstinline!2.lb + 2.kg!
+by adding extension methods:
+\begin{lstlisting}
+implicit class QuantitySyntax(x: Double) {
+  def kg = Quantity[KG](x)
+  def lb = Quantity[LB](x)
+}
+implicit class QuantityAdd[U1](x: Quantity[U1]) {
+  def +[U2](y: Quantity[U2])(implicit ev: Convertible[U1, U2]): Quantity[U2] = add(x, y)
+}
+
+scala> 2.lb + 2.kg
+res1: Quantity[KG] = Quantity(2.907184)
+\end{lstlisting}
+
+Another necessary improvement is reducing the number of implicit values.
+The current code uses $n^{2}$ implicit values for every group of
+$n$ compatible units. Adding support for a new unit (say, inches)
+requires adding implicit values for converting between inches and
+all previously defined units of length. To avoid this problem, the
+code must be reorganized to convert all compatible quantities to chosen
+units (e.g.~all length to kilometers and all mass to kilograms).
+This makes the \lstinline!Convertible! relation many-to-$1$ instead
+of many-to-many. The resulting code is shown in Figure~\ref{fig:Full-code-implementing-units-length-mass}.
+
+\begin{figure}
+\begin{lstlisting}[frame=single,fillcolor={\color{black}},framesep={0.2mm},framexleftmargin=2mm,framexrightmargin=2mm,framextopmargin=2mm,framexbottommargin=2mm]
+trait KG; trait LB; trait OZ; trait KM; trait MI; trait FT
+
+// This type relation is many-to-1: it relates all mass units to KG and all length units to KM.
+final case class Convertible[U1, U2](multiplier: Double) extends AnyVal
+implicit val cKG = Convertible[KG, KG](1.0)
+implicit val cLB = Convertible[LB, KG](0.453592)
+implicit val cOZ = Convertible[OZ, KG](0.0283495)
+implicit val cKM = Convertible[KM, KM](1.0)
+implicit val cMI = Convertible[MI, KM](1.60934)
+implicit val cFT = Convertible[FT, KM](0.0003048)
+
+final case class Quantity[U](value: Double) extends AnyVal { // Use `AnyVal` to reduce run-time cost.
+  def +[U2, C](q: Quantity[U2])(implicit ev1: Convertible[U, C], ev2: Convertible[U2, C]) =
+      Quantity[U2](value * ev1.multiplier / ev2.multiplier + q.value)
+
+  def ==[U2, C](q: Quantity[U2])(implicit ev1: Convertible[U, C], ev2: Convertible[U2, C]) =
+      value * ev1.multiplier == q.value * ev2.multiplier
+}
+
+implicit class QuantitySyntax(x: Double) {
+  def kg = Quantity[KG](x)
+  def lb = Quantity[LB](x)
+  def oz = Quantity[OZ](x)
+  def km = Quantity[KM](x)
+  def mi = Quantity[MI](x)
+  def ft = Quantity[FT](x)
+  // A general extension method, e.g. `1.in[KM]`, that will also work for any units defined later.
+  def in[U](implicit ev: Convertible[U, _]): Quantity[U] = Quantity[U](x)
+}
+
+scala> 1.in[KM]         // Use the general method `.in` with a type parameter.
+res1: Quantity[KM] = Quantity(1.0)
+
+scala> 10000.ft + 1.km  // Use the `.ft` and `.km` methods.
+res2: Quantity[KM] = Quantity(4.048)
+
+scala> 1.kg + 1.lb == 16.oz + 1.kg   // Compare values safely.
+res2: Boolean = true
+
+scala> 1.km + 1.lb      // Compile-time error: cannot add miles to kilograms.
+<console>:29: error: could not find implicit value for parameter ev2: Convertible[LB,C]
+       1.km + 1.lb
+            ^
+
+scala> trait YD; implicit val cYD = Convertible[YD, KM](0.0009144)  // Easily add support for yards.
+defined trait YD
+cIN: Convertible[YD,KM] = Convertible(9.144E-4)
+
+scala> 1.in[YD] + 1.ft // Use .in[YD] to compute 1 YD + 1 FT = 4 FT.
+res3: Quantity[FT] = Quantity(4.0)
+\end{lstlisting}
+
+\caption{Implementing type-safe computations with units of length and mass.\label{fig:Full-code-implementing-units-length-mass}}
+\end{figure}
+
+
 \subsection{Inheritance and automatic conversions of typeclasses\label{subsec:Inheritance-and-automatic-typeclass}}
 
-There exists a Scala encoding of typeclasses that solves the problem
-of duplicate inherited instances.\footnote{See slides 5\textendash 14 of this talk by \index{John de Goes}John
+It often happens that one typeclass implies another; for example,
+a \lstinline!Monoid! instance for a type $T$ means that $T$ already
+has the properties of both \lstinline!Semigroup! and \lstinline!HasDefault!
+typeclasses. One says that the \lstinline!Monoid! typeclass \textbf{inherits}\index{typeclass!inheritance}
+from the \lstinline!Semigroup! and \lstinline!HasDefault! typeclasses.
+We may want to express inheritance relations between typeclasses,
+so that e.g.~a \lstinline!Monoid! instance should automatically
+imply the presence of a \lstinline!Semigroup! instance without extra
+code.
+
+One way of inheriting a typeclass is to add a constraint to the new
+typeclass constructor:
+\begin{lstlisting}
+final case class Semigroup[T](combine: (T, T) => T)
+final case class Monoid[T: Semigroup](empty: T)  // Inherit `Semigroup`.
+\end{lstlisting}
+Creating an instance of \lstinline!Monoid! for a type \lstinline!T!
+will then require having an instance of \lstinline!Semigroup! for
+\lstinline!T!:
+\begin{lstlisting}
+implicit val c1 = Semigroup[Int](_ + _)
+implicit val c2 = Monoid[Int](0)  // Works only if a `Semigroup[Int]` is available.
+\end{lstlisting}
+
+If we now have a \lstinline!Monoid! instance, how can we recover
+the inherited \lstinline!Semigroup! instance? We need to extract
+the implicit value of type \lstinline!Semigroup[T]! that was passed
+to the \lstinline!Monoid! class constructor. This is achieved by
+adding an implicit function and by redefining the \lstinline!Monoid!
+class as follows,
+\begin{lstlisting}
+final case class Monoid[T](empty: T)(implicit val semigroup: Semigroup[T])   // Use `implicit val`.
+implicit def semigroupFromMonoid[T](implicit ti: Monoid[T]): Semigroup[T] = ti.semigroup
+\end{lstlisting}
+The case class \lstinline!Monoid! combines a previous \lstinline!Semigroup!
+instance with the new method \lstinline!empty!.
+
+Another possibility of implementing typeclass inheritance is to use
+object-oriented inheritance of classes or traits. This approach is
+often used when defining typeclasses as traits with methods:
+\begin{lstlisting}
+trait Semigroup[T] { def combine: (T, T) => T }
+trait Monoid[T] extends Semigroup[T] { def empty: T } // `def combine` is inherited from `Semigroup`.
+\end{lstlisting}
+Creating an instance of \lstinline!Monoid! for a type \lstinline!T!
+no longer requires having an instance of \lstinline!Semigroup! for
+\lstinline!T!:
+
+\begin{wrapfigure}{l}{0.43\columnwidth}%
+\vspace{-0.85\baselineskip}
+\begin{lstlisting}
+implicit val c: Monoid[Int] = new Monoid[Int] {
+  def empty: Int =  0
+  def combine: (Int, Int) => Int =  _ + _
+}
+\end{lstlisting}
+
+\vspace{-1\baselineskip}
+\end{wrapfigure}%
+
+\noindent With this approach, we cannot avoid repeating the code for
+\lstinline!def combine...! even if we \emph{do} already have a \lstinline!Semigroup!
+instance. However, conversion from \lstinline!Monoid[T]! to \lstinline!Semigroup[T]!
+is now automatic due to \textbf{object-oriented inheritance}\index{object-oriented inheritance}:
+\lstinline!Monoid[T]! is a subtype of \lstinline!Semigroup[T]! because
+the \lstinline!Monoid! class is declared as \lstinline!extends Semigroup!.
+
+One problem with the object-oriented inheritance is that automatic
+conversions to parent typeclasses cannot be disabled. When several
+typeclasses inherit from the same parent typeclass, duplicate implicit
+instances of the parent typeclass may be present. This will give a
+compile-time error:
+\begin{lstlisting}
+trait TC[A]                    // Parent typeclass.
+trait TC1[A] extends TC[A]     // Two different typeclasses TC1 and TC2 inherit from TC.
+trait TC2[A] extends TC[A]
+// The function f requires A to have both TC1 and TC2 instances and then wants to access TC instance.
+def f[A: TC1 : TC2]() = {
+  implicitly[TC[A]]  // Compilation fails because two implicits of type TC[A] are found.
+}
+\end{lstlisting}
+
+When typeclass inheritance is implemented by combining instances,
+conversions to parent typeclasses are not automatic \textendash{}
+they are implemented by implicit functions that need to be explicitly
+imported into the current scope. The programmer's code can avoid producing
+duplicate instances by choosing which implicit conversions to use:
+\begin{lstlisting}
+final case class TC[A]()
+final case class TC1[A]()(implicit val tc0: TC[A])
+object TC1 { implicit def toTC[A](implicit x: TC1[A]): TC[A] = x.tc0 }
+final case class TC2[A]()(implicit val tc0: TC[A])
+object TC2 { implicit def toTC[A](implicit x: TC2[A]): TC[A] = x.tc0 }
+// The function f requires A to have both TC1 and TC2 instances and then wants to access TC instance.
+def f[A: TC1 : TC2]() = {
+      import TC1._  // Can import TC1._ or TC2._ but not both. If the next line is uncommented,
+//    import TC2._  // compilation will fail because two implicits of type TC[A] will be found!
+  implicitly[TC[A]] // This compiles successfully. One implicit instance of TC[A] can be found.
+}
+\end{lstlisting}
+
+The problem of duplicate inherited instances can be solved with less
+work for the programmer at the cost of a more complicated encoding
+of typeclasses.\footnote{See slides 5\textendash 14 of this talk by \index{John de Goes}John
 de Goes: \texttt{\href{https://www.slideshare.net/jdegoes/scalaz-8-a-whole-new-game}{https://www.slideshare.net/jdegoes/scalaz-8-a-whole-new-game}}}
 
 \begin{comment}
