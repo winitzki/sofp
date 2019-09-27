@@ -1,1055 +1,644 @@
 
 \chapter{Computations in functor blocks. I. Filterable functors\label{chap:Filterable-functors}}
 
-\section{Slides}
+\global\long\def\gunderline#1{\mathunderline{greenunder}{#1}}%
+\global\long\def\bef{\forwardcompose}%
+\global\long\def\bbnum#1{\custombb{#1}}%
 
-\subsection{Computations within a functor context}
 
-Example: 
+\section{Filtering: Practical use}
+
+The Scala standard library defines the \lstinline!.filter! method
+on sequences, sets, and other data structures. An example of using
+\lstinline!.filter! is the following calculation,
 \[
-\sum_{x\in\mathbb{Z};\:0\leq x\leq100;\:\cos x>0}\sqrt{\cos x}\approx38.71
+\sum_{x\in\mathbb{Z};\:0\leq x\leq100;\:\cos x>0}\sqrt{\cos x}\approx38.71\quad.
 \]
-Scala code:
+The following Scala code implements this calculation:
+\begin{lstlisting}
+scala> (0 to 100).map(x => math.cos(x)).filter(_ > 0).map(math.sqrt).sum
+res0: Double = 38.71218949848382
+\end{lstlisting}
+The role of \lstinline!.filter! in this computation is to select
+positive values of $\cos(x)$. It is safe to apply the square root
+function to positive values, so the code will work correctly.
 
-\texttt{\textcolor{blue}{\footnotesize{}(0 to 100).map(math.cos(\_)).filter(\_
-> 0).map(math.sqrt).sum}}{\footnotesize\par}
+The code above was written as a chain of methods. The same code can
+be written using Scala's \lstinline!for! / \lstinline!yield! syntax
+(which is called a \textbf{functor block}\index{functor block} in
+this book). Compare each line of the functor block code with the corresponding
+line of the code written via method chains: the \lstinline!.filter!
+operation is represented by an \lstinline!if! keyword embedded in
+a functor block.
 
-Using Scala's \texttt{\textcolor{blue}{\footnotesize{}for}}/\texttt{\textcolor{blue}{\footnotesize{}yield}}
-syntax (``functor block'', ``\texttt{\textcolor{blue}{\footnotesize{}for}}
-comprehension'')
-
-\texttt{\textcolor{blue}{\footnotesize{}}}%
-\begin{minipage}[t]{0.49\columnwidth}%
-\begin{lyxcode}
-\textcolor{blue}{\footnotesize{}(for~\{~x~$\leftarrow$~0~to~100}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~~~y~=~math.cos(x)}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~~~if~y~>~0}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~\}~yield~math.sqrt(y)}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}).sum}{\footnotesize\par}
-\end{lyxcode}
+\noindent \texttt{\textcolor{blue}{\footnotesize{}}}%
+\begin{minipage}[c]{0.475\columnwidth}%
+\texttt{\textcolor{blue}{\footnotesize{}}}
+\begin{lstlisting}
+(for { x <- 0 to 100
+    y = math.cos(x)
+    if y > 0
+  } yield math.sqrt(y)
+).sum
+\end{lstlisting}
 %
-\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}}}%
-\begin{minipage}[t]{0.49\columnwidth}%
-\begin{lyxcode}
-\textcolor{blue}{\footnotesize{}(0~to~100).map~\{~x~$\Rightarrow$}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~~math.cos(x)~\}.filter~\{~y~$\Rightarrow$}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~~y~>~0~\}.map~\{~y~$\Rightarrow$}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~~~~math.sqrt(y)}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~\}.sum}{\footnotesize\par}
-\end{lyxcode}
+\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\hspace*{\fill}}}%
+\begin{minipage}[c]{0.475\columnwidth}%
+\texttt{\textcolor{blue}{\footnotesize{}}}
+\begin{lstlisting}
+(0 to 100).map { x =>
+   math.cos(x) }.filter { y => 
+   y > 0 }.map { y =>
+     math.sqrt(y)
+  }.sum
+\end{lstlisting}
 %
 \end{minipage}{\footnotesize\par}
 
-``Functor block'' is a syntax for manipulating data within a container
-
-Container must be a functor (has \texttt{\textcolor{blue}{\footnotesize{}map}}
-such that the laws hold)
-
-Data changes but remains within the same container 
-
-A \textbf{filterable functor} is a functor that has a \texttt{\textcolor{blue}{\footnotesize{}withFilter}}
-method
-
-Can use ``\texttt{\textcolor{blue}{\footnotesize{}if}}'' when \texttt{\textcolor{blue}{\footnotesize{}withFilter(p:\ A$\Rightarrow$Boolean):\ F{[}A{]}
-$\Rightarrow$ F{[}A{]}}} is defined
-
-What are the required laws for \texttt{\textcolor{blue}{\footnotesize{}withFilter}}?
-
-What data types are filterable functors?
-
-
-\subsection{Filterable functors: Intuitions I}
-
-Intuition: the \texttt{\textcolor{blue}{\footnotesize{}filter}} call
-\emph{may decrease} the number of data items held
-
-a filterable container can hold \emph{more or fewer} data items of
-type $T$
-
-Examples:
-
-\texttt{\textcolor{blue}{\footnotesize{}Option{[}T{]}}} $\equiv1+T$
-
-\texttt{\textcolor{blue}{\footnotesize{}Some(123).filter(\_ > 0)}}
-returns \texttt{\textcolor{blue}{\footnotesize{}Some(123)}} 
-
-\texttt{\textcolor{blue}{\footnotesize{}Some(123).filter(\_ == 1)}}
-returns \texttt{\textcolor{blue}{\footnotesize{}None}} 
-
-\texttt{\textcolor{blue}{\footnotesize{}Some(123).withFilter(\_ ==
-1).map(identity)}} returns \texttt{\textcolor{blue}{\footnotesize{}None}} 
-
-\texttt{\textcolor{blue}{\footnotesize{}List{[}T{]}}} $\equiv1+T+T\times T+T\times T\times T+...$
-
-\texttt{\textcolor{blue}{\footnotesize{}List(10, 20, 30).filter(\_
-> 10)}} returns \texttt{\textcolor{blue}{\footnotesize{}List(20, 30)}} 
-
-\texttt{\textcolor{blue}{\footnotesize{}List(10, 20, 30).filter(\_
-== 1)}} returns \texttt{\textcolor{blue}{\footnotesize{}List()}} 
-
-What we learn from these examples:
-
-The data type must contain a \emph{disjunction} having different counts
-of $T$
-
-When the predicate \texttt{\textcolor{blue}{\footnotesize{}p}} returns
-\texttt{\textcolor{blue}{\footnotesize{}false}} on some $T$ values,
-the remaining data goes to a part of the disjunction that has fewer
-$T$ values
-
-Values \texttt{\textcolor{blue}{\footnotesize{}x}} are \emph{algebraically}
-replaced by $1$ (a \texttt{\textcolor{blue}{\footnotesize{}Unit}})
-when \texttt{\textcolor{blue}{\footnotesize{}p(x) = false}} 
-
-The container can become ``empty'' as a result of filtering
-
-
-\subsection{Examples of filterable functors I}
-
-Consider these business requirements:
-
-An order can be placed on Tuesday and/or on Friday
-
-An order is approved under certain conditions (amount < \$1000, etc.)
-
-\texttt{\textcolor{blue}{\footnotesize{}final case class Orders{[}A{]}(tue: Option{[}A{]},
-fri: Option{[}A{]}) \{}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}  def withFilter(p: A $\Rightarrow$
-Boolean): Orders{[}A{]} = }}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}    Orders(tue.filter(p),
-fri.filter(p))}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}\}}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}Orders(Some(500), Some(2000)).withFilter(\_
-< 1000)}}{\footnotesize\par}
-
-\textcolor{darkgray}{\footnotesize{}// returns Orders(Some(500), None)
-\textendash{} see example code}{\footnotesize\par}
-
-This functor type is written as $F^{A}=(1+A)\times(1+A)$
-
-When a value does not pass the filter, the $A$ is replaced by $1$
-
-Filtering is applied independently to both parts of the product type
-
-What if additional business requirements were given:
-
-(a) both orders must be approved, or else no orders can be placed\\
-or
-
-(b) both orders can be placed if at least one of them is approved
-
-Does this still make sense as ``filtering''?
-
-Need mathematical laws to decide this
-
-
-\subsection{Filterable functors: Intuitions II}
-
-Intuition: computations in the functor block should ``make sense''
-
-we should be able to reason correctly by looking at the program text
-
-A schematic example of a functor block program using \texttt{\textcolor{blue}{\footnotesize{}map}}
-and \texttt{\textcolor{blue}{\footnotesize{}filter}}:
-
-\texttt{\textcolor{blue}{\footnotesize{}for \{ }}\textcolor{darkgray}{\footnotesize{}//
-computations lifted into the List functor}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}  x $\leftarrow$ List(...)
-}}\textcolor{darkgray}{\footnotesize{}// the first line has ``$\leftarrow$'',
-other lines do not}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}  y = f(x) }}\textcolor{darkgray}{\footnotesize{}//
-will become a ``map(f)'' after compilation}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}  if p1(y) }}\textcolor{darkgray}{\footnotesize{}//
-will become a ``withFilter(p1)''}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}  if p2(y)}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}  z = g(x, y)}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}  if q(x, y, z)}}\textcolor{darkgray}{\footnotesize{}
-// \textendash{} more conditions, etc.; see example code}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}\} yield }}\textcolor{darkgray}{\footnotesize{}//
- for all x in list, such that conditions hold, compute this:}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}  k(x, y, z) }}\textcolor{darkgray}{\footnotesize{}//
- all the new values will stay within the container}{\footnotesize\par}
-
-What we intuitively expect to be true about such programs:
-
-\texttt{\textcolor{blue}{\footnotesize{}y = f(x); if p(y);}} is equivalent
-to \texttt{\textcolor{blue}{\footnotesize{}if p(f(x)); y = f(x);}} 
-
-\texttt{\textcolor{blue}{\footnotesize{}if p1(y); if p2(y);}} is equivalent
-to \texttt{\textcolor{blue}{\footnotesize{}if p1(y) \&\& p2(y)}} 
-
-When a filter predicate \texttt{\textcolor{blue}{\footnotesize{}p(x)}}
-returns \texttt{\textcolor{blue}{\footnotesize{}true}} for \emph{all}
-\texttt{\textcolor{blue}{\footnotesize{}x}}, we can delete the line
-``\texttt{\textcolor{blue}{\footnotesize{}if p(x)}}'' from the program
-with no change to the results
-
-When a filter predicate \texttt{\textcolor{blue}{\footnotesize{}p(x)}}
-returns \texttt{\textcolor{blue}{\footnotesize{}false}} for some \texttt{\textcolor{blue}{\footnotesize{}x}}
-then\emph{ that} \texttt{\textcolor{blue}{\footnotesize{}x}} will
-be excluded from computations performed after ``\texttt{\textcolor{blue}{\footnotesize{}if
-p(x)}}''
-
-
-\subsection{Examples of filterable functors II: Checking the laws}
-
-Properties 1 \textendash{} 4 are expressed as laws for \texttt{\textcolor{blue}{\footnotesize{}filter}}$^{(p\Rightarrow\text{Boolean})\Rightarrow F^{A}\Rightarrow F^{A}}$:
-
-{\footnotesize{}$\text{fmap}\,f^{A\Rightarrow B}\bef\text{filter}\,p^{B\Rightarrow\text{Boolean}}=\text{filter}\left(f\bef p\right)\bef\text{fmap}\,f^{A\Rightarrow B}$}{\footnotesize\par}
-
-{\footnotesize{}$\text{filter}\,p_{1}^{A\Rightarrow\text{Boolean}}\bef\text{filter}\,p_{2}^{A\Rightarrow\text{Boolean}}=\text{filter}\left(x\Rightarrow p_{1}(x)\wedge p_{2}(x)\right)$}{\footnotesize\par}
-
-{\footnotesize{}$\text{filter}\left(x^{A}\Rightarrow\text{true}\right)=\text{id}^{F^{A}\Rightarrow F^{A}}$ }{\footnotesize\par}
-
-{\footnotesize{}$\text{filter}\,p\bef\text{fmap}\,f^{A\Rightarrow B}=\text{filter}\,p\bef\text{fmap}\left(f_{|p}\right)$
-}where {\footnotesize{}$f_{|p}$} is the \emph{partial function} defined
-as \texttt{\textcolor{blue}{\footnotesize{}\{ case x if p(x) $\Rightarrow$
-f(x) \}}} \textendash{} only works if $p(x)$ holds
-
-Can define a type class \texttt{\textcolor{blue}{\footnotesize{}Filterable}},
-method \texttt{\textcolor{blue}{\footnotesize{}withFilter}} 
-
-Check the laws for the \texttt{\textcolor{blue}{\footnotesize{}Orders}}
-functor (see example code)
-
-Laws hold for the \texttt{\textcolor{blue}{\footnotesize{}Orders}}
-functor with / without business rule (a)
-
-Another filterable functor: $F^{A}\equiv1+A\times A$ (``collapsible
-product'')
-
-Examples of functors that are \emph{not} filterable:
-
-``Orders'' with additional business rule (b) \textendash{} breaks
-law 2 for some $p_{1,2}$
-
-$F^{A}$ defining \texttt{\textcolor{blue}{\footnotesize{}filter}}
-in a special way e.g.~for $A=\text{Int}$ \textendash{} breaks law
-1
-
-$F^{A}\equiv1+A$ defining $\text{filter}\left(p\right)\left(x\right)\equiv1+0$
-breaks law 3
-
-$F^{A}\equiv A$ \textendash{} must define $\text{filter}\left(p^{A\Rightarrow\text{Boolean}}\right)\left(x^{A}\right)=x$,
-breaking law 4
-
-$F^{A}\equiv A\times\left(1+A\right)$ \textendash{} unable to remove
-the first $A$, breaking law 4
-
-The equational laws 1\textendash 4 specify \emph{rigorously} what
-it means to ``filter data''!
-
-
-\subsection{Worked examples I: Programming with filterables}
+\vspace{0.2\baselineskip}
+
+Functor blocks require the first line to have a left arrow (called
+a \textbf{generator}\index{functor block!generator}) placed before
+a ``source\index{functor block!source}'', i.e.~a value of a functor
+type (e.g.~a sequence or a \lstinline!Try!). Each line of a functor
+block can be viewed as a computation that creates an intermediate
+value of the same ``source'' functor type. The result value of the
+entire functor block is again a value of the same functor type. So,
+a functor block manipulates data wrapped by a functor without changing
+the type of the wrapper.
+
+We have seen in Chapter~\ref{chap:Functors,-contrafunctors,-and}
+that the functor block syntax becomes available for a type constructor
+that has a \lstinline!.map! method (i.e.~for a functor). To support
+the embedded \lstinline!if! keyword, the type constructor must support
+a method called \lstinline!.withFilter! with type signature similar
+to that of the \lstinline!.filter! method. The type signatures of
+\lstinline!.map! and \lstinline!.withFilter! methods for a type
+constructor \lstinline!F! can be written as
+\begin{lstlisting}
+class F[A] {  // F[A] is some type constructor that has .map and .withFilter methods.
+  def map[B](f: A => B): F[B] = ...
+  def withFilter(p: A => Boolean): F[A] = ...
+}
+\end{lstlisting}
+
+A type constructor\index{filterable type constructor} that supports
+the filtering operation is called \textbf{filterable}. 
+
+The main focus of this chapter is to explore filterable functors in
+detail. Programmers would intuitively expect the filtering operation
+to have certain properties. We will translate these expected properties
+into mathematical laws for the function \lstinline!withFilter!. We
+can then perform structural analysis to look systematically for data
+types that support a filtering operation with these properties.
+
+\subsection{Examples and intuititions for the filtering operation}
+
+Examples of often used filterable functors defined in the Scala library
+are \lstinline!List! and \lstinline!Option!:
+\begin{lstlisting}
+scala> List(64, 128).filter(_ > 100).map(_ * 2)
+res0: List[Int] = List(256)
+
+scala> Some(128).filter(_ > 100).map(_ * 2)
+res1: Option[Int] = Some(256)
+
+scala> Some(64).filter(_ > 100).map(_ * 2)
+res2: Option[Int] = None
+\end{lstlisting}
+An intuitive view is that a functor wraps one or more data values,
+and the filtering operation may \emph{decrease} the number of values
+wrapped by the functor. For instance, the length of the sequence \lstinline!List(64, 128)!
+is decreased from $2$ to $1$ after filtering with the condition
+\lstinline!_ > 100!. The \lstinline!Option! functor can wrap at
+most one value, so filtering with a condition that fails will create
+an empty \lstinline!Option! value (i.e.~\lstinline!None!). In all
+cases, the resulting collection will not contain values that fail
+the filtering predicate.
+
+The type constructor \lstinline!Option[T]! is written in the type
+notation as a disjunctive type $\bbnum 1+T$, while \lstinline!List[T]!
+can be viewed as an ``infinite'' disjunction,
+\begin{equation}
+\text{List}^{T}=1+T+T\times T+T\times T\times T+...\label{eq:list-infinite-disjunction}
+\end{equation}
+These type constructors are able to hold a different number of values
+of type $T$ because they are disjunctive types whose parts contain
+a different number of items of type $T$ (e.g.~$T\times T$ for $2$
+values and $T\times T\times T$ for $3$ values of $T$). 
+
+This suggests an intuitive expectation that a filterable functor should
+contain a disjunctive type that supports wrapping a different number
+of values of $T$, including zero values. When the filtering operation
+\lstinline!.filter(p)! is applied, some values of type $T$ will
+fail the predicate \lstinline!p! and will be removed from the collection.
+The example
+\begin{lstlisting}
+scala> List(64, 128).filter(_ > 100)
+res0: List[Int] = List(128)
+\end{lstlisting}
+corresponds to mapping a disjunctive part of type $T\times T$ to
+a part of type $T$ within $\text{List}^{T}$ in Eq.~(\ref{eq:list-infinite-disjunction}).
+
+Consider now a custom data type that implements a given application's
+business requirements:
+
+\subsubsection{Example \label{subsec:Example-filtering-orders-tue-fri}\ref{subsec:Example-filtering-orders-tue-fri}}
+
+On a given week, an order (data type $A$) can be placed on Tuesday
+and/or on Friday. An order is approved under certain conditions given
+by a predicate \lstinline!p: A => Boolean!. Can we represent the
+order approval by a filtering operation on a suitable data type?
+
+The data type describing a week's orders must describe a possible
+order on Tuesday (\lstinline!Option[A]!) and a possible order on
+Friday (again \lstinline!Option[A]!). So, we can represent a week's
+orders as a product $F^{A}\triangleq\left(\bbnum 1+A\right)\times\left(\bbnum 1+A\right)$
+and implement it as
+\begin{lstlisting}
+final case class Orders[A](tue: Option[A], fri: Option[A]) {
+  def withFilter(p: A => Boolean): Orders[A] = Orders(tue.filter(p), fri.filter(p))
+}
+
+scala> Orders(Some(500), Some(2000)).withFilter(_ < 1000) // Approved if the amount is below $1000.
+res0: Orders[Int] = Orders(Some(500),None)
+\end{lstlisting}
+This code applies filtering independently to both parts of the product
+type.
+
+Once we declare a \lstinline!Functor! instance for the type constructor
+\lstinline!Orders!, we will be able to use \lstinline!Orders! as
+a ``source'' of data in functor blocks:
+\begin{lstlisting}
+import cats.Functor
+import cats.syntax.functor._
+implicit val functorOrders = new Functor[Orders] {
+  def map[A, B](fa: Orders[A])(f: A => B): Orders[B] = Orders(fa.tue.map(f), fa.fri.map(f))
+}
+
+scala@ for {
+  x <- Orders(Some(500), Some(2000))  // "Source" of type Orders[Int].
+  y = x - 200     // Apply discount of $200 to each order.
+  if y < 500      // Orders are approved if the amount is below $500 after discount.
+} yield y * 1.10  // Add 10% tax. Result is of type Orders[Double].
+res1: Orders[Double] = Orders(Some(330.0), None)
+\end{lstlisting}
+
+Suppose we are considering additional business requirements, such
+as:
+
+\textbf{(a)} Both orders must be approved, or else no orders can be
+placed that week. 
+
+\textbf{(b)} Both orders can be placed that week if at least one of
+them is approved.
+
+We could modify the code of \lstinline!withFilter! to implement any
+of the requirements (a) or (b). Will the resulting function still
+be a ``filtering'' operation?
+
+We cannot decide this without having some mathematical laws that a
+filtering operation must satisfy. Let us now consider what intuitive
+expectations we have for the concept of filtering.
+
+\subsection{Motivation for the laws of filtering}
+
+Computations in a functor block will ``make sense'' if we easily
+understand what the program does when we look at the code. Consider
+this schematic example of a functor block program that uses a filterable
+functor \lstinline!List!:\textcolor{darkgray}{\footnotesize{}}
+\begin{lstlisting}[numbers=left,numberstyle={\small}]
+val result = for {  // Some computations in the context of the `List` functor.
+  x <- List(...) // For each x in the given list...
+  y = f(x)       // ... compute y
+  if p1(y)       // ... check whether the condition p1 holds for each `y`
+  if p2(y)       // ... same for the condition p2 
+  z = g(x, y)    // ... compute z
+  if q(x, y, z)  // ... and apply some more conditions and computations.
+} yield          // For all x in the given list, such that all the conditions hold,
+  k(x, y, z)     // compute all the new values and put them into the `result` list.
+\end{lstlisting}
+{\footnotesize\par}
+
+There are several properties that we intuitively expect such programs
+to have. One property is that computing \lstinline!y = f(x)! in line
+3 and then checking a condition for \lstinline!y!, such as \lstinline!if p1(y)!
+in line 4, should be the same as checking the condition \lstinline!p1(f(x))!
+and then computing \lstinline!y = f(x)!: since the code sets \lstinline!y = f(x)!,
+we expect the conditions \lstinline!p1(y)! and \lstinline!p1(f(x))!
+to be equivalent.
+
+Translating this equivalence into code, we obtain the requirement
+that the following two code expressions should always evaluate to
+the same results:
+
+\vspace{0.3\baselineskip}
+
+\noindent \texttt{\textcolor{blue}{\footnotesize{}}}%
+\begin{minipage}[c]{0.475\columnwidth}%
+\begin{lstlisting}
+val result1 = for {
+  x <- xs
+  y = f(x)
+  if p(y)
+} yield y
+// Translating from functor block to methods:
+val result1 = xs.map(f).filter(p)
+\end{lstlisting}
+%
+\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\hspace*{\fill}}}%
+\begin{minipage}[c]{0.475\columnwidth}%
+\begin{lstlisting}
+val result2 = for {
+  x <- xs
+  if p(f(x))
+  y = f(x)
+} yield y
+// Translating from functor block to methods:
+val result2 = xs.filter(x => p(f(x))).map(f)
+\end{lstlisting}
+%
+\end{minipage}{\footnotesize\par}
+
+\vspace{0\baselineskip}
+
+Lines 4\textendash 5 of the listing above show two filtering operations,
+\lstinline!if p1(y)! and \lstinline!if p2(y)!, applied one after
+another. We expect that the first filtering operation keeps only values
+that satisfy the condition \lstinline!p1!, and the second filtering
+operation is applied to the results of the first one, additionally
+requiring the condition \lstinline!p2!. So, we expect that applying
+these two filtering operations is equivalent to filtering by the condition
+\lstinline!if p1(y) && p2(y)!.
+
+We can translate this expectation into equality of the following two
+code expressions:
+
+\vspace{0.3\baselineskip}
+
+\noindent \texttt{\textcolor{blue}{\footnotesize{}}}%
+\begin{minipage}[c]{0.475\columnwidth}%
+\begin{lstlisting}
+val result1 = for {
+  x <- xs
+  if p1(x)
+  if p2(x)
+} yield x
+// Translating from functor block to methods:
+val result1 = xs.filter(p1).filter(p2)
+\end{lstlisting}
+%
+\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\hspace*{\fill}}}%
+\begin{minipage}[c]{0.475\columnwidth}%
+\begin{lstlisting}
+val result2 = for {
+  x <- xs
+  if (p1(x) && p2(x))
+ } yield x
+
+// Translating from functor block to methods:
+val result2 = xs.filter(x => p1(x) && p2(x))
+\end{lstlisting}
+%
+\end{minipage}{\footnotesize\par}
+
+\vspace{0\baselineskip}
+
+When a filter predicate \lstinline!p(x)! returns \lstinline!true!
+for all \lstinline!x!, the filtering operation \lstinline!xs.filter(p)!
+will never remove any elements from a collection \lstinline!xs!.
+So we expect the result not to change if we \emph{delete} the line
+\lstinline!if p(x)! from a functor block program. The corresponding
+code equivalence can be written as
+\begin{lstlisting}
+xs.filter(_ => true) == xs
+\end{lstlisting}
+
+In real-life applications, filtering will use predicates \lstinline!p(x)!
+that return \lstinline!false! for some values \lstinline!x!. Then
+we expect those values \lstinline!x! to be excluded from any computations
+performed \emph{after} the line \lstinline!if p(x)!. In particular,
+we should be able to use a partial function safely as long as that
+function is defined for \lstinline!x! such that \lstinline!p(x) == true!.
+To express this in code, first define a general ``factory'' for
+partial functions,
+\begin{lstlisting}
+def if_p[A, B](p: A => Boolean)(f: A => B): A => B = x => p(x) match { case true => f(x) }
+\end{lstlisting}
+This ``factory'' takes a predicate $p^{:A\Rightarrow\bbnum 2}$
+and a function $f^{:A\Rightarrow B}$, and returns a partial function
+with the same signature, $A\Rightarrow B$, but defined only for values
+$x$ for which $p(x)=\text{true}$. Let us denote that function for
+brevity by $f_{|p}$. Since the \lstinline!Boolean! type is equivalent
+to a disjunction of two named units, $\bbnum 2\cong\text{true}+\text{false}$,
+we can write the code notation for the function $f_{|p}$ as
+\[
+f_{|p}\triangleq x\Rightarrow p(x)\triangleright\,\begin{array}{|c||c|}
+ & B\\
+\hline \text{true} & f(x)\\
+\text{false} & \bbnum 0
+\end{array}\quad.
+\]
+The bottom row contains the void type $\bbnum 0$ whose values cannot
+be computed, indicating that the partial function $f_{|p}$ will crash
+if given a value $x$ for which $p(x)=\text{false}$.
+
+Using the partial function $f_{|p}$, we write the last property of
+the filtering operation as the equivalence of the expressions
+
+\vspace{0.3\baselineskip}
+
+\noindent \texttt{\textcolor{blue}{\footnotesize{}}}%
+\begin{minipage}[c]{0.475\columnwidth}%
+\begin{lstlisting}
+val result1 = for {
+  x <- xs
+  if p(x)
+  y = f(x)
+} yield y
+// Translating from functor block to methods:
+val result1 = xs.filter(p).map(f)
+\end{lstlisting}
+%
+\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\hspace*{\fill}}}%
+\begin{minipage}[c]{0.475\columnwidth}%
+\begin{lstlisting}
+val result2 = for {
+  x <- xs
+  if p(x)
+  y = fp(x) // Defined as val fp = if_p(p)(f)
+ } yield y
+// Translating from functor block to methods:
+val result2 = xs.filter(p).map(fp)
+\end{lstlisting}
+%
+\end{minipage}{\footnotesize\par}
+
+\vspace{0\baselineskip}
+
+We have motivated four requirements for the filtering operation. These
+requirements are written in the code notation as four laws for the
+function \lstinline!filter! (code notation $\text{filt}_{F}$) with
+type signature
+\[
+\text{filt}_{F}:(A\Rightarrow\bbnum 2)\Rightarrow F^{A}\Rightarrow F^{A}\quad.
+\]
+The laws are called the naturality, composition, identity, and partial
+function laws of \lstinline!filter!:\index{composition law!of filter@of \texttt{filter}}\index{naturality law!of filter@of \texttt{filter}}\index{identity law!of filter@of \texttt{filter}}
+\begin{align*}
+{\color{greenunder}\text{naturality law of }\text{filt}_{F}:}\quad & f^{\uparrow F}\bef\text{filt}_{F}(p)=\text{filt}_{F}(f\bef p)\bef f^{\uparrow F}\quad\text{for any }f^{:A\Rightarrow B},~p^{:A\Rightarrow\bbnum 2}\quad.\\
+{\color{greenunder}\text{composition law of }\text{filt}_{F}:}\quad & \text{filt}_{F}(p_{1})\bef\text{filt}_{F}(p_{2})=\text{filt}_{F}(x\Rightarrow p_{1}(x)\wedge p_{2}(x))\quad\text{for any }p_{1}^{:A\Rightarrow\bbnum 2},~p_{2}^{:A\Rightarrow\bbnum 2}\quad.\\
+{\color{greenunder}\text{identity law of }\text{filt}_{F}:}\quad & \text{filt}_{F}(\_\Rightarrow\text{true})=\text{id}^{:F^{A}\Rightarrow F^{A}}\quad.\\
+{\color{greenunder}\text{partial function law of }\text{filt}_{F}:}\quad & \text{filt}_{F}(p)\bef f^{\uparrow F}=\text{filt}_{F}(p)\bef f_{|p}^{\uparrow F}\quad\text{for any }f^{:A\Rightarrow B},~p^{:A\Rightarrow\bbnum 2}\quad.
+\end{align*}
+
+A functor $F$ is \textbf{filterable} if there is a function $\text{filt}_{F}$
+satisfying these four laws.\index{filterable functor}
+
+We can define a typeclass \lstinline!Filterable! and extension methods
+\lstinline!filter! and \lstinline!withFilter! like this, 
+\begin{lstlisting}
+trait Filterable[F[_]] { def filt[A](p: A => Boolean)(fa: F[A]): F[A] }
+implicit class FilterableSyntax[F[_], A](fa: F[A])(implicit ev: Filterable[F]) {
+  def filter(p: A => Boolean): F[A] = ev.filt(p)(fa)
+  def withFilter(p: A => Boolean): F[A] = filter(p)
+}
+\end{lstlisting}
+
+It is intuitively clear that functors such as \lstinline!Option!
+and \lstinline!List! obey these laws: these types can be viewed as
+containers holding zero or more items of data, and \lstinline!.filter!
+simply removes data that fails the filtering condition. What about
+the custom data type \lstinline!Orders! from Example~\ref{subsec:Example-filtering-orders-tue-fri}?
+In principle, we would need to verify all four laws symbolically using
+the implementation code of \lstinline!.withFilter! as we implemented
+it for \lstinline!Orders!. Later in this chapter we will see that
+the four laws can be simplified, reduced to just two laws, and proved
+more quickly. For now, we can use the \texttt{scalacheck} library
+to write randomized tests for the four laws of filterable functors:
+\begin{lstlisting}
+def checkFilterableLaws[F[_] : Filterable : Functor, A, B](implicit
+    faEv: Arbitrary[F[A]], fbEv: Arbitrary[F[B]], abEv: Arbitrary[A => B],
+    aEv: Arbitrary[A => Boolean], bEv: Arbitrary[B => Boolean]): Assertion = {
+  forAll { (f: A => B, p: B => Boolean, fa: F[A]) =>             // Naturality law.
+      fa.map(f).filter(p) shouldEqual fa.filter(f andThen p).map(f)
+  }
+  forAll { (p1: B => Boolean, p2: B => Boolean, fa: F[B]) =>     // Composition law.
+      fa.filter(p1).filter(p2) shouldEqual fa.filter(b => p1(b) && p2(b))
+  }
+  forAll { (fb: F[B]) => fb.filter(_ => true) shouldEqual fb }   // Identity law.
+
+  forAll { (f: A => B, p: A => Boolean, fa: F[A]) =>             // Partial function law.
+      fa.filter(p).map(f) shouldEqual fa.filter(p).map[B](x => p(x) match { case true => f(x) })
+  }
+}
+\end{lstlisting}
+Creating a typeclass instance for \lstinline!Orders! and running
+the tests will show no errors:
+\begin{lstlisting}
+implicit val filterableOrders = new Filterable[Orders] {
+  def filt[A](p: A => Boolean)(fa: F[A]): F[A] = fa.filter(p)
+}
+checkFilterableLaws[Orders, Int, String] // Need to set type parameters to specific types.
+\end{lstlisting}
+
+
+\subsection{Examples of non-filterable functors}
+
+If we define the filtering operation for the \lstinline!Orders! data
+type (see Example~\ref{subsec:Example-filtering-orders-tue-fri})
+with the extra business rule \textbf{(a)}, we get
+\begin{lstlisting}
+implicit val filterableOrdersRuleA = new Filterable[Orders] {
+  def filt[A](p: A => Boolean)(fa: F[A]): F[A] =
+    if (fa.tue.forall(p) && fa.fri.forall(p))) fa.filter(p)
+    else Orders(None, None) // Rule (a): No orders are approved unless both are approved.
+}
+checkFilterableLaws[Orders, Int, String] // Tests pass.
+\end{lstlisting}
+However, implementing the extra business rule \textbf{(b)} will violate
+some laws:
+\begin{lstlisting}
+implicit val filterableOrdersRuleB = new Filterable[Orders] {
+  def filt[A](p: A => Boolean)(fa: F[A]): F[A] =
+    if (fa.tue.exists(p) || fa.fri.exists(p))) fa
+    else Orders(None, None) // Rule (b): Both orders are approved if at least one is approved.
+}
+checkFilterableLawsWithFilter[Orders, Boolean, Boolean]() // Tests fail!
+
+scala> Orders(Some(500), Some(2000)).filter(x => x < 1000).filter(x => x > 1000)
+res0: Orders[Int] = Orders(Some(500),Some(2000))
+
+scala> Orders(Some(500), Some(2000)).filter(x => x < 1000 && x > 1000) // Breaks composition law.
+res1: Orders[Int] = Orders(None, None)
+\end{lstlisting}
+Rule \textbf{(b)} does not allow us to use an intuitive understanding
+of computations in functor blocks:
+\begin{lstlisting}
+scala> for {
+  x <- Orders(Some(500), Some(2000))
+  if x < 1000       // Intuition says that values of x must be less than 1000 from now on.
+  y = s"Amount: $x" // So, the value x = 2000 should not be allowed to appear in this line.
+} yield y           // But the end result does not correspond to this intuition:
+res2: Orders[String] = Orders(Some("Amount: 500"), Some("Amount: 2000"))
+\end{lstlisting}
+The computation just shown clearly violates the partial function law
+because the value \lstinline!x = 2000! is not excluded from further
+computations despite the filtering condition, \lstinline!if x < 1000!.
+
+The four laws of filtering are a rigorous formulation of our intuitions
+about what it means to ``filter'' data. The type \lstinline!Orders!
+with the business rule \textbf{(b)} is an example of a filtering operation
+that does not correspond to our intuitions and, as a consequence,
+violates the filtering laws. However, the same functor \lstinline!Orders!
+with business rule \textbf{(a)} is filterable. It is up to the programmer
+to verify that the implementation of the \lstinline!filter! function
+satisfies the laws.
+
+What are other examples of functors that are \emph{not} filterable?
+One way of implementing the type signature of the \lstinline!filter!
+function is to use the identity function,
+\begin{lstlisting}
+def filt[A](p: A => Boolean)(fa: F[A]): F[A] = fa  // Ignore the predicate `p`; always return `fa`.
+\end{lstlisting}
+There are some functors $F$ (e.g.~the identity functor $F^{A}\triangleq A$
+or the exponential functor $F^{A}\triangleq E\Rightarrow A$) for
+which this implementation is the only one possible. However, this
+implementation never removes any data and so will violate the partial
+function law if the functor $F^{A}$ wraps a value of type $A$ that
+should not pass the filter. So, functors of the form $F^{A}\triangleq E\Rightarrow A$
+(where $E$ is a fixed type) are not filterable.
+
+The functor $F^{A}\triangleq A\times(\bbnum 1+A)$ is not filterable
+because the filtering operation $\text{filt}_{F}(p)$ cannot remove
+the first value of type $A$ even if it does not pass the filter predicate
+$p$.
+
+Functors such as $F^{A}\triangleq\bbnum 1+A$ and $F^{A}\triangleq\bbnum 1+A\times A$
+are filterable if the function $\text{filt}_{F}$ is defined correctly;
+but incorrect implementations are also possible. For example, one
+could imagine defining \lstinline!filter! for an \lstinline!Option!
+type as
+\begin{lstlisting}
+implicit val wrongFilterableOption = new Filterable[Option] {
+  def filt[A](p: A => Boolean)(fa: Option[A]): Option[A] = None // Discard input, always return None.
+}
+\end{lstlisting}
+This definition discards information and so violates the identity
+law: the result of filtering with an identically \lstinline!true!
+predicate is not the identity function of type \lstinline!Option[A] => Option[A]!.
+
+Finally, one could violate the naturality law by defining the \lstinline!filter!
+function in a special way when the type parameter $A$ is equal to,
+say, the \lstinline!Int! type. To obey the naturality law, the \lstinline!filter!
+function must be fully parametric and should not use hard-coded values
+of specific types or make decisions based on type parameters.
+
+\subsection{Solved examples: Programming with filterable functors\index{solved examples} }
+
+\subsubsection{Example \label{subsec:filt-solved-example-1}\ref{subsec:filt-solved-example-1}}
+
+Is the functor $F^{A}\triangleq\bbnum 1+A\times A$ filterable?
+
+\subparagraph{Solution}
+
+\subsubsection{Example \label{subsec:filt-solved-example-2}\ref{subsec:filt-solved-example-2}}
 
 John can have up to 3 coupons, and Jill up to 2. \emph{All} of John's
 coupons must be valid on purchase day, while each of Jill's coupons
 is checked independently. Implement a filterable functor describing
-this setup.
+this situation.
 
-A server received a sequence of requests. Each request must be authenticated.
+\subparagraph{Solution}
+
+\subsubsection{Example \label{subsec:filt-solved-example-3}\ref{subsec:filt-solved-example-3}}
+
+A server receives a sequence of requests. Each request must be authenticated.
 Once a non-authenticated request is found, no further requests are
-accepted. Is this setup described by a filterable functor?\\
-\ \\
-For each of these functors, determine whether they are filterable,
-and if so, implement \texttt{\textcolor{blue}{\footnotesize{}withFilter}}
-via a type class:
+accepted. Is this setup described by a filterable functor?
 
-\texttt{\textcolor{blue}{\footnotesize{}final case class P{[}T{]}(first:\ Option{[}T{]},
-second:\ Option{[}(T, T){]})}}{\footnotesize\par}
+\subparagraph{Solution}
 
-$F^{A}\equiv\text{Int}+\text{Int}\times A+\text{Int}\times A\times A+\text{Int}\times A\times A\times A$
+\subsubsection{Example \label{subsec:filt-solved-example-4}\ref{subsec:filt-solved-example-4}}
 
-$F^{A}=\text{NonEmptyList}^{A}$ defined recursively as $F^{A}\equiv A+A\times F^{A}$ 
+Determine whether each of these functors is filterable, and if so,
+implement a \lstinline!Filterable! typeclass instance:
 
-$F^{Z,A}\equiv Z+\text{Int}\times Z\times A\times A$ (with respect
-to the type parameter $A$)
+\textbf{(a)} The functor $P^{T}$ defined by this Scala code,
+\begin{lstlisting}
+final case class P[T](x: Option[T], yy: Option[(T, T)])
+\end{lstlisting}
 
-$F^{Z,A}\equiv1+Z+\text{Int}\times A\times\text{List}^{A}$ (w.r.t.\ the
-type parameter $A$)
+\textbf{(b)} $F^{A}\triangleq\text{Int}+\text{Int}\times A+\text{Int}\times A\times A+\text{Int}\times A\times A\times A\quad.$
 
-{*} Show that $C^{Z,A}=A\Rightarrow1+Z$ is a filterable \emph{contrafunctor}
-w.r.t.\ $A$ (implement \texttt{\textcolor{blue}{\footnotesize{}withFilter}}
-with the same type signature; no law checking)
+\textbf{(c)} $F^{A}=\text{NonEmptyList}^{A}$ defined recursively
+as $F^{A}\triangleq A+A\times F^{A}\quad.$ 
 
+\textbf{(d)} $F^{Z,A}\triangleq Z+\text{Int}\times Z\times A\times A$
+(with respect to the type parameter $A$).
 
-\subsection{Exercises I}
+\textbf{(e)} $F^{Z,A}\triangleq\bbnum 1+Z+\text{Int}\times A\times\text{List}^{A}$
+(with respect to the type parameter $A$).
+
+\subparagraph{Solution}
+
+\subsubsection{Example \label{subsec:filt-solved-example-5}\ref{subsec:filt-solved-example-5}}
+
+Show that $C^{Z,A}\triangleq A\Rightarrow\bbnum 1+Z$ is a filterable
+contrafunctor with respect to the type parameter $A$ (no law checking).
+
+\subparagraph{Solution}
+
+\subsection{Exercises: Programming with filterable functors\index{exercises} }
+
+\subsubsection{Exercise \label{subsec:filt-exercise-1}\ref{subsec:filt-exercise-1}}
 
 Confucius gave wisdom on each of the 7 days of a week. Sometimes the
 wise proverbs were hard to remember. If Confucius forgets what he
-said on a given day, he also forgets what he said on all the previous
+said on a given day, he also forgets what he said on all the \emph{previous}
 days of the week. Is this setup described by a filterable functor?
 
-Define \texttt{\textcolor{blue}{\footnotesize{}evenFilter(p)}} on
-an \texttt{\textcolor{blue}{\footnotesize{}IndexedSeq{[}T{]}}} such
-that a value \texttt{\textcolor{blue}{\footnotesize{}x:\ T}} is retained
-if \texttt{\textcolor{blue}{\footnotesize{}p(x)=true}} \emph{and}
-only if the sequence has an \emph{even} number of elements \texttt{\textcolor{blue}{\footnotesize{}y}}
-for which \texttt{\textcolor{blue}{\footnotesize{}p(y)=false}}. Does
-this define a filterable functor?\\
-\ \\
-Implement \texttt{\textcolor{blue}{\footnotesize{}filter}} for these
-functors if possible (law checking optional):
-
-$F^{A}\equiv\text{Int}+\text{String}\times A\times A\times A$
-
-\texttt{\textcolor{blue}{\footnotesize{}final case class Q{[}A, Z{]}(id:\ Long,
-user1:\ Option{[}(A, Z){]}, user2:\ Option{[}(A, Z){]}) }}\textendash{}
-with respect to the type parameter $A$
-
-$F^{A}=\text{MyTree}^{A}$ defined recursively as $F^{A}\equiv1+A\times F^{A}\times F^{A}$
-
-\texttt{\textcolor{blue}{\footnotesize{}final case class R{[}A{]}(x:\ Int,\ y: Int,
-z:\ A, data:\ List{[}A{]})}}, where the standard functor $\text{List}$
-already has \texttt{\textcolor{blue}{\footnotesize{}withFilter}} defined
-
-{*} Show that $C^{A}\equiv A+A\times A\Rightarrow1+Z$ is a filterable
-contrafunctor
-
-
-\subsection{Filterable functors: The laws in depth I}
-
-Is there a shorter formulation of the laws that is easier to remember?
-
-Intuition: When \texttt{\textcolor{blue}{\footnotesize{}p(x) = false}},
-replace \texttt{\textcolor{blue}{\footnotesize{}x:\ A}} by \texttt{\textcolor{blue}{\footnotesize{}1:\ Unit}}
-in \texttt{\textcolor{blue}{\footnotesize{}F{[}A{]}}} 
-
-(1) How to replace \texttt{\textcolor{blue}{\footnotesize{}x}} by
-\texttt{\textcolor{blue}{\footnotesize{}1}} in \texttt{\textcolor{blue}{\footnotesize{}F{[}A{]}}}
-without breaking the types?
-
-(2) How to transform the resulting type back to \texttt{\textcolor{blue}{\footnotesize{}F{[}A{]}}}?
-
-We could do (1) if instead of $F^{A}$ we had $F^{1+A}$ i.e.~\texttt{\textcolor{blue}{\footnotesize{}F{[}Option{[}A{]}{]}}} 
-
-Now use \texttt{\textcolor{blue}{\footnotesize{}filter}} to replace
-$A$ by $1$ in each item of type $1+A$
-
-Get $F^{1+A}$ from $F^{A}$ using $\text{inflate}:F^{A}\Rightarrow F^{1+A}=\text{fmap}\,(\text{Some}^{A\Rightarrow1+A})$ 
-
-Filter $F^{1+A}\Rightarrow F^{1+A}$ using $\text{fmap}\left(x^{1+A}\Rightarrow\text{filter}_{\text{Opt}}(p^{A\Rightarrow\text{Boolean}})(x)\right)$
-
-\[
-\text{filter}\,p:\xymatrix{\xyScaleX{5pc}F^{A}\ar[r]\sb(0.45){\text{inflate}} & F^{1+A}\ar[r]_{\text{fmap}\left(\text{filter}_{\text{Opt}}p\right)} & F^{1+A}\ar[r]\sb(0.55){\text{deflate}} & F^{A}}
-\]
-
-Doing (2) means \emph{defining} a function \texttt{\textcolor{blue}{\footnotesize{}deflate:\ F{[}Option{[}A{]}{]}
-$\Rightarrow$ F{[}A{]}}} 
-
-standard library already has \texttt{\textcolor{blue}{\footnotesize{}flatten{[}T{]}:\ Seq{[}Option{[}T{]}{]}
-$\Rightarrow$ Seq{[}T{]}}} 
-
-Simplify{\footnotesize{} $\text{fmap}(\text{Some}^{A\Rightarrow1+A})\bef\text{fmap}\left(\text{filter}_{\text{Opt}}p\right)=\text{fmap}\left(\text{bop}\left(p\right)\right)$}
-where we defined {\footnotesize{}$\text{{\color{blue}bop}}\left(p\right):\left(A\Rightarrow1+A\right)\equiv$}
-\texttt{\textcolor{blue}{\footnotesize{}x $\Rightarrow$ Some(x).filter(p)}} 
-
-In this way, express \texttt{\textcolor{blue}{\footnotesize{}filter}}
-through \texttt{\textcolor{blue}{\footnotesize{}deflate}} (see example
-code)
-
-$\text{filter}\,p=\text{fmap}\left(\text{bop}\,p\right)\bef\text{deflate}$.
-\textendash{} Notation: $\text{bop}\,p$ is $\text{bop}\left(p\right)$,
-like $\cos x$
-
-\[
-\text{filter}\:p:\xymatrix{\xyScaleX{5pc}F^{A}\ar[r]\sb(0.45){\text{fmap}\left(\text{bop}\,p\right)} & F^{1+A}\ar[r]\sb(0.55){\text{deflate}} & F^{A}}
-\]
-
-
-\subsection{Filterable functors: Using \texttt{\textcolor{blue}{\footnotesize{}deflate}}}
-
-So far we have expressed \texttt{\textcolor{blue}{\footnotesize{}filter}}
-through \texttt{\textcolor{blue}{\footnotesize{}deflate}} 
-
-We can also express \texttt{\textcolor{blue}{\footnotesize{}deflate}}
-through \texttt{\textcolor{blue}{\footnotesize{}filter}} (assuming
-law 4 holds):
-
-\[
-\text{deflate}:\xymatrix{\xyScaleX{5pc}F^{1+A}\ar[r]\sb(0.5){\text{filter}\left(\text{.nonEmpty}\right)} & F^{1+A}\ar[r]\sb(0.5){\text{fmap}\left(\text{.get}\right)} & F^{A}}
-\]
-
-\texttt{\textcolor{blue}{\footnotesize{}def deflate{[}F{[}\_{]},A{]}(foa: F{[}Option{[}A{]}{]}): F{[}A{]}
-=}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}  foa.filter(\_.nonEmpty).map(\_.get)
-}}\textcolor{gray}{\footnotesize{}// \_.get is $0+x^{A}\Rightarrow x^{A}$}{\footnotesize\par}
-
-\textcolor{gray}{\footnotesize{}// for F = Seq, this would be foa.collect
-\{ case Some(x) $\Rightarrow$ x \}}{\footnotesize\par}
-
-\textcolor{gray}{\footnotesize{}// for arbitrary functor F we need
-to use the partial function, \_.get}{\footnotesize\par}
-
-This means \texttt{\textcolor{blue}{\footnotesize{}deflate}} and \texttt{\textcolor{blue}{\footnotesize{}filter}}
-are \textbf{computationally equivalent}
-
-We could specify filterable functors by implementing \texttt{\textcolor{blue}{\footnotesize{}deflate}} 
-
-The implementation of \texttt{\textcolor{blue}{\footnotesize{}filter}}
-would then be derived by library
-
-Use \texttt{\textcolor{blue}{\footnotesize{}deflate}} to verify that
-some functors are certainly not filterable:
-
-$F^{A}=A+A\times A$. Write $F^{1+A}=1+A+(1+A)\times(1+A)$ 
-
-cannot map $F^{1+A}\Rightarrow F^{A}$ because we do not have $1\rightarrow A$
-
-$F^{A}=\text{Int}\Rightarrow A$. Write $F^{1+A}=\text{Int}\Rightarrow1+A$ 
-
-type signature of \texttt{\textcolor{blue}{\footnotesize{}deflate}}
-would be $\left(\text{Int}\Rightarrow1+A\right)\Rightarrow\text{Int}\Rightarrow A$
-
-cannot map $F^{1+A}\Rightarrow F^{A}$ because we do not have $1+A\rightarrow A$
-
-\texttt{\textcolor{blue}{\footnotesize{}deflate}} is easier to implement
-and to reason about
-
-
-\paragraph{{*} Filterable functors: The laws in depth II}
-
-We were able to define \texttt{\textcolor{blue}{\footnotesize{}deflate}}
-only by assuming that law 4 holds
-
-Now, law 4 is satisfied \emph{automatically} if \texttt{\textcolor{blue}{\footnotesize{}filter}}
-is defined via \texttt{\textcolor{blue}{\footnotesize{}deflate}}!
-
-Denote {\footnotesize{}$\psi_{p}^{F^{A}\Rightarrow F^{1+A}}\equiv\text{fmap}\left(\text{bop}\:p\right)$
-for brevity, then $\text{filter}\,p=\psi_{p}\bef\text{deflate}$}{\footnotesize\par}
-
-Law 4 then becomes: {\footnotesize{}$\psi_{p}\bef\text{deflate}\bef\text{fmap}\:f^{A\Rightarrow B}=\psi_{p}\bef\text{deflate}\bef\text{fmap}\:f_{|p}$
-\[
-\xymatrix{\xyScaleY{0.1pc}\xyScaleX{3pc} & F^{1+A}\ar[r]\sp(0.5){\text{deflate}} & F^{A}\ar[rd]\sp(0.5){\text{ fmap}\:f^{A\Rightarrow B}}\\
-F^{A}\ar[ru]\sp(0.5){\psi_{p}}\ar[rd]\sb(0.5){\psi_{p}} &  &  & F^{B}\\
- & F^{1+A}\ar[r]\sb(0.5){\text{deflate}} & F^{A}\ar[ru]\sb(0.5){\text{fmap}\:f_{|p}^{A\Rightarrow B}}
-}
-\]
-}{\footnotesize\par}
-
-We would like to interchange \texttt{\textcolor{blue}{\footnotesize{}deflate}}
-and \texttt{\textcolor{blue}{\footnotesize{}fmap}} in both sides
-
-We need a \emph{naturality} law; let's express law 1 through \texttt{\textcolor{blue}{\footnotesize{}deflate}}:
-
-{\footnotesize{}
-\[
-\text{fmap}\:f^{A\Rightarrow B}\bef\psi_{p}\bef\text{deflate}^{F,B}=\psi_{f\bef p}\bef\text{deflate}^{F,A}\bef\text{fmap}\:f^{A\Rightarrow B}
-\]
-\[
-\xymatrix{\xyScaleY{0.1pc}\xyScaleX{3pc} & F^{B}\ar[r]\sp(0.5){\psi_{p}} & F^{1+B}\ar[rd]\sp(0.5){\text{ deflate}^{F,B}}\\
-F^{A}\ar[ru]\sp(0.5){\text{fmap}\:f^{A\Rightarrow B}}\ar[rd]\sb(0.5){\psi_{f\bef p}} &  &  & F^{B}\\
- & F^{1+A}\ar[r]\sb(0.5){\text{deflate}^{F,A}} & F^{A}\ar[ru]\sb(0.5){\text{fmap}\:f^{A\Rightarrow B}}
-}
-\]
-Can we simplify $\text{fmap}\:f\bef\psi_{p}=\text{fmap}\:f\bef\text{fmap}\left(\text{bop}\,p\right)=\text{fmap}\left(f\bef\text{bop}\,p\right)$?}{\footnotesize\par}
-
-
-\paragraph{{*} Filterable functors: The laws in depth III}
-
-{\footnotesize{}Have property: $f^{A\Rightarrow B}\bef\text{bop}\left(p^{B\Rightarrow\text{Boolean}}\right)=\text{bop}\left(f\bef p\right)\bef\text{fmap}^{\text{Opt}}\,f$
-(see code)
-\[
-\xymatrix{\xyScaleY{0.2pc}\xyScaleX{3pc} & B\ar[rd]\sp(0.5){\text{bop}\,p}\\
-A\ar[ru]\sp(0.5){f^{A\Rightarrow B}}\ar[rd]\sb(0.4){\text{bop}\left(f\bef p\right)\,} &  & 1+B\\
- & 1+A\ar[ru]\sb(0.6){\text{fmap}^{\text{Opt}}f}
-}
-\]
-We can now rewrite Law 1 as
-\[
-\text{fmap}\,(\text{bop}\left(f\bef p\right))\bef\text{fmap}\,(\text{fmap}^{\text{Opt}}f)\bef\text{deflate}=\text{fmap}\left(\text{bop}\left(f\bef p\right)\right)\bef\text{deflate}\bef\text{fmap}\,f
-\]
-Remove common prefix $\text{fmap}\left(\text{bop}\left(f\bef p\right)\right)\bef...$
-from both sides:
-\[
-\text{fmap}\,(\text{fmap}^{\text{Opt}}f^{A\Rightarrow B})\bef\text{deflate}^{F,B}=\text{deflate}^{F,A}\bef\text{fmap}\,f^{A\Rightarrow B}\ \ -\text{ \textbf{law 1 for deflate}}
-\]
-\[
-\xymatrix{\xyScaleY{0.2pc}\xyScaleX{3pc} & F^{1+B}\ar[rd]\sp(0.5){\ \text{deflate}^{F,B}}\\
-F^{1+A}\ar[ru]\sp(0.5){\text{fmap}\,(\text{fmap}\,f)\ }\ar[rd]\sb(0.5){\text{deflate}^{F,A}\,} &  & F^{B}\\
- & F^{A}\ar[ru]\sb(0.5){\text{fmap\,}f^{A\Rightarrow B}}
-}
-\]
-}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}deflate}}{\footnotesize{}$:F^{1+A}\Rightarrow F^{A}$}
- is a \textbf{natural transformation} (has naturality law)
-
-Example:{\footnotesize{} $F^{A}=1+A\times A$}{\footnotesize\par}
-
-{\footnotesize{}$F^{1+A}=1+(1+A)\times(1+A)=1+1\times1+A\times1+1\times A+A\times A$}{\footnotesize\par}
-
-{\footnotesize{}natural transformations map containers $G^{A}\Rightarrow H^{A}$
-by rearranging data in them}{\footnotesize\par}
-
-
-\paragraph{{*} Filterable functors: The laws in depth IV}
-
-The naturality law for \texttt{\textcolor{blue}{\footnotesize{}deflate}}:{\footnotesize{}
-\[
-\text{fmap}\,(\text{fmap}^{\text{Opt}}f^{A\Rightarrow B})\bef\text{deflate}^{F,B}=\text{deflate}^{F,A}\bef\text{fmap}\,f^{A\Rightarrow B}
-\]
-}Law 4 expressed via \texttt{\textcolor{blue}{\footnotesize{}deflate}}:{\footnotesize{}
-\[
-\xymatrix{\xyScaleY{0.1pc}\xyScaleX{3pc} & F^{1+A}\ar[r]\sp(0.5){\text{deflate}} & F^{A}\ar[rd]\sp(0.5){\text{ fmap}\:f^{A\Rightarrow B}}\\
-F^{A}\ar[ru]\sp(0.5){\psi_{p}}\ar[rd]\sb(0.5){\psi_{p}} &  &  & F^{B}\\
- & F^{1+A}\ar[r]\sb(0.5){\text{deflate}} & F^{A}\ar[ru]\sb(0.5){\text{fmap}\:f_{|p}^{A\Rightarrow B}}
-}
-\]
-\[
-\psi_{p}\bef\text{deflate}^{F,A}\bef\text{fmap}\:f^{A\Rightarrow B}=\psi_{p}\bef\text{deflate}^{F,A}\bef\text{fmap}\:f_{|p}
-\]
-}{\footnotesize\par}
-
-Use naturality to interchange \texttt{\textcolor{blue}{\footnotesize{}deflate}}
-and \texttt{\textcolor{blue}{\footnotesize{}fmap}} in both sides of
-law 4:{\footnotesize{}
-\begin{align*}
-\psi_{p}\bef\text{fmap}\,(\text{fmap}^{\text{Opt}}f)\bef\text{deflate}^{F,B} & =\psi_{p}\bef\text{fmap}\,(\text{fmap}^{\text{Opt}}f_{|p})\bef\text{deflate}^{F,B}\\
-\text{[omit }\text{deflate}^{F,B}\text{ from} & \ \text{both sides; expand }\psi_{p}\text{]}\\
-\text{bop}\,p\bef\text{fmap}^{\text{Opt}}f & =\text{bop}\,p\bef\text{fmap}^{\text{Opt}}f_{|p}\ \ -\text{ check this by hand:}
-\end{align*}
-}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}x $\Rightarrow$ Some(x).filter(p).map(f)}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}x $\Rightarrow$ Some(x).filter(p).map
-\{ case x if p(x) $\Rightarrow$ f(x) \}}}{\footnotesize\par}
-
-These functions are equivalent because law 4 holds for \texttt{\textcolor{blue}{\footnotesize{}Option}}{\footnotesize\par}
-
-
-\paragraph{Filterable functors: The laws in depth V}
-
-Maybe $\psi_{p}\bef\text{deflate}$ is easier to handle than \texttt{\textcolor{blue}{\footnotesize{}deflate}}?
-Let us define {\footnotesize{}
-\[
-\text{{\color{blue}fmapOpt}}^{F,A,B}(f^{A\Rightarrow1+B}):F^{A}\Rightarrow F^{B}=\text{fmap}\:f\bef\text{deflate}^{F,B}
-\]
-\[
-\xymatrix{\xyScaleY{0.2pc}\xyScaleX{3pc} & F^{1+B}\ar[rd]\sp(0.5){\ \text{deflate}^{F,B}}\\
-F^{A}\ar[ru]\sp(0.5){\text{fmap}\,f^{A\Rightarrow1+B}\ }\ar[rr]\sb(0.5){\text{fmapOpt}\:f^{A\Rightarrow1+B}\,} &  & F^{B}
-}
-\]
-}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}fmapOpt}} and \texttt{\textcolor{blue}{\footnotesize{}deflate}}
-are \emph{equivalent}: {\footnotesize{}$\text{deflate}^{F,A}=\text{fmapOpt}^{F,1+A,A}(\text{id}^{1+A\Rightarrow1+A})$ }{\footnotesize\par}
-
-Express laws 1 \textendash{} 3 in terms of \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}}:
-do they get simpler?
-
-Express \texttt{\textcolor{blue}{\footnotesize{}filter}} through \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}}:
-{\footnotesize{}$\text{filter}\,p=\text{fmapOpt}^{F,A,A}\left(\text{bop}\,p\right)$}{\footnotesize\par}
-
-Consider the expression needed for law 2: $x\Rightarrow p_{1}(x)\wedge p_{2}(x)$
-
-{\footnotesize{}$\text{bop}\left(x\Rightarrow p_{1}(x)\wedge p_{2}(x)\right)=x^{A}\Rightarrow\left(\text{bop}\,p_{1}\right)(x)\text{.flatMap}\left(\text{bop}\,p_{2}\right)$
-}\textendash{} see code
-
-Denote this computation by $\diamond_{\text{Opt}}$ and write{\footnotesize{}
-\[
-q_{1}^{A\Rightarrow1+B}\diamond_{\text{Opt}}q_{2}^{B\Rightarrow1+C}\equiv x^{A}\Rightarrow q_{1}(x).\text{flatMap}\left(q_{2}\right)
-\]
-}{\footnotesize\par}
-
-Similar to composition of functions, except the types are $A\Rightarrow1+B$
-
-This is a particular case of \textbf{Kleisli composition}; the general
-case: {\footnotesize{}$\diamond_{M}:(A\Rightarrow M^{B})\Rightarrow(B\Rightarrow M^{C})\Rightarrow(A\Rightarrow M^{C})$};
-we set $M^{A}\equiv1+A$
-
-The \textbf{Kleisli identity} function: $\text{id}_{\diamond_{\text{Opt}}}^{A\Rightarrow1+A}\equiv x^{A}\Rightarrow\text{Some}\left(x\right)$
-
-Kleisli composition $\diamond_{\text{Opt}}$ is associative and respects
-the Kleisli identity!
-
-\texttt{\textcolor{blue}{\footnotesize{}fmapOpt}} lifts a Kleisli$_{\text{Opt}}$
-function $f^{A\Rightarrow1+B}$ into the functor $F$
-
-
-\paragraph{Filterable functors: The laws in depth VI}
-
-Simplifying down to two laws
-
-Only \emph{two} laws are necessary for \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}}!
-
-\textbf{Identity law} (covers old law 3): {\footnotesize{}
-\[
-\text{fmapOpt}\,(\text{id}_{\diamond_{\text{Opt}}}^{A\Rightarrow1+A})=\text{id}^{F^{A}\Rightarrow F^{A}}
-\]
-}{\footnotesize\par}
-
-\textbf{Composition law} (covers old laws 1 and 2): {\footnotesize{}
-\[
-\text{fmapOpt}\,(f^{A\Rightarrow1+B})\bef\text{fmapOpt}\,(g^{B\Rightarrow1+C})=\text{fmapOpt}\left(f\diamond_{\text{\textbf{Opt}}}g\right)
-\]
-\[
-\xymatrix{\xyScaleY{2pc}\xyScaleX{3pc} & F^{B}\ar[rd]\sp(0.55){\ \text{fmapOpt}\,(g^{B\Rightarrow1+C})}\\
-F^{A}\ar[ru]\sp(0.45){\text{fmapOpt}\,(f^{A\Rightarrow1+B})\ }\ar[rr]\sb(0.5){\text{fmapOpt}\left(f\diamond_{\text{Opt}}g\right)} &  & F^{C}
-}
-\]
-}{\footnotesize\par}
-
-The two laws for \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}}
-are very similar to the two functor laws
-
-Both of them use more complicated types than the old laws
-
-Conceptually, the new laws are simpler (lift $f^{A\Rightarrow1+B}$
-into $F^{A}\Rightarrow F^{B}$)
-
-
-\paragraph{{*} Filterable functors: The laws in depth VII}
-
-Showing that old laws 1 \textendash{} 3 follow from the identity and
-composition laws for \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}}{\footnotesize\par}
-
-Old law 3 is \emph{equivalent} to the identity law for \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}}:{\footnotesize{}
-\[
-\text{filter}\,(x^{A}\Rightarrow\text{true})=\text{fmap}\,(x^{A}\Rightarrow0+x)\bef\text{deflate}=\text{fmapOpt}\,(\text{id}_{\diamond_{\text{Opt}}})=\text{id}^{F^{A}\Rightarrow F^{A}}
-\]
-}{\footnotesize\par}
-
-Derive old law 2: need to work with{\footnotesize{} $q_{1,2}\equiv\text{bop}\left(p_{1,2}\right):A\Rightarrow1+A$ }{\footnotesize\par}
-
-The Boolean conjunction {\footnotesize{}$x\Rightarrow p_{1}(x)\wedge p_{2}(x)$
-}corresponds to {\footnotesize{}$q_{1}\diamond_{\text{\textbf{Opt}}}q_{2}$}{\footnotesize\par}
-
-Apply the composition law to Kleisli functions of types {\footnotesize{}$A\Rightarrow1+A$
-}:{\footnotesize{}
-\begin{align*}
-\text{filter}\,p_{1}\bef\text{filter}\,p_{2} & =\text{fmapOpt}\,q_{1}\bef\text{fmapOpt}\,q_{2}\\
-=\text{fmapOpt}\left(q_{1}\diamond_{\text{\textbf{Opt}}}q_{2}\right) & =\text{fmapOpt}\left(\text{bop}\left(x\Rightarrow p_{1}(x)\wedge p_{2}(x)\right)\right)
-\end{align*}
-}{\footnotesize\par}
-
-Derive old law 1:
-
-express \texttt{\textcolor{blue}{\footnotesize{}filter}} through \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}};
-old law 1 becomes{\footnotesize{}
-\[
-\text{fmap}\:f\bef\text{fmapOpt}\left(\text{bop}\,p\right)=\text{fmapOpt}\left(\text{bop}\left(f\bef p\right)\right)\bef\text{fmap}\:f\ \text{ \textendash\ eq. (*)}
-\]
-}{\footnotesize\par}
-
-lift $f^{A\Rightarrow B}$ to Kleisli$_{\text{Opt}}$ by defining
-{\footnotesize{}$k_{f}^{A\Rightarrow1+B}=f\bef\text{id}_{\diamond_{\text{\textbf{Opt}}}}$;}
-then we have $\text{fmapOpt}\left(k_{f}\right)=\text{fmap}\,k_{f}\bef\text{deflate}=\text{fmap}\:f\bef\text{fmap}\,\text{id}_{\diamond_{\text{\textbf{Opt}}}}\bef\text{deflate}=\text{fmap}\,f$
-
-rewrite eq.\ ({*}) as {\footnotesize{}$\text{fmapOpt}\left(k_{f}\diamond_{\text{\textbf{Opt}}}\text{bop}\,p\right)=\text{fmapOpt}\left(\text{bop}\left(f\bef p\right)\diamond_{\text{\textbf{Opt}}}k_{f}\right)$ }{\footnotesize\par}
-
-it remains to show that {\footnotesize{}$k_{f}\diamond_{\text{\textbf{Opt}}}\text{bop}\,p=\text{bop}\left(f\bef p\right)\diamond_{\text{\textbf{Opt}}}k_{f}$ }{\footnotesize\par}
-
-use the properties {\footnotesize{}$k_{f}\diamond_{\text{\textbf{Opt}}}q=f\bef q$
-and $q\diamond_{\text{\textbf{Opt}}}k_{f}=q\bef\text{fmap}^{\text{Opt}}f$,
-and $f\bef\text{bop}\,p=\text{bop}\left(f\bef p\right)\bef\text{fmap}^{\text{Opt}}\,f$
-(property from slide 11)}{\footnotesize\par}
-
-
-\subsection{Summary: The methods and the laws}
-
-Filterable functors can be defined via \texttt{\textcolor{blue}{\footnotesize{}filter}},
-\texttt{\textcolor{blue}{\footnotesize{}deflate}}, or \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}} 
-
-All three methods are \emph{equivalent} but have different roles:
-
-The easiest to use in program code is \texttt{\textcolor{blue}{\footnotesize{}filter}}
-/ \texttt{\textcolor{blue}{\footnotesize{}withFilter}} 
-
-The easiest type signature to implement and reason about is \texttt{\textcolor{blue}{\footnotesize{}deflate}} 
-
-Conceptually, the laws are easiest to remember with \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}} 
-
-{*} The 2 laws for \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}}
-are the 2 functor laws with a Kleisli ``twist''
-
-{*} Category theory accommodates this via a generalized definition
-of functors as liftings between ``twisted'' types. Compare:
-
-$\text{fmap}:\left(A\Rightarrow B\right)\Rightarrow F^{A}\Rightarrow F^{B}$
-\textendash{} ordinary container (``endofunctor'')
-
-$\text{contrafmap}:\left(B\Rightarrow A\right)\Rightarrow F^{A}\Rightarrow F^{B}$
-\textendash{} lifting from reversed functions
-
-$\text{fmapOpt}:\left(A\Rightarrow1+B\right)\Rightarrow F^{A}\Rightarrow F^{B}$
-\textendash{} lifting from Kleisli$_{\text{Opt}}$-functions 
-
-CT gives us some \emph{intuitions} about how to derive better laws:
-
-look for type signatures that resemble a generalized sort of ``lifting''
-
-look for natural transformations and use the naturality law
-
-However, CT does not directly provide any derivations for the laws
-
-you will not find the laws for \texttt{\textcolor{blue}{\footnotesize{}filter}}
-or \texttt{\textcolor{blue}{\footnotesize{}deflate}} in any CT book
-
-CT is abstract, only gives hints about possible further directions
-
-investigate functors having ``liftings'' with different type signatures
-
-replace \texttt{\textcolor{blue}{\footnotesize{}Option}} in the Kleisli$_{\text{Opt}}$
-construction by another functor
-
-
-\subsection{Structure of filterable functors}
-
-How to recognize a filterable functor by its type?
-
-Intuition from \texttt{\textcolor{blue}{\footnotesize{}deflate}}:
-reshuffle data in $F^{A}$ after replacing some $A$'s by $1$
-
-``reshuffling'' usually means reusing different parts of a disjunction
-
-Some constructions of exponential-polynomial filterable functors 
-
-$F^{A}=Z$ (constant functor) for a fixed type $Z$ (define $\text{fmapOpt}\,f=\text{id}$)
-
-Note: $F^{A}=A$ (identity functor) is \emph{not} filterable
-
-$F^{A}\equiv G^{A}\times H^{A}$ for any filterable functors $G^{A}$
-and $H^{A}$
-
-$F^{A}\equiv G^{A}+H^{A}$ for any filterable functors $G^{A}$ and
-$H^{A}$
-
-$F^{A}\equiv G^{H^{A}}$ for \emph{any} functor $G^{A}$ and filterable
-functor $H^{A}$
-
-$F^{A}\equiv1+A\times G^{A}$ for a filterable functor $G^{A}$
-
-Note: \emph{pointed} types $P$ are isomorphic to $1+Z$ for some
-type $Z$
-
-Example of non-trivial pointed type: $A\Rightarrow A$
-
-Example of non-pointed type: $A\Rightarrow B$ when $A$ is different
-from $B$
-
-So $F^{A}\equiv P+A\times G^{A}$ where $P$ is a pointed type and
-$G^{A}$ is filterable
-
-Also have $F^{A}\equiv P+A\times A\times...\times A\times G^{A}$
-similarly
-
-$F^{A}\equiv G^{A}+A\times F^{A}$ (recursive) for a filterable functor
-$G^{A}$
-
-$F^{A}\equiv G^{A}\Rightarrow H^{A}$ if\emph{ }contrafunctor $G^{A}$
-and functor $H^{A}$ \emph{both} \emph{filterable}
-
-Note: the functor $F^{A}\equiv G^{A}\Rightarrow A$ is not filterable
-
-
-\subsection{{*} Worked examples II: Constructions of filterable functors I}
-
-(2) The \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}} laws hold
-for $F^{A}\times G^{A}$ if they hold for $F^{A}$ and $G^{A}$
-
-For $f^{A\Rightarrow1+B}$, get {\footnotesize{}$\text{fmapOpt}_{F}(f):F^{A}\Rightarrow F^{B}$
-}and {\footnotesize{}$\text{fmapOpt}_{G}(f):G^{A}\Rightarrow G^{B}$}{\footnotesize\par}
-
-Define {\footnotesize{}$\text{fmapOpt}_{F\times G}f\equiv p^{F^{A}}\times q^{G^{A}}\Rightarrow\text{fmapOpt}_{F}(f)(p)\times\text{fmapOpt}_{G}(f)(q)$}{\footnotesize\par}
-
-Identity law: $f=\text{id}_{\diamond_{\text{Opt}}}$, so {\footnotesize{}$\text{fmapOpt}_{F}f=\text{id}$}
-and {\footnotesize{}$\text{fmapOpt}_{G}f=\text{id}$}{\footnotesize\par}
-
-Hence we get $\text{fmapOpt}_{F+G}(f)(p\times q)=\text{id}(p)\times\text{id}(q)=p\times q$
-
-Composition law:{\footnotesize{}
-\begin{align*}
- & (\text{fmapOpt}_{F\times G}\,f_{1}\bef\text{fmapOpt}_{F+G}\,f_{2})(p\times q)\\
-=\  & \text{fmapOpt}_{F\times G}(f_{2})\left(\text{fmapOpt}_{F}(f_{1})(p)\times\text{fmapOpt}_{G}(f_{1})(q)\right)\\
-=\  & (\text{fmapOpt}_{F}\,f_{1}\bef\text{fmapOpt}_{F}\,f_{2})(p)\times\left(\text{fmapOpt}_{G}\,f_{1}\bef\text{fmapOpt}_{G}\,f_{2}\right)(q)\\
-=\  & \text{fmapOpt}_{F}(f_{1}\diamond_{\text{Opt}}f_{2})(p)\times\text{fmapOpt}_{G}(f_{1}\diamond_{\text{Opt}}f_{2})(q)\\
-=\  & \text{fmapOpt}_{F\times G}(f_{1}\diamond_{\text{Opt}}f_{2})(p\times q)
-\end{align*}
-}{\footnotesize\par}
-
-Exactly the same proof as that for functor property for $F^{A}\times G^{A}$
-
-this is because \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}}
-corresponds to a generalized functor
-
-New proofs are necessary only when using non-filterable functors
-
-these are used in constructions 4 \textendash{} 6
-
-
-\paragraph{{*} Worked examples II: Constructions of filterable functors II}
-
-(5) The \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}} laws hold
-for $F^{A}\equiv1+A\times G^{A}$ if they hold for $G^{A}$
-
-For $f^{A\Rightarrow1+B}$, get {\footnotesize{}$\text{fmapOpt}_{G}(f):G^{A}\Rightarrow G^{B}$}{\footnotesize\par}
-
-{\footnotesize{}Define $\text{fmapOpt}_{F}(f)(1+a^{A}\times q^{G^{A}})$
-by returning $0+b\times\text{fmapOpt}_{G}(f)(q)$ if the argument
-is $0+a\times q$ and if $f(a)=0+b$, and returning $1+0$ otherwise}{\footnotesize\par}
-
-Identity law: {\footnotesize{}$f=\text{id}_{\diamond_{\text{Opt}}}$,
-so $f(a)=0+a$ and $\text{fmapOpt}_{G}f=\text{id}$}{\footnotesize\par}
-
-Hence we get{\footnotesize{} $\text{fmapOpt}_{F}(\text{id}_{\diamond_{\text{Opt}}})(1+a\times q)=1+a\times q$}{\footnotesize\par}
-
-Composition law: {\footnotesize{}need only to check for arguments
-$0+a\times q$, and only when $f_{1}(a)=0+b$ and $f_{2}(b)=0+c$,
-in which case $(f_{1}\diamond_{\text{Opt}}f_{2})(a)=0+c$; then 
-\begin{align*}
- & (\text{fmapOpt}_{F}\,f_{1}\bef\text{fmapOpt}_{F}\,f_{2})(0+a\times q)\\
-=\  & \text{fmapOpt}_{F}(f_{2})\left(\text{fmapOpt}_{F}(f_{1})(0+a\times q)\right)\\
-=\  & \text{fmapOpt}_{F}(f_{2})\left(0+b\times\text{fmapOpt}_{G}(f_{1})(q)\right)\\
-=\  & 0+c\times(\text{fmapOpt}_{G}\,f_{1}\bef\text{fmapOpt}_{G}\,f_{2})(q)\\
-=\  & 0+c\times\text{fmapOpt}_{G}(f_{1}\diamond_{\text{Opt}}f_{2})(q)\\
-=\  & \text{fmapOpt}_{F}(f_{1}\diamond_{\text{Opt}}f_{2})(0+a\times q)
-\end{align*}
-}{\footnotesize\par}
-
-This is a ``greedy filter'': if $f(a)$ is empty, will delete all
-data in $G^{A}$
-
-
-\paragraph{{*} Worked examples II: Constructions of filterable functors III}
-
-(6) The \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}} laws hold
-for $F^{A}\equiv G^{A}+A\times F^{A}$ if they hold for $G^{A}$
-
-{\footnotesize{}For $f^{A\Rightarrow1+B}$, we have $\text{fmapOpt}_{G}(f):G^{A}\Rightarrow G^{B}$
-and $\text{fmapOpt}_{F}^{\prime}(f):F^{A}\Rightarrow F^{B}$ (for
-use in recursive arguments as the inductive assumption)}{\footnotesize\par}
-
-{\footnotesize{}Define $\text{fmapOpt}_{F}(f)(q^{G^{A}}+a^{A}\times p^{F^{A}})$
-by returning $0+\text{fmapOpt}_{F}^{\prime}(f)(p)$ if $f(a)=1+0$,
-and $\text{fmapOpt}_{G}(f)(q)+b\times\text{fmapOpt}_{F}^{\prime}(f)(p)$
-otherwise}{\footnotesize\par}
-
-Identity law: {\footnotesize{}$\text{id}_{\diamond_{\text{Opt}}}(x)\neq1+0$},
-so {\footnotesize{}$\text{fmapOpt}_{F}(\text{id}_{\diamond_{\text{Opt}}})(q+a\times p)=q+a\times p$ }{\footnotesize\par}
-
-Composition law: {\footnotesize{}$(\text{fmapOpt}_{F}(f_{1})\bef\text{fmapOpt}_{F}(f_{2}))(q+a\times p)=\text{fmapOpt}_{F}(f_{1}\diamond_{\text{Opt}}f_{2})(q+a\times p)$}{\footnotesize\par}
-
-{\footnotesize{}For arguments $q+0$, the laws for $G^{A}$ hold;
-so assume arguments $0+a\times p$. When $f_{1}(a)=0+b$ and $f_{2}(b)=0+c$,
-the proof of the previous example will go through. So we need to consider
-the two cases $f_{1}(a)=1+0$ and $f_{1}(a)=0+b$, $f_{2}(b)=1+0$ }{\footnotesize\par}
-
-{\footnotesize{}If $f_{1}(a)=1+0$ then $(f_{1}\diamond_{\text{Opt}}f_{2})(a)=1+0$;
-to show $\text{fmapOpt}_{F}^{\prime}(f_{2})(\text{fmapOpt}_{F}^{\prime}(f_{1})(p))$
-$=\text{fmapOpt}_{F}^{\prime}(f_{1}\diamond_{\text{Opt}}f_{2})(p)$,
-use the inductive assumption about $\text{fmapOpt}_{F}^{\prime}$
-on $p$}{\footnotesize\par}
-
-{\footnotesize{}If $f_{1}(a)=0+b$ and $f_{2}(b)=1+0$ then $(f_{1}\diamond_{\text{Opt}}f_{2})(a)=1+0$;
-to show $\text{fmapOpt}_{F}(f_{2})(0+b\times\text{fmapOpt}_{F}^{\prime}(f_{1})(p))$
-$=\text{fmapOpt}_{F}^{\prime}(f_{1}\diamond_{\text{Opt}}f_{2})(p)$,
-rewrite $\text{fmapOpt}_{F}(f_{2})(0+b\times\text{fmapOpt}_{F}^{\prime}(f_{1})(p))$
-$=\text{fmapOpt}_{F}^{\prime}(f_{2})(\text{fmapOpt}_{F}^{\prime}(f_{1})(p))$
-and again use the inductive assumption about $\text{fmapOpt}_{F}^{\prime}$
-on $p$}{\footnotesize\par}
-
-This is a ``list-like filter'': if $f(a)$ is empty, will recurse
-into nested $F^{A}$ data
-
-
-\subsection{Worked examples II: Constructions of filterable functors IV}
-
-Use known filterable constructions to show that{\footnotesize{} $F^{A}\equiv(\text{Int}\times\text{String})\Rightarrow\left(1+\text{Int}\times A+A\times\left(1+A\right)+\left(\text{Int}\Rightarrow1+A+A\times A\times\text{String}\right)\right)$
-}is a filterable functor
-
-Instead of implementing \texttt{\textcolor{blue}{\footnotesize{}Filterable}}
-and verifying laws by hand, we analyze the structure of this data
-type and use known constructions
-
-Define some auxiliary functors that are parts of the structure of
-$F^{A}$,
-
-$R_{1}^{A}=\left(\text{Int}\times\text{String}\right)\Rightarrow A$
-and $R_{2}^{A}=\text{Int}\Rightarrow A$ 
-
-$G^{A}=1+\text{Int}\times A+A\times\left(1+A\right)$ and $H^{A}=1+A+A\times A\times\text{String}$
-
-Now we can rewrite {\footnotesize{}$F^{A}=R_{1}\left[G^{A}+R_{2}\left[H^{A}\right]\right]$}{\footnotesize\par}
-
-$G^{A}$ is filterable by construction 5 because it is of the form
-$G^{A}=1+A\times K^{A}$ with filterable functor $K^{A}=1+\text{Int}+A$
-
-$K^{A}$ is of the form $1+A+X$ with constant type $X$, so it is
-filterable by constructions 1 and 3 with the \texttt{\textcolor{blue}{\footnotesize{}Option}}
-functor $1+A$
-
-$H^{A}$ is filterable by construction 5 with $H^{A}=1+A\times\left(1+A\times\text{String}\right)$,
-while $1+A\times\text{String}$ is filterable by constructions 5 and
-1
-
-Constructions 3 and 4 show that $R_{1}\left[G^{A}+R_{2}\left[H^{A}\right]\right]$
-is filterable
-
-Note that there is more than one way of implementing \texttt{\textcolor{blue}{\footnotesize{}Filterable}}
-here
-
-
-\subsection{{*} Exercises II}
-
-Implement a \texttt{\textcolor{blue}{\footnotesize{}Filterable}} instance
-for \texttt{\textcolor{blue}{\footnotesize{}type F{[}T{]} = G{[}H{[}T{]}{]}}}
-assuming that the functor \texttt{\textcolor{blue}{\footnotesize{}H{[}T{]}}}
-already has a \texttt{\textcolor{blue}{\footnotesize{}Filterable}}
-instance (construction 4). Verify the laws rigorously (i.e.\ by calculations,
-not tests).
-
-For \texttt{\textcolor{blue}{\footnotesize{}type F{[}T{]} = Option{[}Int
-$\Rightarrow$ Option{[}(T, T){]}{]}}}, implement a \texttt{\textcolor{blue}{\footnotesize{}Filterable}}
-instance. Show that the filterable laws hold by using known filterable
-constructions (avoiding explicit proofs or tests).
-
-Implement a \texttt{\textcolor{blue}{\footnotesize{}Filterable}} instance
-for $F^{A}\equiv G^{A}+\text{Int}\times A\times A\times F^{A}$ (recursive)
-for a filterable functor $G^{A}$. Verify the laws rigorously.
-
-Show that $F^{A}=1+A\times G^{A}$ is in general \emph{not} filterable
-if $G^{A}$ is an arbitrary (non-filterable) functor; it is enough
-to give an example.
-
-Show that $F^{A}=1+G^{A}+H^{A}$ is filterable if $1+G^{A}$ and $1+H^{A}$
-are filterable (even when $G^{A}$ and $H^{A}$ are by themselves
-not filterable).
-
-Show that the functor $F^{A}=A+\left(\text{Int}\Rightarrow A\right)$
-is not filterable.
-
-Show that one can define \texttt{\textcolor{blue}{\footnotesize{}deflate}}$:C^{1+A}\Rightarrow C^{A}$
-for any contrafunctor $C^{A}$ (not necessarily filterable), similarly
-to how one can define \texttt{\textcolor{blue}{\footnotesize{}inflate}}$:F^{A}\Rightarrow F^{1+A}$
-for any functor $F^{A}$ (not necessarily filterable). 
-
-
-\subsection{{*} Bonus slide I: Definition of filterable contrafunctors}
-
-When is a contrafunctor filterable?
-
-When a contrafunctor {\footnotesize{}$C^{A}$} with {\footnotesize{}$\text{contrafmap}:\left(B\Rightarrow A\right)\Rightarrow C^{A}\Rightarrow C^{B}$}
-has also
-
-\texttt{\textcolor{blue}{\footnotesize{}filter}}/\texttt{\textcolor{blue}{\footnotesize{}withFilter}}{\footnotesize{}$:\left(A\Rightarrow\text{Boolean}\right)\Rightarrow C^{A}\Rightarrow C^{A}$}
-\textendash{} same as for functors
-
-\texttt{\textcolor{blue}{\footnotesize{}inflate}}{\footnotesize{}$:C^{A}\Rightarrow C^{1+A}$}
-and \texttt{\textcolor{blue}{\footnotesize{}contrafmapOpt}}{\footnotesize{}$:\left(B\Rightarrow1+A\right)\Rightarrow C^{A}\Rightarrow C^{B}$}{\footnotesize\par}
-
-All three functions are computationally equivalent...
-
-{\footnotesize{}$\text{filter}(p^{A\Rightarrow\text{Boolean}})=\text{inflate}^{C^{A}\Rightarrow C^{1+A}}\bef\text{contrafmap}(\text{bop}\,p)$}{\footnotesize\par}
-
-{\footnotesize{}$\text{inflate}^{C^{A}\Rightarrow C^{1+A}}=\text{contrafmap}\left(0+x^{A}\Rightarrow x\right)\bef\text{filter}\left(\_\Rightarrow\text{true}\right)$}{\footnotesize\par}
-
-{\footnotesize{}$\text{contrafmapOpt}\:f^{B\Rightarrow1+A}=\text{inflate}\bef\text{contrafmap}\,f$}{\footnotesize\par}
-
-{\footnotesize{}$\text{inflate}=\text{contrafmapOpt}\,(\text{id}^{1+A\Rightarrow1+A})$}{\footnotesize\par}
-
-but have different laws
-
-4 laws (naturality, conjunction, identity, partial function) for \texttt{\textcolor{blue}{\footnotesize{}filter}} 
-
-3 laws (naturality, conjunction, identity) for \texttt{\textcolor{blue}{\footnotesize{}inflate}} 
-
-2 laws (identity, contracomposition) for \texttt{\textcolor{blue}{\footnotesize{}contrafmapOpt}} 
-
-as before, \texttt{\textcolor{blue}{\footnotesize{}contrafmapOpt}}
-is a ``twisted'' version of \texttt{\textcolor{blue}{\footnotesize{}contrafmap}} 
-
-Examples of filterable contrafunctors
-
-$C^{A}\equiv A\Rightarrow1+Z$ where $Z$ is a fixed type
-
-$C^{A}\equiv1+A\Rightarrow Z$
-
-Examples of non-filterable contrafunctors
-
-$C^{A}\equiv A\times F^{A}\Rightarrow Z$ \textendash{} cannot implement
-\texttt{\textcolor{blue}{\footnotesize{}inflate}} 
-
-
-\subsection{{*} Bonus slide II: Structure of filterable contrafunctors}
-
-How to build up a filterable contrafunctor from parts?
-
-Filterable contrafunctors ``can consume fewer data items''
-
-The easiest function to consider first is \texttt{\textcolor{blue}{\footnotesize{}inflate}} 
-
-Some constructions of filterable contrafunctors:
-
-$C^{A}=Z$ (constant contrafunctor)
-
-Functor constructions (no need to check laws for these): 
-
-$F^{A}\equiv G^{A}\times H^{A}$ for any filterable contrafunctor
-$G^{A}$ and $H^{A}$
-
-$F^{A}\equiv G^{A}+H^{A}$ for any filterable contrafunctor $G^{A}$
-and $H^{A}$
-
-$F^{A}\equiv G^{H^{A}}$ for $H^{A}$ a filterable (contra)functor
-and $G^{A}$ any (contra)functor \textendash{} various combinations
-possible here
-
-$F^{A}\equiv G^{A}\Rightarrow H^{A}$ if\emph{ }functor $G^{A}$ and
-contrafunctor $H^{A}$ \emph{both} \emph{filterable}
-
-Special constructions:
-
-$F^{A}\equiv1+A\times G^{A}\Rightarrow H^{A}$ where $G^{A}$ and
-$H^{A}$ are filterable
-
-$F^{A}\equiv A\times G^{A}\Rightarrow1+H^{A}$ if $G^{A}$ and $H^{A}$
-are filterable
-
-
-\subsection{Addendum}
-
-Notes added after the tutorial was complete
-
-A polynomial functor $F^{A}$ is filterable if and only if it can
-be expressed (isomorphically) as $F^{A}=C\times\left(1+...\right)$
-where $C$ is a constant type. An example of a polynomial functor
-not of this form is $F^{A}=P+Q\times A$, where $P\neq Q$ are constant
-types and $P$ is not pointed (not known to be isomorphic to $1+Z$
-for some type $Z$).
-
-Given a polynomial functor $F^{A}$, one can decide algorithmically
-whether $F^{A}$ is filterable, and derive \emph{some} implementation
-of \texttt{\textcolor{blue}{\footnotesize{}deflate}} or \texttt{\textcolor{blue}{\footnotesize{}withFilter}}
-such that the laws hold. However, typically there will be many legitimate
-implementations, and the application-specific filtering requirements
-are not obviously guessable in advance.
-
-\section{Practical use}
-
-\subsection{Discussion}
+\subsubsection{Exercise \label{subsec:filt-exercise-2}\ref{subsec:filt-exercise-2}}
+
+Define an extension method \lstinline!evenFilter(p)! on the type
+\lstinline!IndexedSeq[T]! such that a value \lstinline!x: T! is
+kept in the sequence if \lstinline!p(x) == true! and only if the
+initial sequence has an \emph{even} total number of elements \lstinline!y!
+for which \lstinline!p(y) == false!. Does \lstinline!evenFilter!
+define a lawful filterable functor?
+
+\subsubsection{Exercise \label{subsec:filt-exercise-3}\ref{subsec:filt-exercise-3}}
+
+Determine whether the following functors are filterable, and if so,
+implement the \lstinline!filter! function or the \lstinline!Filterable!
+typeclass instance (law checking is optional):
+
+\textbf{(a)} The functor $Q^{A,Z}$ with respect to the type parameter
+$A$. Define $Q$ by this Scala code:\texttt{\textcolor{blue}{\footnotesize{}}}
+\begin{lstlisting}
+final case class Q[A, Z](id: Long, user1: Option[(A, Z)], user2: Option[(A, Z)])
+\end{lstlisting}
+{\footnotesize\par}
+
+\textbf{(b)} The functor $R^{A}$ defined by this Scala code,
+\begin{lstlisting}
+final case class R[A](x: Int, y: Int, z: A, data: List[A])
+\end{lstlisting}
+where the functor \lstinline!List! already has the method \lstinline!.filter!
+defined in the standard library.
+
+\textbf{(c)} $F^{P,Q,A}\triangleq(P\Rightarrow P)+(Q\Rightarrow Q)\times A\times A\times A\quad.$
+
+\textbf{(d)} $F^{A}=\text{MyTree}^{A}$ defined recursively as $\text{MyTree}^{A}\triangleq\bbnum 1+A\times\text{MyTree}^{A}\times\text{MyTree}^{A}\quad.$
+
+\subsubsection{Exercise \label{subsec:filt-exercise-4}\ref{subsec:filt-exercise-4}}
+
+Show that $C^{A}\triangleq A+A\times A\Rightarrow\bbnum 1+Z$ is a
+filterable contrafunctor (no law checking).
+
+\begin{comment}
+Discussion
+\end{comment}
 
 \begin{comment}
 Chapter six of the functional programming tutorial it is about computations
@@ -2386,9 +1975,728 @@ factors in a much simpler
 \end{comment}
 
 
-\section{Laws and structure}
+\section{Filterable functors: Laws and structure}
 
-\subsection{Discussion}
+
+\subsection{Filterable functors: The laws in depth I}
+
+Is there a shorter formulation of the laws that is easier to remember?
+
+Intuition: When \texttt{\textcolor{blue}{\footnotesize{}p(x) = false}},
+replace \texttt{\textcolor{blue}{\footnotesize{}x:\ A}} by \texttt{\textcolor{blue}{\footnotesize{}1:\ Unit}}
+in \texttt{\textcolor{blue}{\footnotesize{}F{[}A{]}}} 
+
+(1) How to replace \texttt{\textcolor{blue}{\footnotesize{}x}} by
+\texttt{\textcolor{blue}{\footnotesize{}1}} in \texttt{\textcolor{blue}{\footnotesize{}F{[}A{]}}}
+without breaking the types?
+
+(2) How to transform the resulting type back to \texttt{\textcolor{blue}{\footnotesize{}F{[}A{]}}}?
+
+We could do (1) if instead of $F^{A}$ we had $F^{1+A}$ i.e.~\texttt{\textcolor{blue}{\footnotesize{}F{[}Option{[}A{]}{]}}} 
+
+Now use \texttt{\textcolor{blue}{\footnotesize{}filter}} to replace
+$A$ by $1$ in each item of type $1+A$
+
+Get $F^{1+A}$ from $F^{A}$ using $\text{inflate}:F^{A}\Rightarrow F^{1+A}=\text{fmap}\,(\text{Some}^{A\Rightarrow1+A})$ 
+
+Filter $F^{1+A}\Rightarrow F^{1+A}$ using $\text{fmap}\left(x^{1+A}\Rightarrow\text{filter}_{\text{Opt}}(p^{A\Rightarrow\text{Boolean}})(x)\right)$
+
+\[
+\text{filter}\,p:\xymatrix{\xyScaleX{5pc}F^{A}\ar[r]\sb(0.45){\text{inflate}} & F^{1+A}\ar[r]_{\text{fmap}\left(\text{filter}_{\text{Opt}}p\right)} & F^{1+A}\ar[r]\sb(0.55){\text{deflate}} & F^{A}}
+\]
+
+Doing (2) means \emph{defining} a function \texttt{\textcolor{blue}{\footnotesize{}deflate:\ F{[}Option{[}A{]}{]}
+$\Rightarrow$ F{[}A{]}}} 
+
+standard library already has \texttt{\textcolor{blue}{\footnotesize{}flatten{[}T{]}:\ Seq{[}Option{[}T{]}{]}
+$\Rightarrow$ Seq{[}T{]}}} 
+
+Simplify{\footnotesize{} $\text{fmap}(\text{Some}^{A\Rightarrow1+A})\bef\text{fmap}\left(\text{filter}_{\text{Opt}}p\right)=\text{fmap}\left(\text{bop}\left(p\right)\right)$}
+where we defined {\footnotesize{}$\text{{\color{blue}bop}}\left(p\right):\left(A\Rightarrow1+A\right)\equiv$}
+\texttt{\textcolor{blue}{\footnotesize{}x $\Rightarrow$ Some(x).filter(p)}} 
+
+In this way, express \texttt{\textcolor{blue}{\footnotesize{}filter}}
+through \texttt{\textcolor{blue}{\footnotesize{}deflate}} (see example
+code)
+
+$\text{filter}\,p=\text{fmap}\left(\text{bop}\,p\right)\bef\text{deflate}$.
+\textendash{} Notation: $\text{bop}\,p$ is $\text{bop}\left(p\right)$,
+like $\cos x$
+
+\[
+\text{filter}\:p:\xymatrix{\xyScaleX{5pc}F^{A}\ar[r]\sb(0.45){\text{fmap}\left(\text{bop}\,p\right)} & F^{1+A}\ar[r]\sb(0.55){\text{deflate}} & F^{A}}
+\]
+
+
+\subsection{Filterable functors: Using \texttt{\textcolor{blue}{\footnotesize{}deflate}}}
+
+So far we have expressed \texttt{\textcolor{blue}{\footnotesize{}filter}}
+through \texttt{\textcolor{blue}{\footnotesize{}deflate}} 
+
+We can also express \texttt{\textcolor{blue}{\footnotesize{}deflate}}
+through \texttt{\textcolor{blue}{\footnotesize{}filter}} (assuming
+law 4 holds):
+
+\[
+\text{deflate}:\xymatrix{\xyScaleX{5pc}F^{1+A}\ar[r]\sb(0.5){\text{filter}\left(\text{.nonEmpty}\right)} & F^{1+A}\ar[r]\sb(0.5){\text{fmap}\left(\text{.get}\right)} & F^{A}}
+\]
+
+\texttt{\textcolor{blue}{\footnotesize{}def deflate{[}F{[}\_{]},A{]}(foa: F{[}Option{[}A{]}{]}): F{[}A{]}
+=}}{\footnotesize\par}
+
+\texttt{\textcolor{blue}{\footnotesize{}  foa.filter(\_.nonEmpty).map(\_.get)
+}}\textcolor{gray}{\footnotesize{}// \_.get is $0+x^{A}\Rightarrow x^{A}$}{\footnotesize\par}
+
+\textcolor{gray}{\footnotesize{}// for F = Seq, this would be foa.collect
+\{ case Some(x) $\Rightarrow$ x \}}{\footnotesize\par}
+
+\textcolor{gray}{\footnotesize{}// for arbitrary functor F we need
+to use the partial function, \_.get}{\footnotesize\par}
+
+This means \texttt{\textcolor{blue}{\footnotesize{}deflate}} and \texttt{\textcolor{blue}{\footnotesize{}filter}}
+are \textbf{computationally equivalent}
+
+We could specify filterable functors by implementing \texttt{\textcolor{blue}{\footnotesize{}deflate}} 
+
+The implementation of \texttt{\textcolor{blue}{\footnotesize{}filter}}
+would then be derived by library
+
+Use \texttt{\textcolor{blue}{\footnotesize{}deflate}} to verify that
+some functors are certainly not filterable:
+
+$F^{A}=A+A\times A$. Write $F^{1+A}=1+A+(1+A)\times(1+A)$ 
+
+cannot map $F^{1+A}\Rightarrow F^{A}$ because we do not have $1\rightarrow A$
+
+$F^{A}=\text{Int}\Rightarrow A$. Write $F^{1+A}=\text{Int}\Rightarrow1+A$ 
+
+type signature of \texttt{\textcolor{blue}{\footnotesize{}deflate}}
+would be $\left(\text{Int}\Rightarrow1+A\right)\Rightarrow\text{Int}\Rightarrow A$
+
+cannot map $F^{1+A}\Rightarrow F^{A}$ because we do not have $1+A\rightarrow A$
+
+\texttt{\textcolor{blue}{\footnotesize{}deflate}} is easier to implement
+and to reason about
+
+
+\paragraph{{*} Filterable functors: The laws in depth II}
+
+We were able to define \texttt{\textcolor{blue}{\footnotesize{}deflate}}
+only by assuming that law 4 holds
+
+Now, law 4 is satisfied \emph{automatically} if \texttt{\textcolor{blue}{\footnotesize{}filter}}
+is defined via \texttt{\textcolor{blue}{\footnotesize{}deflate}}!
+
+Denote {\footnotesize{}$\psi_{p}^{F^{A}\Rightarrow F^{1+A}}\equiv\text{fmap}\left(\text{bop}\:p\right)$
+for brevity, then $\text{filter}\,p=\psi_{p}\bef\text{deflate}$}{\footnotesize\par}
+
+Law 4 then becomes: {\footnotesize{}$\psi_{p}\bef\text{deflate}\bef\text{fmap}\:f^{A\Rightarrow B}=\psi_{p}\bef\text{deflate}\bef\text{fmap}\:f_{|p}$
+\[
+\xymatrix{\xyScaleY{0.1pc}\xyScaleX{3pc} & F^{1+A}\ar[r]\sp(0.5){\text{deflate}} & F^{A}\ar[rd]\sp(0.5){\text{ fmap}\:f^{A\Rightarrow B}}\\
+F^{A}\ar[ru]\sp(0.5){\psi_{p}}\ar[rd]\sb(0.5){\psi_{p}} &  &  & F^{B}\\
+ & F^{1+A}\ar[r]\sb(0.5){\text{deflate}} & F^{A}\ar[ru]\sb(0.5){\text{fmap}\:f_{|p}^{A\Rightarrow B}}
+}
+\]
+}{\footnotesize\par}
+
+We would like to interchange \texttt{\textcolor{blue}{\footnotesize{}deflate}}
+and \texttt{\textcolor{blue}{\footnotesize{}fmap}} in both sides
+
+We need a \emph{naturality} law; let's express law 1 through \texttt{\textcolor{blue}{\footnotesize{}deflate}}:
+
+{\footnotesize{}
+\[
+\text{fmap}\:f^{A\Rightarrow B}\bef\psi_{p}\bef\text{deflate}^{F,B}=\psi_{f\bef p}\bef\text{deflate}^{F,A}\bef\text{fmap}\:f^{A\Rightarrow B}
+\]
+\[
+\xymatrix{\xyScaleY{0.1pc}\xyScaleX{3pc} & F^{B}\ar[r]\sp(0.5){\psi_{p}} & F^{1+B}\ar[rd]\sp(0.5){\text{ deflate}^{F,B}}\\
+F^{A}\ar[ru]\sp(0.5){\text{fmap}\:f^{A\Rightarrow B}}\ar[rd]\sb(0.5){\psi_{f\bef p}} &  &  & F^{B}\\
+ & F^{1+A}\ar[r]\sb(0.5){\text{deflate}^{F,A}} & F^{A}\ar[ru]\sb(0.5){\text{fmap}\:f^{A\Rightarrow B}}
+}
+\]
+Can we simplify $\text{fmap}\:f\bef\psi_{p}=\text{fmap}\:f\bef\text{fmap}\left(\text{bop}\,p\right)=\text{fmap}\left(f\bef\text{bop}\,p\right)$?}{\footnotesize\par}
+
+
+\paragraph{{*} Filterable functors: The laws in depth III}
+
+{\footnotesize{}Have property: $f^{A\Rightarrow B}\bef\text{bop}\left(p^{B\Rightarrow\text{Boolean}}\right)=\text{bop}\left(f\bef p\right)\bef\text{fmap}^{\text{Opt}}\,f$
+(see code)
+\[
+\xymatrix{\xyScaleY{0.2pc}\xyScaleX{3pc} & B\ar[rd]\sp(0.5){\text{bop}\,p}\\
+A\ar[ru]\sp(0.5){f^{A\Rightarrow B}}\ar[rd]\sb(0.4){\text{bop}\left(f\bef p\right)\,} &  & 1+B\\
+ & 1+A\ar[ru]\sb(0.6){\text{fmap}^{\text{Opt}}f}
+}
+\]
+We can now rewrite Law 1 as
+\[
+\text{fmap}\,(\text{bop}\left(f\bef p\right))\bef\text{fmap}\,(\text{fmap}^{\text{Opt}}f)\bef\text{deflate}=\text{fmap}\left(\text{bop}\left(f\bef p\right)\right)\bef\text{deflate}\bef\text{fmap}\,f
+\]
+Remove common prefix $\text{fmap}\left(\text{bop}\left(f\bef p\right)\right)\bef...$
+from both sides:
+\[
+\text{fmap}\,(\text{fmap}^{\text{Opt}}f^{A\Rightarrow B})\bef\text{deflate}^{F,B}=\text{deflate}^{F,A}\bef\text{fmap}\,f^{A\Rightarrow B}\ \ -\text{ \textbf{law 1 for deflate}}
+\]
+\[
+\xymatrix{\xyScaleY{0.2pc}\xyScaleX{3pc} & F^{1+B}\ar[rd]\sp(0.5){\ \text{deflate}^{F,B}}\\
+F^{1+A}\ar[ru]\sp(0.5){\text{fmap}\,(\text{fmap}\,f)\ }\ar[rd]\sb(0.5){\text{deflate}^{F,A}\,} &  & F^{B}\\
+ & F^{A}\ar[ru]\sb(0.5){\text{fmap\,}f^{A\Rightarrow B}}
+}
+\]
+}{\footnotesize\par}
+
+\texttt{\textcolor{blue}{\footnotesize{}deflate}}{\footnotesize{}$:F^{1+A}\Rightarrow F^{A}$}
+ is a \textbf{natural transformation} (has naturality law)
+
+Example:{\footnotesize{} $F^{A}=1+A\times A$}{\footnotesize\par}
+
+{\footnotesize{}$F^{1+A}=1+(1+A)\times(1+A)=1+1\times1+A\times1+1\times A+A\times A$}{\footnotesize\par}
+
+{\footnotesize{}natural transformations map containers $G^{A}\Rightarrow H^{A}$
+by rearranging data in them}{\footnotesize\par}
+
+
+\paragraph{{*} Filterable functors: The laws in depth IV}
+
+The naturality law for \texttt{\textcolor{blue}{\footnotesize{}deflate}}:{\footnotesize{}
+\[
+\text{fmap}\,(\text{fmap}^{\text{Opt}}f^{A\Rightarrow B})\bef\text{deflate}^{F,B}=\text{deflate}^{F,A}\bef\text{fmap}\,f^{A\Rightarrow B}
+\]
+}Law 4 expressed via \texttt{\textcolor{blue}{\footnotesize{}deflate}}:{\footnotesize{}
+\[
+\xymatrix{\xyScaleY{0.1pc}\xyScaleX{3pc} & F^{1+A}\ar[r]\sp(0.5){\text{deflate}} & F^{A}\ar[rd]\sp(0.5){\text{ fmap}\:f^{A\Rightarrow B}}\\
+F^{A}\ar[ru]\sp(0.5){\psi_{p}}\ar[rd]\sb(0.5){\psi_{p}} &  &  & F^{B}\\
+ & F^{1+A}\ar[r]\sb(0.5){\text{deflate}} & F^{A}\ar[ru]\sb(0.5){\text{fmap}\:f_{|p}^{A\Rightarrow B}}
+}
+\]
+\[
+\psi_{p}\bef\text{deflate}^{F,A}\bef\text{fmap}\:f^{A\Rightarrow B}=\psi_{p}\bef\text{deflate}^{F,A}\bef\text{fmap}\:f_{|p}
+\]
+}{\footnotesize\par}
+
+Use naturality to interchange \texttt{\textcolor{blue}{\footnotesize{}deflate}}
+and \texttt{\textcolor{blue}{\footnotesize{}fmap}} in both sides of
+law 4:{\footnotesize{}
+\begin{align*}
+\psi_{p}\bef\text{fmap}\,(\text{fmap}^{\text{Opt}}f)\bef\text{deflate}^{F,B} & =\psi_{p}\bef\text{fmap}\,(\text{fmap}^{\text{Opt}}f_{|p})\bef\text{deflate}^{F,B}\\
+\text{[omit }\text{deflate}^{F,B}\text{ from} & \ \text{both sides; expand }\psi_{p}\text{]}\\
+\text{bop}\,p\bef\text{fmap}^{\text{Opt}}f & =\text{bop}\,p\bef\text{fmap}^{\text{Opt}}f_{|p}\ \ -\text{ check this by hand:}
+\end{align*}
+}{\footnotesize\par}
+
+\texttt{\textcolor{blue}{\footnotesize{}x $\Rightarrow$ Some(x).filter(p).map(f)}}{\footnotesize\par}
+
+\texttt{\textcolor{blue}{\footnotesize{}x $\Rightarrow$ Some(x).filter(p).map
+\{ case x if p(x) $\Rightarrow$ f(x) \}}}{\footnotesize\par}
+
+These functions are equivalent because law 4 holds for \texttt{\textcolor{blue}{\footnotesize{}Option}}{\footnotesize\par}
+
+
+\paragraph{Filterable functors: The laws in depth V}
+
+Maybe $\psi_{p}\bef\text{deflate}$ is easier to handle than \texttt{\textcolor{blue}{\footnotesize{}deflate}}?
+Let us define {\footnotesize{}
+\[
+\text{{\color{blue}fmapOpt}}^{F,A,B}(f^{A\Rightarrow1+B}):F^{A}\Rightarrow F^{B}=\text{fmap}\:f\bef\text{deflate}^{F,B}
+\]
+\[
+\xymatrix{\xyScaleY{0.2pc}\xyScaleX{3pc} & F^{1+B}\ar[rd]\sp(0.5){\ \text{deflate}^{F,B}}\\
+F^{A}\ar[ru]\sp(0.5){\text{fmap}\,f^{A\Rightarrow1+B}\ }\ar[rr]\sb(0.5){\text{fmapOpt}\:f^{A\Rightarrow1+B}\,} &  & F^{B}
+}
+\]
+}{\footnotesize\par}
+
+\texttt{\textcolor{blue}{\footnotesize{}fmapOpt}} and \texttt{\textcolor{blue}{\footnotesize{}deflate}}
+are \emph{equivalent}: {\footnotesize{}$\text{deflate}^{F,A}=\text{fmapOpt}^{F,1+A,A}(\text{id}^{1+A\Rightarrow1+A})$ }{\footnotesize\par}
+
+Express laws 1 \textendash{} 3 in terms of \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}}:
+do they get simpler?
+
+Express \texttt{\textcolor{blue}{\footnotesize{}filter}} through \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}}:
+{\footnotesize{}$\text{filter}\,p=\text{fmapOpt}^{F,A,A}\left(\text{bop}\,p\right)$}{\footnotesize\par}
+
+Consider the expression needed for law 2: $x\Rightarrow p_{1}(x)\wedge p_{2}(x)$
+
+{\footnotesize{}$\text{bop}\left(x\Rightarrow p_{1}(x)\wedge p_{2}(x)\right)=x^{A}\Rightarrow\left(\text{bop}\,p_{1}\right)(x)\text{.flatMap}\left(\text{bop}\,p_{2}\right)$
+}\textendash{} see code
+
+Denote this computation by $\diamond_{\text{Opt}}$ and write{\footnotesize{}
+\[
+q_{1}^{A\Rightarrow1+B}\diamond_{\text{Opt}}q_{2}^{B\Rightarrow1+C}\equiv x^{A}\Rightarrow q_{1}(x).\text{flatMap}\left(q_{2}\right)
+\]
+}{\footnotesize\par}
+
+Similar to composition of functions, except the types are $A\Rightarrow1+B$
+
+This is a particular case of \textbf{Kleisli composition}; the general
+case: {\footnotesize{}$\diamond_{M}:(A\Rightarrow M^{B})\Rightarrow(B\Rightarrow M^{C})\Rightarrow(A\Rightarrow M^{C})$};
+we set $M^{A}\equiv1+A$
+
+The \textbf{Kleisli identity} function: $\text{id}_{\diamond_{\text{Opt}}}^{A\Rightarrow1+A}\equiv x^{A}\Rightarrow\text{Some}\left(x\right)$
+
+Kleisli composition $\diamond_{\text{Opt}}$ is associative and respects
+the Kleisli identity!
+
+\texttt{\textcolor{blue}{\footnotesize{}fmapOpt}} lifts a Kleisli$_{\text{Opt}}$
+function $f^{A\Rightarrow1+B}$ into the functor $F$
+
+
+\paragraph{Filterable functors: The laws in depth VI}
+
+Simplifying down to two laws
+
+Only \emph{two} laws are necessary for \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}}!
+
+\textbf{Identity law} (covers old law 3): {\footnotesize{}
+\[
+\text{fmapOpt}\,(\text{id}_{\diamond_{\text{Opt}}}^{A\Rightarrow1+A})=\text{id}^{F^{A}\Rightarrow F^{A}}
+\]
+}{\footnotesize\par}
+
+\textbf{Composition law} (covers old laws 1 and 2): {\footnotesize{}
+\[
+\text{fmapOpt}\,(f^{A\Rightarrow1+B})\bef\text{fmapOpt}\,(g^{B\Rightarrow1+C})=\text{fmapOpt}\left(f\diamond_{\text{\textbf{Opt}}}g\right)
+\]
+\[
+\xymatrix{\xyScaleY{2pc}\xyScaleX{3pc} & F^{B}\ar[rd]\sp(0.55){\ \text{fmapOpt}\,(g^{B\Rightarrow1+C})}\\
+F^{A}\ar[ru]\sp(0.45){\text{fmapOpt}\,(f^{A\Rightarrow1+B})\ }\ar[rr]\sb(0.5){\text{fmapOpt}\left(f\diamond_{\text{Opt}}g\right)} &  & F^{C}
+}
+\]
+}{\footnotesize\par}
+
+The two laws for \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}}
+are very similar to the two functor laws
+
+Both of them use more complicated types than the old laws
+
+Conceptually, the new laws are simpler (lift $f^{A\Rightarrow1+B}$
+into $F^{A}\Rightarrow F^{B}$)
+
+
+\paragraph{{*} Filterable functors: The laws in depth VII}
+
+Showing that old laws 1 \textendash{} 3 follow from the identity and
+composition laws for \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}}{\footnotesize\par}
+
+Old law 3 is \emph{equivalent} to the identity law for \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}}:{\footnotesize{}
+\[
+\text{filter}\,(x^{A}\Rightarrow\text{true})=\text{fmap}\,(x^{A}\Rightarrow0+x)\bef\text{deflate}=\text{fmapOpt}\,(\text{id}_{\diamond_{\text{Opt}}})=\text{id}^{F^{A}\Rightarrow F^{A}}
+\]
+}{\footnotesize\par}
+
+Derive old law 2: need to work with{\footnotesize{} $q_{1,2}\equiv\text{bop}\left(p_{1,2}\right):A\Rightarrow1+A$ }{\footnotesize\par}
+
+The Boolean conjunction {\footnotesize{}$x\Rightarrow p_{1}(x)\wedge p_{2}(x)$
+}corresponds to {\footnotesize{}$q_{1}\diamond_{\text{\textbf{Opt}}}q_{2}$}{\footnotesize\par}
+
+Apply the composition law to Kleisli functions of types {\footnotesize{}$A\Rightarrow1+A$
+}:{\footnotesize{}
+\begin{align*}
+\text{filter}\,p_{1}\bef\text{filter}\,p_{2} & =\text{fmapOpt}\,q_{1}\bef\text{fmapOpt}\,q_{2}\\
+=\text{fmapOpt}\left(q_{1}\diamond_{\text{\textbf{Opt}}}q_{2}\right) & =\text{fmapOpt}\left(\text{bop}\left(x\Rightarrow p_{1}(x)\wedge p_{2}(x)\right)\right)
+\end{align*}
+}{\footnotesize\par}
+
+Derive old law 1:
+
+express \texttt{\textcolor{blue}{\footnotesize{}filter}} through \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}};
+old law 1 becomes{\footnotesize{}
+\[
+\text{fmap}\:f\bef\text{fmapOpt}\left(\text{bop}\,p\right)=\text{fmapOpt}\left(\text{bop}\left(f\bef p\right)\right)\bef\text{fmap}\:f\ \text{ \textendash\ eq. (*)}
+\]
+}{\footnotesize\par}
+
+lift $f^{A\Rightarrow B}$ to Kleisli$_{\text{Opt}}$ by defining
+{\footnotesize{}$k_{f}^{A\Rightarrow1+B}=f\bef\text{id}_{\diamond_{\text{\textbf{Opt}}}}$;}
+then we have $\text{fmapOpt}\left(k_{f}\right)=\text{fmap}\,k_{f}\bef\text{deflate}=\text{fmap}\:f\bef\text{fmap}\,\text{id}_{\diamond_{\text{\textbf{Opt}}}}\bef\text{deflate}=\text{fmap}\,f$
+
+rewrite eq.\ ({*}) as {\footnotesize{}$\text{fmapOpt}\left(k_{f}\diamond_{\text{\textbf{Opt}}}\text{bop}\,p\right)=\text{fmapOpt}\left(\text{bop}\left(f\bef p\right)\diamond_{\text{\textbf{Opt}}}k_{f}\right)$ }{\footnotesize\par}
+
+it remains to show that {\footnotesize{}$k_{f}\diamond_{\text{\textbf{Opt}}}\text{bop}\,p=\text{bop}\left(f\bef p\right)\diamond_{\text{\textbf{Opt}}}k_{f}$ }{\footnotesize\par}
+
+use the properties {\footnotesize{}$k_{f}\diamond_{\text{\textbf{Opt}}}q=f\bef q$
+and $q\diamond_{\text{\textbf{Opt}}}k_{f}=q\bef\text{fmap}^{\text{Opt}}f$,
+and $f\bef\text{bop}\,p=\text{bop}\left(f\bef p\right)\bef\text{fmap}^{\text{Opt}}\,f$
+(property from slide 11)}{\footnotesize\par}
+
+
+\subsection{Summary: The methods and the laws}
+
+Filterable functors can be defined via \texttt{\textcolor{blue}{\footnotesize{}filter}},
+\texttt{\textcolor{blue}{\footnotesize{}deflate}}, or \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}} 
+
+All three methods are \emph{equivalent} but have different roles:
+
+The easiest to use in program code is \texttt{\textcolor{blue}{\footnotesize{}filter}}
+/ \texttt{\textcolor{blue}{\footnotesize{}withFilter}} 
+
+The easiest type signature to implement and reason about is \texttt{\textcolor{blue}{\footnotesize{}deflate}} 
+
+Conceptually, the laws are easiest to remember with \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}} 
+
+{*} The 2 laws for \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}}
+are the 2 functor laws with a Kleisli ``twist''
+
+{*} Category theory accommodates this via a generalized definition
+of functors as liftings between ``twisted'' types. Compare:
+
+$\text{fmap}:\left(A\Rightarrow B\right)\Rightarrow F^{A}\Rightarrow F^{B}$
+\textendash{} ordinary container (``endofunctor'')
+
+$\text{contrafmap}:\left(B\Rightarrow A\right)\Rightarrow F^{A}\Rightarrow F^{B}$
+\textendash{} lifting from reversed functions
+
+$\text{fmapOpt}:\left(A\Rightarrow1+B\right)\Rightarrow F^{A}\Rightarrow F^{B}$
+\textendash{} lifting from Kleisli$_{\text{Opt}}$-functions 
+
+CT gives us some \emph{intuitions} about how to derive better laws:
+
+look for type signatures that resemble a generalized sort of ``lifting''
+
+look for natural transformations and use the naturality law
+
+However, CT does not directly provide any derivations for the laws
+
+you will not find the laws for \texttt{\textcolor{blue}{\footnotesize{}filter}}
+or \texttt{\textcolor{blue}{\footnotesize{}deflate}} in any CT book
+
+CT is abstract, only gives hints about possible further directions
+
+investigate functors having ``liftings'' with different type signatures
+
+replace \texttt{\textcolor{blue}{\footnotesize{}Option}} in the Kleisli$_{\text{Opt}}$
+construction by another functor
+
+
+\subsection{Structure of filterable functors}
+
+How to recognize a filterable functor by its type?
+
+Intuition from \texttt{\textcolor{blue}{\footnotesize{}deflate}}:
+reshuffle data in $F^{A}$ after replacing some $A$'s by $1$
+
+``reshuffling'' usually means reusing different parts of a disjunction
+
+Some constructions of exponential-polynomial filterable functors 
+
+$F^{A}=Z$ (constant functor) for a fixed type $Z$ (define $\text{fmapOpt}\,f=\text{id}$)
+
+Note: $F^{A}=A$ (identity functor) is \emph{not} filterable
+
+$F^{A}\equiv G^{A}\times H^{A}$ for any filterable functors $G^{A}$
+and $H^{A}$
+
+$F^{A}\equiv G^{A}+H^{A}$ for any filterable functors $G^{A}$ and
+$H^{A}$
+
+$F^{A}\equiv G^{H^{A}}$ for \emph{any} functor $G^{A}$ and filterable
+functor $H^{A}$
+
+$F^{A}\equiv1+A\times G^{A}$ for a filterable functor $G^{A}$
+
+Note: \emph{pointed} types $P$ are isomorphic to $1+Z$ for some
+type $Z$
+
+Example of non-trivial pointed type: $A\Rightarrow A$
+
+Example of non-pointed type: $A\Rightarrow B$ when $A$ is different
+from $B$
+
+So $F^{A}\equiv P+A\times G^{A}$ where $P$ is a pointed type and
+$G^{A}$ is filterable
+
+Also have $F^{A}\equiv P+A\times A\times...\times A\times G^{A}$
+similarly
+
+$F^{A}\equiv G^{A}+A\times F^{A}$ (recursive) for a filterable functor
+$G^{A}$
+
+$F^{A}\equiv G^{A}\Rightarrow H^{A}$ if\emph{ }contrafunctor $G^{A}$
+and functor $H^{A}$ \emph{both} \emph{filterable}
+
+Note: the functor $F^{A}\equiv G^{A}\Rightarrow A$ is not filterable
+
+
+\subsection{{*} Worked examples II: Constructions of filterable functors I}
+
+(2) The \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}} laws hold
+for $F^{A}\times G^{A}$ if they hold for $F^{A}$ and $G^{A}$
+
+For $f^{A\Rightarrow1+B}$, get {\footnotesize{}$\text{fmapOpt}_{F}(f):F^{A}\Rightarrow F^{B}$
+}and {\footnotesize{}$\text{fmapOpt}_{G}(f):G^{A}\Rightarrow G^{B}$}{\footnotesize\par}
+
+Define {\footnotesize{}$\text{fmapOpt}_{F\times G}f\equiv p^{F^{A}}\times q^{G^{A}}\Rightarrow\text{fmapOpt}_{F}(f)(p)\times\text{fmapOpt}_{G}(f)(q)$}{\footnotesize\par}
+
+Identity law: $f=\text{id}_{\diamond_{\text{Opt}}}$, so {\footnotesize{}$\text{fmapOpt}_{F}f=\text{id}$}
+and {\footnotesize{}$\text{fmapOpt}_{G}f=\text{id}$}{\footnotesize\par}
+
+Hence we get $\text{fmapOpt}_{F+G}(f)(p\times q)=\text{id}(p)\times\text{id}(q)=p\times q$
+
+Composition law:{\footnotesize{}
+\begin{align*}
+ & (\text{fmapOpt}_{F\times G}\,f_{1}\bef\text{fmapOpt}_{F+G}\,f_{2})(p\times q)\\
+=\  & \text{fmapOpt}_{F\times G}(f_{2})\left(\text{fmapOpt}_{F}(f_{1})(p)\times\text{fmapOpt}_{G}(f_{1})(q)\right)\\
+=\  & (\text{fmapOpt}_{F}\,f_{1}\bef\text{fmapOpt}_{F}\,f_{2})(p)\times\left(\text{fmapOpt}_{G}\,f_{1}\bef\text{fmapOpt}_{G}\,f_{2}\right)(q)\\
+=\  & \text{fmapOpt}_{F}(f_{1}\diamond_{\text{Opt}}f_{2})(p)\times\text{fmapOpt}_{G}(f_{1}\diamond_{\text{Opt}}f_{2})(q)\\
+=\  & \text{fmapOpt}_{F\times G}(f_{1}\diamond_{\text{Opt}}f_{2})(p\times q)
+\end{align*}
+}{\footnotesize\par}
+
+Exactly the same proof as that for functor property for $F^{A}\times G^{A}$
+
+this is because \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}}
+corresponds to a generalized functor
+
+New proofs are necessary only when using non-filterable functors
+
+these are used in constructions 4 \textendash{} 6
+
+
+\paragraph{{*} Worked examples II: Constructions of filterable functors II}
+
+(5) The \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}} laws hold
+for $F^{A}\equiv1+A\times G^{A}$ if they hold for $G^{A}$
+
+For $f^{A\Rightarrow1+B}$, get {\footnotesize{}$\text{fmapOpt}_{G}(f):G^{A}\Rightarrow G^{B}$}{\footnotesize\par}
+
+{\footnotesize{}Define $\text{fmapOpt}_{F}(f)(1+a^{A}\times q^{G^{A}})$
+by returning $0+b\times\text{fmapOpt}_{G}(f)(q)$ if the argument
+is $0+a\times q$ and if $f(a)=0+b$, and returning $1+0$ otherwise}{\footnotesize\par}
+
+Identity law: {\footnotesize{}$f=\text{id}_{\diamond_{\text{Opt}}}$,
+so $f(a)=0+a$ and $\text{fmapOpt}_{G}f=\text{id}$}{\footnotesize\par}
+
+Hence we get{\footnotesize{} $\text{fmapOpt}_{F}(\text{id}_{\diamond_{\text{Opt}}})(1+a\times q)=1+a\times q$}{\footnotesize\par}
+
+Composition law: {\footnotesize{}need only to check for arguments
+$0+a\times q$, and only when $f_{1}(a)=0+b$ and $f_{2}(b)=0+c$,
+in which case $(f_{1}\diamond_{\text{Opt}}f_{2})(a)=0+c$; then 
+\begin{align*}
+ & (\text{fmapOpt}_{F}\,f_{1}\bef\text{fmapOpt}_{F}\,f_{2})(0+a\times q)\\
+=\  & \text{fmapOpt}_{F}(f_{2})\left(\text{fmapOpt}_{F}(f_{1})(0+a\times q)\right)\\
+=\  & \text{fmapOpt}_{F}(f_{2})\left(0+b\times\text{fmapOpt}_{G}(f_{1})(q)\right)\\
+=\  & 0+c\times(\text{fmapOpt}_{G}\,f_{1}\bef\text{fmapOpt}_{G}\,f_{2})(q)\\
+=\  & 0+c\times\text{fmapOpt}_{G}(f_{1}\diamond_{\text{Opt}}f_{2})(q)\\
+=\  & \text{fmapOpt}_{F}(f_{1}\diamond_{\text{Opt}}f_{2})(0+a\times q)
+\end{align*}
+}{\footnotesize\par}
+
+This is a ``greedy filter'': if $f(a)$ is empty, will delete all
+data in $G^{A}$
+
+
+\paragraph{{*} Worked examples II: Constructions of filterable functors III}
+
+(6) The \texttt{\textcolor{blue}{\footnotesize{}fmapOpt}} laws hold
+for $F^{A}\equiv G^{A}+A\times F^{A}$ if they hold for $G^{A}$
+
+{\footnotesize{}For $f^{A\Rightarrow1+B}$, we have $\text{fmapOpt}_{G}(f):G^{A}\Rightarrow G^{B}$
+and $\text{fmapOpt}_{F}^{\prime}(f):F^{A}\Rightarrow F^{B}$ (for
+use in recursive arguments as the inductive assumption)}{\footnotesize\par}
+
+{\footnotesize{}Define $\text{fmapOpt}_{F}(f)(q^{G^{A}}+a^{A}\times p^{F^{A}})$
+by returning $0+\text{fmapOpt}_{F}^{\prime}(f)(p)$ if $f(a)=1+0$,
+and $\text{fmapOpt}_{G}(f)(q)+b\times\text{fmapOpt}_{F}^{\prime}(f)(p)$
+otherwise}{\footnotesize\par}
+
+Identity law: {\footnotesize{}$\text{id}_{\diamond_{\text{Opt}}}(x)\neq1+0$},
+so {\footnotesize{}$\text{fmapOpt}_{F}(\text{id}_{\diamond_{\text{Opt}}})(q+a\times p)=q+a\times p$ }{\footnotesize\par}
+
+Composition law: {\footnotesize{}$(\text{fmapOpt}_{F}(f_{1})\bef\text{fmapOpt}_{F}(f_{2}))(q+a\times p)=\text{fmapOpt}_{F}(f_{1}\diamond_{\text{Opt}}f_{2})(q+a\times p)$}{\footnotesize\par}
+
+{\footnotesize{}For arguments $q+0$, the laws for $G^{A}$ hold;
+so assume arguments $0+a\times p$. When $f_{1}(a)=0+b$ and $f_{2}(b)=0+c$,
+the proof of the previous example will go through. So we need to consider
+the two cases $f_{1}(a)=1+0$ and $f_{1}(a)=0+b$, $f_{2}(b)=1+0$ }{\footnotesize\par}
+
+{\footnotesize{}If $f_{1}(a)=1+0$ then $(f_{1}\diamond_{\text{Opt}}f_{2})(a)=1+0$;
+to show $\text{fmapOpt}_{F}^{\prime}(f_{2})(\text{fmapOpt}_{F}^{\prime}(f_{1})(p))$
+$=\text{fmapOpt}_{F}^{\prime}(f_{1}\diamond_{\text{Opt}}f_{2})(p)$,
+use the inductive assumption about $\text{fmapOpt}_{F}^{\prime}$
+on $p$}{\footnotesize\par}
+
+{\footnotesize{}If $f_{1}(a)=0+b$ and $f_{2}(b)=1+0$ then $(f_{1}\diamond_{\text{Opt}}f_{2})(a)=1+0$;
+to show $\text{fmapOpt}_{F}(f_{2})(0+b\times\text{fmapOpt}_{F}^{\prime}(f_{1})(p))$
+$=\text{fmapOpt}_{F}^{\prime}(f_{1}\diamond_{\text{Opt}}f_{2})(p)$,
+rewrite $\text{fmapOpt}_{F}(f_{2})(0+b\times\text{fmapOpt}_{F}^{\prime}(f_{1})(p))$
+$=\text{fmapOpt}_{F}^{\prime}(f_{2})(\text{fmapOpt}_{F}^{\prime}(f_{1})(p))$
+and again use the inductive assumption about $\text{fmapOpt}_{F}^{\prime}$
+on $p$}{\footnotesize\par}
+
+This is a ``list-like filter'': if $f(a)$ is empty, will recurse
+into nested $F^{A}$ data
+
+
+\subsection{Worked examples II: Constructions of filterable functors IV}
+
+Use known filterable constructions to show that{\footnotesize{} $F^{A}\equiv(\text{Int}\times\text{String})\Rightarrow\left(1+\text{Int}\times A+A\times\left(1+A\right)+\left(\text{Int}\Rightarrow1+A+A\times A\times\text{String}\right)\right)$
+}is a filterable functor
+
+Instead of implementing \texttt{\textcolor{blue}{\footnotesize{}Filterable}}
+and verifying laws by hand, we analyze the structure of this data
+type and use known constructions
+
+Define some auxiliary functors that are parts of the structure of
+$F^{A}$,
+
+$R_{1}^{A}=\left(\text{Int}\times\text{String}\right)\Rightarrow A$
+and $R_{2}^{A}=\text{Int}\Rightarrow A$ 
+
+$G^{A}=1+\text{Int}\times A+A\times\left(1+A\right)$ and $H^{A}=1+A+A\times A\times\text{String}$
+
+Now we can rewrite {\footnotesize{}$F^{A}=R_{1}\left[G^{A}+R_{2}\left[H^{A}\right]\right]$}{\footnotesize\par}
+
+$G^{A}$ is filterable by construction 5 because it is of the form
+$G^{A}=1+A\times K^{A}$ with filterable functor $K^{A}=1+\text{Int}+A$
+
+$K^{A}$ is of the form $1+A+X$ with constant type $X$, so it is
+filterable by constructions 1 and 3 with the \texttt{\textcolor{blue}{\footnotesize{}Option}}
+functor $1+A$
+
+$H^{A}$ is filterable by construction 5 with $H^{A}=1+A\times\left(1+A\times\text{String}\right)$,
+while $1+A\times\text{String}$ is filterable by constructions 5 and
+1
+
+Constructions 3 and 4 show that $R_{1}\left[G^{A}+R_{2}\left[H^{A}\right]\right]$
+is filterable
+
+Note that there is more than one way of implementing \texttt{\textcolor{blue}{\footnotesize{}Filterable}}
+here
+
+
+\subsection{{*} Exercises II}
+
+Implement a \texttt{\textcolor{blue}{\footnotesize{}Filterable}} instance
+for \texttt{\textcolor{blue}{\footnotesize{}type F{[}T{]} = G{[}H{[}T{]}{]}}}
+assuming that the functor \texttt{\textcolor{blue}{\footnotesize{}H{[}T{]}}}
+already has a \texttt{\textcolor{blue}{\footnotesize{}Filterable}}
+instance (construction 4). Verify the laws rigorously (i.e.\ by calculations,
+not tests).
+
+For \texttt{\textcolor{blue}{\footnotesize{}type F{[}T{]} = Option{[}Int
+$\Rightarrow$ Option{[}(T, T){]}{]}}}, implement a \texttt{\textcolor{blue}{\footnotesize{}Filterable}}
+instance. Show that the filterable laws hold by using known filterable
+constructions (avoiding explicit proofs or tests).
+
+Implement a \texttt{\textcolor{blue}{\footnotesize{}Filterable}} instance
+for $F^{A}\equiv G^{A}+\text{Int}\times A\times A\times F^{A}$ (recursive)
+for a filterable functor $G^{A}$. Verify the laws rigorously.
+
+Show that $F^{A}=1+A\times G^{A}$ is in general \emph{not} filterable
+if $G^{A}$ is an arbitrary (non-filterable) functor; it is enough
+to give an example.
+
+Show that $F^{A}=1+G^{A}+H^{A}$ is filterable if $1+G^{A}$ and $1+H^{A}$
+are filterable (even when $G^{A}$ and $H^{A}$ are by themselves
+not filterable).
+
+Show that the functor $F^{A}=A+\left(\text{Int}\Rightarrow A\right)$
+is not filterable.
+
+Show that one can define \texttt{\textcolor{blue}{\footnotesize{}deflate}}$:C^{1+A}\Rightarrow C^{A}$
+for any contrafunctor $C^{A}$ (not necessarily filterable), similarly
+to how one can define \texttt{\textcolor{blue}{\footnotesize{}inflate}}$:F^{A}\Rightarrow F^{1+A}$
+for any functor $F^{A}$ (not necessarily filterable). 
+
+
+\subsection{{*} Bonus slide I: Definition of filterable contrafunctors}
+
+When is a contrafunctor filterable?
+
+When a contrafunctor {\footnotesize{}$C^{A}$} with {\footnotesize{}$\text{contrafmap}:\left(B\Rightarrow A\right)\Rightarrow C^{A}\Rightarrow C^{B}$}
+has also
+
+\texttt{\textcolor{blue}{\footnotesize{}filter}}/\texttt{\textcolor{blue}{\footnotesize{}withFilter}}{\footnotesize{}$:\left(A\Rightarrow\text{Boolean}\right)\Rightarrow C^{A}\Rightarrow C^{A}$}
+\textendash{} same as for functors
+
+\texttt{\textcolor{blue}{\footnotesize{}inflate}}{\footnotesize{}$:C^{A}\Rightarrow C^{1+A}$}
+and \texttt{\textcolor{blue}{\footnotesize{}contrafmapOpt}}{\footnotesize{}$:\left(B\Rightarrow1+A\right)\Rightarrow C^{A}\Rightarrow C^{B}$}{\footnotesize\par}
+
+All three functions are computationally equivalent...
+
+{\footnotesize{}$\text{filter}(p^{A\Rightarrow\text{Boolean}})=\text{inflate}^{C^{A}\Rightarrow C^{1+A}}\bef\text{contrafmap}(\text{bop}\,p)$}{\footnotesize\par}
+
+{\footnotesize{}$\text{inflate}^{C^{A}\Rightarrow C^{1+A}}=\text{contrafmap}\left(0+x^{A}\Rightarrow x\right)\bef\text{filter}\left(\_\Rightarrow\text{true}\right)$}{\footnotesize\par}
+
+{\footnotesize{}$\text{contrafmapOpt}\:f^{B\Rightarrow1+A}=\text{inflate}\bef\text{contrafmap}\,f$}{\footnotesize\par}
+
+{\footnotesize{}$\text{inflate}=\text{contrafmapOpt}\,(\text{id}^{1+A\Rightarrow1+A})$}{\footnotesize\par}
+
+but have different laws
+
+4 laws (naturality, conjunction, identity, partial function) for \texttt{\textcolor{blue}{\footnotesize{}filter}} 
+
+3 laws (naturality, conjunction, identity) for \texttt{\textcolor{blue}{\footnotesize{}inflate}} 
+
+2 laws (identity, contracomposition) for \texttt{\textcolor{blue}{\footnotesize{}contrafmapOpt}} 
+
+as before, \texttt{\textcolor{blue}{\footnotesize{}contrafmapOpt}}
+is a ``twisted'' version of \texttt{\textcolor{blue}{\footnotesize{}contrafmap}} 
+
+Examples of filterable contrafunctors
+
+$C^{A}\equiv A\Rightarrow1+Z$ where $Z$ is a fixed type
+
+$C^{A}\equiv1+A\Rightarrow Z$
+
+Examples of non-filterable contrafunctors
+
+$C^{A}\equiv A\times F^{A}\Rightarrow Z$ \textendash{} cannot implement
+\texttt{\textcolor{blue}{\footnotesize{}inflate}} 
+
+
+\subsection{{*} Bonus slide II: Structure of filterable contrafunctors}
+
+How to build up a filterable contrafunctor from parts?
+
+Filterable contrafunctors ``can consume fewer data items''
+
+The easiest function to consider first is \texttt{\textcolor{blue}{\footnotesize{}inflate}} 
+
+Some constructions of filterable contrafunctors:
+
+$C^{A}=Z$ (constant contrafunctor)
+
+Functor constructions (no need to check laws for these): 
+
+$F^{A}\equiv G^{A}\times H^{A}$ for any filterable contrafunctor
+$G^{A}$ and $H^{A}$
+
+$F^{A}\equiv G^{A}+H^{A}$ for any filterable contrafunctor $G^{A}$
+and $H^{A}$
+
+$F^{A}\equiv G^{H^{A}}$ for $H^{A}$ a filterable (contra)functor
+and $G^{A}$ any (contra)functor \textendash{} various combinations
+possible here
+
+$F^{A}\equiv G^{A}\Rightarrow H^{A}$ if\emph{ }functor $G^{A}$ and
+contrafunctor $H^{A}$ \emph{both} \emph{filterable}
+
+Special constructions:
+
+$F^{A}\equiv1+A\times G^{A}\Rightarrow H^{A}$ where $G^{A}$ and
+$H^{A}$ are filterable
+
+$F^{A}\equiv A\times G^{A}\Rightarrow1+H^{A}$ if $G^{A}$ and $H^{A}$
+are filterable
+
+
+\subsection{Addendum}
+
+Notes added after the tutorial was complete
+
+A polynomial functor $F^{A}$ is filterable if and only if it can
+be expressed (isomorphically) as $F^{A}=C\times\left(1+...\right)$
+where $C$ is a constant type. An example of a polynomial functor
+not of this form is $F^{A}=P+Q\times A$, where $P\neq Q$ are constant
+types and $P$ is not pointed (not known to be isomorphic to $1+Z$
+for some type $Z$).
+
+Given a polynomial functor $F^{A}$, one can decide algorithmically
+whether $F^{A}$ is filterable, and derive \emph{some} implementation
+of \texttt{\textcolor{blue}{\footnotesize{}deflate}} or \texttt{\textcolor{blue}{\footnotesize{}withFilter}}
+such that the laws hold. However, typically there will be many legitimate
+implementations, and the application-specific filtering requirements
+are not obviously guessable in advance.
 
 \begin{comment}
 this is part 2 of chapter 6 of the functional programming tutorial
