@@ -378,17 +378,17 @@ val result2 = xs.filter(p).map(fp)
 
 We have motivated four requirements for the filtering operation. These
 requirements are written in the code notation as four laws for the
-function \lstinline!filter! (code notation $\text{filt}_{F}$) with
-type signature
+function \lstinline!filter! (denoted $\text{filt}_{F}$) with type
+signature
 \[
 \text{filt}_{F}:(A\Rightarrow\bbnum 2)\Rightarrow F^{A}\Rightarrow F^{A}\quad.
 \]
-The laws are called the naturality, composition, identity, and partial
-function laws of \lstinline!filter!:\index{composition law!of filter@of \texttt{filter}}\index{naturality law!of filter@of \texttt{filter}}\index{identity law!of filter@of \texttt{filter}}
+The laws are called the naturality, identity, composition, and partial
+function laws of filtering:\index{composition law!of filter@of \texttt{filter}}\index{naturality law!of filter@of \texttt{filter}}\index{identity law!of filter@of \texttt{filter}}
 \begin{align*}
 {\color{greenunder}\text{naturality law of }\text{filt}_{F}:}\quad & f^{\uparrow F}\bef\text{filt}_{F}(p)=\text{filt}_{F}(f\bef p)\bef f^{\uparrow F}\quad\text{for any }f^{:A\Rightarrow B},~p^{:A\Rightarrow\bbnum 2}\quad.\\
-{\color{greenunder}\text{composition law of }\text{filt}_{F}:}\quad & \text{filt}_{F}(p_{1})\bef\text{filt}_{F}(p_{2})=\text{filt}_{F}(x\Rightarrow p_{1}(x)\wedge p_{2}(x))\quad\text{for any }p_{1}^{:A\Rightarrow\bbnum 2},~p_{2}^{:A\Rightarrow\bbnum 2}\quad.\\
 {\color{greenunder}\text{identity law of }\text{filt}_{F}:}\quad & \text{filt}_{F}(\_\Rightarrow\text{true})=\text{id}^{:F^{A}\Rightarrow F^{A}}\quad.\\
+{\color{greenunder}\text{composition law of }\text{filt}_{F}:}\quad & \text{filt}_{F}(p_{1})\bef\text{filt}_{F}(p_{2})=\text{filt}_{F}(x\Rightarrow p_{1}(x)\wedge p_{2}(x))\quad\text{for any }p_{1}^{:A\Rightarrow\bbnum 2},~p_{2}^{:A\Rightarrow\bbnum 2}\quad.\\
 {\color{greenunder}\text{partial function law of }\text{filt}_{F}:}\quad & \text{filt}_{F}(p)\bef f^{\uparrow F}=\text{filt}_{F}(p)\bef f_{|p}^{\uparrow F}\quad\text{for any }f^{:A\Rightarrow B},~p^{:A\Rightarrow\bbnum 2}\quad.
 \end{align*}
 
@@ -415,9 +415,9 @@ the implementation code of \lstinline!.withFilter! as we implemented
 it for \lstinline!Orders!. Later in this chapter we will see that
 the four laws can be simplified, reduced to just two laws, and proved
 more quickly. For now, we can use the \texttt{scalacheck} library
-to write randomized tests for the four laws of filterable functors:
+to write randomized tests for the four filtering laws:
 \begin{lstlisting}
-def checkFilterableLaws[F[_] : Filterable : Functor, A, B](implicit
+def checkFilteringLaws[F[_] : Filterable : Functor, A, B](implicit
     faEv: Arbitrary[F[A]], fbEv: Arbitrary[F[B]], abEv: Arbitrary[A => B],
     aEv: Arbitrary[A => Boolean], bEv: Arbitrary[B => Boolean]): Assertion = {
   forAll { (f: A => B, p: B => Boolean, fa: F[A]) =>             // Naturality law.
@@ -439,11 +439,16 @@ the tests will show no errors:
 implicit val filterableOrders = new Filterable[Orders] {
   def filt[A](p: A => Boolean)(fa: F[A]): F[A] = fa.filter(p)
 }
-checkFilterableLaws[Orders, Int, String] // Need to set type parameters to specific types.
+checkFilteringLaws[Orders, Int, String] // Need to set type parameters to specific types.
 \end{lstlisting}
 
 
 \subsection{Examples of non-filterable functors}
+
+The code of the \lstinline!Filterable! typeclass fixes the type signature
+of the \lstinline!filter! function but does not enforce its laws.
+It is up to the programmer to verify that the implementation of the
+\lstinline!filter! function satisfies the laws.
 
 If we define the filtering operation for the \lstinline!Orders! data
 type (see Example~\ref{subsec:Example-filtering-orders-tue-fri})
@@ -454,22 +459,22 @@ implicit val filterableOrdersRuleA = new Filterable[Orders] {
     if (fa.tue.forall(p) && fa.fri.forall(p))) fa.filter(p)
     else Orders(None, None) // Rule (a): No orders are approved unless both are approved.
 }
-checkFilterableLaws[Orders, Int, String] // Tests pass.
+checkFilteringLaws[Orders, Int, String] // Tests pass.
 \end{lstlisting}
-However, implementing the extra business rule \textbf{(b)} will violate
-some laws:
+However, implementing business rule \textbf{(b)} will violate some
+laws:
 \begin{lstlisting}
 implicit val filterableOrdersRuleB = new Filterable[Orders] {
   def filt[A](p: A => Boolean)(fa: F[A]): F[A] =
-    if (fa.tue.exists(p) || fa.fri.exists(p))) fa
+    if (fa.tue.exists(p) || fa.fri.exists(p)) fa    // Here, the value `fa` remains unchanged.
     else Orders(None, None) // Rule (b): Both orders are approved if at least one is approved.
 }
-checkFilterableLawsWithFilter[Orders, Boolean, Boolean]() // Tests fail!
+checkFilteringLaws[Orders, Boolean, Boolean]()    // Tests will fail! A specific failing case:
 
 scala> Orders(Some(500), Some(2000)).filter(x => x < 1000).filter(x => x > 1000)
 res0: Orders[Int] = Orders(Some(500),Some(2000))
 
-scala> Orders(Some(500), Some(2000)).filter(x => x < 1000 && x > 1000) // Breaks composition law.
+scala> Orders(Some(500), Some(2000)).filter(x => x < 1000 && x > 1000) // Composition law fails.
 res1: Orders[Int] = Orders(None, None)
 \end{lstlisting}
 Rule \textbf{(b)} does not allow us to use an intuitive understanding
@@ -485,28 +490,39 @@ res2: Orders[String] = Orders(Some("Amount: 500"), Some("Amount: 2000"))
 The computation just shown clearly violates the partial function law
 because the value \lstinline!x = 2000! is not excluded from further
 computations despite the filtering condition, \lstinline!if x < 1000!.
+This happened because the code of \lstinline!filt! does not always
+remove the value \lstinline!x = 2000! from the data structure when
+it does not pass the predicate.
 
 The four laws of filtering are a rigorous formulation of our intuitions
 about what it means to ``filter'' data. The type \lstinline!Orders!
-with the business rule \textbf{(b)} is an example of a filtering operation
+with business rule \textbf{(b)} is an example of a filtering operation
 that does not correspond to our intuitions and, as a consequence,
-violates the filtering laws. However, the same functor \lstinline!Orders!
-with business rule \textbf{(a)} is filterable. It is up to the programmer
-to verify that the implementation of the \lstinline!filter! function
-satisfies the laws.
+violates the filtering laws. This does not mean that business rule
+\textbf{(b)} cannot be used in real-world programs; it only means
+that order approval according to rule \textbf{(b)} is not a filtering
+operation. For instance, applying two order approvals one after another
+will not give the intuitively expected results. However, this may
+be acceptable in applications where only one order approval is ever
+applied.
 
-What are other examples of functors that are \emph{not} filterable?
-One way of implementing the type signature of the \lstinline!filter!
+Violations of the filtering laws by business rule (b) also does not
+mean that the functor \lstinline!Orders! is not filterable. The same
+functor with business rule \textbf{(a)} has a lawful implementation
+of \lstinline!filter!. 
+
+What are examples of functors that are \emph{not} filterable? One
+way of implementing the type signature of the \lstinline!filter!
 function is to use the identity function,
 \begin{lstlisting}
 def filt[A](p: A => Boolean)(fa: F[A]): F[A] = fa  // Ignore the predicate `p`; always return `fa`.
 \end{lstlisting}
-There are some functors $F$ (e.g.~the identity functor $F^{A}\triangleq A$
-or the exponential functor $F^{A}\triangleq E\Rightarrow A$) for
-which this implementation is the only one possible. However, this
-implementation never removes any data and so will violate the partial
-function law if the functor $F^{A}$ wraps a value of type $A$ that
-should not pass the filter. So, functors of the form $F^{A}\triangleq E\Rightarrow A$
+This is the only possible implementation of \lstinline!filter! for
+certain functors $F$, e.g.~the identity functor $F^{A}\triangleq A$
+or the exponential functor $F^{A}\triangleq E\Rightarrow A$. However,
+this implementation never removes any data and so will violate the
+partial function law if the functor $F^{A}$ wraps a value of type
+$A$ that should not pass the filter. So, functors of the form $F^{A}\triangleq E\Rightarrow A$
 (where $E$ is a fixed type) are not filterable.
 
 The functor $F^{A}\triangleq A\times(\bbnum 1+A)$ is not filterable
@@ -515,41 +531,296 @@ the first value of type $A$ even if it does not pass the filter predicate
 $p$.
 
 Functors such as $F^{A}\triangleq\bbnum 1+A$ and $F^{A}\triangleq\bbnum 1+A\times A$
-are filterable if the function $\text{filt}_{F}$ is defined correctly;
-but incorrect implementations are also possible. For example, one
-could imagine defining \lstinline!filter! for an \lstinline!Option!
+are filterable because the function $\text{filt}_{F}$ can be defined
+correctly; but incorrect implementations are also possible. For example,
+one could imagine defining \lstinline!filter! for an \lstinline!Option!
 type as
 \begin{lstlisting}
 implicit val wrongFilterableOption = new Filterable[Option] {
   def filt[A](p: A => Boolean)(fa: Option[A]): Option[A] = None // Discard input, always return None.
 }
 \end{lstlisting}
-This definition discards information and so violates the identity
-law: the result of filtering with an identically \lstinline!true!
-predicate is not the identity function of type \lstinline!Option[A] => Option[A]!.
+This code discards information and so violates the identity law: the
+result of filtering with an identically \lstinline!true! predicate
+is not the identity function of type \lstinline!Option[A] => Option[A]!.
 
 Finally, one could violate the naturality law by defining the \lstinline!filter!
 function in a special way when the type parameter $A$ is equal to,
 say, the \lstinline!Int! type. To obey the naturality law, the \lstinline!filter!
-function must be fully parametric and should not use hard-coded values
+function must be fully parametric and must not use hard-coded values
 of specific types or make decisions based on type parameters.
 
 \subsection{Solved examples: Programming with filterable functors\index{solved examples} }
 
 \subsubsection{Example \label{subsec:filt-solved-example-1}\ref{subsec:filt-solved-example-1}}
 
-Is the functor $F^{A}\triangleq\bbnum 1+A\times A$ filterable?
+A cluster has $2$ servers; each server needs to have valid credentials,
+which expire periodically. If credentials expire for one server, it
+may copy valid credentials from the other server. If no server has
+valid credentials, the cluster is down. Is this setup described by
+a filterable functor?
 
 \subparagraph{Solution}
 
+Assuming that credentials have type $A$, we can have two possibilities:
+both servers have valid credentials, or the cluster is down. The corresponding
+data type is the functor $F^{A}\triangleq\bbnum 1+A\times A$. This
+functor is filterable if we can implement a lawful \lstinline!filter!
+function. Begin writing code for \lstinline!filter!:
+
+\begin{wrapfigure}{l}{0.49\columnwidth}%
+\vspace{-0.75\baselineskip}
+\begin{lstlisting}[numbers=left,numberstyle={\small}]
+final case class F[A](p: Option[(A, A)])
+def filter[A](p: A => Boolean): F[A] => F[A] = {
+    case None             => None
+    case Some((a1, a2))   => ???
+  }
+}
+\end{lstlisting}
+
+\vspace{-1.25\baselineskip}
+\end{wrapfigure}%
+
+\noindent In line~5, we need to compute a value of type $F^{A}$
+using the given values \lstinline!a1! and \lstinline!a2!. We need
+to check whether the predicate \lstinline!p! holds for \lstinline!a1!
+and \lstinline!a2!. What if \lstinline!p(a1) == false! but \lstinline!p(a2) == true!?
+We need to remove \lstinline!a1! from the result, or else the filtering
+laws will not hold. But the functor $F^{A}\triangleq\bbnum 1+A\times A$
+does not allow us to keep just one of the values of type $A$; it
+requires two such values or none. So, we have a choice: line~5 may
+return \lstinline!Some((a2, a2))! or \lstinline!None!. 
+
+Looking at the business requirements, we see that \lstinline!p(a1) == false!
+corresponds to expired credentials for the first server. In that case,
+if \lstinline!p(a2) == true!, the first server may copy the second
+server's valid credentials, \lstinline!a2!. The implementation is
+\begin{lstlisting}
+def filter[A](p: A => Boolean): F[A] => F[A] = {
+    case None             => None                    // Cluster is down, no valid credentials.
+    case Some((a1, a2))   => (p(a1), p(a2)) match {
+        case (true, true)     => Some((a1, a2))     // Both credentials are still valid.
+        case (true, false)    => Some((a1, a1))     // Server 2 copies server 1's credentials.
+        case (false, true)    => Some((a2, a2))     // Server 1 copies server 2's credentials.
+        case (false, false)   => None        // Both credentials expired, the cluster is down.
+    }
+}
+\end{lstlisting}
+
+It remains to check that the filtering laws hold. The naturality law
+requires that the equation $f^{\uparrow F}\bef\text{filt}_{F}(p)=\text{filt}_{F}(f\bef p)\bef f^{\uparrow F}$
+must hold for any values $s^{:F^{A}}$, $f^{:A\Rightarrow B}$, and
+$p^{:B\Rightarrow\bbnum 2}$. The code for \lstinline!fmap! is
+\begin{lstlisting}
+def fmap[A, B](f: A => B): F[A] => F[B] = {
+    case None             => None
+    case Some((a1, a2))   => Some((f(a1), f(a2)))
+}
+\end{lstlisting}
+The code for the left-hand side of the law, $f^{\uparrow F}\bef\text{filt}_{F}(p)$,
+is written by composing \lstinline!fmap! and \lstinline!filter!:
+\begin{lstlisting}
+fmap(f) andThen filter(p) == {
+    case None            => None
+    case Some((a1, a2))  => (p(f(a1)), p(f(a2))) match {
+        case (true, true)     => Some((f(a1), f(a2)))
+        case (true, false)    => Some((f(a1), f(a1)))
+        case (false, true)    => Some((f(a2), f(a2)))
+        case (false, false)   => None
+    }
+}
+\end{lstlisting}
+The code for the right-hand side of the law, $\text{filt}_{F}(f\bef p)\bef f^{\uparrow F}$,
+is
+\begin{lstlisting}
+filter(f andThen p) = {
+    case None            => None
+    case Some((a1, a2))  => (p(f(a1)), p(f(a2))) match {
+        case (true, true)     => Some((a1, a2))
+        case (true, false)    => Some((a1, a1))
+        case (false, true)    => Some((a2, a2))
+        case (false, false)   => None
+    }
+} andThen fmap(f) = {
+    case None            => None
+    case Some((a1, a2))  => (p(f(a1)), p(f(a2))) match {
+        case (true, true)     => Some((f(a1), f(a2)))
+        case (true, false)    => Some((f(a1), f(a1)))
+        case (false, true)    => Some((f(a2), f(a2)))
+        case (false, false)   => None
+    }
+}
+\end{lstlisting}
+Since the code is exactly the same, the law holds. This computation
+illustrates why fully parametric functions such as \lstinline!filter!
+obey the naturality law: such functions manipulate their arguments
+purely as symbols of unknown types, without referring to any specific
+types or values. Applying a lifted function $f^{\uparrow F}$ before
+\lstinline!filter! is the same as inserting \lstinline!f(...)! around
+values of type \lstinline!A! at every place in the code of \lstinline!filter(p)!
+where a value of type \lstinline!A! is used. Applying a lifted function
+$f^{\uparrow F}$ after \lstinline!filter! is the same as inserting
+\lstinline!f(...)! at every place where a value of type \lstinline!A!
+is \emph{returned}; but this does not put \lstinline!f(...)! around
+values of type \lstinline!A! used by the predicate \lstinline!p!.
+To compensate, the right-hand side of the naturality law replaces
+the predicate \lstinline!p! by the new predicate \lstinline!f andThen p!,
+which inserts \lstinline!f(...)! into the remaining places in the
+code.
+
+This turns out to be the rule: all fully parametric functions always
+satisfy a suitably formulated naturality law. We will see many more
+examples of naturality laws in this book, and we will find that a
+naturality law for a method $q$ usually has the form $f^{\uparrow F}\bef q=\text{<modified }q\text{>}\bef f^{\uparrow F}$,
+i.e.~the composition of a lifted function $f$ and a method $q$
+can be interchanged with some modifications.
+
+The identity law holds because the code of \lstinline!filter! is
+the identity function when $p\triangleq(\_\Rightarrow\text{true})$,
+\begin{lstlisting}
+def filter[A](p: A => Boolean): F[A] => F[A] = {
+    case None             => None
+    case Some((a1, a2))   => Some((a1, a2))
+}
+\end{lstlisting}
+
+It takes a bit more work to show that the composition law holds. We
+need to consider two cases: the cluster is down, or the two servers
+have valid credentials.
+
+In the first case, the value of $F^{A}$ is \lstinline!None! and
+remains \lstinline!None! after any filtering operation. (If the cluster
+is down, a check of credentials will not bring it up.) So, the composition
+law holds for that case. 
+
+In the second case, we have two different credentials in a value $s\triangleq\bbnum 0+a_{1}\times a_{2}$.
+The filtering $s\triangleright\text{filt}_{F}(p_{1})\triangleright\text{filt}_{F}(p_{2})$
+will produce different results according to the values of the predicates
+$p_{1}$ and $p_{2}$ applied to $a_{1}$ and $a_{2}$, which we can
+summarize as a table:
+\noindent \begin{center}
+\begin{tabular}{|c|c|c|c|c|c|c|c|c|}
+\hline 
+{\footnotesize{}$p_{1}(a_{1})$} & {\footnotesize{}$p_{1}(a_{2})$} & {\footnotesize{}$p_{2}(a_{1})$} & {\footnotesize{}$p_{2}(a_{2})$} & {\footnotesize{}$p_{12}(a_{1})$} & {\footnotesize{}$p_{12}(a_{2})$} & {\footnotesize{}$s\triangleright\text{filt}_{F}(p_{1})$} & {\footnotesize{}$s\triangleright\text{filt}_{F}(p_{1})\triangleright\text{filt}_{F}(p_{2})$} & {\footnotesize{}$s\triangleright\text{filt}_{F}(p_{12})$}\tabularnewline
+\hline 
+\hline 
+{\small{}}\lstinline!true! & {\small{}}\lstinline!true! & {\small{}}\lstinline!true! & {\small{}}\lstinline!false! & {\small{}}\lstinline!true! & {\small{}}\lstinline!false! & {\small{}$\bbnum 0+a_{1}\times a_{2}$} & {\small{}$\bbnum 0+a_{1}\times a_{1}$} & {\small{}$\bbnum 0+a_{1}\times a_{1}$}\tabularnewline
+\hline 
+{\small{}}\lstinline!true! & {\small{}}\lstinline!false! & {\small{}}\lstinline!true! & {\small{}}\lstinline!true! & {\small{}}\lstinline!true! & {\small{}}\lstinline!false! & {\small{}$\bbnum 0+a_{1}\times a_{1}$} & {\small{}$\bbnum 0+a_{1}\times a_{1}$} & {\small{}$\bbnum 0+a_{1}\times a_{1}$}\tabularnewline
+\hline 
+{\small{}}\lstinline!???! & {\small{}}\lstinline!???! & {\small{}}\lstinline!false! & {\small{}}\lstinline!false! & {\small{}}\lstinline!false! & {\small{}}\lstinline!false! & {\small{}}\lstinline!???! & {\small{}$\bbnum 1+\bbnum 0^{:A\times A}$} & {\small{}$\bbnum 1+\bbnum 0^{:A\times A}$}\tabularnewline
+\hline 
+{\small{}}\lstinline!true! & {\small{}}\lstinline!false! & {\small{}}\lstinline!false! & {\small{}}\lstinline!true! & {\small{}}\lstinline!false! & {\small{}}\lstinline!false! & {\small{}$\bbnum 0+a_{1}\times a_{1}$} & {\small{}$\bbnum 1+\bbnum 0^{:A\times A}$} & {\small{}$\bbnum 1+\bbnum 0^{:A\times A}$}\tabularnewline
+\hline 
+{\small{}}\lstinline!false! & {\small{}}\lstinline!false! & {\small{}}\lstinline!???! & {\small{}}\lstinline!???! & {\small{}}\lstinline!false! & {\small{}}\lstinline!false! & {\small{}$\bbnum 1+\bbnum 0^{:A\times A}$} & {\small{}$\bbnum 1+\bbnum 0^{:A\times A}$} & {\small{}$\bbnum 1+\bbnum 0^{:A\times A}$}\tabularnewline
+\hline 
+\end{tabular}
+\par\end{center}
+
+Here we denoted $p_{12}\triangleq x\rightarrow p_{1}(x)\wedge p_{2}(x)$
+for brevity. We see that the last two columns are always equal, which
+verifies the composition law. We omitted some rows from the table
+because the filtering code is completely symmetric with respect to
+interchanging $a_{1}$ and $a_{2}$, and because the composition law
+is trivial when $p_{1}=p_{2}$.
+
+The partial function law holds because the code of filter will always
+remove the value \lstinline!a1!, \lstinline!a2!, or both of them
+when the filtering predicate \lstinline!p! returns \lstinline!false!
+for any those values.
+
+So, we have seen that all filtering laws hold. If the business logic
+requirements change, the \lstinline!filter! function will need to
+be implemented differently. For instance, the first server might be
+the only source of credentials: the second server may copy the first
+server's credentials if needed, but the cluster will go down whenever
+the first server's credentials expire. This corresponds to the code
+
+\begin{lstlisting}
+def filter[A](p: A => Boolean): F[A] => F[A] = {
+    case None             => None
+    case Some((a1, a2))   => (p(a1), p(a2)) match {
+        case (true, true)     => Some((a1, a2))
+        case (true, false)    => Some((a1, a1))
+        case (false, _)       => None    // The cluster is down if credentials expired for server 1.
+    }
+}
+\end{lstlisting}
+Alternatively, we may have a requirement that copying credentials
+between servers is not possible:
+\begin{lstlisting}
+def filter[A](p: A => Boolean): F[A] => F[A] = {
+    case None             => None
+    case Some((a1, a2))   => (p(a1), p(a2)) match {
+        case (true, true)     => Some((a1, a2))
+        case _                => None    // The cluster is down if any server's credentials expired.
+    }
+}
+\end{lstlisting}
+The filtering laws will still hold with these alternative implementations.
+We omit the proofs.
+
 \subsubsection{Example \label{subsec:filt-solved-example-2}\ref{subsec:filt-solved-example-2}}
 
-John can have up to 3 coupons, and Jill up to 2. \emph{All} of John's
+John can have up to $3$ coupons, and Jill up to $2$. All of John's
 coupons must be valid on purchase day, while each of Jill's coupons
 is checked independently. Implement a filterable functor describing
 this situation.
 
 \subparagraph{Solution}
+
+We use a type parameter $A$ for the type of ``coupons''. A data
+structure holding ``up to $3$'' values of type $A$ is written
+as $\bbnum 1+A+A\times A+A\times A\times A$ and can be implemented
+in Scala by
+\begin{lstlisting}
+sealed trait JohnsCoupons[A]
+final case class John0[A]()                    extends JohnsCoupons[A]
+final case class John1[A](c1: A)               extends JohnsCoupons[A]
+final case class John2[A](c1: A, c2: A)        extends JohnsCoupons[A]
+final case class John3[A](c1: A, c2: A, c3: A) extends JohnsCoupons[A] 
+\end{lstlisting}
+This code models John's coupons. Jill's coupons are implemented similarly,
+\begin{lstlisting}
+sealed trait JillsCoupons[A]
+final case class Jill0[A]()             extends JillsCoupons[A]
+final case class Jill1[A](c1: A)        extends JillsCoupons[A]
+final case class Jill2[A](c1: A, c2: A) extends JillsCoupons[A] 
+\end{lstlisting}
+The total data is a product of John's and Jill's coupons.
+\begin{lstlisting}
+final case class Coupons[A](johns: JohnsCoupons[A], jills: JillsCoupons[A])
+\end{lstlisting}
+It is convenient first to define filtering functions separately for
+\lstinline!JohnsCoupons! and for \lstinline!JillsCoupons!:
+\begin{lstlisting}
+def filterJohn[A](p: A => Boolean): JohnsCoupons[A] => JohnsCoupons[A] = {
+  case John0() => John0()       // We must return John0() unless all coupons are valid.
+  case John1(c1) => if (p(c1)) John1(c1) else John0()
+  case John2(c1, c2) => if (p(c1) && p(c2)) John2(c1, c2) else John0()
+  case John3(c1, c2, c3) => if (p(c1) && p(c2) && p(c3)) John3(c1, c2, c3) else John0()
+}
+def filterJill[A](p: A => Boolean): JillsCoupons[A] => JillsCoupons[A] = {
+  case Jill0() => Jill0()      // We must remove each invalid coupon and keep the rest.
+  case Jill1(c1) => if (p(c1)) Jill1(c1) else Jill0()
+  case Jill2(c1, c2) => (p(c1), p(c2)) match {
+     case (true, true)     => Jill2(c1, c2)
+     case (true, false)    => Jill1(c1)
+     case (false, true)    => Jill1(c2)
+     case (false, false)   => Jill0()
+  }
+}
+\end{lstlisting}
+Now we can define the \lstinline!filter! function for \lstinline!Coupons!:
+\begin{lstlisting}
+def filter[A](p: A => Boolean)(fa: Coupons[A]): Coupons[A] =
+  Coupons(filterJohn(p)(fa.johns), filterJill(p)(fa.jills))
+\end{lstlisting}
+
+We will not prove the laws for the \lstinline!filter! function because
+this implementation follows from general type constructions derived
+later in this chapter.
 
 \subsubsection{Example \label{subsec:filt-solved-example-3}\ref{subsec:filt-solved-example-3}}
 
@@ -559,12 +830,24 @@ accepted. Is this setup described by a filterable functor?
 
 \subparagraph{Solution}
 
+We represent the situation by a \lstinline!Seq[A]! wrapped in a \lstinline!Server!
+type:
+\begin{lstlisting}
+final case class Server[A](requests: Seq[A])
+\end{lstlisting}
+The filtering operation stops the sequence when the predicate \lstinline!p!
+first returns \lstinline!false!:
+\begin{lstlisting}
+def filter[A](p: A => Boolean)(s: Server[A]): Server[A] = Server(s.requests.takeWhile(p))
+\end{lstlisting}
+{*}{*}{*}
+
 \subsubsection{Example \label{subsec:filt-solved-example-4}\ref{subsec:filt-solved-example-4}}
 
 Determine whether each of these functors is filterable, and if so,
 implement a \lstinline!Filterable! typeclass instance:
 
-\textbf{(a)} The functor $P^{T}$ defined by this Scala code,
+\textbf{(a)} The functor $P^{T}$ defined by the Scala code
 \begin{lstlisting}
 final case class P[T](x: Option[T], yy: Option[(T, T)])
 \end{lstlisting}
@@ -620,7 +903,7 @@ final case class Q[A, Z](id: Long, user1: Option[(A, Z)], user2: Option[(A, Z)])
 \end{lstlisting}
 {\footnotesize\par}
 
-\textbf{(b)} The functor $R^{A}$ defined by this Scala code,
+\textbf{(b)} The functor $R^{A}$ defined by the Scala code
 \begin{lstlisting}
 final case class R[A](x: Int, y: Int, z: A, data: List[A])
 \end{lstlisting}
@@ -630,6 +913,28 @@ defined in the standard library.
 \textbf{(c)} $F^{P,Q,A}\triangleq(P\Rightarrow P)+(Q\Rightarrow Q)\times A\times A\times A\quad.$
 
 \textbf{(d)} $F^{A}=\text{MyTree}^{A}$ defined recursively as $\text{MyTree}^{A}\triangleq\bbnum 1+A\times\text{MyTree}^{A}\times\text{MyTree}^{A}\quad.$
+
+\subsubsection{Exercise \label{subsec:filt-exercise-4-1}\ref{subsec:filt-exercise-4-1}}
+
+Three times each week (on Mondays, Wednesdays, and Fridays) a data
+set is collected and a test is run. If a test fails, the corresponding
+data set should be discarded. Is this setup described by a filterable
+functor if we require one of the following additional rules:
+
+\textbf{(a)} All data sets for a given week are discarded if at least
+\emph{two} of the tests failed that week.
+
+\textbf{(b)} All data sets for a given week are retained if at least
+\emph{two} of the tests passed that week.
+
+\subsubsection{Exercise \label{subsec:filt-exercise-4-2}\ref{subsec:filt-exercise-4-2}}
+
+Implement a lawful \lstinline!filter! function for a regular-shaped
+tree $R^{A}$ defined by
+\[
+R^{A}\triangleq\bbnum 1+A+R^{A\times A}\quad.
+\]
+
 
 \subsubsection{Exercise \label{subsec:filt-exercise-4}\ref{subsec:filt-exercise-4}}
 
