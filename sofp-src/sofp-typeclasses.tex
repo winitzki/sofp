@@ -36,10 +36,10 @@ only if we constrain the type parameter \lstinline!T! to be a type
 representing a suitable numeric value (e.g.~\lstinline!Float!, \lstinline!Double!,
 or \lstinline!BigDecimal!).
 
-Another example of a similar situation is a function with the type
-signature $A\times F^{B}\Rightarrow F^{A\times B}$, 
+Another example of a similar situation is a function with type signature
+$A\times F^{B}\Rightarrow F^{A\times B}$, 
 \begin{lstlisting}
-def inject[F[_], A, B](a: A, f: F[B]): F[(A, B)] = f.map(b => (a, b))
+def inject[F[_], A, B](a: A, f: F[B]): F[(A, B)] = f.map(b => (a, b)) // Must have `f.map`.
 \end{lstlisting}
 This function requires the type constructor \lstinline!F[_]! to have
 a \lstinline!.map! method, i.e.~to be a functor. We can implement
@@ -66,8 +66,8 @@ Using a similar syntax for \emph{type} \emph{parameters}, we would
 write the type signatures for \lstinline!avg! and \lstinline!inject!
 as
 \begin{lstlisting}
-def avg[T: Fractional](s: Seq[T]): T = ???
-def inject[F[_]: Functor, A, B](a: A, f: F[B]): F[(A, B)] = ???
+def avg[T: Fractional](s: Seq[T]): T
+def inject[F[_]: Functor, A, B](a: A, f: F[B]): F[(A, B)]
 \end{lstlisting}
 Scala uses the syntax \lstinline![T: Fractional]! to constrain the
 type parameter \lstinline!T! to ``fractional numeric'' types. Similarly,
@@ -158,8 +158,8 @@ it is a type that depends on the \emph{value} \lstinline!x!. For
 the value \lstinline!x! defined in this code, the expression \lstinline!x.T!
 evaluates to the type \lstinline!Int!. 
 
-We will not use dependent types (VTFs) in this chapter because typeclasses
-only require a combination of a TTF and a TVF.
+We will not consider dependent types (VTFs) in this chapter because
+typeclasses only require a combination of a TTF and a TVF.
 
 \subsection{Partial functions of types and values}
 
@@ -219,25 +219,20 @@ res1: Seq[Int] = List(0, 1)
 function because it is defined for all values of its arguments and
 does not throw exceptions. 
 
-It is better to use total functions rather than partial functions.
-The partial function \lstinline!p! can be converted into a total
-function by changing its type to \lstinline!Left[Int, String] => Int!.
-As another example, the operation \lstinline!.head! on a \lstinline!List!
-is unsafe but we can use the non-empty list type to guarantee at compile
-time that the first element exists:
+Total functions are safer to use than partial functions. The partial
+function \lstinline!p! can be converted into a total function by
+changing its type to \lstinline!Left[Int, String] => Int!. Another
+example: applying \lstinline!.head! to a \lstinline!List! is unsafe,
+but the non-empty list type guarantees at compile time that the first
+element exists:
 \begin{lstlisting}
-def f(xs: NonEmptyList[Int]) = {
-  val h = xs.head  // Safe and checked at compile time.
-}
+val xs: NonEmptyList[Int] = ...
+val h = xs.head  // .head is a total function for a NonEmptyList.
 \end{lstlisting}
-
-In these cases, we achieve safety by refactoring the code to use more
-strictly constrained types.
-
-Similarly, partial functions of types become safe to use if we impose
-the required typeclass constraints on the type parameters. Typeclasses
-can be viewed as a systematic way of safely managing partial type-to-value
-functions (PTVFs).
+In these cases, we achieve safety by making types more strictly constrained.
+Similarly, partial type-to-value functions (PTVFs) become safe to
+use if we impose suitable typeclass constraints on the type parameters.
+Typeclasses can be viewed as a systematic way of safely managing PTVFs.
 
 \section{Implementing typeclasses}
 
@@ -245,33 +240,20 @@ A typeclass constraint \lstinline![T: Fractional]! will generate
 a compile-time error when a function such as \lstinline!avg[T]! is
 applied to an incorrectly chosen type parameter \lstinline!T!. If
 the Scala library did not already implement the \lstinline!Fractional!
-typeclass, how would we be able to reproduce that functionality?
-
-\begin{comment}
-we will implement a limited version of \lstinline!avg! for a tuple
-of three values:
-\begin{lstlisting}
-def avg[T](s: (T, T, T)): T = ???
-\end{lstlisting}
-The type parameter \lstinline!T! must be restricted to types for
-which addition and division by integer are defined. For this example,
-we will assume that the possible types are \lstinline!BigDecimal!
-and \lstinline!Double!.
-\end{comment}
-
+typeclass, how could we reproduce that functionality?
 
 \subsection{Creating a partial function on types}
 
 The code needs to specify that the type parameter must belong to a
-certain subset of allowed types. To simplify the task, we will assume
-that the allowed types are \lstinline!BigDecimal! and \lstinline!Double!.
-One example of such a constraint is given by unfunctors\index{unfunctor}
+certain subset of allowed types. To simplify the task, assume that
+the allowed types are \lstinline!BigDecimal! and \lstinline!Double!.
+One example of a type constraint is shown by unfunctors\index{unfunctor}
 (see Section~\ref{subsec:Examples-of-non-functors}), which are type
 constructors whose type parameters are restricted to specific types.
 In this code,
 
 \begin{wrapfigure}{l}{0.54\columnwidth}%
-\vspace{-0.75\baselineskip}
+\vspace{-0.6\baselineskip}
 \begin{lstlisting}
 sealed trait Frac[A] // Unfunctor.
 final case class FracBD() extends Frac[BigDecimal]
@@ -289,7 +271,7 @@ type, say, \lstinline!Frac[String]! or \lstinline!Frac[Boolean]!.
 Although the Scala compiler will not detect any errors in this code,
 
 \begin{wrapfigure}{l}{0.32\columnwidth}%
-\vspace{-0.55\baselineskip}
+\vspace{-0.75\baselineskip}
 \begin{lstlisting}
 type T = Frac[String]
 type U = Frac[Boolean]
@@ -304,25 +286,25 @@ and \lstinline!Frac[Boolean]! are \emph{void}\index{void type} types.
 Trying to create and use values of these types will result in type
 errors, as the following code shows:
 
-\begin{wrapfigure}{l}{0.54\columnwidth}%
-\vspace{-0.5\baselineskip}
+\begin{wrapfigure}{l}{0.46\columnwidth}%
+\vspace{-0.95\baselineskip}
 \begin{lstlisting}[numbers=left,numberstyle={\small}]
-def f[A]: Frac[A] = FracD()          // Type error.
-val x: U = FracD()                   // Type error.
+def f[A]: Frac[A] = FracD()    // Type error.
+val x: U = FracD()             // Type error.
 val y: U = FracD().asInstanceOf[U]
-y match { case FracD() => }          // Type error.
+y match { case FracD() => }    // Type error.
 \end{lstlisting}
 
-\vspace{-0.75\baselineskip}
+\vspace{-1.05\baselineskip}
 \end{wrapfigure}%
 
 \noindent In line~3, we disabled the type checker and forced the
 Scala compiler to ignore the type error in the definition of \lstinline!y!.
-However, line~4 shows that we will be unable to use that value \lstinline!y!
-in any further computations.
+However, line~4 shows that we are unable to use that value \lstinline!y!
+in further computations.
 
-The type $\text{Frac}^{A}$ is non-void (i.e.~has values) only for
-$A$ belonging to the set \{\lstinline!BigDecimal!, \lstinline!Double!\}
+The type \lstinline!Frac[A]! is non-void (i.e.~has values) only
+for $A$ belonging to the set \{\lstinline!BigDecimal!, \lstinline!Double!\}
 \begin{comment}
 $\{\text{BigDecimal},\text{Double}\}$
 \end{comment}
@@ -331,13 +313,13 @@ of the type function \lstinline!Frac!. We now need to define the
 function \lstinline!avg[T]! with a type parameter $T$ constrained
 to that type domain. 
 
-The type constraint $T\in\,$\{\lstinline!BigDecimal!, \lstinline!Double!\}
-is equivalent to the requirement that a value of type $\text{Frac}^{T}$
-should exist. So, we will implement the type constraint if we include
-an \emph{additional argument} of type $\text{Frac}^{T}$ into the
-type signature of \lstinline!avg!:
+The type constraint $T\negthickspace\in\:$\{\lstinline!BigDecimal!,
+\lstinline!Double!\} is equivalent to the requirement that a value
+of type $\text{Frac}^{T}$ should exist. So, we will implement the
+type constraint if we include an \emph{additional argument} of type
+$\text{Frac}^{T}$ into the type signature of \lstinline!avg!:
 \begin{lstlisting}
-def avg[T](s: Seq[T], frac: Frac[T]): T = ???
+def avg[T](s: Seq[T], frac: Frac[T]): T
 \end{lstlisting}
 The value \lstinline!frac:Frac[T]! is called a \index{typeclass!instance value}\textbf{typeclass
 instance} value. Because that value needs to be passed to every call
@@ -357,17 +339,11 @@ It is not necessary to define the type constructor \lstinline!Frac!
 via an unfunctor. The type constructor \lstinline!Frac! is only needed
 to define the type domain \{\lstinline!BigDecimal!, \lstinline!Double!\}.
 We can use a simple case class instead:
-
-\begin{wrapfigure}{l}{0.38\columnwidth}%
-\vspace{-1.1\baselineskip}
 \begin{lstlisting}
 final case class Frac[T]()
 val fracBD: Frac[BigDecimal] = Frac()
 val fracD: Frac[Double] = Frac()
 \end{lstlisting}
-
-\vspace{-1.1\baselineskip}
-\end{wrapfigure}%
 
 \noindent This code creates a type constructor \lstinline!Frac! and
 makes values of type \lstinline!Frac[T]! available for chosen type
@@ -383,8 +359,8 @@ def add[T](x: T, y: T): T
 def intdiv[T](x: T, n: Int): T
 \end{lstlisting}
 Since \lstinline!avg[T]! now has an additional argument \lstinline!frac!,
-we may use that argument to hold the required functions. So, let us
-redefine \lstinline!Frac! as a named tuple containing the functions
+we may use that argument to hold the required functions. So, we redefine
+\lstinline!Frac! as a named tuple (case class) containing the functions
 \lstinline!add! and \lstinline!intdiv!:
 \begin{lstlisting}
 final case class Frac[T](add: (T, T) => T, intdiv: (T, Int) => T)
@@ -402,10 +378,10 @@ def avg[T](s: Seq[T], frac: Frac[T]): T = {      // Assuming `s` is a non-empty 
   frac.intdiv(sum, s.length)       // Compute `sum/length`.
 }
 \end{lstlisting}
-To use this function, we need to pass the correct typeclass instance
-corresponding to the type \lstinline!T!:
+To use this function, we need to pass a typeclass instance corresponding
+to the type \lstinline!T!:
 \begin{lstlisting}
-scala> avg(Seq(1.0, 2.0, 3.0), fracD) // It would be a type error to use fracBD here.
+scala> avg(Seq(1.0, 2.0, 3.0), fracD) // It will be a type error to use fracBD instead of fracD here.
 res0: Double = 2.0
 
 scala> avg(Seq(BigDecimal(1.0), BigDecimal(2.0)), fracBD)
@@ -454,8 +430,8 @@ by \lstinline!trait! mixing. We will look at that in more detail
 below. For now, we note that both implementations will require the
 programmer to add a significant amount of new code:
 \begin{itemize}
-\item All calls to \lstinline!func[T](args)! need to be rewritten as \lstinline!func[T](args, ti)!
-using typeclass instances \lstinline!ti!.
+\item Calls to \lstinline!func[T](args)! need to be changed to \lstinline!func[T](args, ti)!
+with typeclass instances \lstinline!ti!.
 \item For each supported type \lstinline!T!, a corresponding typeclass
 instance value needs to be created.
 \item All those values need to be passed to all places in the code where
@@ -486,10 +462,9 @@ We need to declare the arguments as ``\lstinline!implicit!'' in
 the function's type signature, and the implicit arguments must be
 in a separate argument group.
 
-The simplest useful function using an implicit argument is the identity
-function whose argument is declared as \lstinline!implicit!. In the
-standard Scala library, this function is called \lstinline!implicitly!.
-Compare its code with the code for the ordinary identity function:
+The simplest useful function with an implicit argument is the identity
+function. In the Scala library, this function is called \lstinline!implicitly!.
+Compare its code with the code of the ordinary identity function:
 \begin{lstlisting}
 def implicitly[T](implicit t: T): T = t
 def identity[T](t: T): T = t
@@ -499,8 +474,8 @@ declared as \lstinline!implicit!, we can simply write \lstinline!implicitly[T]!
 with no arguments to apply that function. (The type parameter usually
 needs to be specified.) If no implicit value of type \lstinline!T!
 is available, a compile-time error will occur. If an implicit value
-of type \lstinline!T! is available in the current scope, we can apply
-\lstinline!implicitly! and obtain that value:
+of type \lstinline!T! is available in the current scope, \lstinline!implicitly[T]!
+will return that value:
 \begin{lstlisting}
 implicit val s: String = "qqq"
 
@@ -511,27 +486,8 @@ res1: String = qqq
 It is an error to declare more than one implicit value of the same
 type in the same scope, because implicit arguments are specified by
 type alone. The Scala compiler will not be able to set implicit arguments
-of functions automatically when the function's scope has more than
-one implicit value of a required type. But it is not an error to declare
-several implicit arguments of the same type, e.g.~
-\begin{lstlisting}
-def f(a: String)(implicit x: MyType, y: MyType)
-implicit val z: MyType = ???
-
-f("abc") // Same as f("abc")(z, z) since z is the unique implicit value of type MyType.
-\end{lstlisting}
-In this example, the arguments \lstinline!x! and \lstinline!y! will
-be set to the same value, \lstinline!z!. A compile-time error will
-occur if no \lstinline!implicit! value of type \lstinline!MyType!
-is visible in the current scope:
-\begin{lstlisting}
-scala> implicitly[MyType]
-<console>:12: error: could not find implicit value for parameter e: MyType
-       implicitly[MyType]
-                 ^
-\end{lstlisting}
-A compile-time error will also occur if more than one implicit value
-of the required type is found:
+of functions automatically when the function's outer scope contains
+more than one implicit value of a required type, as in this code:
 \begin{lstlisting}
 implicit val x: Int = 1
 implicit val y: Int = 2
@@ -544,15 +500,33 @@ scala> implicitly[Int]
        implicitly[Int]
                  ^
 \end{lstlisting}
+But it is not an error to declare several implicit arguments of the
+\emph{same} type, e.g.
+\begin{lstlisting}
+def f(a: String)(implicit x: MyType, y: MyType)
+implicit val z: MyType = ???
+
+f("abc") // Same as f("abc")(z, z) since z is the unique implicit value of type MyType.
+\end{lstlisting}
+In the example above, the arguments \lstinline!x! and \lstinline!y!
+will be set to the same value, \lstinline!z!. A compile-time error
+will occur if no \lstinline!implicit! value of type \lstinline!MyType!
+is visible in the current scope:
+\begin{lstlisting}
+scala> implicitly[MyType]
+<console>:12: error: could not find implicit value for parameter e: MyType
+       implicitly[MyType]
+                 ^
+\end{lstlisting}
 
 
 \subsection{Implementing typeclasses by making instances \texttt{implicit} }
 
 The main idea is to declare typeclass instance values as \lstinline!implicit!.
 Typeclass instance arguments of functions are also declared as \lstinline!implicit!.
-As a result, typeclass instance arguments will be passed to all PTVFs
-automatically. This makes typeclasses easier to use because instance
-values need to be written out much less often.
+As a result, typeclass instances will be passed to all PTVFs automatically.
+This makes typeclasses easier to use because instance values need
+to be written out much less often.
 
 The example with the \lstinline!Frac! typeclass is implemented using
 implicit values like this:
@@ -624,7 +598,8 @@ for a specific type \lstinline!T!, the Scala compiler will automatically
 look within the companion object of \lstinline!Frac! (as well as
 within the companion object of the type \lstinline!T!) for any instances
 declared there. So, the programmer's code will not need to \lstinline!import!
-those typeclass instance values explicitly:
+those typeclass instances explicitly even if the companion object
+is in a different module:
 \begin{lstlisting}
 scala> avg(Seq(1.0, 2.0, 3.0))
 res0: Double = 2.0
@@ -634,7 +609,7 @@ res0: Double = 2.0
 \subsection{Extension methods}
 
 In Scala, function applications can use three kinds of syntax: 
-\begin{itemize}
+\begin{enumerate}
 \item The ``function'' syntax: arguments are to the right of the function
 as in \lstinline!plus(x, y)! or \lstinline!plus(x)(y)!.
 \item The ``method'' syntax: the first argument is to the left of the
@@ -643,7 +618,7 @@ of the function, as in \lstinline!x.plus(y)! or \lstinline!xs.foldLeft(0)(update
 \item The ``infix method'' syntax (only applies to functions with two
 \emph{explicit} arguments): no dot character is used, as in \lstinline!x plus y!,
 or in \lstinline!xs map {x => x + 1}!, or in \lstinline!Set(1,2,3) contains 1!.
-\end{itemize}
+\end{enumerate}
 The last two syntax features are often used when writing chains of
 function applications, such as \lstinline!xs.map(f).filter(g)!, because
 that code is easier to read than \lstinline!filter(map(xs, f), g)!. 
@@ -662,29 +637,20 @@ into an extension method on the type \lstinline!X! with the syntax
 that has a method named \lstinline!func!. The class's constructor
 must be declared as an \lstinline!implicit! function having a \emph{single}
 argument of type \lstinline!X!:
-
-\begin{wrapfigure}{l}{0.35\columnwidth}%
-\vspace{-0.65\baselineskip}
 \begin{lstlisting}
-implicit class FuncSyntax(x: X) {
-  def func(y: Y): Z = { ... }
-}
+implicit class FuncSyntax(x: X) {  def func(y: Y): Z = ... }
 \end{lstlisting}
-
-\vspace{-0.85\baselineskip}
-\end{wrapfigure}%
-
-\noindent After this code, we can write the method syntax \lstinline!x.func(y)!
+After this code, we can write the method syntax \lstinline!x.func(y)!
 as well as the infix method syntax \lstinline!x func y!. The new
 syntax will work because the compiler automatically rewrites \lstinline!x.func(y)!
 into \lstinline!new FuncSyntax(x).func(y)!, creating a new temporary
 value \lstinline!FuncSyntax(x)!. The method \lstinline!.func! will
 be available since it is defined in the class \lstinline!FuncSyntax!. 
 
-For example, let us implement the function \lstinline!avg[T]! as
-an extension method on the type \lstinline!Seq[T]!. Both the type
-parameter \lstinline!T! and its typeclass constraint need to be used
-in the helper class:
+As an example, let us define an extension method \lstinline!.average!
+for the type \lstinline!Seq[T]!. Both the type parameter \lstinline!T!
+and its typeclass constraint can be written in the constructor of
+the helper class:
 \begin{lstlisting}
 implicit class AvgSyntax[T: Frac](xs: Seq[T]) {
   def average: T = avg(xs) // Use a different name, `average`, to avoid name clash with `avg`.
@@ -698,7 +664,7 @@ res0: Double = 2.0
 The Scala compiler automatically rewrites the syntax \lstinline!Seq(1.0, 2.0, 3.0).average!
 as the expression
 \begin{lstlisting}
-new AvgSyntax(Seq(1.0, 2.0, 3.0))(implicitly[Frac[Seq]]).average
+new AvgSyntax(Seq(1.0, 2.0, 3.0))(implicitly[Frac[Double]]).average
 \end{lstlisting}
 In this way, the method \lstinline!.average! is actually invoked
 on a temporarily created value of type \lstinline!AvgSyntax!. These
@@ -713,10 +679,10 @@ This example illustrates the convenience of implementing PTVFs as
 extension methods. An extension method is defined only once but automatically
 becomes available for all types in the domain of the typeclass. Because
 of the typeclass constraint, the new method will be available \emph{only}
-on values of correct types.
+on values of supported types.
 
 This convenience comes at a cost: helper classes such as \lstinline!AvgSyntax!
-need to be explicitly imported in every scope where extension methods
+need to be explicitly imported intod every scope where extension methods
 are used, with a declaration like this:
 \begin{lstlisting}
 import some.library.having.a.longwinded.packagename.AvgSyntax
@@ -727,17 +693,17 @@ of the helper class that needs to be imported.
 
 \subsection{Solved examples: Implementing typeclasses in practice\index{solved examples}}
 
-We will now see some practical examples of programming tasks implemented
+We will now look at some practical examples of programming tasks implemented
 via typeclasses.
 
 \subsubsection{Example \label{subsec:tc-Example-metadata-extractors}\ref{subsec:tc-Example-metadata-extractors}
 (metadata extractors)}
 
-Suppose that an application needs to work with data structures implemented
-in various external libraries. All those data structures are case
-classes containing certain metadata: ``name'' (a \lstinline!String!)
-and ``count'' (a \lstinline!Long! integer). However, the specific
-data structures define the metadata differently, each in its own way:
+An application needs to work with data structures implemented in various
+external libraries. All those data structures are case classes containing
+certain metadata: ``name'' (a \lstinline!String!) and ``count''
+(a \lstinline!Long! integer). However, the specific data structures
+define the metadata differently, each in its own way:
 \begin{lstlisting}
 final case class Data1(p: String, q: String, r: Long) // "name" = p, "count" = z
 final case class Data2(s: String, c: Long, x: Int)    // "name" = s, "count" = c
@@ -767,7 +733,7 @@ instances only for \lstinline!Data1!, \lstinline!Data2!, and \lstinline!Data3!.
 The code for extracting the metadata will be contained within the
 typeclass instances. Since the metadata extractors have types \lstinline!T => String!
 and \lstinline!T => Long!, a simple solution is to define the typeclass
-as a \lstinline!case class! containing these functions:
+as a \lstinline!case class! containing these two functions:
 \begin{lstlisting}
 final case class HasMetadata[T](getName: T => String, getCount: T => Long)
 \end{lstlisting}
@@ -781,13 +747,13 @@ object HasMetadata {    // Extract metadata from each type as appropriate.
 }
 \end{lstlisting}
 Now we can define \lstinline!getName! and \lstinline!getCount! as
-PTVFs with a typeclass constraint. First, let us write the code using
+PTVFs with typeclass constraints. First, let us write the code using
 an implicit argument to pass the typeclass instance:
 \begin{lstlisting}
 def getName[T](t: T)(implicit ti: HasMetadata[T]): String = ti.getName(t)
 def getCount[T](t: T)(implicit ti: HasMetadata[T]): Long = ti.getCount(t)
 \end{lstlisting}
-To use the typeclass constraint syntax, we replace \lstinline!ti!
+Or we could use the typeclass constraint syntax, replacing \lstinline!ti!
 by calls to \lstinline!implicitly[...]!:
 \begin{lstlisting}
 def getName[T: HasMetadata](t: T): String = implicitly[HasMetadata[T]].getName(t)
@@ -805,7 +771,7 @@ within the companion object \lstinline!HasMetadata!. To avoid extra
 within the companion object of \lstinline!Data4!:
 \begin{lstlisting}
 final case class Data4(x: Int, message: String)
-object Data4 {
+object Data4 {   // Add Data4 to the type domain of HasMetadata:
   implicit val data4 = HasMetadata[Data4](_.message, _.x.toLong)
 }
 
@@ -813,7 +779,7 @@ scala> getName(Data4(1, "abc"))
 res2: String = abc
 \end{lstlisting}
 
-For convenience, let us define the metadata extractors as extension
+For convenience, let us declare the metadata extractors as extension
 methods:
 \begin{lstlisting}
 implicit class ExtractorsSyntax[T: HasMetadata](t: T) {
@@ -842,8 +808,8 @@ data types. It is important that the new methods were added \emph{without}
 any changes to the implementations of \lstinline!Data1!, \lstinline!Data2!,
 or \lstinline!Data3!. Those implementations may reside in external
 libraries whose code we do not need to modify. The typeclass pattern
-enables us to to add those externally defined types to a type domain
-whenever necessary and to implement new PTVFs for them.
+enables us to to add externally defined types to a type domain whenever
+necessary, and to implement new PTVFs for them.
 
 \subsubsection{Example \label{subsec:tc-Example-observability}\ref{subsec:tc-Example-observability}
 (counters)}
@@ -853,10 +819,11 @@ and to send this number to external observability services. The functionality
 of a counter is provided by an external library as a special class
 \lstinline!Counter! with an \lstinline!.inc()! method that increments
 the counter. To test the code, we want to be able to pass a test-only
-counter of type \lstinline!TestCounter! that has an \lstinline!.incr()!
-method. The task is to implement a function \lstinline!bump[C]()!,
-where \lstinline!C! is a type constrained to be one of the supported
-types of counters. The type signature and sample code:
+counter provided by another library as a type \lstinline!TestCounter!
+with an \lstinline!.incr()! method. The task is to implement a function
+\lstinline!bump[C]()!, where \lstinline!C! is a type constrained
+to be one of the supported types of counters. The type signature and
+sample code:
 \begin{lstlisting}
 def bump[C]()(...) = ???
 
@@ -973,7 +940,7 @@ because they are more widely used than pointed types.
 In many cases, data items can be combined or merged into a larger
 data item of the same type. For instance, two numbers can be added,
 two sets combined into one set, two strings concatenated into one
-string, and two lists into one list. The ``merger'' operation can
+string, and two lists into one list. The ``merge'' operation can
 be defined as a function \lstinline!combine[T]! taking two arguments
 of type \lstinline!T! and returning a new value of type \lstinline!T!.
 We will denote that operation by $\oplus$, e.g.~we write $x\oplus y$.
@@ -994,7 +961,7 @@ the types \lstinline!Int!, \lstinline!String!, and \lstinline!List[A]!.
 
 For every supported type $T$, the required data is a function of
 type $T\times T\Rightarrow T$. So, we define the typeclass as a wrapper
-over this type:
+over that type:
 \begin{lstlisting}
 final case class Semigroup[T](combine: (T, T) => T)
 \end{lstlisting}
@@ -1014,9 +981,7 @@ def combine[T](x: T, y: T)(implicit ti: Semigroup[T]): T = ti.combine(x, y)
 Since \lstinline!combine! is a binary operation, it is convenient
 to define infix method syntax for it:
 \begin{lstlisting}
-implicit class SemigroupSyntax[T: Semigroup](x: T) {
-  def |+|(y: T): T = combine(x, y)
-}
+implicit class SemigroupSyntax[T: Semigroup](x: T) { def |+|(y: T): T = combine(x, y) }
 \end{lstlisting}
 After this definition, we may use the infix operation \lstinline!|+|!
 like this,
@@ -1044,9 +1009,7 @@ This function assumes a non-empty input sequence \lstinline!ts! whose
 elements are of a semigroup type \lstinline!T!. We can also implement
 the same function as an extension method,
 \begin{lstlisting}
-implicit class SumSyntax[T: Semigroup](ts: Seq[T]) {
-  def merge: T = ts.reduce(combine[T])
-}
+implicit class SumSyntax[T: Semigroup](ts: Seq[T]) { def merge: T = ts.reduce(combine[T]) }
 \end{lstlisting}
 With the previous definitions, we can now evaluate expressions such
 as
@@ -1086,7 +1049,7 @@ the \lstinline!concat! function, requires significant work (see Section~\ref{sub
 
 The definitions of the semigroup operation $\oplus$ as concatenation
 for strings and as addition for integers may appear to be ``natural''.
-However, alternative implementations become useful in certain applications.
+However, alternative implementations are useful in certain applications.
 As long as the associativity law holds, \emph{any} function of type
 $T\times T\Rightarrow T$ may be used as the semigroup operation.
 The task of this example is to show that the following implementations
@@ -1097,10 +1060,7 @@ typeclass instances in Scala.
 the value of $y$).
 
 \textbf{(b)} For pair types $T\triangleq A\times B$, define the operation
-$\oplus$ by
-\[
-\left(a_{1}\times b_{1}\right)\oplus\left(a_{2}\times b_{2}\right)\triangleq a_{1}\times b_{2}\quad.
-\]
+$\oplus$ by $\left(a_{1}\times b_{1}\right)\oplus\left(a_{2}\times b_{2}\right)\triangleq a_{1}\times b_{2}$.
 
 \textbf{(c)} For $T\triangleq\text{String}$, define $x\oplus y$
 as the longer of the strings $x$ and $y$.
@@ -1111,7 +1071,7 @@ or $x\oplus y\triangleq x\circ y$ (the backward function composition).
 
 \subparagraph{Solution}
 
-\textbf{(a)} To verify the associativity law, use the definition $x\oplus y=x$
+\textbf{(a)} To verify the associativity law, use the definition $x\oplus y\triangleq x$
 to compute 
 \[
 \left(x\oplus y\right)\oplus z=x\oplus z=x\quad,\quad x\oplus\left(y\oplus z\right)=x\quad.
@@ -1126,8 +1086,8 @@ all types $T$:
 \begin{lstlisting}
 implicit def semigroup1[T] = Semigroup[T]{ (x, y) => x }
 \end{lstlisting}
-Similarly, the definition $x\oplus y=y$ gives an associative binary
-operation for a (different) semigroup.
+Similarly, the definition $x\oplus y\triangleq y$ gives an associative
+binary operation for a (different) semigroup.
 
 \textbf{(b)} To verify the associativity law:
 \begin{align*}
@@ -1172,7 +1132,7 @@ value that acts as an ``default'' value with respect to the semigroup
 operation. Merging with the default value will not change any other
 value. For instance, concatenating with an empty list does not change
 any other list; so the empty list plays the role of the default value
-for lists. Merging an empty set and any other set does not change
+for lists. Merging an empty set with any other set does not change
 the other set; so the empty set is the default for sets.
 
 A semigroup with such a default value is called a \textbf{monoid}\index{monoid}.
@@ -1241,10 +1201,10 @@ Using the type constraint syntax, the equivalent code is
 def monoidOf[T: Semigroup : HasDefault]: Monoid[T] =
   Monoid(implicitly[Semigroup[T]].combine, implicitly[HasDefault[T]].value)
 \end{lstlisting}
-We can then define this function as an \lstinline!implicit def monoidOf...!,
-so that every type \lstinline!T! with a \lstinline!Semigroup! and
-\lstinline!HasDefault! instances will automatically receive a \lstinline!Monoid!
-typeclass instance as well.
+We can also define this function as an \lstinline!implicit!, so that
+every type \lstinline!T! with a \lstinline!Semigroup! and \lstinline!HasDefault!
+instances will automatically receive a \lstinline!Monoid! typeclass
+instance as well.
 
 Writing the types of the \lstinline!Semigroup!, \lstinline!HasDefault!,
 and \lstinline!Monoid! instances in the type notation, we get
@@ -1311,7 +1271,7 @@ What information needs to be wrapped by a typeclass instance? A functor
 type signature
 
 \begin{wrapfigure}{l}{0.43\columnwidth}%
-\vspace{-0.65\baselineskip}
+\vspace{-0.75\baselineskip}
 \begin{lstlisting}
 def map[A, B](fa: F[A])(f: A => B): F[B]
 \end{lstlisting}
@@ -1358,8 +1318,8 @@ implicit val functorSeq = new Functor[Seq] {
 \end{lstlisting}
 This is currently the most common way of defining typeclasses in Scala.
 
-It is also convenient to declare \lstinline!.map! as an extension
-method on the \lstinline!Functor! type constructors,
+It is convenient to declare \lstinline!.map! as an extension method
+on the \lstinline!Functor! type constructors,
 \begin{lstlisting}
 implicit class FunctorSyntax[F[_]: Functor, A](fa: F[A]) {    // Syntax helper class.
   def map[B](f: A => B): F[B] = implicitly[Functor[F]].map(fa)(f)
@@ -1372,14 +1332,11 @@ Using the \lstinline!Functor! typeclass and the syntax helper, we
 can now implement the function \lstinline!inject!:
 \begin{lstlisting}
 def inject[F[_]: Functor, A, B](a: A, f: F[B]): F[(A, B)] = f.map { b => (a, b) }
-\end{lstlisting}
-To use this function, we write code such as
-\begin{lstlisting}
-scala> inject("abc", Seq(1, 2, 3))
+
+scala> inject("abc", Seq(1, 2, 3))   // Assuming that implicit Functor[Seq] is in scope.
 res0: Seq[(String, Int)] = List(("abc", 1), ("abc", 2), ("abc", 3))
 \end{lstlisting}
-
-Just like the \lstinline!Monoid! typeclass, the code of the \lstinline!Functor!
+ Just like the \lstinline!Monoid! typeclass, the code of the \lstinline!Functor!
 typeclass does not enforce the functor laws on the implementation.
 It is the programmer responsibility to verify that the laws hold.
 
@@ -1391,25 +1348,25 @@ for \emph{any} given type constructor. The code looks like this (the
 required \lstinline!import! declarations are omitted for brevity):
 \begin{lstlisting}
 def checkFunctorLaws[F[_], A, B, C]()(implicit ff: Functor[F],
-      // The `Arbitrary` typeclass is provided by scalacheck.
+                     // The `Arbitrary` typeclass is provided by scalacheck.
       fa: Arbitrary[F[A]], ab: Arbitrary[A => B], bc: Arbitrary[B => C]) = {
   // Identity law. The assertion must hold for all `fa`.
   forAll { (fa: F[A]) =>     fa.map(identity[A]) shouldEqual fa }
-  // Composition law. The assertion must hold for all `fa`, `f`, and `g`.
+  // Composition law. The assertion must hold for all `f`, `g`, `fa`.
   forAll { (f: A => B, g: B => C, fa: F[A]) =>
     fa.map(f).map(g) shouldEqual fa.map(f andThen g)
   }
 }
-// Check the laws for `Seq[_]` using specific types instead of type parameters A, B, C.
+// Check the laws for F = Seq using specific types instead of type parameters A, B, C.
 checkFunctorLaws[Seq, Int, String, Double]()
 \end{lstlisting}
 
 The \texttt{scalacheck} library will substitute a large number of
-random values into the given assertions, hoping to discover a set
-of values for which some condition fails. While a test of this kind
-is useful (it might find a bug), it does not provide a rigorous proof
-that the laws hold, because the laws are tested only in a finite number
-of cases and with type parameters set to specific types.
+random values into the given assertions, aiming to discover a set
+of values for which some condition fails. While a test of laws with
+\texttt{scalacheck} (it might find a bug), it does not provide a rigorous
+proof that the laws hold: the laws are tested only with a finite number
+of values and with type parameters set to specific types.
 
 \section{Deriving typeclass instances via structural analysis of types}
 
@@ -1429,8 +1386,7 @@ constructed instances.
 \end{itemize}
 In the following sections, we will show how to use this approach for
 some simple typeclasses. Later chapters of this book will systematically
-apply structural analysis to all typeclasses (filterable functors,
-monads, applicative functors, and so on).
+apply structural analysis to each considered typeclass.
 
 \subsection{Extractors}
 
@@ -1531,7 +1487,7 @@ out the types, we get
 \[
 \forall(A,B,Z).\,\text{Extractor}^{A}\times\text{Extractor}^{B}\Rightarrow\text{Extractor}^{A+B}=\left(A\Rightarrow Z\right)\times\left(B\Rightarrow Z\right)\Rightarrow A+B\Rightarrow Z\quad.
 \]
-From a known type equivalence (Table~\ref{tab:Logical-identities-with-function-types}),
+Due to a known type equivalence (Table~\ref{tab:Logical-identities-with-function-types}),
 we have a unique implementation of this function:
 \[
 \text{extractorEither}\triangleq f^{:A\Rightarrow Z}\times g^{:B\Rightarrow Z}\Rightarrow\begin{array}{|c||c|}
@@ -1559,6 +1515,9 @@ the type expression
 A\times Z+Z\times(P+Z\times Q)+B\times C\times Z
 \]
 is of that form and therefore has an \lstinline!Extractor! instance.
+Generally, a polynomial in $Z$ will have an \lstinline!Extractor!
+instance only if the polynomial is of the form $Z\times P^{Z}$ for
+some functor $P$.
 
 \paragraph{Function types}
 
@@ -1599,16 +1558,14 @@ and instead substitute the default value when necessary.
 
 \paragraph{Recursive types}
 
-We can apply type recursion to any of the non-recursive constructions
+We can use type recursion with any of the non-recursive constructions
 that create a new type with an \lstinline!Extractor! instance out
-of a previous extractor type. For clarity, let us use a \emph{type
-constructor} denoted $F^{A}$ for describing the produced new type
-out of a previous extractor type $A$. 
-
-For the product construction, we define $F_{1}^{B,A}\triangleq A\times B$.
-For the co-product construction, $F_{2}^{B,A}\triangleq B+A$ (where
-$B$ must be also an extractor type). For the function construction,
-$F_{3}^{C,A}\triangleq C\times\left(C\Rightarrow A\right)$.
+of a previous such type. For clarity, let us use type constructors
+$F_{1}$, $F_{2}$, etc., for describing the new types produced out
+of previous extractor types. For the product construction, we define
+$F_{1}^{B,A}\triangleq A\times B$. For the co-product construction,
+$F_{2}^{B,A}\triangleq B+A$ (where $B$ must be also an extractor
+type). For the function construction, $F_{3}^{C,A}\triangleq C\times\left(C\Rightarrow A\right)$.
 
 Any recursive type equation that uses $F_{1}$, $F_{2}$, and/or $F_{3}$
 will define a new recursive type with an \lstinline!Extractor! instance.
@@ -1621,8 +1578,7 @@ We can visualize this recursive type as an ``infinite disjunction''
 \begin{align*}
  & T\cong Z\times P+Q\times T\\
  & \cong Z\times P+Q\times\left(Z\times P+Q\times\left(Z\times P+...\right)\right)\\
- & \cong Z\times P\times(\bbnum 1+Q+Q\times Q+...)\\
- & \cong Z\times P\times\text{List}^{Q}\quad.
+ & \cong Z\times P\times(\bbnum 1+Q+Q\times Q+...)\cong Z\times P\times\text{List}^{Q}\quad.
 \end{align*}
 Since the resulting type is equivalent to $Z\times C$ where $C\triangleq P\times\text{List}^{Q}$,
 we find that the recursive equation~(\ref{eq:example-recursive-equation-extractor})
@@ -1632,7 +1588,8 @@ This will happen with any recursive equation containing $F_{1}$ and
 $F_{2}$ (but no $F_{3}$): since $F_{1}$ and $F_{2}$ are polynomial
 functors, the resulting type $T$ will be a recursive polynomial in
 $Z$. A polynomial in $Z$ will have an \lstinline!Extractor! instance
-only if it is of the form $Z\times C$ for some type $C$.
+only if the polynomial is of the form $Z\times P^{Z}$ for some functor
+$P$.
 
 Recursive equations involving $F_{3}$ will produce new examples of
 \lstinline!Extractor! types, such as
@@ -1650,20 +1607,16 @@ streams.
 We will now show how to define an \lstinline!Extractor! instance
 for any recursive type defined using $F_{1}$, $F_{2}$, and/or $F_{3}$.
 A recursive type equation defining a type $T$ can be written generally
-as
-\[
-T\triangleq S^{T}\quad,
-\]
-where $S^{\bullet}$ is a type constructor that is built up by composing
-$F_{1}$, $F_{2}$, and/or $F_{3}$ in some way. (The type constructor
-$S^{\bullet}$ may use $Z$ as well as other fixed types, which is
-not indicated for brevity.) For each of $F_{1}$, $F_{2}$, and/or
-$F_{3}$, we implemented a function with type 
+as $T\triangleq S^{T}$, where $S$ is a type constructor built up
+by composing $F_{1}$, $F_{2}$, and/or $F_{3}$ in some way. (The
+type constructor $S$ may use $Z$ or other fixed types.) For each
+of $F_{1}$, $F_{2}$, and/or $F_{3}$, we implemented a function
+with type 
 \[
 \text{extractorF}:\text{Extractor}^{A}\Rightarrow\text{Extractor}^{F^{A}}\quad.
 \]
-Since $S^{\bullet}$ is a composition of $F_{1}$, $F_{2}$, and/or
-$F_{3}$, we are able to implement a function 
+Since $S$ is a composition of $F_{1}$, $F_{2}$, and/or $F_{3}$,
+we are able to implement a function 
 \[
 \text{extractorS}:\text{Extractor}^{A}\Rightarrow\text{Extractor}^{S^{A}}\quad.
 \]
@@ -1679,13 +1632,13 @@ type recursion terminates), the extractor function will also terminate.
 To illustrate this construction, let us derive an \lstinline!Extractor!
 instance for the type $T$ defined by Eq.~(\ref{eq:example-good-recursive-equation-extractor}).
 
-The type constructor $S^{\bullet}$ is defined by
+The type constructor $S$ is defined by
 \[
 S^{A}\triangleq C\times\left(C\Rightarrow Z+P\times A\right)\quad.
 \]
 \begin{lstlisting}
 type S[A] = (C, C => Either[Z, (P, A)])
-final case class TypeT(t: S[TypeT])   // Define the recursive type `T`. 
+final case class TypeT(t: S[TypeT])   // Define the recursive type `TypeT`. 
 \end{lstlisting}
 To implement the function of type \lstinline!Extractor[T] => Extractor[S[T]]!,
 which is $\left(T\Rightarrow Z\right)\Rightarrow S^{T}\Rightarrow Z$,
@@ -1763,18 +1716,18 @@ def extractorT: Extractor[TypeT] = Extractor { case TypeT(t) => extractorS(extra
 \end{lstlisting}
 Although the ``expanded function\index{expanded function}'' $t\Rightarrow f(t)$
 is equivalent to just $f$, there is an important difference: using
-``expanded functions'' will make recursive definitions \index{recursive function!termination}
-valid and terminating.
+``expanded functions'' makes recursive definitions \index{recursive function!termination}
+terminate.
 
-As an example, consider a recursive function $f$ defined via an equation
-$f\triangleq k(f)$, where $k$ is a suitable function. If we write
-Scala code directly in this way (using functions as values), we will
-create an infinite loop:
+To see an example of that, consider a recursive function $f$ defined
+via an equation $f\triangleq k(f)$, where $k$ is a suitable function.
+If we write Scala code as $f=k(f)$ using functions as values, we
+will create an infinite loop:
 \begin{lstlisting}[mathescape=true]
 def k(f: Int => Int): Int => Int = { x => if (x <= 0) 1 else 2 * f(x - 1) }
-def f_bad: Int => Int = k(f_bad)     // This definition is invalid!
+def f_bad: Int => Int = k(f_bad)    // This definition is invalid!
 
-scala> f_bad(4)  // Infinite loop: k(k(k(k(....)))(4)
+scala> f_bad(4)               // Infinite loop: k(k(k(k(....)))(4)
 java.lang.StackOverflowError
 \end{lstlisting}
 This code is clearly invalid. But if we expand the right-hand side
@@ -1858,7 +1811,7 @@ ensuring that types can be meaningfully compared for equality. The
 equality comparison for values of type $A$ is a function of type
 $A\times A\Rightarrow\bbnum 2$ (where $\bbnum 2$ denotes the \lstinline!Boolean!
 type). A function of that type is wrapped by typeclass instances of
-\lstinline!Eq!. We also define \lstinline!===! as an extension method:\index{typeclass!Eq@\texttt{Eq}}.
+\lstinline!Eq!. We also define \lstinline!===! as an extension method:\index{typeclass!Eq@\texttt{Eq}}
 \begin{lstlisting}
 final case class Eq[A](equal: (A, A) => Boolean)
 object Eq {
@@ -1885,13 +1838,13 @@ The operations \lstinline!==! and \lstinline!===! do not seem to
 compare function values correctly. The equality comparison must satisfy
 the laws of identity, reflexivity and transitivity. The law of reflexivity\index{reflexivity law}
 states that $x=x$ for every $x$; so the comparison \lstinline!x === x!
-should always return \lstinline!true!. The example shown above clearly
-violates that law when we choose $x\triangleq n^{:\text{Int}}\Rightarrow n$.
+should always return \lstinline!true!. The example shown above violates
+that law when we choose $x\triangleq n^{:\text{Int}}\Rightarrow n$.
 
 Let us perform structural analysis for the \lstinline!Eq! typeclass,
 defining $\text{Eq}^{A}\triangleq A\times A\Rightarrow\bbnum 2$.
 The results (see Table~\ref{tab:Type-constructions-for-Eq} below)
-will show which types can be meaningfully compared for equality.
+will show which types can be reasonably compared for equality.
 
 \paragraph{Fixed types}
 
@@ -2049,19 +2002,19 @@ As an example, let us define an \lstinline!Eq! instance for the type
 $T$ defined by $T\triangleq\text{Int}+T+\text{Int}\times T\times T$.
 \begin{lstlisting}[mathescape=true]
 type S[A] = Either[Either[Int, A], (Int, (A, A))]
-final case class T(s: S[T])                     // Recursive equation $ T\triangleq\text{Int}+T+\text{Int}\times T\times T $.
+final case class T(s: S[T])                     // Recursive type equation $ T\triangleq\text{Int}+T+\text{Int}\times T\times T $.
 def eqS[A](implicit ti: Eq[A]): Eq[S[A]] = {    // Function of type Eq[A] => Eq[S[A]].
-  implicit val e1 = eqEither[Int, A]
-  implicit val e2 = eqPair[A, A]
-  implicit val e3 = eqPair[Int, (A, A)]
-  eqEither[Either[Int, A], (Int, (A, A))]
+  implicit val e1 = eqEither[Int, A]            // Instance for $ \text{Int}+A $.
+  implicit val e2 = eqPair[A, A]                // Instance for $ A\times A $.
+  implicit val e3 = eqPair[Int, (A, A)]         // Instance for $ \text{Int}\times A\times A $.
+  eqEither[Either[Int, A], (Int, (A, A))]       // Instance for $ \text{Int}+A+\text{Int}\times A\times A $.
 }
 implicit def eqT: Eq[T] = Eq { case (T(s1), T(s2)) => eqS(eqT).equal(s1, s2) }
 \end{lstlisting}
 To test that the recursion terminates, define a value of type $T$
 and run a comparison:
-\begin{lstlisting}
-val t = T(Left(Right(T(Left(Left(10))))))
+\begin{lstlisting}[mathescape=true]
+val t = T(Left(Right(T(Left(Left(10))))))   // $t: \bbnum 0+(10^{:\text{Int}}+\bbnum 0+\bbnum 0)^{:T}+\bbnum 0$
 
 scala> t === t
 res0: Boolean = true
@@ -2139,9 +2092,9 @@ $T\triangleq S^{T}$} & {\footnotesize{}$\text{Eq}^{T}$}\tabularnewline
 \subsection{Semigroups\label{subsec:Semigroups-constructions}}
 
 A type $T$ has an instance of \lstinline!Semigroup! when an associative
-binary operation of type $T\times T\Rightarrow T$ is available. Let
-us apply structural analysis to this typeclass. The results are shown
-in Table~\ref{tab:Type-constructions-for-semigroup}.
+binary operation of type $T\times T\Rightarrow T$ is available. We
+will now apply structural analysis to this typeclass. The results
+are shown in Table~\ref{tab:Type-constructions-for-semigroup}.
 
 \paragraph{Fixed types}
 
@@ -2164,10 +2117,10 @@ likely to be useful).
 A semigroup instance parametric in type $T$ means a value of type
 $\forall T.\,T\times T\Rightarrow T$. There are two implementations
 of this type signature: $a^{:T}\times b^{:T}\Rightarrow a$ and $a^{:T}\times b^{:T}\Rightarrow b$.
-Both provide an associative binary operation, as we showed in Example~\ref{subsec:tc-Example-semigroup-alternative-implementations}(a).
-So, any type $T$ can be made into a ``trivial'' semigroup in one
-of these two ways. (\index{``trivial'' semigroup}``Trivial'' semigroups
-are occasionally useful.)
+Both provide an associative binary operation, as Example~\ref{subsec:tc-Example-semigroup-alternative-implementations}(a)
+shows. So, any type $T$ can be made into a ``trivial'' semigroup
+in one of these two ways. (\index{``trivial'' semigroup}``Trivial''
+semigroups are occasionally useful.)
 
 \paragraph{Products}
 
@@ -2305,13 +2258,13 @@ def semigroupEither2[A: Semigroup, B: Semigroup] = Semigroup[Either[A, B]] {
   case (Left(a), Right(b))      =>  b         // "Take $B$" - discard all data of type $A$.
   case (Right(b), Left(a))      =>  b
 }
-def semigroupEither1[A: Semigroup, B: Semigroup] = Semigroup[Either[A, B]] {
+def semigroupEither3[A: Semigroup, B: Semigroup] = Semigroup[Either[A, B]] {
   case (Left(a1), Left(a2))     =>  a1 |+| a2
   case (Right(b1), Right(b2))   =>  b1 |+| b2
   case (Left(a), Right(b))      =>  a         // "Take first" - discard $y$ in $x\oplus y$.
   case (Right(b), Left(a))      =>  b
 }
-def semigroupEither2[A: Semigroup, B: Semigroup] = Semigroup[Either[A, B]] {
+def semigroupEither4[A: Semigroup, B: Semigroup] = Semigroup[Either[A, B]] {
   case (Left(a1), Left(a2))     =>  a1 |+| a2
   case (Right(b1), Right(b2))   =>  b1 |+| b2
   case (Left(a), Right(b))      =>  b         // "Take last" - discard $x$ in $x\oplus y$.
@@ -2337,14 +2290,14 @@ and $(\bbnum 0+b^{:B})\oplus(a^{:A}+\bbnum 0)=a$.
 hold for the new typeclass instance with any of these implementations?
 
 It turns out that \emph{all} \emph{four} implementations are lawful.
-To verify the associativity law, we need to show that the values of
-expressions such as \lstinline!Left(x) |+| Left(y) |+| Right(z)!
-or \lstinline!Left(x) |+| Right(y) |+| Right(z)! do not depend on
-the order of inserted parentheses. Expressions of the form $x\oplus y\oplus z$
-can have $8$ possible combinations of \lstinline!Left! and \lstinline!Right!
-types. Each of them needs to be checked against each of the $4$ implementations
-of $\oplus$. Instead of going through $32$ separate derivations,
-let us do case by case reasoning.
+To verify the associativity law, we need to show that values such
+as \lstinline!Left(x) |+| Left(y) |+| Right(z)! or \lstinline!Left(x) |+| Right(y) |+| Right(z)!
+do not depend on the order of inserted parentheses. Expressions of
+the form $x\oplus y\oplus z$ can have $8$ possible combinations
+of \lstinline!Left! and \lstinline!Right! types. Each of them needs
+to be checked against each of the $4$ implementations of $\oplus$.
+Instead of doing $32$ separate derivations, we will reason case by
+case.
 
 First consider the case when all three values are of type \lstinline!Left(x)!.
 In all four implementations, the binary operation reduces to the binary
@@ -2593,8 +2546,8 @@ cover all exponential-polynomial types. So, let us consider an exponential-polyn
 type constructor $S^{A}$ that contains a type parameter $A$, primitive
 types, and other known monoid types. For such type constructors $S^{\bullet}$,
 we will always be able to implement a function \lstinline!monoidS!
-that derives a \lstinline!Monoid! instance for $S^{A}$ when $A$
-is a monoid:
+that derives a \lstinline!Monoid! instance for $S^{A}$ from a monoid
+instance for $A$:
 \[
 \text{monoidS}:\text{Monoid}^{A}\Rightarrow\text{Monoid}^{S^{A}}\quad.
 \]
@@ -2670,8 +2623,8 @@ def monoidT: Monoid[T] = new Monoid[T] {
 }
 \end{lstlisting}
  The recursive definition of \lstinline!monoidT! terminates because
-all methods of the \lstinline!trait! are declared as \lstinline!def!
-(not as a \lstinline!val!). The code of \lstinline!monoidS! remains
+the methods of the \lstinline!trait! are declared as \lstinline!def!
+(not as \lstinline!val!). The code of \lstinline!monoidS! remains
 the same; we need to rewrite \lstinline!monoidPair!, \lstinline!monoidEitherPreferB!,
 and \lstinline!monoidFunc! to accommodate the new definition of the
 \lstinline!Monoid! typeclass. Figure~\ref{fig:Implementation-of-Monoid-typeclass-with-trait}
@@ -2787,11 +2740,10 @@ to implement typeclasses for type \emph{constructors}, e.g.~the \lstinline!Funct
 typeclass. Typeclass instances in such cases often contain a nested
 type quantifier such as $\forall A.\left(...\right)$, so the implementation
 needs to use Scala's \lstinline!trait! with \lstinline!def! methods
-inside. We will now look at two examples of typeclasses (pointed and
-co-pointed functors) that extend \lstinline!Functor! with further
-methods. Chapter~\ref{chap:Functors,-contrafunctors,-and} performed
-a structural analysis of functors, which we will now extend to the
-new typeclasses.
+inside. We will now look at some examples of typeclasses that add
+further methods to \lstinline!Functor!. Chapter~\ref{chap:Functors,-contrafunctors,-and}
+performed a structural analysis of functors, which we will extend
+to the new typeclasses.
 
 The first typeclass is a ``pointed'' functor. A functor type $F^{T}$
 represents, in a generalized sense, ``wrapped'' values of type $T$.
@@ -2803,7 +2755,7 @@ as a function with a type signature
 \begin{wrapfigure}{l}{0.4\columnwidth}%
 \vspace{-0.8\baselineskip}
 \begin{lstlisting}
-def pure[A]: A => F[A] = ???
+def pure[A]: A => F[A]
 \end{lstlisting}
 \vspace{-0.8\baselineskip}
 \end{wrapfigure}%
@@ -2819,24 +2771,25 @@ value:
 val x: Option[Int] = Some(10)                     // A non-empty option that holds a value.
 val y: List[String] = List("abc")                 // A list that holds a single value.
 val z: Try[Int] = Success(200)                    // A value computed without errors.
-val f: Future[String] = Future.successful("OK")   // A `Future` value that is already computed.
+val f: Future[String] = Future.successful("OK")   // A `Future` value that is already available.
 \end{lstlisting}
 As we can see, ``wrapping a single value'' means a different thing
 for each of the type constructors. Although the relevant methods of
 these type constructors are not called ``\lstinline!pure!'', we
 can create a PTVF \lstinline!pure[F]! that would be defined only
 for \lstinline!F! that can ``wrap'' a single value. Such type constructors
-are called ``\textbf{pointed}''. We may define the typeclass\index{typeclass!Pointed@\texttt{Pointed}}
-\lstinline!Pointed! via this code:
+\lstinline!F! are called ``\textbf{pointed}''. We may define the
+typeclass\index{typeclass!Pointed@\texttt{Pointed}} \lstinline!Pointed!
+via this code:
 \begin{lstlisting}
 trait Pointed[F[_]] { def pure[A]: A => F[A] }
 \end{lstlisting}
 Now we can implement instances of the \lstinline!Pointed! typeclass
 for some functors:
 \begin{lstlisting}
-implicit val pointedOption = new Pointed[Option] { def pure[A]: A => Option[A] = x => Some(x) }
-implicit val pointedList = new Pointed[List] { def pure[A]: A => List[A] =       x => List(x) }
-implicit val pointedTry = new Pointed[Try] { def pure[A]: A => Try[A] =       x => Success(x) }
+implicit val pointedOption = new Pointed[Option] { def pure[A]: A => Option[A] = x => Some(x)    }
+implicit val pointedList   = new Pointed[List]   { def pure[A]: A => List[A]   = x => List(x)    }
+implicit val pointedTry    = new Pointed[Try]    { def pure[A]: A => Try[A]    = x => Success(x) }
 \end{lstlisting}
 The PTVF \lstinline!pure! can be defined and used like this,
 
@@ -2856,7 +2809,7 @@ res0: Option[Int] = Some(123)
 use both the functor's \lstinline!map! method and the \lstinline!pure!
 method. Do these two methods need to be compatible in some way? If
 we ``wrap'' a value $123$ in a \lstinline!List! and then apply
-a \lstinline!.map(x => x + 1)!, we expect to obtain a list containing
+\lstinline!.map(x => x + 1)!, we expect to obtain a list containing
 $124$; any other result would break our intuition about ``wrapping''.
 We can generalize this situation to an arbitrary value $x^{:A}$ wrapped
 using \lstinline!pure! and a function $f^{:A\Rightarrow B}$ applied
@@ -2870,7 +2823,7 @@ pure(x).map(f)    //   $\text{pu}_{F}(x)\triangleright\, \scriptstyle{f^{\uparro
 \vspace{-0.8\baselineskip}
 \end{wrapfigure}%
 
-\noindent We now expect that the result should be the same as a wrapped
+\noindent We expect that the result should be the same as a wrapped
 $f(x)$. This expectation can be formulated as a law, called the \textbf{naturality
 law}\index{naturality law!of pure@of \texttt{pure}} of \lstinline!pure!;
 it must hold for any $f^{:A\Rightarrow B}$:
@@ -2898,7 +2851,7 @@ value $x^{:A}$, we can omit $x$ and write
 \noindent \begin{wrapfigure}{l}{0.28\columnwidth}%
 \vspace{-4.2\baselineskip}
 \[
-\xymatrix{\xyScaleY{2.0pc}\xyScaleX{4.0pc}A\ar[r]\sp(0.5){\text{pu}_{F}}\ar[d]\sb(0.45){f} & F^{A}\ar[d]\sp(0.45){\text{fmap}_{F}(f)}\\
+\xymatrix{\xyScaleY{2.0pc}\xyScaleX{4.0pc}A\ar[r]\sp(0.5){\text{pu}_{F}}\ar[d]\sb(0.45){f} & F^{A}\ar[d]\sp(0.45){f^{\uparrow F}}\\
 B\ar[r]\sp(0.5){\text{pu}_{F}} & F^{B}
 }
 \]
@@ -2919,7 +2872,7 @@ but equivalent form for which the law is satisfied automatically.
 
 Both sides of the naturality law~(\ref{eq:naturality-law-of-pure})
 are functions of type $A\Rightarrow F^{B}$. The trick is to set $A=\bbnum 1$
-and $f^{:\bbnum 1\Rightarrow B}\triangleq\_\Rightarrow b$, where
+and $f^{:\bbnum 1\Rightarrow B}\triangleq(\_\Rightarrow b)$, where
 $b^{:B}$ is any fixed value. Both sides of the naturality law can
 then be applied to the unit value $1$ and must evaluate to the same
 result, 
@@ -2946,9 +2899,10 @@ pure(one).map(f) == pure(f(one)) == pure(b)    // Because f(one) == b.
 
 It follows that if $\text{pu}_{F}$ satisfies the naturality law then
 a single ``wrapped unit'' value of that function, $\text{pu}_{F}(1)$,
-is sufficient to recover the entire function by using the code
+is sufficient to recover the entire function $\text{pu}_{F}(b)$ by
+using the code
 \[
-\text{pu}_{F}\triangleq b\Rightarrow\text{pu}_{F}(1)\triangleright(\_\Rightarrow b)^{\uparrow F}\quad
+\text{pu}_{F}(b)\triangleq\text{pu}_{F}(1)\triangleright(\_\Rightarrow b)^{\uparrow F}\quad
 \]
 So, given just a ``wrapped unit'' value (denoted $\text{wu}_{F}$)
 of type $F^{\bbnum 1}$, we can define a new function $\text{pu}_{F}$:
@@ -2988,7 +2942,7 @@ To summarize our results: for any functor $F$,
 \begin{itemize}
 \item If $F$ is a lawful pointed functor, its \lstinline!pure! method
 satisfies Eq.~(\ref{eq:pu-via-wu-def}) where $\text{wu}_{F}\triangleq\text{pu}_{F}(1)$
-is a fixed ``wrapped unit'' value of type $F^{\bbnum 1}$. 
+is a fixed ``wrapped unit'' value of type $F^{\bbnum 1}$.
 \item If any ``wrapped unit'' value $\text{wu}_{F}:F^{\bbnum 1}$ is given,
 we may define a \lstinline!pure! method by Eq.~(\ref{eq:pu-via-wu-def})
 and make the functor $F$ into a lawful pointed functor; the naturality
@@ -3013,17 +2967,30 @@ to build lawful functors and impose an additional requirement that
 a ``wrapped unit'' value $\text{wu}_{F}:F^{\bbnum 1}$ should exist.
 As we have seen in the previous section, no additional laws need to
 be checked. The results are shown in Table~\ref{tab:Type-constructions-for-pointed-functor}.
-The typeclass can be defined by
+The typeclass can be defined by the simpler code,
 \begin{lstlisting}
 final case class Pointed[F[_]](wu: F[Unit])
 def pure[F[_]: Pointed : Functor, A](a: A): F[A] = implicitly[Pointed[F]].wu.map(_ => a)
 \end{lstlisting}
 
+When the type $F^{\bbnum 1}$ has several distinct values, the choice
+of $\text{wu}_{F}$ is application-dependent. E.g.~if $F^{A}\triangleq\text{List}^{A}$,
+the type $\text{List}^{\bbnum 1}$ has values such as an empty list
+\lstinline!List[Unit]()!, the list of length $1$, i.e.~\lstinline!List(())!,
+the list of length $2$, i.e.~\lstinline!List((), ())!, etc. Each
+of these choices gives a valid \lstinline!Pointed! instance for the
+\lstinline!List! functor. It is up to the programmer to choose the
+\lstinline!Pointed! instance that will be useful for the application
+at hand. In the case of \lstinline!List!, the standard choice \lstinline!wu == List(())!
+and correspondingly \lstinline!pure(x) = List(x)! is motivated by
+the usage of the \lstinline!List! type constructor to represent several
+possibilities, e.g.~in a search problem; then the ``pure'' list
+represents the situation with only one possibility.
 
 \paragraph{Nameless type-to-type functions}
 
 To implement the \lstinline!Pointed! typeclass instances for the
-following constructions, we need to use more advanced syntax features
+following constructions, we need to use some advanced syntax features
 of Scala. In the previous sections, we wrote PTVFs parameterized by
 a type built out of other types, for example
 \begin{lstlisting}
@@ -3040,11 +3007,11 @@ type L[A] = (F[A], G[A])
 However, the following declaration of the analogous function \lstinline!pointedPair!
 is invalid in Scala:
 \begin{lstlisting}
-def pointedPair[F[_]: Pointed, G[_]: Pointed]: Pointed[L]     // Not valid in Scala.
+def pointedPair[F[_]: Pointed, G[_]: Pointed]: Pointed[L]     // Does not work in Scala.
 \end{lstlisting}
 It is not possible to use the type alias \lstinline!L! within this
 function declaration, because the type alias needs to use the type
-parameters \lstinline!F! and \lstinline!G! that are only defined
+parameters \lstinline!F! and \lstinline!G! that are defined only
 within the type signature of the function. To achieve that, we would
 need somehow to insert a new type alias declaration within the type
 signature of \lstinline!pointedPair!, but the syntax of Scala does
@@ -3054,18 +3021,18 @@ def pointedPair[F[_]: Pointed, G[_]: Pointed]: {            // Not a valid Scala
     type L[A] = (F[A], G[A]) // Temporarily define a type constructor L, and now use it:
     Pointed[L] }
 \end{lstlisting}
-The return type is required to be \lstinline!Pointed[L]! where \lstinline!L!
+The return type is required to be \lstinline!Pointed[L]!, where \lstinline!L!
 needs to be a type expression that defines a type constructor, i.e.~a
 type-to-type function with a \emph{single} type parameter. Writing
 a type alias with parameters \lstinline!F! and \lstinline!G!,
 \begin{lstlisting}
 type L[F[_], G[_], A] = (F[A], G[A])
-def pointedPair[F[_]: Pointed, G[_]: Pointed]: Pointed[L]     // Still incorrect.
+def pointedPair[F[_]: Pointed, G[_]: Pointed]: Pointed[L[F, G]]    // Still incorrect.
 \end{lstlisting}
-will not help because the parameter \lstinline!L! in \lstinline!Pointed[L]!
-is not a type constructor: it has $3$ type parameters rather than
-$1$. We cannot define a new type name (such as \lstinline!L!) within
-the type signature; what we need is a \emph{nameless} type-to-type
+will not help because the type expression \lstinline!L[F, G]! in
+\lstinline!Pointed[L[F, G]]! is not a valid type constructor with
+one type parameter. We cannot define a new type name (such as \lstinline!L!)
+within the type signature; what we need is a \emph{nameless} type-to-type
 function (i.e.~a nameless type constructor).
 
 The special Scala plugin called the \index{``kind projector'' plugin}``kind
@@ -3169,30 +3136,16 @@ def pointedEitherFG[F[_]: Pointed, G[_]]: Pointed[Lambda[X => Either[F[X],G[X]]]
   Pointed[Lambda[X => Either[F[X],G[X]]]](Left(implicitly[Pointed[F]].wu))
 \end{lstlisting}
 
-When the type $F^{\bbnum 1}$ has several distinct values, the choice
-of $\text{wu}_{F}$ is application-dependent. E.g.~if $F^{A}\triangleq\text{List}^{A}$,
-the type $\text{List}^{\bbnum 1}$ has values such as an empty list
-\lstinline!List[Unit]()!, the list of length $1$, i.e.~\lstinline!List(())!,
-the list of length $2$, i.e.~\lstinline!List((), ())!, etc. Each
-of these choices gives a valid \lstinline!Pointed! instance for the
-\lstinline!List! functor. It is up to the programmer to choose the
-\lstinline!Pointed! instance that will be useful for the application
-at hand. In the case of \lstinline!List!, the standard choice \lstinline!wu == List(())!
-and correspondingly \lstinline!pure(x) = List(x)! is motivated by
-the usage of the \lstinline!List! type constructor to represent several
-possibilities, e.g.~in a search problem; then the ``pure'' list
-represents the situation with only one possibility.
 
 \paragraph{Functions}
 
 If $C$ is any contrafunctor and $F$ is a pointed functor, the exponential
 functor $L^{A}\triangleq C^{A}\Rightarrow F^{A}$ will be pointed
-if we produce a value $\text{wu}_{L}:C^{\bbnum 1}\Rightarrow F^{\bbnum 1}$.
-We already have a value $\text{wu}_{F}:F^{\bbnum 1}$, and there is
-no way we could have used a value of type $C^{\bbnum 1}$ for an arbitrary
-contrafunctor $C$. So, we have to set $\text{wu}_{L}\triangleq(\_\Rightarrow\text{wu}_{F})$,
-i.e.~$\text{wu}_{L}$ is a function that ignores its argument and
-always returns $\text{wu}_{F}$. This makes $L$ into a pointed functor.
+if we are able to produce a value $\text{wu}_{L}:C^{\bbnum 1}\Rightarrow F^{\bbnum 1}$.
+We already have a value $\text{wu}_{F}:F^{\bbnum 1}$, and we cannot
+use a value of type $C^{\bbnum 1}$ with a general contrafunctor $C$.
+So, we have to set $\text{wu}_{L}\triangleq(\_\Rightarrow\text{wu}_{F})$.
+This makes $L$ into a pointed functor.
 \begin{lstlisting}
 def pointedFuncFG[F[_]: Pointed, C[_]]: Pointed[Lambda[X => C[X] => F[X]]] =
   Pointed[Lambda[X => C[X] => F[X]]](_ => implicitly[Pointed[F]].wu)
@@ -3201,23 +3154,24 @@ def pointedFuncFG[F[_]: Pointed, C[_]]: Pointed[Lambda[X => C[X] => F[X]]] =
 
 \paragraph{Recursive types}
 
-The recursive construction for functors assumes a bifunctor $S^{\bullet,\bullet}$
-and defines a recursive functor $F^{\bullet}$ via the type equation
-$F^{A}\triangleq S^{A,F^{A}}$. The functor $F^{A}$ will be pointed
-if we can compute a value $\text{wu}_{F}$ of type $F^{\bbnum 1}$.
-The type $F^{\bbnum 1}$ is a recursive type defined via the type
-equation $F^{\bbnum 1}\triangleq S^{\bbnum 1,F^{\bbnum 1}}$. If that
-type is not void, i.e.~if there exists some value of that type, we
-will be able to define $\text{wu}_{F}$ as that value. 
+The recursive construction for functors (see Statement~\ref{subsec:functor-Statement-functor-recursive-1})
+assumes a bifunctor $S^{\bullet,\bullet}$ and defines a recursive
+functor $F^{\bullet}$ via the type equation $F^{A}\triangleq S^{A,F^{A}}$.
+The functor $F^{\bullet}$ will be pointed if we can compute a value
+$\text{wu}_{F}$ of type $F^{\bbnum 1}$. The type $F^{\bbnum 1}$
+is a recursive type defined via the type equation $F^{\bbnum 1}\triangleq S^{\bbnum 1,F^{\bbnum 1}}$.
+If that type is not void, i.e.~if there exists some value of that
+type, we will be able to define $\text{wu}_{F}$ as that value. 
 
 How can we construct $\text{wu}_{F}$ for a given bifunctor $S$?
 The procedure can be derived by structural analysis of $S$ (see Section~\ref{subsec:Recursive-types-and}
 below). For \emph{polynomial} bifunctors $S$ (which is the most often
-used kind of bifunctors), the relevant condition is that the type
-$S^{\bbnum 1,\bbnum 0}$ should be non-void. If we can create a value
-of type $S^{\bbnum 1,\bbnum 0}$ , arguments shown in Section~\ref{subsec:Recursive-types-and}
-will guarantee that we can also create a value of type $F^{\bbnum 1}$,
-and so the recursive functor $F$ will be pointed.
+used kind of bifunctors), the necessary and sufficient condition is
+that the type $S^{\bbnum 1,\bbnum 0}$ should be non-void. If we can
+create a value of type $S^{\bbnum 1,\bbnum 0}$ , arguments shown
+in Section~\ref{subsec:Recursive-types-and} will guarantee that
+we can also create a value of type $F^{\bbnum 1}$, and so the recursive
+functor $F$ will be pointed.
 
 As an example, consider the polynomial bifunctor $S^{A,R}\triangleq A+A\times R$.
 The corresponding recursive functor $F^{A}\triangleq S^{A,F^{A}}=A+A\times F^{A}$
@@ -3227,7 +3181,7 @@ and Statement~\ref{subsec:functor-Statement-functor-recursive-1}).
 The type $F^{A}$ can be (non-rigorously) viewed as an ``infinite
 disjunction''
 \[
-F^{A}=A+A\times(A+A\times\left(A+...\right))\cong A+A\times A+A\times A\times A+...\quad.
+F^{A}=A+A\times(A+A\times\left(A+...\right))=A+A\times A+A\times A\times A+...
 \]
 Since the type $S^{\bbnum 1,\bbnum 0}=\bbnum 1+\bbnum 1\times\bbnum 0\cong\bbnum 1$
 is non-void, the necessary and sufficient condition holds, so we expect
@@ -3238,7 +3192,7 @@ F^{\bbnum 1}\triangleq S^{\bbnum 1,F^{\bbnum 1}}=\bbnum 1+\bbnum 1\times F^{\bbn
 \]
 This type can be (non-rigorously) viewed as an ``infinite disjunction''
 \[
-F^{\bbnum 1}=\bbnum 1+\bbnum 1+\bbnum 1+...\quad.
+F^{\bbnum 1}=\bbnum 1+\bbnum 1+\bbnum 1+...
 \]
 It is clear that a value of that type can be computed, for example,
 as 
@@ -3284,7 +3238,7 @@ in $F^{A,B}$ and obtain the type expression
 F^{\bbnum 1,B}=\left((\bbnum 1+\bbnum 1\Rightarrow\text{Int})\Rightarrow\bbnum 1\times B\right)+\text{String}\times\bbnum 1\times\bbnum 1\cong\left(\left(\bbnum 2\Rightarrow\text{Int}\right)\Rightarrow B\right)+\text{String}\quad.
 \]
 The functor $F$ will be pointed with respect to $A$ if we can compute
-values of this type from scratch. At the outer level, this type expression
+a value of this type from scratch. At the outer level, this type expression
 is a disjunctive type with two parts; it is sufficient to compute
 one of the parts. Can we compute a value of type $\left(\bbnum 2\Rightarrow\text{Int}\right)\Rightarrow B$?
 Since the parameter $B$ is an arbitrary, unknown type, we cannot
@@ -3339,13 +3293,13 @@ where $F^{A}\triangleq S^{A,F^{A}}$} & {\footnotesize{}$\text{Pointed}^{F^{\bull
 \subsection{Co-pointed functors}
 
 Pointed functors provide the functionality of wrapping a given value
-in a ``pure wrapper''. Another useful operation is extracting a
-value from a given ``wrapper'':
+in a ``pure wrapper''. Another useful operation is \emph{extracting}
+a value from a given ``wrapper'':
 
 \begin{wrapfigure}{l}{0.5\columnwidth}%
 \vspace{-0.8\baselineskip}
 \begin{lstlisting}
-def extract[F[_], A]: F[A] => A = ???
+def extract[F[_], A]: F[A] => A
 \end{lstlisting}
 \vspace{-0.5\baselineskip}
 \end{wrapfigure}%
@@ -3369,10 +3323,10 @@ law (compare to Eq.~(\ref{eq:naturality-law-of-pure})),
 \text{ex}_{F}\bef f=f^{\uparrow F}\bef\text{ex}_{F}\quad.\label{eq:naturality-law-of-extract}
 \end{equation}
 
-\begin{wrapfigure}{l}{0.27\columnwidth}%
-\vspace{-4.8\baselineskip}
+\begin{wrapfigure}{l}{0.25\columnwidth}%
+\vspace{-4.6\baselineskip}
 \[
-\xymatrix{\xyScaleY{2.0pc}\xyScaleX{4.0pc}F^{A}\ar[r]\sp(0.5){\text{ex}_{F}}\ar[d]\sb(0.45){\text{fmap}_{F}(f)} & A\ar[d]\sp(0.45){~f}\\
+\xymatrix{\xyScaleY{2.0pc}\xyScaleX{4.0pc}F^{A}\ar[r]\sp(0.5){\text{ex}_{F}}\ar[d]\sb(0.45){f^{\uparrow F}} & A\ar[d]\sp(0.45){~f}\\
 F^{B}\ar[r]\sp(0.5){\text{ex}_{F}} & B
 }
 \]
@@ -3387,19 +3341,18 @@ of the values. If all wrapped values are transformed by a function
 $f$ into wrapped values of type $B$, the extractor function will
 still select a value of type $B$ in the same way as it did for values
 of type $A$. So, the result will be the same as if we first extracted
-a value of type $A$ and then transformed it with $f$.
+a value of type $A$ and then transformed that value with $f$.
 
 Both sides of the law~(\ref{eq:naturality-law-of-extract}) are functions
 of type $F^{A}\Rightarrow B$. We saw in the previous section that
 the \lstinline!pure! method of the \lstinline!Pointed! typeclass
 is computationally equivalent to a single chosen value of type $F^{\bbnum 1}$
-when $F$ is a functor. That provided us a simpler formulation for
-the \lstinline!Pointed! typeclass. For co-pointed functors, there
-is no simpler form of the \lstinline!extract! method. If we set $A=\bbnum 1$
-and $f^{:\bbnum 1\Rightarrow B}\triangleq(1\Rightarrow b)$ in the
-naturality law, both sides will become functions of type $F^{\bbnum 1}\Rightarrow B$.
-Now, the type $F^{\bbnum 1}$ might be void, or a value of type $F^{\bbnum 1}$
-may not be computable via fully parametric code. So we cannot deduce
+when $F$ is a functor. That provides a simpler form of the \lstinline!Pointed!
+typeclass. For co-pointed functors, there is no simpler form of the
+\lstinline!extract! method. If we set $A=\bbnum 1$ and $f^{:\bbnum 1\Rightarrow B}\triangleq(1\Rightarrow b)$
+in the naturality law, both sides will become functions of type $F^{\bbnum 1}\Rightarrow B$.
+But the type $F^{\bbnum 1}$ might be void, or a value of type $F^{\bbnum 1}$
+may not be computable via fully parametric code. So, we cannot deduce
 any further information from the naturality law of co-pointed functors. 
 
 However, if $F$ is a pointed functor, we \emph{will} have a chosen
@@ -3410,7 +3363,7 @@ naturality law~(\ref{eq:naturality-law-of-extract}) and obtain
 \]
 Calculating both sides separately, we find
 \begin{align*}
- & \text{wu}_{F}\triangleright\text{ex}_{F}\triangleright f=\text{wu}_{F}\triangleright\text{ex}_{F}\triangleright f=1\triangleright f=b\quad.\\
+ & \text{wu}_{F}\triangleright\text{ex}_{F}\bef f=\text{wu}_{F}\triangleright\text{ex}_{F}\triangleright f=1\triangleright f=b\quad.\\
  & \text{wu}_{F}\triangleright f^{\uparrow F}\bef\text{ex}_{F}=b\triangleright\text{pu}_{F}\bef\text{ex}_{F}\quad.
 \end{align*}
 The result is $b=b\triangleright\text{pu}_{F}\bef\text{ex}_{F}$.
@@ -3429,7 +3382,7 @@ are shown in Table~\ref{tab:Type-constructions-for-copointed-functor}.
 
 A constant functor $\text{Const}^{Z,A}\triangleq Z$ is \emph{not}
 co-pointed because we cannot implement $\forall A.\,Z\Rightarrow A$
-(a value of an arbitrary type $A$ cannot be computed from values
+(a value of an arbitrary type $A$ cannot be computed from a value
 of a fixed type $Z$).
 
 \paragraph{Type parameters}
@@ -3580,14 +3533,14 @@ Finally we have
 To verify the naturality law, we apply both sides to an arbitrary
 $h^{:C^{A}\Rightarrow P^{A}}$ and compute
 \begin{align*}
-{\color{greenunder}\text{expect to equal }h\triangleright\text{ex}_{L}\bef f:}\quad & h\triangleright f^{\uparrow L}\bef\text{ex}_{L}=(h\triangleright f^{\uparrow L})\,\gunderline{\triangleright\text{ex}_{L}}\\
+{\color{greenunder}\text{expect to equal }h\triangleright\text{ex}_{L}\bef f:}\quad & h\triangleright f^{\uparrow L}\bef\text{ex}_{L}=(h\triangleright f^{\uparrow L})\:\gunderline{\triangleright\,\text{ex}_{L}}\\
 {\color{greenunder}\text{use Eq.~(\ref{eq:def-of-ex-for-C-mapsto-P})}:}\quad & =\text{pu}_{C}\triangleright(h\triangleright f^{\uparrow L})\triangleright\text{ex}_{P}=\text{pu}_{C}\triangleright\gunderline{(h\triangleright f^{\uparrow L})}\bef\text{ex}_{P}\\
 {\color{greenunder}\text{definition of }f^{\uparrow L},\text{ see Eq.~(\ref{eq:f-functor-exponential-def-fmap-f-h})}:}\quad & =\text{pu}_{C}\triangleright f^{\downarrow C}\bef h\bef\gunderline{f^{\uparrow P}\bef\text{ex}_{P}}\\
 {\color{greenunder}\text{naturality law for }\text{ex}_{P}:}\quad & =\text{pu}_{C}\triangleright f^{\downarrow C}\bef h\bef\text{ex}_{P}\bef f\quad.
 \end{align*}
 We expect the last expression to equal 
 \[
-h\triangleright\text{ex}_{L}\bef f=\text{pu}_{C}\triangleright h\triangleright\text{ex}_{P}\bef f=\text{pu}_{C}\triangleright h\bef\text{ex}_{P}\bef f\quad.
+h\triangleright\text{ex}_{L}\bef f=\text{pu}_{C}\triangleright h\triangleright\text{ex}_{P}\triangleright f=\text{pu}_{C}\triangleright h\bef\text{ex}_{P}\bef f\quad.
 \]
 This is possible only if $\text{pu}_{C}\triangleright f^{\downarrow C}=\text{pu}_{C}$
 for all $f$. This motivates us to assume that law as the \index{naturality law!of pure for contrafunctors@of \texttt{pure} for contrafunctors}\textbf{naturality
@@ -3598,7 +3551,7 @@ The code for $\text{ex}_{L}$ is
 def copointedFunc[C[_]: Pointed, P[_]: Copointed]: Copointed[Lambda[X => C[X] => P[X]]] =
   new Copointed[Lambda[X => C[X] => P[X]]] {
     def ex[A]: (C[A] => P[A]) => A = h => extract[P, A](h(cpure[C, A]))
-  }      // In Scala 2.13: h => cpure[C, A] pipe h pipe extract[P, A] as in $ h\Rightarrow\text{pu}_{C}\triangleright h\bef\text{ex}_{P} $
+  }      // In Scala 2.13: h => cpure[C, A] pipe h pipe extract[P, A] as in $ h\Rightarrow\text{pu}_{C}\triangleright h\triangleright\text{ex}_{P} $
 \end{lstlisting}
 
 We will analyze pointed contrafunctors and their naturality law in
@@ -3608,7 +3561,7 @@ Section~\ref{subsec:Pointed-contrafunctors}.
 
 Consider a functor $F$ defined by a recursive equation $F^{A}\triangleq S^{A,F^{A}}$
 where $S$ is a bifunctor (see Section~\ref{subsec:Bifunctors}).
-The functor $F$ is pointed if a method $\text{ex}_{F}:(F^{A}\Rightarrow A)\cong(S^{A,F^{A}}\Rightarrow A)$
+The functor $F$ is co-pointed if a method $\text{ex}_{F}:(F^{A}\Rightarrow A)\cong(S^{A,F^{A}}\Rightarrow A)$
 can be defined. Since the recursive definition of $F$ uses $F^{A}$
 as a type argument in $S^{A,F^{A}}$, we may assume (by induction)
 that an extractor function $F^{A}\Rightarrow A$ is already available
@@ -3638,14 +3591,14 @@ uses by an overline and compute:
 {\color{greenunder}\text{naturality law~(\ref{eq:copointed-bifunctor-naturality-law}) of }\text{ex}_{S}:}\quad & =\gunderline{\text{bimap}_{S}(\text{id})(\overline{\text{ex}_{F}})\bef\text{ex}_{S}}\bef f\\
 {\color{greenunder}\text{definition of }\text{ex}_{F}:}\quad & =\text{ex}_{F}\bef f\quad.
 \end{align*}
-An example to illustrate the recursive construction is the bifunctor
+An example illustrating the recursive construction is the bifunctor
 $S^{A,R}\triangleq A+R\times R$ that defines $F^{A}$ to be the binary
 tree functor, 
 \[
 F^{A}\triangleq S^{A,F^{A}}=A+F^{A}\times F^{A}\quad.
 \]
 The bifunctor $S$ is co-pointed because there exists a suitable function
-$\text{ex}_{S}:S^{A,A}\Rightarrow A$,
+$\text{ex}_{S}:S^{A,A}\Rightarrow A$.
 
 \begin{wrapfigure}{l}{0.48\columnwidth}%
 \vspace{-0.35\baselineskip}
@@ -3657,11 +3610,11 @@ def exS[A]: S[A, A] => A = {
 }
 \end{lstlisting}
 
-\vspace{-3.75\baselineskip}
+\vspace{-1.75\baselineskip}
 \end{wrapfigure}%
 
 \noindent In the code notation, the function $\text{ex}_{S}$ is written
-as\vspace{-0.35\baselineskip}
+as\vspace{-0.2\baselineskip}
 \[
 \text{ex}_{S}\triangleq\begin{array}{|c||c|}
  & A\\
@@ -3865,25 +3818,24 @@ def pointedFuncFC[C[_]: Pointed, F[_]]: Pointed[Lambda[X => F[X] => C[X]]] =
 
 \paragraph{Recursive types}
 
-The recursive construction for contrafunctors is $C^{A}\triangleq S^{A,C^{A}}$
-where $S^{A,R}$ is a contrafunctor in $A$ and a functor in $R$.
-A value of type $C^{\bbnum 1}$ will exist when the recursive type
-equation $T\triangleq S^{\bbnum 1,T}$ defines a non-void type $T$.
-This condition is similar to what we saw for pointed functors, and
-the resulting construction is the same.
+The recursive construction for contrafunctors (see Statement~\ref{subsec:functor-Statement-contrafunctor-recursive-1})
+is $C^{A}\triangleq S^{A,C^{A}}$ where $S^{A,R}$ is a contrafunctor
+in $A$ and a functor in $R$. A value of type $C^{\bbnum 1}$ will
+exist when the recursive type equation $T\triangleq S^{\bbnum 1,T}$
+defines a non-void type $T$. This condition is similar to that for
+pointed functors, and the resulting construction is the same.
 
 \paragraph{Summary}
 
 Can we recognize a pointed contrafunctor $C$ by looking at its type
 expression, e.g.
 \[
-C^{A}\triangleq\left(\bbnum 1+A\Rightarrow\text{Int}\right)+(\text{String}\times A\times A\Rightarrow\text{String})\quad?
+C^{A,B}\triangleq\left(\bbnum 1+A\Rightarrow B\right)+(\text{String}\times A\times B\Rightarrow\text{String})
 \]
-We need to set $A=\bbnum 1$ and try to create a value of type $C^{\bbnum 1}$.
-For this example, $C^{\bbnum 1}=\left(\bbnum 1+\bbnum 1\Rightarrow\text{Int}\right)+(\text{String}\times\bbnum 1\times\bbnum 1\Rightarrow\text{String})$.
-A value of this type is e.g.~a constant function returning an integer
-$123$: $\text{wu}_{C}\triangleq(\_^{:\bbnum 1+\bbnum 1}\Rightarrow123)+\bbnum 0$.
-So, the contrafunctor $C$ is pointed.
+with respect to $A$? We need to set $A=\bbnum 1$ and try to create
+a value of type $C^{\bbnum 1,B}$. In this example, $C^{\bbnum 1,B}=\left(\bbnum 1+\bbnum 1\Rightarrow B\right)+(\text{String}\times\bbnum 1\times B\Rightarrow\text{String})$.
+A value of this type is e.g.~$\text{wu}_{C}\triangleq\bbnum 0+(s^{:\text{String}}\times1\times b^{:B}\Rightarrow s)$.
+So, the contrafunctor $C^{A,B}$ is pointed with respect to $A$.
 
 \begin{table}
 \begin{centering}

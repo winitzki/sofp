@@ -794,12 +794,12 @@ final case class Coupons[A](johns: JohnsCoupons[A], jills: JillsCoupons[A])
 \end{lstlisting}
 It is convenient first to define filtering functions separately for
 \lstinline!JohnsCoupons! and for \lstinline!JillsCoupons!:
-\begin{lstlisting}
+\begin{lstlisting}[mathescape=true]
 def filterJohn[A](p: A => Boolean): JohnsCoupons[A] => JohnsCoupons[A] = {
-  case John0() => John0()       // We must return John0() unless all coupons are valid.
-  case John1(c1) => if (p(c1)) John1(c1) else John0()
-  case John2(c1, c2) => if (p(c1) && p(c2)) John2(c1, c2) else John0()
-  case John3(c1, c2, c3) => if (p(c1) && p(c2) && p(c3)) John3(c1, c2, c3) else John0()
+  case John0()             => John0()  // We return John0() unless $all$ coupons are valid:
+  case John1(c1)           => if (p(c1)) John1(c1) else John0()
+  case John2(c1, c2)       => if (p(c1) && p(c2)) John2(c1, c2) else John0()
+  case John3(c1, c2, c3)   => if (p(c1) && p(c2) && p(c3)) John3(c1, c2, c3) else John0()
 }
 def filterJill[A](p: A => Boolean): JillsCoupons[A] => JillsCoupons[A] = {
   case Jill0() => Jill0()      // We must remove each invalid coupon and keep the rest.
@@ -820,7 +820,15 @@ def filter[A](p: A => Boolean)(fa: Coupons[A]): Coupons[A] =
 
 We will not prove the laws for the \lstinline!filter! function because
 this implementation follows from general type constructions derived
-later in this chapter.
+later in this chapter. Running the \texttt{scalacheck} tests does
+not find any problems:
+\begin{lstlisting}
+implicit val filterableCoupons = new Filterable[Coupons] {
+  def filt[A](p: A => Boolean)(fa: Coupons[A]): Coupons[A] = filter(p)(coupons)
+}
+checkFilteringLaws[Coupons, Int, String] // Tests pass.
+\end{lstlisting}
+
 
 \subsubsection{Example \label{subsec:filt-solved-example-3}\ref{subsec:filt-solved-example-3}}
 
@@ -840,22 +848,28 @@ first returns \lstinline!false!:
 \begin{lstlisting}
 def filter[A](p: A => Boolean)(s: Server[A]): Server[A] = Server(s.requests.takeWhile(p))
 \end{lstlisting}
-{*}{*}{*}
+This implementation can be reduced to general type constructions for
+filterable functors, so the filtering laws hold. Intuitively, we expect
+this to be the case because the \lstinline!filter! function removes
+values that violate the predicate \lstinline!p! from the sequence.
+The filtering function also removes other values that may or may not
+violate the predicate, but removing additional values is compatible
+with the filtering laws.
 
 \subsubsection{Example \label{subsec:filt-solved-example-4}\ref{subsec:filt-solved-example-4}}
 
-Determine whether each of these functors is filterable, and if so,
-implement a \lstinline!Filterable! typeclass instance:
+If possible, implement a \lstinline!Filterable! typeclass instance
+for:
 
-\textbf{(a)} The functor $P^{T}$ defined by the Scala code
+\textbf{(a)} The functor $F^{T}$ defined by the Scala code
 \begin{lstlisting}
-final case class P[T](x: Option[T], yy: Option[(T, T)])
+final case class F[T](x: Option[T], yy: Option[(T, T)])
 \end{lstlisting}
 
 \textbf{(b)} $F^{A}\triangleq\text{Int}+\text{Int}\times A+\text{Int}\times A\times A+\text{Int}\times A\times A\times A\quad.$
 
-\textbf{(c)} $F^{A}=\text{NonEmptyList}^{A}$ defined recursively
-as $F^{A}\triangleq A+A\times F^{A}\quad.$ 
+\textbf{(c)} A non-empty list functor, $F^{A}=\text{NEList}^{A}$,
+defined recursively as $F^{A}\triangleq A+A\times F^{A}\quad.$ 
 
 \textbf{(d)} $F^{Z,A}\triangleq Z+\text{Int}\times Z\times A\times A$
 (with respect to the type parameter $A$).
@@ -864,6 +878,60 @@ as $F^{A}\triangleq A+A\times F^{A}\quad.$
 (with respect to the type parameter $A$).
 
 \subparagraph{Solution}
+
+\textbf{(a)} The functor $F$ is written in the code notation as $F^{T}\triangleq\left(\bbnum 1+T\right)\times\left(\bbnum 1+T\times T\right)$.
+This is a product of \lstinline!Option[T]!, which is filterable,
+and the functor $\bbnum 1+T\times T$, which was shown to be filterable
+in Example~.
+
+\textbf{(b)} The functor $F$ is equivalent to $F^{A}\cong\text{Int}\times\left(\bbnum 1+A+A\times A+A\times A\times A\right)$.
+Note that the functor \lstinline!JohnsCoupons! from Example~\ref{subsec:filt-solved-example-2}
+is $\bbnum 1+A+A\times A+A\times A\times A$; so we can write $F^{A}\cong\text{Int}\times\text{JohnsCoupons}^{A}$
+and use the filtering operation from Example~\ref{subsec:filt-solved-example-2}.
+\begin{lstlisting}
+final case class F[A](n: Int, johns: JohnsCoupons[A])
+def filter[A](p: A => Boolean)(fa: F[A]): F[A] = fa.copy(johns = johns.filter(p))
+\end{lstlisting}
+
+An interesting alternative implementation is to use the integer value
+\lstinline!n! for counting the number of data items \emph{removed}
+by filtering:
+\begin{lstlisting}
+def filter[A](p: A => Boolean)(fa: F[A]): F[A] = {
+  val (removed, newJohnsCoupons) = fa.johns match {
+    case John0()             => (0, John0())
+    case John1(c1)           => if (p(c1)) (0, John1(c1)) else (1, John0())
+    case John2(c1, c2)       => if (p(c1) && p(c2)) (0, John2(c1, c2)) else (2, John0())
+    case John3(c1, c2, c3)   => if (p(c1) && p(c2) && p(c3)) (0, John3(c1, c2, c3)) else (3, John0())
+  }
+  F(fa.n + removed, newJohnsCoupons)
+}
+\end{lstlisting}
+The new code still satisfies the filtering laws.
+
+\textbf{(c)} The type definition of \lstinline!NEList! is
+\begin{lstlisting}
+sealed trait NEList[A]
+final case class Last[A](x: A)                  extends NEList[A]
+final case class More[A](x: A, tail: NEList[A]) extends NEList[A]
+\end{lstlisting}
+We find that we \emph{cannot} implement the type signature of \lstinline!filter!:
+\begin{lstlisting}[numbers=left,numberstyle={\small}]
+def filter[A](p: A => Boolean): NEList[A] => NEList[A] = {
+  case Last(x)       => if (p(x)) ??? else ???    // Need to compute a value of type NEList[A] here.
+  case More(x, tail) => ???
+}
+\end{lstlisting}
+The problem is with handling the case \lstinline!p(x) == false! in
+line~2 above: we need to remove the value \lstinline!x!, which would
+make the list empty, but the type \lstinline!NEList[A]! disallows
+empty lists. So, line~2 must always return a list containing the
+value \lstinline!x!, which will violate the partial function law
+of filtering. We conclude that \lstinline!NEList! is not filterable.
+
+\textbf{(d)} The
+
+\textbf{(e)} The
 
 \subsubsection{Example \label{subsec:filt-solved-example-5}\ref{subsec:filt-solved-example-5}}
 
@@ -892,9 +960,8 @@ define a lawful filterable functor?
 
 \subsubsection{Exercise \label{subsec:filt-exercise-3}\ref{subsec:filt-exercise-3}}
 
-Determine whether the following functors are filterable, and if so,
-implement the \lstinline!filter! function or the \lstinline!Filterable!
-typeclass instance (law checking is optional):
+If possible, implement the \lstinline!filter! function or a \lstinline!Filterable!
+typeclass instance (law checking is optional) for:
 
 \textbf{(a)} The functor $Q^{A,Z}$ with respect to the type parameter
 $A$. Define $Q$ by this Scala code:\texttt{\textcolor{blue}{\footnotesize{}}}
@@ -929,8 +996,8 @@ functor if we require one of the following additional rules:
 
 \subsubsection{Exercise \label{subsec:filt-exercise-4-2}\ref{subsec:filt-exercise-4-2}}
 
-Implement a lawful \lstinline!filter! function for a regular-shaped
-tree $R^{A}$ defined by
+Implement a \lstinline!filter! function for a regular-shaped tree
+$R^{A}$ defined by
 \[
 R^{A}\triangleq\bbnum 1+A+R^{A\times A}\quad.
 \]
