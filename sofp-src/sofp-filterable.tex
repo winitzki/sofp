@@ -14,7 +14,6 @@ on sequences, sets, and other data structures. An example of using
 \[
 \sum_{x\in\mathbb{Z};\:0\leq x\leq100;\:\cos x>0}\sqrt{\cos x}\approx38.71\quad.
 \]
-The following Scala code implements this calculation:
 \begin{lstlisting}
 scala> (0 to 100).map(x => math.cos(x)).filter(_ > 0).map(math.sqrt).sum
 res0: Double = 38.71218949848382
@@ -118,7 +117,7 @@ the filtering predicate.
 
 The type constructor \lstinline!Option[T]! is written in the type
 notation as a disjunctive type $\bbnum 1+T$, while \lstinline!List[T]!
-can be viewed as an ``infinite'' disjunction,
+can be viewed as an ``infinite disjunction'',
 \begin{equation}
 \text{List}^{T}=1+T+T\times T+T\times T\times T+...\label{eq:list-infinite-disjunction}
 \end{equation}
@@ -154,29 +153,22 @@ The data type describing a week's orders must describe a possible
 order on Tuesday (\lstinline!Option[A]!) and a possible order on
 Friday (again \lstinline!Option[A]!). So, we can represent a week's
 orders as a product $F^{A}\triangleq\left(\bbnum 1+A\right)\times\left(\bbnum 1+A\right)$
-and implement it as
+and implement it as a case class with methods \lstinline!.map! and
+\lstinline!.withFilter!:
 \begin{lstlisting}
 final case class Orders[A](tue: Option[A], fri: Option[A]) {
+  def map[B](f: A => B): Orders[B] = Orders(tue.map(f), fri.map(f))    // Functor.
   def withFilter(p: A => Boolean): Orders[A] = Orders(tue.filter(p), fri.filter(p))
 }
 
 scala> Orders(Some(500), Some(2000)).withFilter(_ < 1000) // Approved if the amount is below $1000.
 res0: Orders[Int] = Orders(Some(500),None)
 \end{lstlisting}
-This code applies filtering independently to both parts of the product
-type.
-
-Once we declare a \lstinline!Functor! instance for the type constructor
-\lstinline!Orders!, we will be able to use \lstinline!Orders! as
+This code applies filtering independently to both parts of the product.
+With this definition, we will be able to use \lstinline!Orders! as
 a ``source'' of data in functor blocks:
 \begin{lstlisting}
-import cats.Functor
-import cats.syntax.functor._
-implicit val functorOrders = new Functor[Orders] {
-  def map[A, B](fa: Orders[A])(f: A => B): Orders[B] = Orders(fa.tue.map(f), fa.fri.map(f))
-}
-
-scala@ for {
+scala> for {
   x <- Orders(Some(500), Some(2000))  // "Source" of type Orders[Int].
   y = x - 200     // Apply discount of $200 to each order.
   if y < 500      // Orders are approved if the amount is below $500 after discount.
@@ -184,8 +176,7 @@ scala@ for {
 res1: Orders[Double] = Orders(Some(330.0), None)
 \end{lstlisting}
 
-Suppose we are considering additional business requirements, such
-as:
+Suppose we are considering an additional business rule, such as:
 
 \textbf{(a)} Both orders must be approved, or else no orders can be
 placed that week. 
@@ -193,11 +184,11 @@ placed that week.
 \textbf{(b)} Both orders can be placed that week if at least one of
 them is approved.
 
-We could modify the code of \lstinline!withFilter! to implement any
-of the requirements (a) or (b). Will the resulting function still
-be a ``filtering'' operation?
+We could modify the code of \lstinline!withFilter! to implement one
+of the rules \textbf{(a)} or \textbf{(b)}. Will the resulting function
+still be a ``filtering'' operation?
 
-We cannot decide this without having some mathematical laws that a
+We cannot decide this without knowing the mathematical laws that a
 filtering operation must satisfy. Let us now consider what intuitive
 expectations we have for the concept of filtering.
 
@@ -396,7 +387,7 @@ A functor $F$ is \textbf{filterable} if there is a function $\text{filt}_{F}$
 satisfying these four laws.\index{filterable functor} The following
 type diagram illustrates the naturality law of \lstinline!filter!:
 \[
-\xymatrix{\xyScaleY{2.0pc}\xyScaleX{8.0pc}F^{A}\ar[r]\sp(0.5){\text{filt}_{F}(f^{:A\rightarrow B}\bef p^{:B\rightarrow\bbnum 2})}\ar[d]\sb(0.45){(f^{:A\rightarrow B})^{\uparrow F}} & F^{A}\ar[d]\sp(0.45){(f^{:A\rightarrow B})^{\uparrow F}}\\
+\xymatrix{\xyScaleY{2.0pc}\xyScaleX{7.0pc}F^{A}\ar[r]\sp(0.5){\text{filt}_{F}(f^{:A\rightarrow B}\bef p^{:B\rightarrow\bbnum 2})}\ar[d]\sb(0.45){(f^{:A\rightarrow B})^{\uparrow F}} & F^{A}\ar[d]\sp(0.45){(f^{:A\rightarrow B})^{\uparrow F}}\\
 F^{B}\ar[r]\sp(0.5){\text{filt}_{F}(p^{:B\rightarrow\bbnum 2})} & F^{B}
 }
 \]
@@ -421,7 +412,7 @@ the implementation code of \lstinline!.withFilter! as we implemented
 it for \lstinline!Orders!. Later in this chapter we will see that
 the four laws can be simplified, reduced to just two laws, and proved
 more quickly. For now, we can use the \texttt{scalacheck} library
-to write randomized tests for the four filtering laws:
+to implement randomized tests for the four filtering laws:
 \begin{lstlisting}
 def checkFilteringLaws[F[_] : Filterable : Functor, A, B](implicit
     faEv: Arbitrary[F[A]], fbEv: Arbitrary[F[B]], abEv: Arbitrary[A => B],
@@ -439,8 +430,8 @@ def checkFilteringLaws[F[_] : Filterable : Functor, A, B](implicit
   }
 }
 \end{lstlisting}
-Creating a typeclass instance for \lstinline!Orders! and running
-the tests will show no errors:
+Creating a \lstinline!Filterable! typeclass instance for \lstinline!Orders!
+and running the tests will show no errors:
 \begin{lstlisting}
 implicit val filterableOrders = new Filterable[Orders] {
   def filt[A](p: A => Boolean)(fa: F[A]): F[A] = fa.filter(p)
@@ -488,17 +479,17 @@ of computations in functor blocks:
 \begin{lstlisting}
 scala> for {
   x <- Orders(Some(500), Some(2000))
-  if x < 1000       // Intuition says that values of x must be less than 1000 from now on.
-  y = s"Amount: $x" // So, the value x = 2000 should not be allowed to appear in this line.
-} yield y           // But the end result does not correspond to this intuition:
+  if x < 1000       // Intuition says that values of x must be below 1000 from now on.
+  y = s"Amount: $x" // So, the value x = 2000 should never appear in this line.
+} yield y           // But the final result does not correspond to this intuition:
 res2: Orders[String] = Orders(Some("Amount: 500"), Some("Amount: 2000"))
 \end{lstlisting}
-The computation just shown clearly violates the partial function law
-because the value \lstinline!x = 2000! is not excluded from further
-computations despite the filtering condition, \lstinline!if x < 1000!.
-This happened because the code of \lstinline!filt! does not always
-remove the value \lstinline!x = 2000! from the data structure when
-it does not pass the predicate.
+The computation just shown violates the partial function law because
+the value \lstinline!x = 2000! is not excluded from further computations
+despite the filtering condition, ``\lstinline!if x < 1000!''. This
+happened because the code of \lstinline!filt! did not remove the
+value \lstinline!x = 2000! from the data structure even though it
+does not pass the predicate.
 
 The four laws of filtering are a rigorous formulation of our intuitions
 about what it means to ``filter'' data. The type \lstinline!Orders!
@@ -508,32 +499,33 @@ violates the filtering laws. This does not mean that business rule
 \textbf{(b)} cannot be used in real-world programs; it only means
 that order approval according to rule \textbf{(b)} is not a filtering
 operation. For instance, applying two order approvals one after another
-will not give the intuitively expected results. However, this may
-be acceptable in applications where only one order approval is ever
-applied.
+will not give the intuitively expected results. Nevertheless, this
+may be acceptable in applications where only one order approval is
+ever applied.
 
-Violations of the filtering laws by business rule (b) also does not
-mean that the functor \lstinline!Orders! is not filterable. The same
-functor with business rule \textbf{(a)} has a lawful implementation
+Violations of the filtering laws by business rule \textbf{(b)} also
+does not mean that the functor \lstinline!Orders! is not filterable.
+The same functor with business rule \textbf{(a)} has a lawful implementation
 of \lstinline!filter!. 
 
-What are examples of functors that are \emph{not} filterable? One
-way of implementing the type signature of the \lstinline!filter!
-function is to use the identity function,
+What are examples of functors that are not filterable? One way of
+implementing the type signature of the \lstinline!filter! function
+is to use the identity function,
 \begin{lstlisting}
 def filt[A](p: A => Boolean)(fa: F[A]): F[A] = fa  // Ignore the predicate `p`; always return `fa`.
 \end{lstlisting}
-This is the only possible implementation of \lstinline!filter! for
-certain functors $F$, e.g.~the identity functor $F^{A}\triangleq A$
-or the exponential functor $F^{A}\triangleq E\rightarrow A$. However,
-this implementation never removes any data and so will violate the
+This implementation never removes any data and so will violate the
 partial function law if the functor $F^{A}$ wraps a value of type
-$A$ that should not pass the filter. So, functors of the form $F^{A}\triangleq E\rightarrow A$
-(where $E$ is a fixed type) are not filterable.
+$A$ that does not pass the filter. However, the identity function
+is the \emph{only} possible implementation of \lstinline!filter!
+for certain functors $F$, e.g.~the identity functor $F^{A}\triangleq A$
+or the exponential functor $F^{A}\triangleq E\rightarrow A$. So,
+functors of the form $F^{A}\triangleq E\rightarrow A$ (where $E$
+is a fixed type) are not filterable.
 
 The functor $F^{A}\triangleq A\times(\bbnum 1+A)$ is not filterable
 because the filtering operation $\text{filt}_{F}(p)$ cannot remove
-the first value of type $A$ even if it does not pass the filter predicate
+the first value of type $A$ when it does not pass the filter predicate
 $p$.
 
 Functors such as $F^{A}\triangleq\bbnum 1+A$ and $F^{A}\triangleq\bbnum 1+A\times A$
@@ -546,15 +538,21 @@ implicit val wrongFilterableOption = new Filterable[Option] {
   def filt[A](p: A => Boolean)(fa: Option[A]): Option[A] = None // Discard input, always return None.
 }
 \end{lstlisting}
-This code discards information and so violates the identity law: the
+This code discards information and violates the identity law: the
 result of filtering with an identically \lstinline!true! predicate
 is not the identity function of type \lstinline!Option[A] => Option[A]!.
 
 Finally, one could violate the naturality law by defining the \lstinline!filter!
-function in a special way when the type parameter $A$ is equal to,
+function in a special way when the type parameter $A$ is set to,
 say, the \lstinline!Int! type. To obey the naturality law, the \lstinline!filter!
 function must be fully parametric and must not use hard-coded values
 of specific types or make decisions based on type parameters.
+
+Note that the \lstinline!Boolean! type is equivalent to $\bbnum 2\cong\bbnum 1+\bbnum 1$;
+in other words, this type can be expressed via the basic type constructions
+(disjunction and the \lstinline!Unit! type) without using any externally
+defined values. For this reason, it is allowed to use the \lstinline!Boolean!
+type in fully parametric functions.
 
 \subsection{Solved examples: Programming with filterable functors\index{solved examples} }
 
@@ -880,7 +878,7 @@ defined recursively as $F^{A}\triangleq A+A\times F^{A}\quad.$
 \textbf{(d)} $F^{Z,A}\triangleq Z+\text{Int}\times Z\times A\times A$
 (with respect to the type parameter $A$).
 
-\textbf{(e)} $F^{Z,A}\triangleq\bbnum 1+Z+\text{Int}\times A\times\text{List}^{A}$
+\textbf{(e)} $F^{Z,A}\triangleq Z+\text{Int}\times A\times\text{List}^{A}$
 (with respect to the type parameter $A$).
 
 \subparagraph{Solution}
@@ -888,12 +886,22 @@ defined recursively as $F^{A}\triangleq A+A\times F^{A}\quad.$
 \textbf{(a)} The functor $F$ is written in the code notation as $F^{T}\triangleq\left(\bbnum 1+T\right)\times\left(\bbnum 1+T\times T\right)$.
 This is a product of \lstinline!Option[T]!, which is filterable,
 and the functor $\bbnum 1+T\times T$, which was shown to be filterable
-in Example~.
+in Example~\ref{subsec:filt-solved-example-1}. We can apply the
+corresponding \lstinline!filter! operation to each part of the product:
+\begin{lstlisting}
+type F[T] = (Option[T], Option[(T, T)])
+def filter[T](p: T => Boolean): F[T] => F[T] = {
+  case (t, None)             => (t.filter(p), None)
+  case (t, Some((t1, t2)))   => (t.filter(p), if (p(t1) && p(t2)) Some((t1, t2)) else None)
+}
+\end{lstlisting}
+Each part of the product type satisfies the filtering laws separately.
 
 \textbf{(b)} The functor $F$ is equivalent to $F^{A}\cong\text{Int}\times\left(\bbnum 1+A+A\times A+A\times A\times A\right)$.
 Note that the functor \lstinline!JohnsCoupons! from Example~\ref{subsec:filt-solved-example-2}
 is $\bbnum 1+A+A\times A+A\times A\times A$; so we can write $F^{A}\cong\text{Int}\times\text{JohnsCoupons}^{A}$
-and use the filtering operation from Example~\ref{subsec:filt-solved-example-2}.
+and use the filtering operation from Example~\ref{subsec:filt-solved-example-2},
+while keeping the \lstinline!Int! value unchanged.
 \begin{lstlisting}
 final case class F[A](n: Int, johns: JohnsCoupons[A])
 def filter[A](p: A => Boolean)(fa: F[A]): F[A] = fa.copy(johns = johns.filter(p))
@@ -935,9 +943,40 @@ empty lists. So, line~2 must always return a list containing the
 value \lstinline!x!, which will violate the partial function law
 of filtering. We conclude that \lstinline!NEList! is not filterable.
 
-\textbf{(d)} The
+\textbf{(d)} Looking at the type expression $F^{Z,A}\triangleq Z+\text{Int}\times Z\times A\times A$,
+we need to check whether we could remove the values of type $A$ that
+do not pass the filter. If none of the two values of type $A$ within
+$\text{Int}\times Z\times A\times A$ pass the filter, we will need
+to remove both of them and to return a value of type $Z$. Luckily,
+we have a value of type $Z$ within $\text{Int}\times Z\times A\times A$.
+So we can implement \lstinline!filter! as e.g.~this code,
+\begin{lstlisting}
+type F[A] = Either[Z, (Int, Z, A, A)]           // The type `Z` must be already defined.
+def filter[A](p: A => Boolean): F[A] => F[A] = {
+  case Left(z)                 => Left(z)
+  case Right((n, z, a1, a2))   => if (p(a1) && p(a2)) Right((n, z, a1, a2))
+                                  else Left(z) // If nothing passes the filter, use `z`.
+}
+\end{lstlisting}
+The filtering laws will hold similarly to Example~\ref{subsec:filt-solved-example-1}.
 
-\textbf{(e)} The
+\textbf{(e)} The \lstinline!filter! function must be able to remove
+values of type $A$ from $F^{Z,A}\triangleq Z+\text{Int}\times A\times\text{List}^{A}$.
+What if \emph{no} values of type $A$ pass the filter? If we do not
+remove all those values of type $A$ from the data structure, we will
+violate the partial function law. So, the only choice in that case
+is to return a value of type $Z$. But $Z$ is a type parameter, and
+we cannot create values of type $Z$ from scratch. We conclude that
+$F^{Z,A}$ is not filterable with respect to $A$.
+\begin{lstlisting}
+type F[A] = Either[Z, (Int, A, List[A])]
+def filter[A](p: A => Boolean): F[A] => F[A] = {
+  case Left(z)             => Left(z)
+  case Right((n, a, as))   =>  // What to compute in case p(a) == false and as.filter(p) == List() ?
+                           ??? // In that case, we will have neither values of type A nor of type Z.
+}
+\end{lstlisting}
+
 
 \subsubsection{Example \label{subsec:filt-solved-example-5}\ref{subsec:filt-solved-example-5}}
 
@@ -945,6 +984,20 @@ Show that $C^{Z,A}\triangleq A\rightarrow\bbnum 1+Z$ is a filterable
 contrafunctor with respect to the type parameter $A$ (no law checking).
 
 \subparagraph{Solution}
+
+We will study filterable contrafunctors in more detail later in this
+chapter. For now, we simply ignore the fact that $C^{Z,A}$ is a contrafunctor
+in $A$, and try implementing a \lstinline!filter! function with
+the standard type signature
+\begin{lstlisting}
+type C[A] = A => Option[Z]       // The type `Z` must be already defined.
+def filter[A](p: A => Boolean)(c: C[A]): C[A] = { a: A => ??? }
+\end{lstlisting}
+We need to implement a function of type $A\rightarrow\bbnum 1+Z$,
+trying to preserve information as much as possible. We could return
+\lstinline!None! for all arguments, but that implementation would
+lose information. Instead, we may apply \lstinline!c(a)! and obtain
+a value of type $\bbnum 1+Z$.
 
 \subsection{Exercises: Programming with filterable functors\index{exercises} }
 
