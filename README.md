@@ -12,11 +12,31 @@ The book is published under the [GNU Free Documentation License](https://www.gnu
 
 This repository contains the full source code for the book (LyX and LaTeX / jpg / eps) and shell scripts for building a PDF version of the book. (So this is a "transparent" copy in the sense of the GNU license.)
 
-This repository also contains talk slides for presentations that initiated the work on this book. The talk slides are not part of the book and may be partially obsolete.
+This repository also contains talk slides for presentations that initiated the work on this book. The talk slides are not part of the book and may be partially obsolete both in content and in the notation used.
+
+# Current status of the book
+
+Chapters 1-7 as well as some appendices and discussion chapters are ready after a second proofreading of the draft. Chapters 8 and 13 are in preparation.
+
+# Printed version of the draft
+
+A printed version of the current draft can be purchased at lulu.com: [http://www.lulu.com/content/paperback-book/the-science-of-functional-programming/24915714](http://www.lulu.com/content/paperback-book/the-science-of-functional-programming/24915714).
+
+This printed version contains only the chapters whose text has been edited and proofread. It corresponds to the PDF file [sofp-src/sofp-draft.pdf](sofp-src/sofp-draft.pdf).
+
+Readers are invited to create github issues in this repository if they wish to make comments or suggestions regarding the contents of the book.
+
+# Roadmap
+
+- Milestone 1 (achieved as of August 2019): chapters 1-6 are completed and available for purchase at lulu.com as a cheap (black/white) paperback.
+- Milestone 2 (ETA: November 2019): chapters 7, 8, 9, 13 are completed. The draft is available for purchase at lulu.com (black/white, cheaper) and at blurb.com (color, more expensive) in paperback.
+- Milestone 3 (ETA: end of 2019): chapters 1-13 are completed and available for purchase at lulu.com (black/white, cheaper) and blurb.com (color, more expensive) as both paperback and hardcover versions.
+- Milestone 4 (ETA: mid-2020): possibly adding chapters 14-16, the entire book is completed after possible revisions and input from readers.
 
 # Building a PDF version of the book from LyX sources
 
-The current PDF build is available as [sofp-src/sofp.pdf](sofp-src/sofp.pdf).
+The current build of the full PDF file is available as [sofp-src/sofp.pdf](sofp-src/sofp.pdf).
+It contains the proofread chapters as well as some chapters that are not ready and may contain some partial text and some older slides.
 
 If you want to build from source, currently you need `LyX` 2.3.x and `pdftk` installed. 
 
@@ -34,22 +54,3 @@ latex sofp.tex
 dvips sofp.dvi
 ps2pdf sofp.ps
 ```
-
-# Printed version of the draft
-
-A printed version of the draft can be purchased at lulu.com: [http://www.lulu.com/content/paperback-book/the-science-of-functional-programming/24915714](http://www.lulu.com/content/paperback-book/the-science-of-functional-programming/24915714).
-
-This printed version contains only the chapters whose text has been edited and proofread, and corresponds to the PDF file [sofp-src/sofp-draft.pdf](sofp-src/sofp-draft.pdf). 
-
-Readers are invited to create github issues in this repository if they wish to make comments or suggestions regarding the contents of the book.
-
-# Current status of the draft
-
-Chapters 1-6 as well as some appendices and discussion chapters are ready after a second proofreading of the draft. Chapter 13 is in preparation.
-
-# Roadmap
-
-- Milestone 1 (achieved as of August 2019): chapters 1-6 are completed and available for purchase at lulu.com as a cheap (black/white) paperback.
-- Milestone 2 (ETA: November 2019): chapters 7, 8, 9, 13 are completed. The draft is available for purchase at lulu.com (black/white, cheaper) and at blurb.com (color, more expensive) in paperback.
-- Milestone 3 (ETA: end of 2019): chapters 1-13 are completed and available for purchase at lulu.com (black/white, cheaper) and blurb.com (color, more expensive) as both paperback and hardcover versions.
-- Milestone 4 (ETA: mid-2020): possibly adding chapters 14-16, the entire book is completed after possible revisions and input from readers.
