@@ -419,7 +419,7 @@ Contents in brief:
 - What category theory does for us, and what it does not do
 - Constructions of filterable functors from other functors
 - Intuitions behind filterable contrafunctors vs. filterable functors
-- Fiilterable contrafunctors: their laws and structure (in brief)
+- Filterable contrafunctors: their laws and structure (in brief)
 - Worked examples and exercises
 
 [Summary for Chapter 6, parts 1 and 2](https://www.youtube.com/watch?v=jateYf0rYZs&list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV&index=19)
