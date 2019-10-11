@@ -379,7 +379,7 @@ function laws of filtering:\index{composition law!of filter@of \texttt{filter}}\
 {\color{greenunder}\text{naturality law of }\text{filt}_{F}:}\quad & f^{\uparrow F}\bef\text{filt}_{F}(p)=\text{filt}_{F}(f\bef p)\bef f^{\uparrow F}\quad\text{for any }f^{:A\rightarrow B},~p^{:B\rightarrow\bbnum 2}\quad.\label{eq:naturality-law-of-filter}\\
 {\color{greenunder}\text{identity law of }\text{filt}_{F}:}\quad & \text{filt}_{F}(\_\rightarrow\text{true})=\text{id}^{:F^{A}\rightarrow F^{A}}\quad.\nonumber \\
 {\color{greenunder}\text{composition law of }\text{filt}_{F}:}\quad & \text{filt}_{F}(p_{1})\bef\text{filt}_{F}(p_{2})=\text{filt}_{F}(x\rightarrow p_{1}(x)\wedge p_{2}(x))\quad\text{for any }p_{1}^{:A\rightarrow\bbnum 2},~p_{2}^{:A\rightarrow\bbnum 2}\quad.\nonumber \\
-{\color{greenunder}\text{partial function law of }\text{filt}_{F}:}\quad & \text{filt}_{F}(p)\bef f^{\uparrow F}=\text{filt}_{F}(p)\bef f_{|p}^{\uparrow F}\quad\text{for any }f^{:A\rightarrow B},~p^{:A\rightarrow\bbnum 2}\quad.\nonumber 
+{\color{greenunder}\text{partial function law of }\text{filt}_{F}:}\quad & \text{filt}_{F}(p)\bef f^{\uparrow F}=\text{filt}_{F}(p)\bef f_{|p}^{\uparrow F}\quad\text{for any }f^{:A\rightarrow B},~p^{:A\rightarrow\bbnum 2}\quad.\label{eq:partial-function-law-of-filter}
 \end{align}
 
 The following type diagram illustrates the naturality law of \lstinline!filter!:\vspace{-0.5\baselineskip}
@@ -1139,7 +1139,6 @@ we can then express \lstinline!filter! through \lstinline!map! and
  & \quad\quad\quad\quad\left(\text{filt}_{F}(p)\right)^{:F^{A}\rightarrow F^{A}}=\text{inflate}\bef(\text{filt}_{\text{Opt}}(p))^{\uparrow F}\bef\text{deflate}\quad.\\
  & \xymatrix{\xyScaleX{5pc}F^{A}\ar[r]\sp(0.45){\text{inflate}} & F^{1+A}\ar[r]\sp(0.55){\left(\text{filt}_{\text{Opt}}(p)\right)^{\uparrow F}} & F^{1+A}\ar[r]\sp(0.55){\text{deflate}} & F^{A}}
 \end{align*}
-
 Here $\text{filt}_{\text{Opt}}$ is the standard \lstinline!filter!
 function for the \lstinline!Option! type. We notice that both functions
 in the composition $\text{inflate}\bef(\text{filt}_{\text{Opt}}(p))^{\uparrow F}$
@@ -1218,29 +1217,85 @@ being applied to an empty \lstinline!Option! value. Because of this,
 \lstinline!deflate! is a \emph{total} function when defined by Eq.~(\ref{eq:def-deflate-via-filter}),
 as long as $F$'s \lstinline!filter! obeys its partial function law.
 
-\subsection{Using \texttt{deflate} to define filterable functors}
+The function \lstinline!deflate! has a simpler type signature than
+\lstinline!filter! and is simpler to implement. We can define the
+\lstinline!Filterable! typeclass through \lstinline!deflate!, providing
+\lstinline!filter! automatically like this:
+\begin{lstlisting}
+abstract class Filterable[F[_]: Functor] {  // Need a `Functor` instance to use `.map`.
+  def deflate[A]: F[Option[A]] => F[A]   // Typeclass instances will implement `deflate`.
+  def filt[A](p: A => Boolean)(fa: F[A]): F[A] = deflate(fa.map(x => Some(x).filter(p)))
+} // Typeclass instances don't have to implement `filt`, but may override it for performance reasons.
+\end{lstlisting}
 
-We could specify filterable functors by implementing \texttt{\textcolor{blue}{\footnotesize{}deflate}} 
 
-The implementation of \texttt{\textcolor{blue}{\footnotesize{}filter}}
-would then be derived by library
+\subsubsection{Example \label{subsec:Example-ff-deflate-1-1}\ref{subsec:Example-ff-deflate-1-1}\index{solved examples}}
 
-Use \texttt{\textcolor{blue}{\footnotesize{}deflate}} to verify that
-some functors are certainly not filterable:
+Use \lstinline!deflate! to implement a \lstinline!Filterable! instance
+for the functor $F^{A}\triangleq Z\rightarrow\text{List}^{A}$.
 
-$F^{A}=A+A\times A$. Write $F^{1+A}=1+A+(1+A)\times(1+A)$ 
+\subparagraph{Solution}
 
-cannot map $F^{1+A}\rightarrow F^{A}$ because we do not have $1\rightarrow A$
+The type signature of \lstinline!deflate! is implemented as
+\begin{lstlisting}
+type F[A] = Z => List[A]    // The type Z should have been defined before.
+def deflateF[A](fa: F[Option[A]]): F[A] = { z => fa(z).flatten }
+\end{lstlisting}
+We used Scala's library method \lstinline!.flatten! with the type
+signature \lstinline!Seq[Option[A]] => Seq[A]!. This method is defined
+for all sequences, similarly to the \lstinline!.flatten! method with
+type \lstinline!Seq[Seq[A]] => Seq[A]!.
 
-$F^{A}=\text{Int}\rightarrow A$. Write $F^{1+A}=\text{Int}\rightarrow1+A$ 
+Using this function, we implement the typeclass instance as
+\begin{lstlisting}
+implicit val filterableF = new Filterable[F] {
+  def deflate[A]: F[Option[A]] => F[A] = deflateF
+}
+\end{lstlisting}
 
-type signature of \texttt{\textcolor{blue}{\footnotesize{}deflate}}
-would be $\left(\text{Int}\rightarrow1+A\right)\rightarrow\text{Int}\rightarrow A$
 
-cannot map $F^{1+A}\rightarrow F^{A}$ because we do not have $1+A\rightarrow A$
+\subsubsection{Example \label{subsec:Example-ff-deflate-1}\ref{subsec:Example-ff-deflate-1}}
 
-\texttt{\textcolor{blue}{\footnotesize{}deflate}} is easier to implement
-and to reason about
+Implement \lstinline!deflate! for the functor $F^{A}\triangleq A\times A+(Z\rightarrow Z)$.
+
+\subparagraph{Solution}
+
+The type signature of \lstinline!deflate! is $F^{\bbnum 1+A}\rightarrow F^{A}$
+and can be implemented e.g.~as
+\begin{lstlisting}
+type F[A] = Either[(A, A), Z => Z]    // The type Z should have been defined before.
+def deflateF[A]: F[Option[A]] => F[A] = { // Pattern-match on Either[(Option[A], Option[A]), Z => Z].
+  case Left((Some(a1), Some(a2)))   => Left((a1, a2))   // Both values pass the filter.
+  case Left(_)                      => Right(identity)  // Map to a fixed value.
+  case Right(zz)                    => Right(zz)
+}
+\end{lstlisting}
+This code implements a ``greedy'' filter that requires both values
+in the pair $A\times A$ to satisfy the predicate. Otherwise, the
+filter returns the special ``empty'' value $\bbnum 0^{:A\times A}+\text{id}^{:Z\rightarrow Z}$
+of type $F^{A}$. 
+
+\subsubsection{Example \label{subsec:Example-ff-deflate-2}\ref{subsec:Example-ff-deflate-2}}
+
+Use \lstinline!deflate! to verify that the functor $F^{A}\triangleq A+A\times A\times\text{String}$
+is not filterable.
+
+\subparagraph{Solution}
+
+We begin by checking whether the type signature of \lstinline!deflate!
+can be implemented:
+\[
+\text{deflate}_{F}:\bbnum 1+A+\left(\bbnum 1+A\right)\times\left(\bbnum 1+A\right)\times\text{String}\rightarrow A+A\times A\times\text{String}\quad.
+\]
+An immediate problem is that we need to map all disjunctive cases,
+including $\bbnum 1+0+0$, into a value of type $F^{A}$, which contains
+values of type $A$ in every disunctive case. So, implementing \lstinline!deflate!
+requires us to produce a value of type $A$ from scratch, $\forall A.\,\bbnum 1\rightarrow A$,
+which is impossible in a fully parametric function. Since \lstinline!deflate!
+is not implementable, the functor $F$ is not filterable.
+
+These examples show that \lstinline!deflate! is easier to implement
+and to reason about than \lstinline!filter!.
 
 \subsection{Equivalence of \texttt{filter} and \texttt{deflate}}
 
@@ -1248,8 +1303,10 @@ We have expressed \lstinline!filter! through \lstinline!deflate!
 by Eq.~(\ref{eq:def-filter-through-deflate}) and \lstinline!deflate!
 through \lstinline!filter! by Eq.~(\ref{eq:def-deflate-via-filter}).
 It appears that \lstinline!deflate! and \lstinline!filter! are computationally
-equivalent. To verify that rigorously, we will now find the precise
+equivalent. To verify that rigorously, we will need to find the precise
 conditions for those equations to be inverses of each other.
+
+\subsubsection{Statement \label{subsec:Statement-filter-to-deflate-equivalence}\ref{subsec:Statement-filter-to-deflate-equivalence}}
 
 Begin with a filterable functor $F$ having a given function \lstinline!filter!,
 define \lstinline!deflate! through Eq.~(\ref{eq:def-deflate-via-filter}),
@@ -1257,8 +1314,13 @@ and then define a new function \lstinline!filter_prime! via Eq.~(\ref{eq:def-fil
 \[
 \text{deflate}=\text{filt}_{F}(\text{nonEmpty})\bef\text{get}^{\uparrow F}\quad,\quad\quad\text{filt}^{\prime}(p)=\psi_{p}^{\uparrow F}\bef\text{deflate}\quad.
 \]
-We would like to show that \lstinline!filter_prime! the same function
-as \lstinline!filter!:
+Then \lstinline!filter_prime! the same function as \lstinline!filter!,
+assuming that the partial function law holds.
+
+\subparagraph{Proof}
+
+We need to show that $\text{filt}_{F}(p)$ is the same as $\text{filt}^{\prime}(p)$
+for any predicate $p^{:A\rightarrow\bbnum 2}$:
 \begin{align}
 {\color{greenunder}\text{expect to equal }\text{filt}_{F}(p):}\quad & \text{filt}^{\prime}(p)=\gunderline{\psi_{p}^{\uparrow F}\bef\text{filt}_{F}}(\text{nonEmpty})\bef\text{get}^{\uparrow F}\nonumber \\
 {\color{greenunder}\text{naturality law of }\text{filt}_{F}:}\quad & =\text{filt}_{F}(\psi_{p}\bef\text{nonEmpty})\bef\gunderline{\psi_{p}^{\uparrow F}\bef\text{get}^{\uparrow F}}\nonumber \\
@@ -1267,11 +1329,17 @@ as \lstinline!filter!:
 To proceed with the calculation, we need to simplify expressions $\psi_{p}\bef\text{nonEmpty}$
 and $\psi_{p}\bef\text{get}$. Begin with writing the code notation
 for the methods \lstinline!.nonEmpty! and \lstinline!.get!, defined
-by the Scala library for the \lstinline!Option! type:
-\begin{align*}
+by the Scala library for the \lstinline!Option! type, but using the
+equivalent type \lstinline!Option[Unit]! (i.e.~$\bbnum 1+\bbnum 1$)
+instead of \lstinline!Boolean! (i.e.~$\bbnum 2$):
+\begin{lstlisting}
+def nonEmpty[A]: Option[A] => Option[Unit] = _.map(_ => ())
+def get[A]: Option[A] => A = { case Some(a) => a }
+\end{lstlisting}
+\begin{align}
  & \text{nonEmpty}^{:\bbnum 1+A\rightarrow\bbnum 1+\bbnum 1}\triangleq\begin{array}{|c||cc|}
  & \bbnum 1 & \bbnum 1\\
-\hline \bbnum 1 & (\_\rightarrow1) & \bbnum 0\\
+\hline \bbnum 1 & \text{id} & \bbnum 0\\
 A & \bbnum 0 & (\_\rightarrow1)
 \end{array}=\begin{array}{|c||c|}
  & \bbnum 2\\
@@ -1281,41 +1349,32 @@ A & \_\rightarrow\text{true}
  & A\\
 \hline \bbnum 1 & \bbnum 0\\
 A & \text{id}
-\end{array}\quad.
-\end{align*}
+\end{array}\quad.\label{eq:def-of-nonEmpty-and-get}
+\end{align}
 These methods are fully parametric since their code is defined purely
 through the eight standard code constructions of functional programming
 (see Table~\ref{tab:Mathematical-notation-for-code} and Section~\ref{subsec:The-rules-of-proof}),
 with no externally defined types such as \lstinline!Int! or \lstinline!String!.
-The function $\psi$ is also fully parametric because its code is
+The function $\psi$ is also fully parametric since we can write it
+as
+\begin{lstlisting}[mathescape=true]
+def psi[A](p: A => Option[Unit]): A => Option[A] = x => p(x).map(_ => x)   // Option[Unit] $\cong$ Boolean
+\end{lstlisting}
 \begin{align*}
-{\color{greenunder}\text{since }\bbnum 2\cong\bbnum 1+\bbnum 1\text{, view }p^{:A\rightarrow\bbnum 2}(x^{:A})\text{ as having type }\bbnum 1+\bbnum 1:}\quad & \psi_{p}=x^{:A}\rightarrow p(x)\triangleright\,\begin{array}{|c||cc|}
+{\color{greenunder}\text{view }p^{:A\rightarrow\bbnum 2}(x^{:A})\text{ as having type }\bbnum 1+\bbnum 1:}\quad & \psi_{p}\triangleq x^{:A}\rightarrow p(x)\triangleright\,\begin{array}{|c||cc|}
  & \bbnum 1 & A\\
 \hline \bbnum 1 & \text{id} & \bbnum 0\\
 \bbnum 1 & \bbnum 0 & (\_\rightarrow x)
 \end{array}\quad.
 \end{align*}
-Now we compute the function compositions we need. First, we simplify
+We may write that code equivalently as $\text{nonEmpty}\triangleq(\_^{:\bbnum 1}\rightarrow1)^{\uparrow\text{Opt}}$
+and $\psi_{p}(x)\triangleq x\triangleright p\bef(\_^{:\bbnum 1}\rightarrow x)^{\uparrow\text{Opt}}$.
+
+Now we compute the function compositions we need. First, we show that
 $\psi_{p}\bef\text{nonEmpty}=p$:
 \begin{align*}
-{\color{greenunder}\text{expect to equal }x\triangleright p:}\quad & x^{:A}\triangleright\psi_{p}\bef\text{nonEmpty}=p(x)\triangleright\,\begin{array}{|c||cc|}
- & \bbnum 1 & A\\
-\hline \bbnum 1 & \text{id} & \bbnum 0\\
-\bbnum 1 & \bbnum 0 & (\_\rightarrow x)
-\end{array}\,\bef\,\begin{array}{|c||cc|}
- & \bbnum 1 & \bbnum 1\\
-\hline \bbnum 1 & (\_\rightarrow1) & \bbnum 0\\
-A & \bbnum 0 & (\_\rightarrow1)
-\end{array}\\
-{\color{greenunder}\text{matrix composition}:}\quad & =p(x)\triangleright\,\begin{array}{|c||cc|}
- & \bbnum 1 & \bbnum 1\\
-\hline \bbnum 1 & (\_\rightarrow1) & \bbnum 0\\
-\bbnum 1 & \bbnum 0 & (\_\rightarrow1)
-\end{array}=x\triangleright p\triangleright\begin{array}{|c||cc|}
- & \bbnum 1 & \bbnum 1\\
-\hline \bbnum 1 & \text{id} & \bbnum 0\\
-\bbnum 1 & \bbnum 0 & \text{id}
-\end{array}=x\triangleright p\triangleright\text{id}=x\triangleright p\quad.
+{\color{greenunder}\text{expect to equal }x\triangleright p:}\quad & x^{:A}\triangleright\psi_{p}\bef\text{nonEmpty}=x\triangleright p\bef(\_^{:\bbnum 1}\rightarrow x)^{\uparrow\text{Opt}}\bef(\_\rightarrow1)^{\uparrow\text{Opt}}\\
+{\color{greenunder}\text{functor composition law of }\text{Opt}:}\quad & =x\triangleright p\bef(\gunderline{\_^{:\bbnum 1}\rightarrow1})^{\uparrow\text{Opt}}=x\triangleright p\bef\big(\text{id}^{:\bbnum 1\rightarrow\bbnum 1}\gunderline{\big)^{\uparrow\text{Opt}}}=x\triangleright p\quad.
 \end{align*}
 The composition $\psi_{p}\bef\text{get}$ is simplified to the partial
 function $\text{id}_{|p}$:
@@ -1340,20 +1399,27 @@ We can now finish the calculation in Eq.~(\ref{eq:filter-prime-derivation-1}):
 \begin{align*}
 {\color{greenunder}\text{expect to equal }\text{filt}_{F}(p):}\quad & \text{filt}^{\prime}(p)=\text{filt}_{F}(\gunderline{\psi_{p}\bef\text{nonEmpty}})\bef(\gunderline{\psi_{p}\bef\text{get}})^{\uparrow F}\\
 {\color{greenunder}\text{simplify expressions with }\psi_{p}:}\quad & =\text{filt}_{F}(p)\bef(\gunderline{\text{id}_{|p}})^{\uparrow F}\\
-{\color{greenunder}\text{partial function law of }\text{filt}_{F}:}\quad & =\text{filt}_{F}(p)\bef\gunderline{(\text{id})^{\uparrow F}}=\text{filt}_{F}(p)\bef\text{id}=\text{filt}_{F}(p)\quad.
+{\color{greenunder}\text{partial function law~(\ref{eq:partial-function-law-of-filter}) of }\text{filt}_{F}:}\quad & =\text{filt}_{F}(p)\bef\gunderline{(\text{id})^{\uparrow F}}=\text{filt}_{F}(p)\bef\text{id}=\text{filt}_{F}(p)\quad.
 \end{align*}
 So, the new \lstinline!filter_prime! function is equal to the original
 \lstinline!filter! function.
 
-Beginning now with a given \lstinline!deflate! function, we first
-define the corresponding \lstinline!filter! function via Eq.~(\ref{eq:def-filter-through-deflate})
+\subsubsection{Statement \label{subsec:Statement-deflate-to-filter-equivalence}\ref{subsec:Statement-deflate-to-filter-equivalence}}
+
+Beginning with a given \lstinline!deflate! function, we first define
+the corresponding \lstinline!filter! function via Eq.~(\ref{eq:def-filter-through-deflate})
 and then use Eq.~(\ref{eq:def-deflate-via-filter}) to define a new
 function \lstinline!deflate_prime!:
 \[
 \text{filt}_{F}(p)=\psi_{p}^{\uparrow F}\bef\text{deflate}\quad,\quad\quad\text{deflate}^{\prime}=\text{filt}_{F}(\text{nonEmpty})\bef\text{get}^{\uparrow F}\quad.
 \]
-We would like to show that \lstinline!deflate_prime! is the same
-function as \lstinline!deflate!, so we write
+Then \lstinline!deflate_prime! is the same function as \lstinline!deflate!,
+assuming that the naturality law holds.
+
+\subparagraph{Proof}
+
+Try showing that the new function $\text{deflate}^{\prime}$ is equal
+to \lstinline!deflate!:
 \begin{equation}
 \text{deflate}^{\prime}=\text{filt}_{F}(\text{nonEmpty})\bef\text{get}^{\uparrow F}=\psi_{\text{nonEmpty}}^{\uparrow F}\bef\text{deflate}\bef\text{get}^{\uparrow F}\quad.\label{eq:deflate-prime-derivation-2}
 \end{equation}
@@ -1417,9 +1483,9 @@ F^{\bbnum 1+B}\ar[r]\sp(0.5){\text{deflate}} & F^{B}
 \end{wrapfigure}%
 
 \noindent 
-\[
-\text{deflate}\bef f^{\uparrow F}=f^{\uparrow\text{Opt}\uparrow F}\bef\text{deflate}\quad,
-\]
+\begin{equation}
+\text{deflate}\bef f^{\uparrow F}=f^{\uparrow\text{Opt}\uparrow F}\bef\text{deflate}\quad,\label{eq:naturality-law-of-deflate}
+\end{equation}
 where $f^{:A\rightarrow B}$ is an arbitrary function. 
 
 Assuming that this naturality law holds for \lstinline!deflate!,
@@ -1427,13 +1493,14 @@ we can continue the derivation in Eq.~(\ref{eq:deflate-prime-derivation-2})
 towards showing that \lstinline!deflate_prime! equals \lstinline!deflate!:
 \begin{align}
 {\color{greenunder}\text{expect to equal }\text{deflate}:}\quad & \text{deflate}^{\prime}=\psi_{\text{nonEmpty}}^{\uparrow F}\bef\gunderline{\text{deflate}\bef\text{get}^{\uparrow F}}\nonumber \\
-{\color{greenunder}\text{naturality law of }\text{deflate}:}\quad & =\gunderline{\psi_{\text{nonEmpty}}^{\uparrow F}\bef\text{get}^{\uparrow\text{Opt}\uparrow F}}\bef\text{deflate}\nonumber \\
+{\color{greenunder}\text{naturality law~(\ref{eq:naturality-law-of-deflate}) of }\text{deflate}:}\quad & =\gunderline{\psi_{\text{nonEmpty}}^{\uparrow F}\bef\text{get}^{\uparrow\text{Opt}\uparrow F}}\bef\text{deflate}\nonumber \\
 {\color{greenunder}\text{composition law of }F:}\quad & =\big(\psi_{\text{nonEmpty}}\bef\text{get}^{\uparrow\text{Opt}}\big)^{\uparrow F}\bef\text{deflate}\quad.\label{eq:deflate-derivation-3}
 \end{align}
 To simplify the function $\psi_{\text{nonEmpty}}\bef\text{get}^{\uparrow\text{Opt}}$,
 which must be a function of type $\bbnum 1+A\rightarrow\bbnum 1+A$
 for the types to match, we perform a separate calculation. The lifting
-to the \lstinline!Option! functor is expressed as
+operation $^{\uparrow\text{Opt}}$ for the \lstinline!Option! functor
+is written as
 \[
 (h^{:C\rightarrow D})^{\uparrow\text{Opt}}=\begin{array}{|c||cc|}
  & \bbnum 1 & D\\
@@ -1495,8 +1562,113 @@ So, we find $\psi_{\text{nonEmpty}}\bef\text{get}^{\uparrow\text{Opt}}=\text{id}
 and thus Eq.~(\ref{eq:deflate-derivation-3}) gives $\text{deflate}^{\prime}=\text{deflate}$.
 
 We conclude that \lstinline!filter! and \lstinline!deflate! are
-computationally equivalent as long as the partial function law holds
-for \lstinline!filter! and the naturality law holds for \lstinline!deflate!.
+computationally equivalent as long as the partial function law~(\ref{eq:partial-function-law-of-filter})
+holds for \lstinline!filter! and the naturality law~(\ref{eq:naturality-law-of-deflate})
+holds for \lstinline!deflate!.
+
+\subsubsection{Statement \label{subsec:Statement-partial-functionlaw-deflate-to-filter}\ref{subsec:Statement-partial-functionlaw-deflate-to-filter}}
+
+The partial function law always holds for the \lstinline!filter!
+function defined via \lstinline!deflate!.
+
+\subparagraph{Proof}
+
+Assume that a \lstinline!deflate! function is given, and define \lstinline!filter!
+through Eq.~(\ref{eq:def-filter-through-deflate}). Then compute:
+\begin{align*}
+{\color{greenunder}\text{expect to equal }\text{filt}_{F}(p)\bef f^{\uparrow F}:}\quad & \gunderline{\text{filt}_{F}(p)}\bef f_{|p}^{\uparrow F}\\
+{\color{greenunder}\text{use Eq.~(\ref{eq:def-filter-through-deflate}), define }\text{filt}_{F}\text{ via }\text{deflate}:}\quad & =\psi_{p}^{\uparrow F}\bef\gunderline{\text{deflate}\bef f_{|p}^{\uparrow F}}\\
+\text{naturality law~(\ref{eq:naturality-law-of-deflate}) of }\text{deflate}: & =\gunderline{\psi_{p}^{\uparrow F}\bef f_{|p}^{\uparrow\text{Opt}\uparrow F}}\bef\text{deflate}=\big(\psi_{p}\bef f_{|p}^{\uparrow\text{Opt}}\big)^{\uparrow F}\bef\text{deflate}\quad.
+\end{align*}
+A similar calculation with $f$ instead of $f_{|p}$ gives 
+\[
+\text{filt}_{F}(p)\bef f^{\uparrow F}=\big(\psi_{p}\bef f^{\uparrow\text{Opt}}\big)^{\uparrow F}\bef\text{deflate}\quad.
+\]
+It remains to show that $\psi_{p}\bef f_{|p}^{\uparrow\text{Opt}}=\psi_{p}\bef f^{\uparrow\text{Opt}}$:
+\begin{align*}
+ & x^{:A}\triangleright\psi_{p}\bef f^{\uparrow\text{Opt}}=p(x)\triangleright\,\begin{array}{|c||cc|}
+ & \bbnum 1 & A\\
+\hline \bbnum 1 & \text{id} & \bbnum 0\\
+\bbnum 1 & \bbnum 0 & (\_\rightarrow x)
+\end{array}\,\bef\,\begin{array}{|c||cc|}
+ & \bbnum 1 & A\\
+\hline \bbnum 1 & \text{id} & \bbnum 0\\
+A & \bbnum 0 & f
+\end{array}=p(x)\triangleright\,\begin{array}{|c||cc|}
+ & \bbnum 1 & A\\
+\hline \bbnum 1 & \text{id} & \bbnum 0\\
+\bbnum 1 & \bbnum 0 & (\_\rightarrow f(x))
+\end{array}\quad.
+\end{align*}
+In the last expression, the function $f$ is used only in the case
+$p(x)=\text{true}$. So, the result is the same if we replace $f$
+by the partial function $f_{|p}$ defined by Eq.~(\ref{eq:def-partial-f})
+as equal to $f(x)$ when $p(x)$ holds. It follows that $\psi_{p}\bef f_{|p}^{\uparrow\text{Opt}}=\psi_{p}\bef f^{\uparrow\text{Opt}}$,
+which concludes the proof.
+
+The equivalence between \lstinline!filter! and \lstinline!deflate!
+also extends to their respective naturality laws:
+
+\subsubsection{Statement \label{subsec:Statement-naturality-law-of-deflate-from-filter}\ref{subsec:Statement-naturality-law-of-deflate-from-filter}}
+
+If the naturality law~(\ref{eq:naturality-law-of-filter}) holds
+for \lstinline!filter!, the law~(\ref{eq:naturality-law-of-deflate})
+will also hold for \lstinline!deflate! if it is defined through \lstinline!filter!
+by Eq.~(\ref{eq:def-deflate-via-filter}).
+
+\subparagraph{Proof}
+
+Compare the two sides of the law~(\ref{eq:naturality-law-of-deflate})
+if \lstinline!deflate! is defined by Eq.~(\ref{eq:def-deflate-via-filter}):
+\begin{align*}
+{\color{greenunder}\text{left-hand side of Eq.~(\ref{eq:naturality-law-of-deflate})}:}\quad & f^{\uparrow\text{Opt}\uparrow F}\bef\gunderline{\text{deflate}}=\gunderline{f^{\uparrow\text{Opt}\uparrow F}\bef\text{filt}_{F}(\text{nonEmpty})}\bef\text{get}^{\uparrow F}\\
+{\color{greenunder}\text{naturality law~(\ref{eq:naturality-law-of-filter}) of }\text{filt}_{F}:}\quad & =\text{filt}_{F}(f^{\uparrow\text{Opt}}\bef\text{nonEmpty})\bef f^{\uparrow\text{Opt}\uparrow F}\bef\text{get}^{\uparrow F}\quad.\\
+{\color{greenunder}\text{right-hand side of Eq.~(\ref{eq:naturality-law-of-deflate})}:}\quad & \gunderline{\text{deflate}}\bef f^{\uparrow F}=\text{filt}_{F}(\text{nonEmpty})\bef\text{get}^{\uparrow F}\bef f^{\uparrow F}\quad.
+\end{align*}
+The two sides will be equal if we prove that $f^{\uparrow\text{Opt}}\bef\text{nonEmpty}=\text{nonEmpty}$
+and that $f^{\uparrow\text{Opt}}\bef\text{get}=\text{get}\bef f$,
+which can be viewed as two naturality laws specific to these functions.
+Use the definitions~(\ref{eq:def-of-nonEmpty-and-get}) of \lstinline!get!
+and \lstinline!nonEmpty!, set the type parameters as needed to match
+the types, and compute:
+\begin{align*}
+ & f^{\uparrow\text{Opt}}\bef\text{nonEmpty}=\begin{array}{|c||cc|}
+ & \bbnum 1 & B\\
+\hline \bbnum 1 & \text{id} & \bbnum 0\\
+A & \bbnum 0 & f
+\end{array}\,\bef\,\begin{array}{|c||c|}
+ & \bbnum 2\\
+\hline \bbnum 1 & \_\rightarrow\text{false}\\
+B & \_\rightarrow\text{true}
+\end{array}=\begin{array}{|c||c|}
+ & \bbnum 2\\
+\hline \bbnum 1 & \_\rightarrow\text{false}\\
+A & \_\rightarrow\text{true}
+\end{array}=\text{nonEmpty}\quad.\\
+ & f^{\uparrow\text{Opt}}\bef\text{get}=\begin{array}{|c||cc|}
+ & \bbnum 1 & B\\
+\hline \bbnum 1 & \text{id} & \bbnum 0\\
+A & \bbnum 0 & f
+\end{array}\,\bef\,\begin{array}{|c||c|}
+ & B\\
+\hline \bbnum 1 & \bbnum 0\\
+B & \text{id}
+\end{array}=\begin{array}{|c||c|}
+ & B\\
+\hline \bbnum 1 & \bbnum 0\\
+A & f
+\end{array}\quad,\\
+ & \text{get}\bef f=\begin{array}{|c||c|}
+ & A\\
+\hline \bbnum 1 & \bbnum 0\\
+A & \text{id}
+\end{array}\,\bef\,f=\begin{array}{|c||c|}
+ & B\\
+\hline \bbnum 1 & \bbnum 0\\
+A & f
+\end{array}=f^{\uparrow\text{Opt}}\bef\text{get}\quad.
+\end{align*}
+
 
 \subsection{Motivation for the \texttt{liftOpt} function}
 
