@@ -26,6 +26,9 @@ function add_color {
 	# Insert color comments into displayed equation arrays.
 	# Example of inserted color: {\color{greenunder}\text{outer-interchange law for }M:}\quad &
 	LC_ALL=C sed -i "" -e 's|^\(.*\\text{.*}.*:\)\( *\\quad \& \)|{\\color{greenunder}\1}\2|' "$texsrc"
+	# Insert color background into all displayed equations.
+	LC_ALL=C sed -i "" -E -e ' s!\\begin\{(align.?|equation)\}!\\begin{empheq}[box=\\mymathbgbox]{\1}!; s!\\end\{(align.?|equation)\}!\\end{empheq}!; ' "$texsrc"
+	LC_ALL=C sed -i "" -E -e ' s!^\\\[$!\\begin{empheq}[box=\\mymathbgbox]{equation*}!; s!^\\\]$!\\end{empheq}!; ' "$texsrc"
 }
 
 function remove_lulu {
