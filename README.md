@@ -18,6 +18,10 @@ This repository also contains talk slides for presentations that initiated the w
 
 Chapters 1-7 as well as some appendices and discussion chapters are ready after a second proofreading of the draft. Chapters 8 and 13 are in preparation.
 
+# Leanpub version of the draft
+
+The draft version is [available for purchase on leanpub](https://leanpub.com/sofp) for people who want to be notified about updates.
+
 # Printed version of the draft
 
 A printed version of the current draft can be purchased at lulu.com: [http://www.lulu.com/content/paperback-book/the-science-of-functional-programming/24915714](http://www.lulu.com/content/paperback-book/the-science-of-functional-programming/24915714).
