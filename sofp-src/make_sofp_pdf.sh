@@ -27,8 +27,10 @@ function add_color {
 	# Example of inserted color: {\color{greenunder}\text{outer-interchange law for }M:}\quad &
 	LC_ALL=C sed -i "" -e 's|^\(.*\\text{.*}.*:\)\( *\\quad \& \)|{\\color{greenunder}\1}\2|' "$texsrc"
 	# Insert color background into all displayed equations.
+	if false; then
 	LC_ALL=C sed -i "" -E -e ' s!\\begin\{(align.?|equation)\}!\\begin{empheq}[box=\\mymathbgbox]{\1}!; s!\\end\{(align.?|equation)\}!\\end{empheq}!; ' "$texsrc"
 	LC_ALL=C sed -i "" -E -e ' s!^\\\[$!\\begin{empheq}[box=\\mymathbgbox]{equation*}!; s!^\\\]$!\\end{empheq}!; ' "$texsrc"
+	fi
 }
 
 function remove_lulu {
@@ -100,6 +102,7 @@ create_draft $name $draft.pdf
 # Attach sources to the draft file.
 "$pdftk" $draft.pdf attach_files "$name-src.tar.bz2" output $draft-src.pdf
 
+if [ x"$1" == x-nolulu ]; then
 # Create a pdf file without references to lulu.com and without lulu.com's ISBN.
 mv "$name".pdf "$name"-lulu.pdf
 remove_lulu $name
@@ -108,6 +111,8 @@ create_draft $name $draft-nolulu.pdf
 
 # The main file "$name".pdf has lulu.com information.
 mv "$name"-lulu.pdf "$name".pdf
+
+fi
 
 # Cleanup.
 #rm -f $name*{idx,ind,aux,dvi,ilg,out,toc,log,ps,lof,lot,data}
