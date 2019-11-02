@@ -3088,13 +3088,44 @@ that affects the \emph{other} type parameter of $S^{\bullet,\bullet}$,
 all fully parametric functions will have this property (see a discussion
 at the end of Section~\ref{subsec:Bifunctors}).
 
-\subsection{Filterable contrafunctors: definition and examples}
+\subsection{Filterable contrafunctors: motivation and examples}
 
 The intuitive view is that functors are ``wrappers'' of data, while
 contrafunctors ``consume'' data. Filterable functors permit us to
 exclude certain data from a wrapper; filterable contrafunctors permit
 us to exclude certain data from being \emph{consumed}. Let us now
 make this intuition precise.
+
+A simple non-trivial contrafunctor is $C^{A}\triangleq A\rightarrow Z$,
+where $Z$ is a constant type. This is a general form of an ``extractor''
+\textemdash{} for example, a function that extracts logging information
+of type $Z$ from data of type $A$. It is sometimes necessary to
+exclude particular kinds of information (e.g.~private personal data)
+from logging. We can implement this by providing a predicate of type
+\lstinline!A => Boolean! that decides, depending on the given value
+$x^{:A}$, whether the data item $x$ may be passed to the extractor.
+That decision will be made by applying the \lstinline!filter! operation
+to a value of type $C^{A}$:
+\begin{lstlisting}
+def filter[A](p: A => Boolean): C[A] => C[A]
+val extractor: C[Payload] = ???           // Original code for extracting metadata from payloads.
+val filtered: C[Payload] = filter(noPrivateData)(extractor)     // Will not extract private data.
+\end{lstlisting}
+How could filtering work if the predicate returns \lstinline!false!?
+Even if the data (of type $A$) is excluded from the filtered extractor,
+the function of type $A\rightarrow Z$ must still return a value of
+type $Z$. A solution is to have a \emph{default value }of type $Z$
+that the extractor will return when data is excluded from it.
+
+There are two simple ways of implementing filtering for $C^{A}=A\rightarrow Z$
+via a default value of type $Z$: First, by storing that default value
+in the type $C^{A}$. In other words, we consider the contrafunctor
+$C^{A}\triangleq Z\times\left(A\rightarrow Z\right)$ instead of simply
+$A\rightarrow Z$. Second, by using a type $\bbnum 1+Z$ instead of
+$Z$, since the type $\bbnum 1+Z$ has a default value $1+\bbnum 0^{:Z}$.
+We will now implement filtering for these contrafunctors.
+
+\subsubsection{Example {*}{*}{*}}
 
 Consider the contrafunctor $C^{A}\triangleq A\rightarrow\bbnum 1+Z$,
 where $Z$ is a constant type. This contrafunctor ``consumes'' data
@@ -3335,7 +3366,113 @@ according to the given business requirements.
 \subsubsection{Example \label{subsec:Example-identity-law-of-deflate}\ref{subsec:Example-identity-law-of-deflate}
 (identity law of \texttt{deflate})}
 
-\index{identity laws!of deflate@of \texttt{deflate}}
+\index{identity laws!of deflate@of \texttt{deflate}}The function
+\lstinline!deflate!$~:F^{\bbnum 1+A}\rightarrow F^{A}$ is available
+only for filterable functors; but the function with the inverse type
+signature, \lstinline!inflate!$~:F^{A}\rightarrow F^{\bbnum 1+A}$
+, can be implemented for any functor $F$. (See definition of \lstinline!inflate!
+in Section~\ref{subsec:Simplifying-the-filtering-laws-deflate}.)
+Assuming that a given functor $F$ is filterable, show that \lstinline!deflate!
+is a left inverse of \lstinline!inflate!:
+\begin{equation}
+\text{inflate}_{F}\bef\text{deflate}_{F}=\text{id}\quad.\label{eq:identity-law-of-deflate}
+\end{equation}
+Also show that it is not a full inverse: in general, 
+\[
+\text{deflate}_{F}\bef\text{inflate}_{F}\ne\text{id}\quad.
+\]
+
+
+\subparagraph{Solution}
+
+We may assume that $F$ satisfies the filtering laws. The function
+\lstinline!inflate! can be equivalently written as
+\[
+\text{inflate}_{F}=(x^{:A}\rightarrow\bbnum 0+x)^{\uparrow F}=\text{pu}_{\text{Opt}}^{\uparrow F}=\psi_{(\_\rightarrow\text{true})}\quad.
+\]
+Now we can use the identity law~(\ref{eq:identity-law-of-filter})
+to derive
+\[
+\text{filt}_{F}(\_\rightarrow\text{true})=\psi_{(\_\rightarrow\text{true})}^{\uparrow F}\bef\text{deflate}_{F}=\text{inflate}_{F}\bef\text{deflate}_{F}\quad.
+\]
+Since the identity law says $\text{filt}_{F}(\_\rightarrow\text{true})=\text{id}$,
+we obtain $\text{inflate}_{F}\bef\text{deflate}_{F}=\text{id}$.
+
+To show that the inverse equation does not always hold, we need to
+find an explicit example: a specific functor $F$ and a value $x^{:F^{\bbnum 1+A}}$
+such that $x\triangleright\text{deflate}_{F}\bef\text{inflate}_{F}\neq x$.
+Looking at the simplest filterable functors, we find that the constant
+functor $F^{A}\triangleq Z$ is not a suitable example because all
+its methods are identity functions. The next nontrivial example is
+the \lstinline!Option! functor, $F^{A}\triangleq\bbnum 1+A=\text{Opt}^{A}$.
+With the equivalence $\text{Opt}^{\text{Opt}^{A}}\cong\bbnum 1+\bbnum 1+A$,
+we write the methods \lstinline!inflate! and \lstinline!deflate!
+as
+\begin{lstlisting}
+def inflate[A]: Option[A] => Option[Option[A]] = _.map(x => Some(x))
+def deflate[A]: Option[Option[A]] => Option[A] = _.flatten
+\end{lstlisting}
+\[
+\text{inflate}_{\text{Opt}}\triangleq\text{pu}_{\text{Opt}}^{\uparrow\text{Opt}}=\,\begin{array}{|c||ccc|}
+ & \bbnum 1 & \bbnum 1 & A\\
+\hline \bbnum 1 & \text{id} & \bbnum 0 & \bbnum 0\\
+A & \bbnum 0 & \bbnum 0 & \text{id}
+\end{array}\quad,\quad\quad\text{deflate}_{\text{Opt}}\triangleq\text{ftn}_{\text{Opt}}=\,\begin{array}{|c||cc|}
+ & \bbnum 1 & A\\
+\hline \bbnum 1 & \text{id} & \bbnum 0\\
+\bbnum 1 & \text{id} & \bbnum 0\\
+A & \bbnum 0 & \text{id}
+\end{array}\quad.
+\]
+ We can now compute the matrix composition as
+\begin{align*}
+ & \text{deflate}_{\text{Opt}}\bef\text{inflate}_{\text{Opt}}=\,\begin{array}{|c||cc|}
+ & \bbnum 1 & A\\
+\hline \bbnum 1 & \text{id} & \bbnum 0\\
+\bbnum 1 & \text{id} & \bbnum 0\\
+A & \bbnum 0 & \text{id}
+\end{array}\,\bef\,\begin{array}{|c||ccc|}
+ & \bbnum 1 & \bbnum 1 & A\\
+\hline \bbnum 1 & \text{id} & \bbnum 0 & \bbnum 0\\
+A & \bbnum 0 & \bbnum 0 & \text{id}
+\end{array}\,=\,\begin{array}{|c||ccc|}
+ & \bbnum 1 & \bbnum 1 & A\\
+\hline \bbnum 1 & \text{id} & \bbnum 0 & \bbnum 0\\
+\bbnum 1 & \text{id} & \bbnum 0 & \bbnum 0\\
+A & \bbnum 0 & \bbnum 0 & \text{id}
+\end{array}\\
+ & \neq\text{id}=\,\begin{array}{|c||ccc|}
+ & \bbnum 1 & \bbnum 1 & A\\
+\hline \bbnum 1 & \text{id} & \bbnum 0 & \bbnum 0\\
+\bbnum 1 & \bbnum 0 & \text{id} & \bbnum 0\\
+A & \bbnum 0 & \bbnum 0 & \text{id}
+\end{array}\quad.
+\end{align*}
+The result differs from an identity matrix in the second row. A value
+$x^{:\bbnum 1+\bbnum 1+A}\triangleq\bbnum 0^{:\bbnum 1}+1+\bbnum 0^{:A}$
+will give a non-void result in the second row of the matrix, showing
+the difference:
+\[
+(\bbnum 0+1+\bbnum 0)\triangleright\,\begin{array}{|c||ccc|}
+ & \bbnum 1 & \bbnum 1 & A\\
+\hline \bbnum 1 & \text{id} & \bbnum 0 & \bbnum 0\\
+\bbnum 1 & \text{id} & \bbnum 0 & \bbnum 0\\
+A & \bbnum 0 & \bbnum 0 & \text{id}
+\end{array}=\,\begin{array}{|ccc|}
+\bbnum 0 & 1 & \bbnum 0\end{array}\,\triangleright\,\begin{array}{||ccc|}
+\text{id} & \bbnum 0 & \bbnum 0\\
+\text{id} & \bbnum 0 & \bbnum 0\\
+\bbnum 0 & \bbnum 0 & \text{id}
+\end{array}\,=\,\begin{array}{|ccc|}
+1 & \bbnum 0 & \bbnum 0\end{array}\,\neq\,\begin{array}{|ccc|}
+\bbnum 0 & 1 & \bbnum 0\end{array}\quad.
+\]
+In Scala code, this value $x$ is \lstinline!Some(None)!, so the
+calculation corresponds to
+\begin{lstlisting}
+inflate(deflate(Some(None))) == None  // Would have been Some(None) if the function were an identity.
+\end{lstlisting}
+
 
 \subsubsection{Example \label{subsec:Example-filterable-property-1+K}\ref{subsec:Example-filterable-property-1+K}}
 
@@ -3373,19 +3510,13 @@ It remains to show that
 \begin{equation}
 (1+\bbnum 0^{:K^{\bbnum 1+A}})\triangleright\text{deflate}_{H}\overset{?}{=}1+\bbnum 0^{:K^{A}}\quad.\label{eq:emptyable-wrapper-deflate-derivation1}
 \end{equation}
-We have not yet seen the \textbf{identity law} for \lstinline!deflate!;
-it is quick to derive it\index{identity laws!for deflate@for \texttt{deflate}}
-from Eq.~(\ref{eq:identity-law-of-filter}),
-\begin{equation}
-\text{filt}_{H}(\_\rightarrow\text{true})=\psi_{(\_\rightarrow\text{true})}^{\uparrow H}\bef\text{deflate}_{H}=\text{inflate}_{H}\bef\text{deflate}_{H}=\text{id}\quad.\label{eq:identity-law-of-deflate}
-\end{equation}
-Since Eq.~(\ref{eq:emptyable-wrapper-psi-p-filter-derivation1})
+We can proceed only if we use some law of \lstinline!deflate!; Example~\ref{subsec:Example-identity-law-of-deflate}
+shows a suitable law. Since Eq.~(\ref{eq:emptyable-wrapper-psi-p-filter-derivation1})
 holds for all predicates $p$, we can choose the predicate $p$ to
 be identically \lstinline!true! and get
 \begin{equation}
 (1+\bbnum 0^{:K^{A}})\triangleright\psi_{(\_\rightarrow\text{true})}^{\uparrow H}=(1+\bbnum 0^{:K^{A}})\triangleright\text{inflate}_{H}=1+\bbnum 0^{:K^{\bbnum 1+A}}\quad.\label{eq:emptyable-wrapper-inflate-derivation1}
 \end{equation}
-(See definition of \lstinline!inflate! in Section~\ref{subsec:Simplifying-the-filtering-laws-deflate}.)
 Substituting this into Eq.~(\ref{eq:emptyable-wrapper-deflate-derivation1}),
 we find
 \begin{align*}
@@ -3556,10 +3687,9 @@ value).
 \subparagraph{Solution}
 
 Try to implement the function \lstinline!inflate!$~:C^{A}\rightarrow C^{\bbnum 1+A}$,
-\begin{align*}
- & \text{inflate}_{C}:(A\rightarrow Z)\rightarrow\bbnum 1+A\rightarrow Z\quad,\\
- & \text{inflate}_{C}=c^{:A\rightarrow Z}\rightarrow p^{\bbnum 1+A}\rightarrow\text{???}^{:Z}\quad.
-\end{align*}
+\[
+\text{inflate}_{C}:(A\rightarrow Z)\rightarrow\bbnum 1+A\rightarrow Z\quad,\quad\quad\text{inflate}_{C}=c^{:A\rightarrow Z}\rightarrow p^{\bbnum 1+A}\rightarrow\text{???}^{:Z}\quad.
+\]
 The only way to fill the type hole $\text{???}^{:Z}$ is to apply
 $c$ to an argument of type $A$. However, we do not have values of
 type $A$; we only have $p$ of type $\bbnum 1+A$, and $p$ might
@@ -3583,21 +3713,18 @@ proofs or tests).
 
 \subsubsection{Exercise \label{subsec:Exercise-filterable-laws-2}\ref{subsec:Exercise-filterable-laws-2}}
 
-Prove rigorously (not via tests) that $\text{flm}_{\text{Opt}}(\text{pu}_{\text{Opt}})=\text{id}$.
+Prove rigorously (not by tests) that $\text{flm}_{\text{Opt}}(\text{pu}_{\text{Opt}})=\text{id}$.
 
 \subsubsection{Exercise \label{subsec:Exercise-filterable-laws-7}\ref{subsec:Exercise-filterable-laws-7}}
 
-Show that one can define \lstinline!deflate!$:C^{\bbnum 1+A}\rightarrow C^{A}$
-for any contrafunctor $C^{A}$ (not necessarily filterable), similarly
-to how one can define \lstinline!inflate!$:F^{A}\rightarrow F^{\bbnum 1+A}$
-for any functor $F^{A}$ (not necessarily filterable). Prove that
-in case $C^{\bullet}$ \emph{is} filterable, the \textbf{identity
+Show that one can define \lstinline!deflate!$~:C^{\bbnum 1+A}\rightarrow C^{A}$
+for any contrafunctor $C^{A}$ (not necessarily filterable). Prove
+that in case $C^{\bullet}$ \emph{is} filterable, the \textbf{identity
 law}\index{identity laws!of inflate@of \texttt{inflate}} will hold:
 \[
 \text{inflate}_{C}\bef\text{deflate}_{C}=\text{id}^{:C^{A}\rightarrow C^{A}}\quad.
 \]
-Show on examples that the inverse equations do not hold in general:
-$\text{deflate}\bef\text{inflate}\neq\text{id}$.
+Show that the inverse equation does not hold in general: $\text{deflate}_{C}\bef\text{inflate}_{C}\neq\text{id}$.
 
 \subsubsection{Exercise \label{subsec:Exercise-filterable-laws-3}\ref{subsec:Exercise-filterable-laws-3}}
 
@@ -3636,7 +3763,7 @@ filterable.
 \subsubsection{Exercise \label{subsec:Exercise-filterable-laws-6-2}\ref{subsec:Exercise-filterable-laws-6-2}}
 
 If $H^{A}$ is a filterable contrafunctor and $C^{A}$ any contrafunctor,
-prove that $C^{H^{A}}$ is a filterable \emph{functor}.
+prove that $F^{A}\triangleq C^{H^{A}}$ is a filterable \emph{functor}.
 
 \subsubsection{Exercise \label{subsec:Exercise-filterable-laws-8}\ref{subsec:Exercise-filterable-laws-8}}
 
