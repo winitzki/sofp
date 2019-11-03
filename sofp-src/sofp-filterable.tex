@@ -3119,25 +3119,33 @@ that the extractor will return when data is excluded from it.
 
 There are two simple ways of implementing filtering for $C^{A}=A\rightarrow Z$
 via a default value of type $Z$: First, by storing that default value
-in the type $C^{A}$. In other words, we consider the contrafunctor
-$C^{A}\triangleq Z\times\left(A\rightarrow Z\right)$ instead of simply
-$A\rightarrow Z$. Second, by using a type $\bbnum 1+Z$ instead of
-$Z$, since the type $\bbnum 1+Z$ has a default value $1+\bbnum 0^{:Z}$.
-We will now implement filtering for these contrafunctors.
+in the type $C^{A}$ and considering the contrafunctor $C^{A}\triangleq Z\times\left(A\rightarrow Z\right)$
+instead of $A\rightarrow Z$. Second, by using a type $\bbnum 1+Z$
+instead of $Z$, since the type $\bbnum 1+Z$ has a default value
+$1+\bbnum 0^{:Z}$. We will now implement filtering for these contrafunctors.
 
-\subsubsection{Example {*}{*}{*}}
+\subsubsection{Example \label{subsec:Example-first-filterable-contrafunctor}\ref{subsec:Example-first-filterable-contrafunctor}}
 
-Consider the contrafunctor $C^{A}\triangleq A\rightarrow\bbnum 1+Z$,
-where $Z$ is a constant type. This contrafunctor ``consumes'' data
-of type $A$ and computes values of type $\bbnum 1+Z$. Given a value
-$c$ of type $C^{A}$,
+Implement \lstinline!filter! for the contrafunctor $C^{A}\triangleq A\rightarrow\bbnum 1+Z$,
+where $Z$ is a fixed type. 
+
+\subparagraph{Solution}
+
+This contrafunctor ``consumes'' data of type $A$ and computes values
+of type $\bbnum 1+Z$. Given a value $c$ of type $C^{A}$, which
+is a function that we might write like this,
 \begin{lstlisting}
 val c: A => Option[Z] = ???
 \end{lstlisting}
-we would like to impose a filter predicate $p^{:A\rightarrow\bbnum 2}$
-so that the function $c$ is applied only to values that pass the
-predicate. The result is a new function $d^{:C^{A}}$ defined by the
-code
+we need somehow to impose a filter predicate $p^{:A\rightarrow\bbnum 2}$
+ensuring that the function $c$ is applied only to values that pass
+the predicate. The result will be a new function $d^{:A\rightarrow\bbnum 1+C}$
+that will use its argument only if it passes the predicate. The function
+$d$ could return \lstinline!None! for all arguments, but that implementation
+would lose information. If \lstinline!p(a) == true!, we may compute
+\lstinline!c(a)!, getting a value of type $\bbnum 1+Z$. If \lstinline!p(a) == false!,
+the function $d$ must return \lstinline!None!. So, the code of $d$
+must be
 \begin{lstlisting}
 val d: A => Option[Z] = { a => if (p(a)) c(a) else None }
 \end{lstlisting}
@@ -3152,8 +3160,34 @@ def filter[A](p: A => Boolean)(c: A => Option[Z]): A => Option[Z] = { a =>
 \text{filt}_{C}(p^{:A\rightarrow\bbnum 2})\triangleq c^{:A\rightarrow\bbnum 1+Z}\rightarrow\text{pu}_{\text{Opt}}\bef\text{filt}_{\text{Opt}}(p)\bef\text{flm}_{\text{Opt}}(c)\quad.
 \]
 
-Another example is the contrafunctor $C^{A}\triangleq\bbnum 1+A\rightarrow Z$.
-The filtering transformation is
+
+\subsubsection{Example \label{subsec:Example-first-filterable-contrafunctor-1}\ref{subsec:Example-first-filterable-contrafunctor-1}}
+
+Implement \lstinline!filter! for the contrafunctor $C^{A}\triangleq Z\times\left(A\rightarrow Z\right)$. 
+
+\subparagraph{Solution}
+
+The code for the \lstinline!filter! function is
+\begin{lstlisting}
+def filter[A](p: A => Boolean): ((Z, A => Z)) => (Z, A => Z) = {
+  case (z, f) => (z, a => if (p(a)) f(a) else z)
+}
+\end{lstlisting}
+\[
+\text{filt}_{C}(p^{:A\rightarrow\bbnum 2})\triangleq z^{:Z}\times f^{:A\rightarrow Z}\rightarrow z\times\big(a^{:A}\rightarrow p(a)\triangleright\,\begin{array}{|c||c|}
+ & Z\\
+\hline \bbnum 1_{\text{false}} & z\\
+\bbnum 1_{\text{true}} & f(a)
+\end{array}\,\big)\quad.
+\]
+
+Note that the type $Z\times\left(A\rightarrow Z\right)$ is equivalent
+to $\bbnum 1+A\rightarrow Z$:
+\[
+Z\times\left(A\rightarrow Z\right)\cong\left(\bbnum 1\rightarrow Z\right)\times\left(A\rightarrow Z\right)\cong\bbnum 1+A\rightarrow Z\quad.
+\]
+For the contrafunctor $C^{A}\triangleq\bbnum 1+A\rightarrow Z$, the
+\lstinline!filter! function is implemented by
 \begin{lstlisting}
 def filter[A](p: A => Boolean)(c: Option[A] => Z): Option[A] => Z = {
   case Some(a) if p(a)   => c(Some(a))    // Only apply `c` to `a` if `p(a) == true`.
@@ -3161,27 +3195,27 @@ def filter[A](p: A => Boolean)(c: Option[A] => Z): Option[A] => Z = {
 }                             // Equivalent code is _.filter(p).pipe(c) (Scala 2.13).
 \end{lstlisting}
 \[
-\text{filt}_{C}(p^{:A\rightarrow\bbnum 2})\triangleq c^{:\bbnum 1+A\rightarrow Z}\rightarrow\text{filt}_{\text{Opt}}(p)\bef c\quad.
+\text{filt}_{C}(p^{:A\rightarrow\bbnum 2})\triangleq c^{:\bbnum 1+A\rightarrow Z}\rightarrow x^{:\bbnum 1+A}\rightarrow x\triangleright\text{filt}_{\text{Opt}}(p)\triangleright c=c^{:\bbnum 1+A\rightarrow Z}\rightarrow\text{filt}_{\text{Opt}}(p)\bef c\quad.
 \]
 
-We have seen two definitions of a filterable contrafunctor $C^{\bullet}$:
-one through the \lstinline!filter! method,
+Another motivation for filterable contrafunctors comes from the construction
+$F^{A}\triangleq G^{A}\rightarrow H^{A}$ (Statement~\ref{subsec:Statement-filterable-function-type}):
+In order to obtain the properties of a filterable functor for $F^{\bullet}$,
+the contrafunctor $G^{\bullet}$ must have the \lstinline!liftOpt!
+function as shown in Eq.~(\ref{eq:type-signature-liftOpt-contrafunctors}).
+The existence of the \lstinline!liftOpt! function for a contrafunctor
+turns out to be equivalent to the existence of the \lstinline!filter!
+function, if suitable laws are assumed to hold. To verify that equivalence,
+begin by defining the function \lstinline!inflate!, whose role is
+similar to that of \lstinline!deflate! for filterable functors. The
+type signature of \lstinline!inflate! is
 \[
-\text{filt}_{C}(p^{:A\rightarrow\bbnum 2}):C^{A}\rightarrow C^{A}\quad,
+\text{inflate}:C^{A}\rightarrow C^{\bbnum 1+A}\quad.
 \]
-and another through \lstinline!liftOpt! as shown in Eq.~(\ref{eq:type-signature-liftOpt-contrafunctors}).
-These two definitions are equivalent when suitable laws are assumed
-to hold, similarly to the situation with filterable functors. 
-
-We can also consider the function \lstinline!inflate! with the type
-signature
-\[
-\text{inflate}:C^{A}\rightarrow C^{\bbnum 1+A}\quad,
-\]
-whose role is similar to that of \lstinline!deflate! for filterable
-functors. We can relate these functions by
+We can relate \lstinline!inflate! to \lstinline!filter! and \lstinline!liftOpt!
+by the following equations (we omit the derivations):
 \begin{align*}
-\text{filt}_{C}(p)=\text{inflate}^{:C^{A}\rightarrow C^{\bbnum 1+A}}\bef(\psi_{p}^{:A\rightarrow\bbnum 1+A})^{\downarrow C}\quad, & \quad\quad\text{inflate}^{:C^{A}\rightarrow C^{\bbnum 1+A}}=\text{filt}_{C}(\_\rightarrow\text{true})\bef\big(\text{get}^{:\bbnum 1+A\rightarrow A}\big)^{\downarrow C}\quad,\\
+\text{filt}_{C}(p)=\text{inflate}^{:C^{A}\rightarrow C^{\bbnum 1+A}}\bef(\psi_{p}^{:A\rightarrow\bbnum 1+A})^{\downarrow C}\quad, & \quad\quad\text{inflate}^{:C^{A}\rightarrow C^{\bbnum 1+A}}=\big(\text{get}^{:\bbnum 1+A\rightarrow A}\big)^{\downarrow C}\bef\text{filt}_{C}(\text{nonEmpty})\quad,\\
 \text{inflate}^{:C^{A}\rightarrow C^{\bbnum 1+A}}=\text{liftOpt}_{C}(\text{id}^{:\bbnum 1+A\rightarrow\bbnum 1+A})\quad, & \quad\quad\text{liftOpt}_{C}(f^{:A\rightarrow\bbnum 1+B})=\text{inflate}^{:C^{B}\rightarrow C^{\bbnum 1+B}}\bef f^{\downarrow C}\quad.
 \end{align*}
 
@@ -3190,12 +3224,16 @@ has $4$ laws, \lstinline!inflate! has $3$, and $\text{liftOpt}_{C}$
 has just $2$ laws. Because of this, $\text{liftOpt}_{C}$ is the
 most convenient function for proving laws, while \lstinline!inflate!
 is the easiest to implement in code (and to check whether a given
-contrafunctor is filterable).
+contrafunctor is filterable). The laws of $\text{liftOpt}_{C}$ are
+similar to the laws of \lstinline!liftOpt! for filterable functors
+(we omit the derivations):
+\begin{align*}
+{\color{greenunder}\text{naturality-identity law of }\text{liftOpt}_{C}:}\quad & \text{liftOpt}_{C}(f^{:A\rightarrow B}\bef\text{pu}_{\text{Opt}}^{:B\rightarrow\bbnum 1+B})=f^{\downarrow C}\quad,\\
+{\color{greenunder}\text{composition law of }\text{liftOpt}_{C}:}\quad & \text{liftOpt}_{C}(g^{:B\rightarrow\bbnum 1+C})\bef\text{liftOpt}_{C}(f^{:A\rightarrow\bbnum 1+B})=\text{liftOpt}_{C}(f\diamond_{_{\text{Opt}}}g)\quad.
+\end{align*}
 
-As an illustration, we implement these functions for the two examples
-of filterable contrafunctors.
-
-{*}{*}{*}
+As an illustration, we implement these functions for the contrafunctor
+$C^{A}\triangleq A\rightarrow\bbnum 1+Z$. 
 
 \subsubsection{Example \label{subsec:filt-solved-example-5}\ref{subsec:filt-solved-example-5}}
 
@@ -3212,20 +3250,9 @@ a \lstinline!filter! function with the standard type signature
 type C[A] = A => Option[Z]       // The type `Z` must be already defined.
 def filter[A](p: A => Boolean)(c: C[A]): C[A] = { a: A => ??? }
 \end{lstlisting}
-We need to implement a function of type $A\rightarrow\bbnum 1+Z$,
-trying to preserve information as much as possible. We could return
-\lstinline!None! for all arguments, but that implementation would
-lose information. Instead, we may compute \lstinline!c(a)! and obtain
-a value of type $\bbnum 1+Z$. If the predicate fails on the input,
-we should not use the value $A$; the function of type $A\rightarrow\bbnum 1+Z$
-that does not use its argument must always return $1+\bbnum 0^{:Z}$
-since $Z$ is a type parameter. So, the implementation is
-\begin{lstlisting}
-def filter[A](p: A => Boolean)(c: C[A]): C[A] = { a: A => if (p(a)) c(a) else None }
-\end{lstlisting}
 
 
-\subsection{Constructions of filterable contrafunctors}
+\subsection{Filterable contrafunctors: constructions}
 
 How to build up a filterable contrafunctor from parts? 
 
@@ -3788,12 +3815,19 @@ reshuffle data in $F^{A}$ after replacing some $A$'s by $1$
 
 ``reshuffling'' usually means reusing different parts of a disjunction
 
-A polynomial functor $F^{A}$ is filterable if and only if it can
-be expressed (isomorphically) as $F^{A}\triangleq C\times\left(\bbnum 1+...\right)$
-where $C$ is a constant type. An example of a polynomial functor
-not of this form is $F^{A}=P+Q\times A$, where $P\neq Q$ are constant
-types and $P$ is not pointed (not known to be isomorphic to $\bbnum 1+Z$
-for some type $Z$).
+A polynomial functor $F^{A}$ is filterable if its type can be expressed
+equivalently as $F^{A}\triangleq P\times(\bbnum 1+G^{A})$ where $P$
+is a fixed type and $G^{A}$ is some polynomial functor. An example
+of a polynomial functor not of this form is $F^{A}\triangleq P+Q\times A$,
+where $P\neq Q$ are constant types and $P$ is not pointed (not known
+to be isomorphic to $\bbnum 1+Z$ for some type $Z$).
+
+A necessary condition for a filterable functor is the existence of
+a fully parametric function with type $F^{\bbnum 1}\rightarrow F^{\bbnum 0}$.
+For contrafunctors, $C^{\bbnum 0}\rightarrow C^{\bbnum 1}$. For a
+polynomial functor, this is a sufficient condition. (?) Substitute
+$A=\bbnum 0$ into \lstinline!deflate[A]! and obtain that function.
+Similarly with \lstinline!inflate!.
 
 Given a polynomial functor $F^{A}$, one can decide algorithmically
 whether $F^{A}$ is filterable, and derive \emph{some} implementation
