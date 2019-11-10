@@ -23,9 +23,9 @@ function make_pdf_with_index {
 
 function add_color {
 	local texsrc="$1"
-	# Insert color comments into displayed equation arrays.
+	# Insert color comments into displayed equation arrays. Also, in some places the green color was inserted; replace by `greenunder`.
 	# Example of inserted color: {\color{greenunder}\text{outer-interchange law for }M:}\quad &
-	LC_ALL=C sed -i "" -e 's|^\(.*\\text{.*}.*:\)\( *\\quad \& \)|{\\color{greenunder}\1}\2|' "$texsrc"
+	LC_ALL=C sed -i "" -e 's|\\color{green}|\\color{greenunder}|; s|^\(.*\\text{[^}]*}.*:\)\( *\\quad \& \)|{\\color{greenunder}\1}\2|' "$texsrc"
 	# Insert color background into all displayed equations.
 	if false; then
 	LC_ALL=C sed -i "" -E -e ' s!\\begin\{(align.?|equation)\}!\\begin{empheq}[box=\\mymathbgbox]{\1}!; s!\\end\{(align.?|equation)\}!\\end{empheq}!; ' "$texsrc"
@@ -49,7 +49,7 @@ pdftk=`which pdftk`
 # LyX needs to be installed for this to work. Edit the next line as needed.
 lyx="/Applications/LyX.app/Contents/MacOS/lyx"
 
-echo "Info: Using pdftk as '$pdftk' and lyx as '$lyx'"
+echo "Info: Using pdftk from '$pdftk' and lyx from '$lyx'"
 
 name="sofp"
 draft="$name-draft"
@@ -89,7 +89,7 @@ function create_draft {
 	local base="$1" output_pdf="$2"
 	"$pdftk" $name.pdf dump_data output $name.data
 	egrep -v 'Bookmark(Level|Begin)' $name.data|fgrep Bookmark|perl -e 'undef $/; while(<>){ s/\nBookmarkPageNumber/ BookmarkPageNumber/ig; print; }' | \
-	egrep '(8 Computations in functor blocks. I. Filterable functors|Applied functional type theory|C The Curry-Howard |E A humorous disclaimer)' | egrep -o '[0-9]+$' | \
+	egrep '(Computations in functor blocks. II. |Applied functional type theory|C The Curry-Howard |E A humorous disclaimer)' | egrep -o '[0-9]+$' | \
 		(read b1; read e1; read b2; read e2; pdftk sofp.pdf cat 1-$((b1-1)) $e1-$((b2-1)) $e2-end output $output_pdf; echo Draft page ranges 1-$((b1-1)) $e1-$((b2-1)) $e2-end )
 
 	echo Draft file created as $output_pdf, size `kbSize $output_pdf` bytes, with `pdfPages $output_pdf` pages.
