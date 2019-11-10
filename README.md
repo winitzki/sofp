@@ -16,7 +16,7 @@ This repository also contains talk slides for presentations that initiated the w
 
 # Current status of the book
 
-Chapters 1-7 as well as some appendices and discussion chapters are ready after a second proofreading of the draft. Chapters 8 and 13 are in preparation.
+Chapters 1-8 as well as some appendices and discussion chapters are ready after a second proofreading of the draft. Chapter 13 is in preparation.
 
 # Leanpub version of the draft
 
