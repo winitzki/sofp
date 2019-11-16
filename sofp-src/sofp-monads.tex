@@ -1,17 +1,93 @@
 
 \chapter{Computations in functor blocks. II. Semimonads and monads\label{chap:Semimonads-and-monads}}
 
+\global\long\def\gunderline#1{\mathunderline{greenunder}{#1}}%
+\global\long\def\bef{\forwardcompose}%
+\global\long\def\bbnum#1{\custombb{#1}}%
+
+In a Scala programmer's view, functors are type constructors with
+a \lstinline!.map! method, filterable type constructors have a \lstinline!.filter!
+method, and \textbf{semimonads} are functors that additionally have
+a \lstinline!.flatMap! method. This chapter begins by developing
+an intuition for the behavior of the \lstinline!.flatMap! method.
+
+\section{Practical use of semimonads}
+
+\subsection{Motivation for semimonads: Nested iteration}
+
+How can we translate into code a computation that contains nested
+iterations, such as
+\begin{equation}
+\sum_{i=1}^{n}\sum_{j=1}^{n}\sum_{k=1}^{n}\frac{1}{1+i+j+k}=\quad?\label{eq:semimonads-numerical-example-1}
+\end{equation}
+Recall that a ``flat'' (non-nested) iteration is translated into
+a \lstinline!.map! method applied to a sequence:
+
+\begin{wrapfigure}{l}{0.4\columnwidth}%
+\vspace{-0.45\baselineskip}
+\begin{lstlisting}
+(1 to n).map(i => 1.0 /(1 + i)).sum
+\end{lstlisting}
+\vspace{-2.5\baselineskip}
+\end{wrapfigure}%
+
+~\vspace{-1.5\baselineskip}
+\[
+\sum_{i=1}^{n}\frac{1}{1+i}\quad.
+\]
+\vspace{-0.85\baselineskip}
+
+The mathematical notation combines summation and iteration in one
+symbol, but the code logically separates these two steps: first, a
+sequence is computed as \lstinline!(1 to n).map(i => 1.0 /(1 + i))!,
+containing the values $\frac{1}{1+i}$ for $i=1,...,n$, and only
+then the summation function is applied to the sequence. This separation
+is useful because it gives us full flexibility to transform or aggregate
+the sequence.
+
+So, we will treat nested iterations in a similar way: first, compute
+a sequence of values that result from nested iteration, and then apply
+transformations or aggregations to that sequence.
+
+If we use nested \lstinline!.map! operations, we will obtain a nested
+data structure, e.g.~a vector of vectors:
+\begin{lstlisting}
+scala> (1 to 4).map(i => (1 to i).map(j => i * j))
+res0: IndexedSeq[IndexedSeq[Int]] = Vector(Vector(1), Vector(2, 4), Vector(3, 6, 9), Vector(4, 8, 12, 16))
+\end{lstlisting}
+We need to ``flatten'' this nested structure into a simple, non-nested
+sequence. The standard method for that is \lstinline!.flatten!, and
+its combination with \lstinline!.map! can be replaced by \lstinline!.flatMap!:
+\begin{lstlisting}
+scala> (1 to 4).map(i => (1 to i).map(j => i * j)).flatten
+res1: IndexedSeq[Int] = Vector(1, 2, 4, 3, 6, 9, 4, 8, 12, 16)
+
+scala> (1 to 4).flatMap(i => (1 to i).map(j => i * j))     // Same result as above.
+res2: IndexedSeq[Int] = Vector(1, 2, 4, 3, 6, 9, 4, 8, 12, 16)
+\end{lstlisting}
+To represent more nestings, we use more \lstinline!.flatMap! operations.
+For example, to implement Eq.~(\ref{eq:semimonads-numerical-example-1}):
+\begin{lstlisting}
+def example(n: Int): Double = (1 to n).flatMap { i =>
+  (1 to n).flatMap { j =>
+    (1 to n).map { k => 
+      1.0 / (1.0 + i + j + k) }
+  }
+}.sum
+
+scala> example(10)
+res6: Double = 63.20950497687006
+\end{lstlisting}
+These examples show that converting nested iterations into a simple
+iteration means replacing all \lstinline!.map! functions by \lstinline!.flatMap!
+except for the last \lstinline!.map! call (as long as that call by
+itself would produce an ordinary, non-nested sequence).
+
 \section{Slides, part 1}
 
 \paragraph{Computations within a functor context: Semimonads}
 
 Intuitions behind adding more ``generator arrows''
-
-Example of nested iterations: {\footnotesize{}
-\[
-\sum_{i=1}^{n}\sum_{j=1}^{n}\sum_{k=1}^{n}f(i,j,k)
-\]
-}{\footnotesize\par}
 
 Using Scala's \texttt{\textcolor{blue}{\footnotesize{}for}}/\texttt{\textcolor{blue}{\footnotesize{}yield}}
 syntax (``functor block'')
