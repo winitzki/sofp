@@ -83,218 +83,256 @@ iteration means replacing all \lstinline!.map! functions by \lstinline!.flatMap!
 except for the last \lstinline!.map! call (as long as that call by
 itself would produce an ordinary, non-nested sequence).
 
+The \lstinline!for! / \lstinline!yield! syntax (or ``functor block'')
+is an easier way of flattening nested iterations: just use more left
+arrows. Compare the two following code fragments line by line:
+
+\noindent \texttt{\textcolor{blue}{\footnotesize{}}}%
+\begin{minipage}[c]{0.475\columnwidth}%
+\texttt{\textcolor{blue}{\footnotesize{}}}
+\begin{lstlisting}
+(for { i <- 1 to n
+    j <- 1 to n
+    k <- 1 to n
+  } yield 1.0 / (1.0 + i + j + k)
+).sum
+\end{lstlisting}
+%
+\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\hspace*{\fill}}}%
+\begin{minipage}[c]{0.475\columnwidth}%
+\texttt{\textcolor{blue}{\footnotesize{}}}
+\begin{lstlisting}
+(1 to n).flatMap { i =>
+   (1 to n).flatMap { j =>
+     (1 to n).map { k =>
+       1.0 / (1.0 + i + j + k)
+  }}}.sum
+\end{lstlisting}
+%
+\end{minipage}{\footnotesize\par}
+
+\vspace{0.2\baselineskip}
+All left arrows except the last one are replaced by \lstinline!flatMap!s;
+the last left arrow is replaced by a \lstinline!map!. This replacement
+is performed automatically by the Scala compiler.
+
+To develop more intuition about using functor blocks with multiple
+left arrows, look at this code:
+
+\noindent \texttt{\textcolor{blue}{\footnotesize{}}}%
+\begin{minipage}[c]{0.475\columnwidth}%
+\texttt{\textcolor{blue}{\footnotesize{}}}
+\begin{lstlisting}
+val result = for {
+  i <- 1 to m
+  j <- 1 to n
+  x = f(i, j)
+  k <- 1 to p
+  y = g(i, j, k)
+} yield h(x, y)
+\end{lstlisting}
+%
+\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\hspace*{\fill}}}%
+\begin{minipage}[c]{0.475\columnwidth}%
+\texttt{\textcolor{blue}{\footnotesize{}}}
+\begin{lstlisting}
+val result = {
+  (1 to m).flatMap { i =>
+    (1 to n).flatMap { j =>
+      val x = f(i, j)
+      (1 to p).map { k =>
+        val y = g(i, j, k)
+        h(x, y)  } } } }
+\end{lstlisting}
+%
+\end{minipage}{\footnotesize\par}
+
+\vspace{0.2\baselineskip}
+One can imagine that each line produces an intermediate sequence of
+the same type. Further lines take that sequence as a source and continue
+calculations. If this intuition is correct, we should be able to refactor
+the code by cutting the calculation at any place and continuing in
+another functor block, without changing the result value:
+
+\noindent \texttt{\textcolor{blue}{\footnotesize{}}}%
+\begin{minipage}[c]{0.475\columnwidth}%
+\texttt{\textcolor{blue}{\footnotesize{}}}
+\begin{lstlisting}
+val result = for {
+  i <- 1 to m
+  j <- 1 to n
+// At right, we will cut the block here, making
+// (i, j) available for further computations.
+  x = f(i, j)
+  k <- 1 to p
+  y = g(i, j, k)
+} yield h(x, y)
+// The `result` is equal to `result2` at right.
+\end{lstlisting}
+%
+\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\hspace*{\fill}}}%
+\begin{minipage}[c]{0.475\columnwidth}%
+\texttt{\textcolor{blue}{\footnotesize{}}}
+\begin{lstlisting}
+val result1 = for {
+  i <- 1 to m
+  j <- 1 to n
+} yield (i, j)
+val result2 = for { // Continue from `result1`.
+  (i, j) <- result1
+  x = f(i, j)
+  k <- 1 to p
+  y = g(i, j, k)
+} yield h(x, y)
+\end{lstlisting}
+%
+\end{minipage}{\footnotesize\par}
+
+\vspace{0.2\baselineskip}
+This example illustrates the two features of functor blocks that often
+cause confusion:
+\begin{itemize}
+\item Each ``source'' line computes an intermediate sequence of the same
+type, so all values to the right of left arrows must use \emph{the
+same} type constructor (or its subtypes).
+\item The entire functor block's result is again a sequence using the same
+type constructor. The result is \emph{not} the expression under \lstinline!yield!;
+instead, it is a sequence of those expressions.
+\end{itemize}
+In these examples, we have been using sequences as the main type constructor.
+However, functor blocks with several left arrows will work with any
+other type constructor that has \lstinline!.map! and \lstinline!.flatMap!
+methods. In the next sections, we will see how to use functor blocks
+with different type constructors. 
+
+Functors having \lstinline!.flatMap! methods are called \textbf{semimonads}
+in\index{semimonads} this book. In practice, most semimonads also
+have a \lstinline!pure! method (i.e.~belong to the \lstinline!Pointed!
+typeclass, see Section~\ref{subsec:Pointed-functors:-motivation}).
+Semimonads with a \lstinline!pure! method (and obeying the appropriate
+laws) are called \textbf{monads}.\index{monads} This chapter will
+study semimonads and monads in detail. For now, we note that the presence
+of the \lstinline!pure! method is not required by the functor block
+syntax.
+
+If a functor has a \lstinline!.withFilter! method, the functor block
+will support embedded \lstinline!if! conditions (see Section~\ref{sec:Practical-uses-of-filterable-functors}).
+So, filterable semimonads allow us to use the full functionality of
+functor blocks.
+
+\subsection{List-like monads}
+
+List-like monads are types that model a sequence of data values, e.g.~\lstinline!Seq!
+and its subtypes, \lstinline!Stream!, \lstinline!Array!, and non-empty
+list. While these data types have different choices of lazy or eager
+evaluation and memory allocation, their \lstinline!.flatMap! methods
+are all similar: they ``flatten'' nested sequences.
+
+All list-like monads are also filterable and usually have a large
+number of additional methods (e.g.~for appending or prepending elements).
+A typical task performed by these monads is creating a list of all
+combinations or all permutations from a set of alternatives. This
+task may be used, for instance, to build and traverse a search tree
+and to filter out incorrect solutions.
+
+\subsubsection{Example \label{subsec:Example-list-monads-1}\ref{subsec:Example-list-monads-1}\index{solved examples}}
+
+Compute all permutations of the three letters \lstinline!"a", "b", "c"!. 
+
+\subparagraph{Solution}
+
+We will compute a \emph{sequence} of all permutations. First attempt:
+\begin{lstlisting}
+scala> for {
+         x <- Seq("a", "b", "c")
+         y <- Seq("a", "b", "c")
+         z <- Seq("a", "b", "c")
+       } yield x + y + z
+res0: Seq[String] = List(aaa, aab, aac, aba, abb, abc, aca, acb, acc, baa, bab, bac, bba, bbb, bbc, bca, bcb, bcc, caa, cab, cac, cba, cbb, cbc, cca, ccb, ccc)
+\end{lstlisting}
+To obtain all permutations and nothing else, but we need to exclude
+all repeated subsequences such as \lstinline!"aab"!. To achieve that,
+we must make \lstinline!y! iterate over letters that do not include
+the current value of \lstinline!x!. One solution is to exclude values
+\lstinline!y! that are equal to \lstinline!x!:
+\begin{lstlisting}
+val xs = Seq("a", "b", "c")
+
+scala> for {
+      x <- xs
+      remainAfterX = xs.filter(_ != x)
+      y <- remainAfterX
+      remainAfterY = remainAfterX.filter(_ != y)
+      z <- remainAfterY
+} yield x + y + z
+res1: Seq[String] = List(abc, acb, bac, bca, cab, cba) 
+\end{lstlisting}
+
+
+\subsubsection{Example \label{subsec:Example-list-monads-2}\ref{subsec:Example-list-monads-2}}
+
+Compute the set of all subsets of \lstinline!Set("a", "b", "c")!. 
+
+\subparagraph{Solution}
+
+{*}{*}{*}
+
+\subsubsection{Example \label{subsec:Example-list-monads-3}\ref{subsec:Example-list-monads-3}}
+
+Compute all subsequences of length $3$ out of a given sequence.
+
+\subparagraph{Solution}
+
+{*}{*}{*}Another implementation is to use the standard method \lstinline!.tails!
+defined on sequences:
+\begin{lstlisting}
+scala> Seq("a", "b", "c").tails.toList
+res2: List[Seq[String]] = List(List(a, b, c), List(b, c), List(c), List()) 
+\end{lstlisting}
+
+
+\subsubsection{Example \label{subsec:Example-list-monads-4}\ref{subsec:Example-list-monads-4}}
+
+Generalize examples \ref{subsec:Example-list-monads-1}\textendash \ref{subsec:Example-list-monads-3}
+to support arbitrary length $n$ instead of \lstinline!3!.
+
+\subparagraph{Solution}
+
+{*}{*}{*}
+
+\subsubsection{Example \label{subsec:Example-list-monads-5}\ref{subsec:Example-list-monads-5}}
+
+Find all solutions of the ``$8$ queens'' problem.
+
+\subparagraph{Solution}
+
+{*}{*}{*}
+
+\subsubsection{Example \label{subsec:Example-list-monads-6}\ref{subsec:Example-list-monads-6}}
+
+Generalize example \ref{subsec:Example-list-monads-5} to solve the
+$n$-queens problem.
+
+\subparagraph{Solution}
+
+{*}{*}{*}
+
+\subsubsection{Example \label{subsec:Example-list-monads-7}\ref{subsec:Example-list-monads-7}{*}}
+
+Transform Boolean formulas between CNF\footnote{\texttt{\href{https://en.wikipedia.org/wiki/Conjunctive_normal_form}{https://en.wikipedia.org/wiki/Conjunctive\_normal\_form}}}
+and DNF\footnote{\texttt{\href{https://en.wikipedia.org/wiki/Disjunctive_normal_form}{https://en.wikipedia.org/wiki/Disjunctive\_normal\_form}}}.
+
+\subparagraph{Solution}
+
+{*}{*}{*}
+
+\subsection{Pass/fail monads}
+
+\subsection{Tree-like semimonads and monads}
+
+\subsection{Single-value monads}
+
 \section{Slides, part 1}
-
-\paragraph{Computations within a functor context: Semimonads}
-
-Intuitions behind adding more ``generator arrows''
-
-Using Scala's \texttt{\textcolor{blue}{\footnotesize{}for}}/\texttt{\textcolor{blue}{\footnotesize{}yield}}
-syntax (``functor block'')
-
-\texttt{\textcolor{blue}{\footnotesize{}}}%
-\begin{minipage}[t]{0.49\columnwidth}%
-\begin{lyxcode}
-\textcolor{blue}{\footnotesize{}(for~\{~i~$\leftarrow$~1~to~n}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~~~j~$\leftarrow$~1~to~n}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~~~k~$\leftarrow$~1~to~n}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~\}~yield~f(i,~j,~k)}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}).sum}{\footnotesize\par}
-\end{lyxcode}
-%
-\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}}}%
-\begin{minipage}[t]{0.49\columnwidth}%
-\begin{lyxcode}
-\textcolor{blue}{\footnotesize{}(1~to~n).flatMap~\{~i~$\rightarrow$}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~~(1~to~n).flatMap~\{~j~$\rightarrow$}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~~~~(1~to~n).map~\{~k~$\rightarrow$}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~~~~~~f(i,~j,~k)}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~\}\}\}.sum}{\footnotesize\par}
-\end{lyxcode}
-%
-\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\medskip{}
-}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}map}} replaces the last left
-arrow, \texttt{\textcolor{blue}{\footnotesize{}flatMap}} replaces
-other left arrows
-
-When the functor is \emph{also} filterable, we can use ``\texttt{\textcolor{blue}{\footnotesize{}if}}''
-as well
-
-Standard library defines \texttt{\textcolor{blue}{\footnotesize{}flatMap()}}
-as replacement of \texttt{\textcolor{blue}{\footnotesize{}map() $\circ$
-flatten}} 
-
-\texttt{\textcolor{blue}{\footnotesize{}(1 to n).map(j $\rightarrow$
-...).flatten}} is \texttt{\textcolor{blue}{\footnotesize{}(1 to n).flatMap(j
-$\rightarrow$ ...)}} 
-
-Functors having \texttt{\textcolor{blue}{\footnotesize{}flatMap}}/\texttt{\textcolor{blue}{\footnotesize{}flatten}}
-are ``flattenable'' or \textbf{semimonads}
-
-Most of them also have method \texttt{\textcolor{blue}{\footnotesize{}pure:\ A
-$\rightarrow$ F{[}A{]}}} and so are \textbf{monads}
-
-The method \texttt{\textcolor{blue}{\footnotesize{}pure}} is not relevant
-in the functor block
-
-We will not need \texttt{\textcolor{blue}{\footnotesize{}pure}} in
-this part of the tutorial; focus on semimonads
-
-
-\paragraph{How \texttt{\textcolor{blue}{\footnotesize{}flatMap}} works with
-lists}
-
-consider \texttt{\textcolor{blue}{\footnotesize{}List(x1, x2, x3).flatMap(x
-$\rightarrow$ f(x))}} 
-
-assume that 
-
-\texttt{\textcolor{blue}{\footnotesize{}f: X $\rightarrow$ List{[}Y{]}}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}f(x1) = List(y0, y1)}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}f(x2) = List(y2)}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}f(x3) = List(y3, y4, y5, y6)}}{\footnotesize\par}
-
-then the result is \texttt{\textcolor{blue}{\footnotesize{}List(y0,
-y1, y2, y3, y4, y5, y6)}} 
-
-if we first do \texttt{\textcolor{blue}{\footnotesize{}.map(f)}} then
-\texttt{\textcolor{blue}{\footnotesize{}flatten}}:
-
-\texttt{\textcolor{blue}{\footnotesize{}List(x1, x2, x3).map(f).flatten
-=}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}  List(List(y0, y1), List(y2),
-List(y3, y4, y5, y6)).flatten =}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}  List(y0, y1, y2, y3, y4,
-y5, y6)}} 
-
-
-\paragraph{What is \texttt{\textcolor{blue}{\footnotesize{}flatMap}} doing with
-the data in a collection?}
-
-Consider this schematic code, using \texttt{\textcolor{blue}{\footnotesize{}Seq}}
-as the container type:\texttt{\textcolor{blue}{\footnotesize{} }}%
-\begin{minipage}[t]{0.49\columnwidth}%
-\begin{lyxcode}
-\textcolor{blue}{\footnotesize{}val~result~=~for~\{}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~i~$\leftarrow$~1~to~m}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~j~$\leftarrow$~1~to~n}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~x~=~f(i,~j)}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~k~$\leftarrow$~1~to~p}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~y~=~g(i,~j,~k)}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}\}~yield~h(x,y)}{\footnotesize\par}
-\end{lyxcode}
-%
-\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}}}%
-\begin{minipage}[t]{0.49\columnwidth}%
-\begin{lyxcode}
-\textcolor{blue}{\footnotesize{}val~result~=~\{}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~(1~to~m).flatMap~\{~i~$\rightarrow$}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~~~(1~to~n).flatMap~\{~j~$\rightarrow$}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~~~~~val~x~=~f(i,~j)}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~~~~~(1~to~p).map~\{~k~$\rightarrow$}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~~~~~~~val~y~=~g(i,~j,~k)}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~~~~~~~h(x,y)~~\}~\}~\}~\}}{\footnotesize\par}
-\end{lyxcode}
-%
-\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\medskip{}
-}}{\footnotesize\par}
-
-Computations are repeated for all $i$, for all $j$, etc., from each
-collection
-
-All ``generator lines'' must use the same container type
-
-Each generator line finally computes a container of \emph{that} type
-
-The total number of resulting data items is $\leq m*n*p$\texttt{\textcolor{blue}{\footnotesize{} }}{\footnotesize\par}
-
-All the resulting data items must fit within \emph{the same} container
-type!
-
-{\footnotesize{}The set of }\emph{\footnotesize{}container capacity
-counts}{\footnotesize{} must be closed under multiplication}{\footnotesize\par}
-
-What container types have this property?
-
-\texttt{\textcolor{blue}{\footnotesize{}Seq,}} \texttt{\textcolor{blue}{\footnotesize{}NonEmptyList}}
-\textendash{} can hold \emph{any} number of elements $\geq$ min.\ count
-
-\texttt{\textcolor{blue}{\footnotesize{}Option}}, \texttt{\textcolor{blue}{\footnotesize{}Either}},
-\texttt{\textcolor{blue}{\footnotesize{}Try}}, \texttt{\textcolor{blue}{\footnotesize{}Future}}
-\textendash{} can hold $0$ or $1$ elements (``pass/fail'')
-
-``Tree-like'' containers, e.g.\ can hold only $3$, $6$, $9$,
-$12$, ...\ elements
-
-``Non-standard'' containers: $F^{A}\equiv\text{String}\rightarrow A$;
-$F^{A}\equiv\left(A\rightarrow\text{Int}\right)\rightarrow\text{Int}$
-
-
-\subsection{Worked examples I: List-like monads}
-
-\texttt{\textcolor{blue}{\footnotesize{}Seq}}, \texttt{\textcolor{blue}{\footnotesize{}NonEmptyList}},
-\texttt{\textcolor{blue}{\footnotesize{}Iterator}}, \texttt{\textcolor{blue}{\footnotesize{}Stream}}{\footnotesize\par}
-
-Typical tasks for ``list-like'' monads:
-
-Create a list of all combinations or all permutations of a sequence
-
-Traverse a ``solution tree'' with DFS and filter out incorrect solutions
-
-Can use eager (\texttt{\textcolor{blue}{\footnotesize{}Seq}}) or lazy
-(\texttt{\textcolor{blue}{\footnotesize{}Iterator}}, \texttt{\textcolor{blue}{\footnotesize{}Stream}})
-evaluation strategies
-
-Usually, list-like containers have many additional methods
-
-append, prepend, concat, fill, fold, scan, etc.
-
-Worked examples: see code
-
-All permutations of \texttt{\textcolor{blue}{\footnotesize{}Seq(\textquotedbl a\textquotedbl ,
-\textquotedbl b\textquotedbl , \textquotedbl c\textquotedbl )}} 
-
-All subsets of \texttt{\textcolor{blue}{\footnotesize{}Set(\textquotedbl a\textquotedbl ,
-\textquotedbl b\textquotedbl , \textquotedbl c\textquotedbl )}} 
-
-All subsequences of length 3 out of a given sequence
-
-Generalize examples 1-3 to support arbitrary length $n$ instead of
-3
-
-All solutions of the ``8 queens'' problem
-
-Generalize example 5 to solve $n$-queens problem
-
-Transform Boolean formulas between CNF and DNF 
-
 
 \paragraph{Intuitions for pass/fail monads}
 
