@@ -1808,50 +1808,51 @@ where $T\triangleq S^{T}$} & {\footnotesize{}$\text{Extractor}^{T}$}\tabularnewl
 \end{table}
 
 
-\subsection{The \texttt{Eq} typeclass\label{subsec:The-Eq-typeclass}}
+\subsection{Equality comparison \textemdash{} the \texttt{Eq} typeclass\label{subsec:The-Eq-typeclass}}
 
 In Scala, the built-in operation \lstinline!==! is not type-safe
 because the code \lstinline!x == y! will compile regardless of the
-types of x and y. W can replace \lstinline!==! by a new operation
-\lstinline!===! constrained to a typeclass called \lstinline!Eq!,
-ensuring that types can be meaningfully compared for equality. The
-equality comparison for values of type $A$ is a function of type
-$A\times A\rightarrow\bbnum 2$ (where $\bbnum 2$ denotes the \lstinline!Boolean!
-type). A function of that type is wrapped by typeclass instances of
-\lstinline!Eq!. We also define \lstinline!===! as an extension method:\index{typeclass!Eq@\texttt{Eq}}
+types of \lstinline!x! and \lstinline!y!. We can replace \lstinline!==!
+by a new operation \lstinline!===! constrained to a typeclass called
+\lstinline!Eq!, ensuring that types can be meaningfully compared
+for equality. The equality comparison for values of type $A$ is a
+function of type $A\times A\rightarrow\bbnum 2$ (where $\bbnum 2$
+denotes the \lstinline!Boolean! type). Typeclass instances of \lstinline!Eq!
+need to wrap a function of that type. We also define \lstinline!===!
+as an extension method:\index{typeclass!Eq@\texttt{Eq}}
 \begin{lstlisting}
 final case class Eq[A](equal: (A, A) => Boolean)
 object Eq {
   implicit class EqOps[A: Eq](a: A) {
     def ===(b: A): Boolean = implicitly[Eq[A]].equal(a, b)
-  }             // Define some typeclass instances here:
+  } // Use type-specific comparisons to define some typeclass instances here:
   implicit val eqInt: Eq[Int] = Eq[Int](_ == _)
   implicit val eqString: Eq[String] = Eq[String](_ == _)
 }
 \end{lstlisting}
-We may, if desired, define an \lstinline!Eq! typeclass instance for
-all types at once through the code
-\begin{lstlisting}
-implicit def eqTypeA[A] = Eq[A](_ == _)
-\end{lstlisting}
-However, this will not work as expected for function types:
+If we define an \lstinline!Eq! typeclass instance for all types via
+the built-in \lstinline!==! operation, we will find that this operation
+does not work as expected when comparing values of a function type,
+e.g.~\lstinline!Int => Int!: 
 \begin{lstlisting}
 import Eq._
+implicit def eqTypeA[A] = Eq[A](_ == _)
 
 scala> ((n: Int) => n) === ((n: Int) => n)
 res1: Boolean = false 
 \end{lstlisting}
-The operations \lstinline!==! and \lstinline!===! do not seem to
-compare function values correctly. The equality comparison must satisfy
-the laws of identity, reflexivity and transitivity. The law of reflexivity\index{reflexivity law}
-states that $x=x$ for every $x$; so the comparison \lstinline!x === x!
-should always return \lstinline!true!. The example shown above violates
-that law when we choose $x\triangleq n^{:\text{Int}}\rightarrow n$.
+Our expectations about equality comparisons are formalized via the
+laws of identity, symmetry, reflexivity, and transitivity (see also
+a discussion on page~\pageref{par:label-equality-laws} in Section~\ref{subsec:Examples-of-non-functors}).
+The \textbf{reflexivity}\index{reflexivity law} law states that $x=x$
+for any $x$; so the comparison \lstinline!x === x! should always
+return \lstinline!true!. The example shown above violates that law
+when we choose $x\triangleq n^{:\text{Int}}\rightarrow n$.
 
 Let us perform structural analysis for the \lstinline!Eq! typeclass,
 defining $\text{Eq}^{A}\triangleq A\times A\rightarrow\bbnum 2$.
 The results (see Table~\ref{tab:Type-constructions-for-Eq} below)
-will show which types can be reasonably compared for equality.
+will show which types can be usefully compared for equality.
 
 \paragraph{Fixed types}
 
@@ -1863,17 +1864,18 @@ equality comparisons.
 If $A$ and $B$ have equality comparisons, we can compare pairs of
 type $A\times B$ by comparing each part of the pair separately:
 \begin{lstlisting}
-implicit def eqPair[A: Eq, B: Eq] = Eq[(A,B)]{ case ((a1, b1), (a2, b2)) => a1 === a2 && b1 === b2 }
+implicit def eqPair[A: Eq, B: Eq] = Eq[(A, B)]{ case ((a1, b1), (a2, b2)) => a1 === a2 && b1 === b2 }
 \end{lstlisting}
-It is easy to check that the identity, reflexivity, and transitivity
-laws hold for the new comparison operation if they hold for comparisons
-of $A$ and $B$ separately.
+It is easy to check that the identity, symmetry, reflexivity, and
+transitivity laws hold for the new comparison operation if they hold
+for comparisons of $A$ and $B$ separately.
 
-In this construction, it is important that both types $A$ and $B$
-should have an \lstinline!Eq! instance. If the above code contained
-only, say, the comparison \lstinline!a1 === a2!, the resulting comparison
-operation would have violated the \index{identity laws!of equality}identity
-law of the equality operation (if $x=y$ then $f(x)=f(y)$ for any
+It is important that the code for this construction assumes that both
+types $A$ and $B$ have lawful \lstinline!Eq! instances and performs
+the comparisons \lstinline!a1 === a2! and \lstinline!b1 === b2!.
+If the above code performed only, say, the comparison \lstinline!a1 === a2!,
+the resulting comparison operation would have violated the \index{identity laws!of equality}\textbf{identity
+law} of the equality operation (if $x=y$ then $f(x)=f(y)$ for any
 function $f$): we would have pairs such as $a\times b_{1}$ and $a\times b_{2}$
 that would be ``equal'' according to this definition, and yet many
 functions $f^{:A\times B\rightarrow C}$ exist such that $f(a\times b_{1})\neq f(a\times b_{2})$.
@@ -2030,30 +2032,29 @@ res0: Boolean = true
 
 \paragraph{Checking laws for recursive instances}
 
-To verify that the laws of identity, reflexivity, and transitivity
-will hold for the \lstinline!Eq! instance we just defined, we need
-to use induction. The \lstinline!Eq! instance for $T$ was defined
-as a recursive function \lstinline!eqT = eqS(eqT)!. We know that
-\lstinline!eqS(x)! satisfies all the required laws if \lstinline!x!
-satisfies them (``\lstinline!eqS! preserves the laws''). Let us
-visualize what happens when the function \lstinline!eqT! is applied
-to some values of type $T$. Are the laws satisfied in that case (e.g.~is
-\lstinline!eqT(t, t) == true! for all \lstinline!t:T!)? The function
-\lstinline!eqT! will call itself recursively whenever the body of
-\lstinline!eqS! calls \lstinline!eqT!. \emph{Assuming} that all
-the recursive calls to \lstinline!eqT! satisfy the laws, we find
-that the outer call to \lstinline!eqT! also satisfies the laws because
-\lstinline!eqS! preserves them. This corresponds to the inductive
-step.
+We use induction to verify that the laws of identity, symmetry, reflexivity,
+and transitivity will hold for the \lstinline!Eq! instance just defined.
+The \lstinline!Eq! instance for $T$ was defined as a recursive function
+\lstinline!eqT = eqS(eqT)!. We know that \lstinline!eqS(x)! satisfies
+all the required laws if \lstinline!x! satisfies them (``\lstinline!eqS!
+preserves the laws''). Let us visualize what happens when the function
+\lstinline!eqT! is applied to some values of type $T$. Are the laws
+satisfied in that case (e.g.~is \lstinline!eqT(t, t) == true! for
+all \lstinline!t:T!)? The function \lstinline!eqT! will call itself
+recursively whenever the body of \lstinline!eqS! calls \lstinline!eqT!.
+\emph{Assuming} that all the recursive calls to \lstinline!eqT! satisfy
+the laws, we find that the outer call to \lstinline!eqT! also satisfies
+the laws because \lstinline!eqS! preserves them. This corresponds
+to the inductive step.
 
-Eventually the recursion will terminate; so, \emph{some} calls of
-\lstinline!eqT(t1, t2)! with certain values \lstinline!t1! and \lstinline!t2!
-will not cause any more recursive self-calls to \lstinline!eqT!.
-For \emph{those} values \lstinline!t1! and \lstinline!t2!, the function
-\lstinline!eqT! will satisfy the required laws with no additional
-assumptions, because \lstinline!eqS(eqT)(t1, t2)!, which satisfies
-the laws, does not call \lstinline!eqT!. This corresponds to the
-base case of an inductive proof. 
+Eventually the recursion will terminate; so \emph{some} calls of \lstinline!eqT(t1, t2)!
+with certain values \lstinline!t1! and \lstinline!t2! do not cause
+any more recursive self-calls to \lstinline!eqT!. For \emph{those}
+values \lstinline!t1! and \lstinline!t2!, the function \lstinline!eqT!
+will satisfy the required laws with no additional assumptions, because
+\lstinline!eqS(eqT)(t1, t2)!, which satisfies the laws, does not
+call \lstinline!eqT!. This corresponds to the base case of an inductive
+proof. 
 
 So, the recursively defined \lstinline!Eq! instance is lawful. This
 argument is general and works in all cases when a typeclass instance
@@ -3203,14 +3204,14 @@ If that type is not void, i.e.~if there exists some value of that
 type, we will be able to define $\text{wu}_{F}$ as that value. 
 
 How can we construct $\text{wu}_{F}$ for a given bifunctor $S$?
-The procedure can be derived by structural analysis of $S$ (see Section~\ref{subsec:Recursive-types-and}
+The procedure can be derived by structural analysis of $S$ (see Section~\ref{subsec:Recursive-types-and-the-existence-of-their-values}
 below). For \emph{polynomial} bifunctors $S$ (which is the most often
 used kind of bifunctors), the necessary and sufficient condition is
 that the type $S^{\bbnum 1,\bbnum 0}$ should be non-void. If we can
 create a value of type $S^{\bbnum 1,\bbnum 0}$ , arguments shown
-in Section~\ref{subsec:Recursive-types-and} will guarantee that
-we can also create a value of type $F^{\bbnum 1}$, and so the recursive
-functor $F$ will be pointed.
+in Section~\ref{subsec:Recursive-types-and-the-existence-of-their-values}
+will guarantee that we can also create a value of type $F^{\bbnum 1}$,
+and so the recursive functor $F$ will be pointed.
 
 As an example, consider the polynomial bifunctor $S^{A,R}\triangleq A+A\times R$.
 The corresponding recursive functor $F^{A}\triangleq S^{A,F^{A}}=A+A\times F^{A}$
@@ -4588,7 +4589,7 @@ law holds because
 \begin{align*}
 {\color{greenunder}\text{expect to equal }(b^{:B}\rightarrow\bbnum 0+b)^{\uparrow F}:}\quad & p^{\bbnum 0,B}=\begin{array}{|c||c|}
  & F^{\bbnum 0+B}\\
-\hline \bbnum 0 & \text{(we can delete this line)}\\
+\hline \bbnum 0 & \text{(we may delete this line)}\\
 F^{B} & (b^{:B}\rightarrow\bbnum 0+b)^{\uparrow F}
 \end{array}=(b^{:B}\rightarrow\bbnum 0+b)^{\uparrow F}\quad.
 \end{align*}
@@ -4626,9 +4627,9 @@ expanded type matrix, using the type isomorphisms such as $\bbnum 0^{:A}+\bbnum 
 \[
 p^{A+B,C}=\begin{array}{|c||c|}
  & F^{A+B+C}\\
-\hline A & (a^{:A}\rightarrow a+\bbnum 0^{:B}+\bbnum 0^{:C})\bef\text{pu}_{F}\\
+\hline A & (a^{:A}\rightarrow a+\gunderline{\bbnum 0^{:B}+\bbnum 0^{:C}})\bef\text{pu}_{F}\\
 B & (b^{:B}\rightarrow\bbnum 0^{:A}+b+\bbnum 0^{:C})\bef\text{pu}_{F}\\
-F^{C} & (c^{:C}\rightarrow\bbnum 0^{:A}+\bbnum 0^{:B}+c)^{\uparrow F}
+F^{C} & (c^{:C}\rightarrow\gunderline{\bbnum 0^{:A}+\bbnum 0^{:B}}+c)^{\uparrow F}
 \end{array}=\begin{array}{|c||c|}
  & F^{A+B+C}\\
 \hline A & (a^{:A}\rightarrow a+\bbnum 0^{:B+C})\bef\text{pu}_{F}\\
@@ -4867,7 +4868,7 @@ The right-hand side is
 
 \section{Discussion}
 
-\subsection{Recursive types and the existence of their values\label{subsec:Recursive-types-and}}
+\subsection{Recursive types and the existence of their values\label{subsec:Recursive-types-and-the-existence-of-their-values}}
 
 A recursive type $T$ is defined by a type equation such as $T\triangleq\bbnum 1+\text{Int}+T\times T$.
 Can we decide whether such a type equation has a ``solution'', i.e.~a
@@ -4893,12 +4894,12 @@ satisfying the conditions
 Given a type constructor $S$, we can define the recursive type $T$
 with this Scala code,
 \begin{lstlisting}
-final case class T(s: S[T])
+final case class T(s: S[T])               // Type constructor S[_] must be already defined.
 def fix:    S[T] => T   =   { s => T(s) }
 def unfix:  T => S[T]   =   { t => t.s }
 \end{lstlisting}
 We can generalize this code to a ``fixpoint'' constructor $\text{Fix}^{S}$
-parameterized by $S$:
+that is \emph{parameterized} by $S$:
 \begin{lstlisting}
 final case class Fix[S[_]](s: S[Fix[S]])
 def fix[S[_]]:    S[Fix[S]] => Fix[S]   =   { s => Fix(s) }
@@ -4909,7 +4910,7 @@ In both implementations, the functions \lstinline!fix! and \lstinline!unfix!
 are inverses of each other because they merely wrap and unwrap values
 within a case class. So, we are always able to write code that \emph{defines}
 the recursive type $T$. The remaining question is whether we will
-be able to create values of that type.
+be able to create values of type $T$.
 
 Applying structural analysis to the functor $S$, we begin with the
 constant functor $S^{A}\triangleq Z$, where $Z$ is a fixed type.
@@ -4957,7 +4958,7 @@ val x = T(s = (x, x, 123))  // Infinite loop!
 \noindent We again have an infinite loop when creating values of type
 \lstinline!T!. As in the example with the identity functor, the case
 class \lstinline!T! requires us to compute some values of type \lstinline!T!
-before we can create a value of type \lstinline!T!. This requirement
+before we can create a value of type \lstinline!T!. That requirement
 is impossible to satisfy.
 
 A disjunctive type, e.g.~$S^{A}\triangleq\text{Int}+A\times A$,
@@ -4996,8 +4997,9 @@ S^{A}\cong C_{0}+C_{1}\times A+C_{2}\times A\times A+...\label{eq:functor-polyno
 \end{equation}
 It is clear from this formula that the type $C_{0}$ is found by setting
 $A=\bbnum 0$ in $S^{A}$, i.e.~$C_{0}\cong S^{\bbnum 0}$. If we
-can compute a value $c_{0}$ of type $C_{0}$, a base-case value $t_{0}$
-of type $T$ is found as
+can compute a value $c_{0}$ of type $C_{0}$ (i.e.~if $C_{0}$ is
+not void, $C_{0}\not\cong\bbnum 0$), a base-case value $t_{0}$ of
+type $T$ is found as
 \[
 t_{0}^{:T}\triangleq c_{0}^{:C_{0}}+\bbnum 0^{:C_{1}\times A}+\bbnum 0^{:C_{2}\times A\times A}+...
 \]
@@ -5006,7 +5008,7 @@ or $c_{2}\times t_{0}\times t_{0}$, etc.
 
 We conclude that the recursive type $T\triangleq S^{T}$ defined via
 a \emph{polynomial} functor $S$ will be non-void (i.e.~type recursion
-will terminate) when we can create values of type $S^{\bbnum 0}$.
+will terminate) when the type $S^{\bbnum 0}$ is non-void.
 
 In the examples $S^{A}\triangleq A$ and $S^{A}\triangleq\text{Int}\times A\times A$,
 we find $S^{\bbnum 0}\cong\bbnum 0$, so type recursion is invalid.
@@ -5087,11 +5089,11 @@ How can we recognize functors $S$ that admit valid recursive values
 of type $\text{Fix}^{S}$? The exponential functor construction (Statement~\ref{subsec:functor-Statement-functor-exponential})
 shows that $C^{A}\rightarrow P^{A}$ is a functor when $C$ is a contrafunctor
 and $P$ is a functor. If the type expression for $S^{A}$ contains
-a sub-expression of the form $C^{A}\rightarrow P^{A}$, we can use
-recursion to implement any values of $A$ wrapped by $P^{A}$. It
-remains to create any other values that are required by $P^{A}$;
-effectively, we need $P^{A}$ to be a pointed functor, so that we
-can create a value $P^{A}$ given a value of $A$. The contrafunctor
+a sub-expression of the form $C^{A}\rightarrow P^{A}$, how can we
+implement a value of type $C^{T}\rightarrow P^{T}$? We can use recursion
+to implement a value of $T$, as long as we can then somehow produce
+a value of type $P^{T}$ out of a value of type $T$. This is precisely
+the condition for $P^{\bullet}$ to be a pointed functor. The contrafunctor
 $C^{A}$ is an argument of the function of type $C^{A}\rightarrow P^{A}$,
 so we are not required to produce values of type $C^{A}$\textemdash{}
 we \emph{consume} those values. It follows that we can implement a
@@ -5111,8 +5113,8 @@ within the type constructor $S^{A}$. The condition for values of
 $\text{Fix}^{S}$ to exist is that every functor $P^{A}$ involved
 in such sub-expressions should be pointed. To check that, we can set
 the type parameter $A=\bbnum 1$ in all return types of \emph{functions}
-within $S^{A}$. If the resulting type can be implemented, we will
-be able to implement a recursively defined value of type $\text{Fix}^{S}$.
+within $S^{A}$. If the resulting type is not void, we will be able
+to implement a recursively defined value of type $\text{Fix}^{S}$.
 
 If the functor $S^{A}$ has the property $S^{\bbnum 0}\not\cong\bbnum 0$
 (i.e.~we have a base case for the inductive definition of $\text{Fix}^{S}$),
@@ -5124,7 +5126,7 @@ is a polynomial functor, this condition is also a necessary condition,
 as we have seen.) For exponential-polynomial functors $S$, recursive
 values of type $\text{Fix}^{S}$ can be implemented if every function-type
 sub-expression $C^{A}\rightarrow P^{A}$ in $S^{A}$ involves a pointed
-functor $P$.
+functor $P$ (i.e.~if $P^{\bbnum 1}\not\cong\bbnum 0$).
 
 \subsection{Proofs of associativity of \texttt{concat} for lists and arrays\label{subsec:Proofs-for-associativity-law-lists-and-arrays}}
 
@@ -5549,19 +5551,19 @@ type TC[A] = P[A] => A
 \end{lstlisting}
 If two types $A$, $B$ have an instance of the typeclass \lstinline!TC!,
 an instance for the product $A\times B$ can be derived automatically
-using the function
-\begin{align*}
-\text{productTC} & :(P^{A}\rightarrow A)\times(P^{B}\rightarrow B)\rightarrow P^{A\times B}\rightarrow A\times B\quad,\\
-\text{productTC} & \triangleq(f^{:P^{A}\rightarrow A}\times g^{:P^{B}\rightarrow B})\rightarrow p^{:P^{A\times B}}\rightarrow(p\triangleright\nabla_{1}^{\uparrow P}\triangleright f)\times(p\triangleright\nabla_{2}^{\uparrow P}\triangleright g)\quad.
-\end{align*}
+using the function \lstinline!productTC!:
 \begin{lstlisting}
 def productTC[A, B](f: P[A] => A, g: P[B] => B): P[(A, B)] => (A, B) =
   p => ( f(p.map(_._1)), g(p.map(_._2)) )
 \end{lstlisting}
+\begin{align*}
+\text{productTC} & :(P^{A}\rightarrow A)\times(P^{B}\rightarrow B)\rightarrow P^{A\times B}\rightarrow A\times B\quad,\\
+\text{productTC} & \triangleq(f^{:P^{A}\rightarrow A}\times g^{:P^{B}\rightarrow B})\rightarrow p^{:P^{A\times B}}\rightarrow(p\triangleright\nabla_{1}^{\uparrow P}\triangleright f)\times(p\triangleright\nabla_{2}^{\uparrow P}\triangleright g)\quad.
+\end{align*}
 This explains why product types have instances for all typeclasses
 listed in Table~\ref{tab:Types-of-typeclass-instance-values}: those
-typeclasses are inductive. (This argument does not prove that the
-typeclass \emph{laws} will also hold for the product types.)
+typeclasses are inductive. (However, this argument does not prove
+that the typeclass \emph{laws} will also hold for the product types.)
 
 It is interesting to note that the co-product construction cannot
 be derived in general for arbitrary inductive typeclasses: given $P^{A}\rightarrow A$
@@ -5583,18 +5585,18 @@ be checked for the new instances.
 Finally, let us show that the recursive type construction works for
 inductive typeclasses. Consider a recursive type $T$ defined by a
 type equation $T\triangleq S^{T}$, where the functor $S^{\bullet}$
-preserves typeclass instances (i.e.~if $A$ has an instance then
-$S^{A}$ also does, as we saw in all our examples in this chapter).
-It means that we have a function $\text{tcS}:(P^{A}\rightarrow A)\rightarrow P^{S^{A}}\rightarrow S^{A}$
+``preserves'' typeclass instances: if $A$ has an instance then
+$S^{A}$ also does, as we saw in all our examples in this chapter.
+In other words, we have a function $\text{tcS}:(P^{A}\rightarrow A)\rightarrow P^{S^{A}}\rightarrow S^{A}$
 that creates typeclass instances of type $P^{S^{A}}\rightarrow S^{A}$
 out of instances of type $P^{A}\rightarrow A$. Then we define an
 instance \lstinline!tcT! for $T$ as 
 \[
-\text{tcT}^{:P^{T}\rightarrow T}\triangleq p^{:P^{T}}\rightarrow\text{tcS}\,(\text{tcT})(p)\quad.
+\text{tcT}^{:P^{T}\rightarrow T}\triangleq p^{:P^{T}}\rightarrow\text{tcS}\,(\overline{\text{tcT}})(p)\quad.
 \]
-This recursive function terminates because it is implemented as an
-expanded function. The types match since we can convert between the
-equivalent types $T$ and $S^{T}$ whenever necessary, so $p^{:P^{T}}$
+This recursive definition terminates because it is implemented as
+an expanded function. The types match since we can convert between
+the equivalent types $T$ and $S^{T}$ whenever necessary, so $p^{:P^{T}}$
 can be converted to a value of type $P^{S^{T}}$, while the value
 $\text{tcS}\,(\text{tcT})(p)$ can be converted from type $S^{T}$
 to type $T$. In Scala code, the isomorphic conversions between $T$
@@ -5602,13 +5604,14 @@ and $S^{T}$ are implemented by the constructor \lstinline!T(...)!
 and accessor \lstinline!(_.s)! methods of the case class that wraps
 the type $T$.
 \begin{lstlisting}[mathescape=true]
-type S[A] = ...             // Define a functor S as required.
-final case class T(s: S[T]) // Define the recursive type T as $\scriptstyle{T\triangleq \,S^{T}} $.
+type S[A] = ...               // Define a functor S as required.
+final case class T(s: S[T])   // Define the recursive type T as ${ \color{dkgreen}\scriptstyle{T\triangleq \,S^{T}} }$.
 def tcS: TC[A] => TC[S[A]] = ... // Compute instances for S[A] from instances of A.
 def tcT: P[T] => T = p => T(tcS(tcT)(p.map(_.s))) // Define the recursive instance.
 \end{lstlisting}
-In this way, we can show that all inductive typeclasses support the
-recursive-type construction.
+In this way, we can implement the recursive-type construction for
+any inductive typeclass. (The typeclass laws still need to be checked
+for the recursively defined instances.)
 
 The \lstinline!Functor! and \lstinline!Pointed! typeclasses are
 also inductive. Instead of a structure functor, we need to use a higher-order
@@ -5963,10 +5966,10 @@ def f[A: TC1 : TC2]() = {
 
 When typeclass inheritance is implemented by combining instances without
 object-oriented inheritance, conversions to parent typeclasses are
-not automatic \textendash{} they are implemented by implicit functions
-that need to be imported into the current scope. The programmer's
-code can avoid producing duplicate instances by choosing which implicit
-conversions to import:
+not automatic: they are implemented by implicit functions that need
+to be imported into the current scope. The programmer's code can avoid
+producing duplicate instances by choosing which implicit conversions
+to import:
 \begin{lstlisting}
 final case class TC[A]()
 
