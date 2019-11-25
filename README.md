@@ -16,7 +16,7 @@ This repository also contains talk slides for presentations that initiated the w
 
 # Current status of the book
 
-Chapters 1-8 as well as some appendices and discussion chapters are ready after a second proofreading of the draft. Chapter 13 is in preparation.
+Chapters 1-9 as well as some appendices and discussion chapters are ready after a second proofreading of the draft. Chapter 14 is in preparation.
 
 # Leanpub version of the draft
 
@@ -33,9 +33,9 @@ Readers are invited to create github issues in this repository if they wish to m
 # Roadmap
 
 - Milestone 1 (achieved as of August 2019): chapters 1-6 are completed and available for purchase at lulu.com as a cheap (black/white) paperback.
-- Milestone 2 (ETA: November 2019): chapters 7, 8, 9, 13 are completed. The draft is available for purchase at lulu.com (black/white, cheaper) and at blurb.com (color, more expensive) in paperback.
-- Milestone 3 (ETA: end of 2019): chapters 1-13 are completed and available for purchase at lulu.com (black/white, cheaper) and blurb.com (color, more expensive) as both paperback and hardcover versions.
-- Milestone 4 (ETA: mid-2020): possibly adding chapters 14-16, the entire book is completed after possible revisions and input from readers.
+- Milestone 2 (ETA: November 2019): chapters 7, 8, 9, 10, 14 are completed. The draft is available for purchase at lulu.com (black/white, cheaper) and at blurb.com (color, more expensive) in paperback.
+- Milestone 3 (ETA: end of 2019): chapters 1-14 are completed and available for purchase at lulu.com (black/white, cheaper) and blurb.com (color, more expensive) as both paperback and hardcover versions.
+- Milestone 4 (ETA: mid-2020): possibly adding chapters 15-16, the entire book is completed after possible revisions and input from readers.
 
 # Building a PDF version of the book from LyX sources
 
