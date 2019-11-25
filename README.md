@@ -6,9 +6,11 @@ The book is a tutorial exposition of the theoretical knowledge that functional p
 
 A recorded slide presentation, ["Reasoning about types and code"](https://www.youtube.com/watch?v=tgr_dV7_53s), illustrates some of the topics and methods of this book.
 
+Another relevant presentation is ["What did category theory ever did for us (functional programmers)](https://www.youtube.com/watch?v=Zau8CxsfxOo).
+
 # Source code
 
-The book is published under the [GNU Free Documentation License](https://www.gnu.org/licenses/old-licenses/fdl-1.2.en.html). Permission is granted to _copy, distribute and/or modify_ this book under the terms of that license.
+The book is published under the [GNU Free Documentation License](https://www.gnu.org/licenses/old-licenses/fdl-1.2.en.html). Permission is granted to _copy, distribute and/or modify_ this book under the terms of that license. This means the book is free (as in "freedom") and will stay free forever.
 
 This repository contains the full source code for the book (LyX and LaTeX / jpg / eps) and shell scripts for building a PDF version of the book. (So this is a "transparent" copy in the sense of the GNU license.)
 
