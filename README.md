@@ -6,15 +6,18 @@ The book is a tutorial exposition of the theoretical knowledge that functional p
 
 A recorded slide presentation, ["Reasoning about types and code"](https://www.youtube.com/watch?v=tgr_dV7_53s), illustrates some of the topics and methods of this book.
 
-Another relevant presentation is ["What did category theory ever did for us (functional programmers)](https://www.youtube.com/watch?v=Zau8CxsfxOo).
+Another related presentation is ["What did category theory ever did for us (functional programmers)](https://www.youtube.com/watch?v=Zau8CxsfxOo).
 
 # Source code
 
-The book is published under the [GNU Free Documentation License](https://www.gnu.org/licenses/old-licenses/fdl-1.2.en.html). Permission is granted to _copy, distribute and/or modify_ this book under the terms of that license. This means the book is free (as in "freedom") and will stay free forever.
+The book is published under the [GNU Free Documentation License](https://www.gnu.org/licenses/old-licenses/fdl-1.2.en.html).
+Permission is granted to _copy, distribute and/or modify_ this book under the terms of that license.
+This means the book is free (as in "freedom") and will stay free forever.
 
-This repository contains the full source code for the book (LyX and LaTeX / jpg / eps) and shell scripts for building a PDF version of the book. (So this is a "transparent" copy in the sense of the GNU license.)
+This repository contains the full source code for the book (LyX and LaTeX / jpg / eps) and shell scripts for building a PDF version of the book.
+So, this is a "transparent" copy in the sense of the GNU license.
 
-This repository also contains talk slides for presentations that initiated the work on this book. The talk slides are not part of the book and may be partially obsolete both in content and in the notation used.
+This repository also contains the slides for YouTube presentations that initiated the work on this book. The talk slides are not part of the book and may be partially obsolete both in content and in the notation used.
 
 # Current status of the book
 
@@ -30,7 +33,9 @@ A printed version of the current draft can be purchased at lulu.com: [http://www
 
 This printed version contains only the chapters whose text has been edited and proofread. It corresponds to the PDF file [sofp-src/sofp-draft.pdf](sofp-src/sofp-draft.pdf).
 
-Readers are invited to create github issues in this repository if they wish to make comments or suggestions regarding the contents of the book.
+Readers are invited to create github issues in this repository and comment if they find something not clearly explained or wrong in the book,
+or if they wish to make comments or suggestions regarding the contents of the book.
+
 
 # Roadmap
 
