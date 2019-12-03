@@ -261,10 +261,10 @@ val xs = Seq("a", "b", "c")
 
 scala> for {
       x <- xs
-      remainAfterX = xs.filter(_ != x)
-      y <- remainAfterX
-      remainAfterY = remainAfterX.filter(_ != y)
-      z <- remainAfterY
+      xsWithoutX = xs.filter(_ != x)
+      y <- xsWithoutX
+      xsWithoutXY = xsWithoutX.filter(_ != y)
+      z <- xsWithoutXY
 } yield x + y + z
 res1: Seq[String] = List(abc, acb, bac, bca, cab, cba) 
 \end{lstlisting}
@@ -298,26 +298,153 @@ res0: Set[Set[String]] = Set(Set(), Set(a, b), Set(b, c), Set(a, c), Set(a, b, c
 
 \subsubsection{Example \label{subsec:Example-list-monads-3}\ref{subsec:Example-list-monads-3}}
 
-Compute all subsequences of length $3$ out of a given sequence.
-
-\subparagraph{Solution}
-
-{*}{*}{*}Another implementation is to use the standard method \lstinline!.tails!
-defined on sequences:
+Compute all sub-arrays of length $3$ in a given array. Type signature
+and a test:
 \begin{lstlisting}
-scala> Seq("a", "b", "c").tails.toList
-res2: List[Seq[String]] = List(List(a, b, c), List(b, c), List(c), List()) 
+def subarrays3[A](input: IndexedSeq[A]): IndexedSeq[IndexedSeq[A]]
+
+scala> subarrays3(IndexedSeq("a", "b", "c", "d"))
+res3: IndexedSeq[IndexedSeq[String]] = Vector(Vector(a, b, c), Vector(a, b, d), Vector(a, c, d), Vector(b, c, d))
 \end{lstlisting}
 
 
+\subparagraph{Solution}
+
+We need to find the indices of the elements of the sub-arrays. Suppose
+$n$ is the length of the given array. In any sub-array of length
+$3$, the first element must have an index $i$ such that $0\leq i<n$.
+The second element must have an index $j$ such that $i<j<n$, and
+the third element's index $k$ must satisfy $j<k<n$. So we can iterate
+over the indices like this,
+\begin{lstlisting}
+def subarrays3[A](input: IndexedSeq[A]): IndexedSeq[IndexedSeq[A]] = {
+  val n = input.length
+  for {
+    i <- 0 to n - 1
+    j <- i + 1 to n - 1
+    k <- j + 1 to n - 1
+  } yield IndexedSeq(input(i), input(j), input(k))
+}
+\end{lstlisting}
+The Scala library automatically chooses the class \lstinline!Vector!,
+which is a subtype of \lstinline!IndexedSeq!.
+
 \subsubsection{Example \label{subsec:Example-list-monads-4}\ref{subsec:Example-list-monads-4}}
 
-Generalize examples \ref{subsec:Example-list-monads-1}\textendash \ref{subsec:Example-list-monads-3}
-to support arbitrary length $n$ instead of \lstinline!3!.
+Generalize examples~\ref{subsec:Example-list-monads-1}\textendash \ref{subsec:Example-list-monads-3}
+to support an arbitrary size $n$ instead of $3$.
 
 \subparagraph{Solution}
 
-{*}{*}{*}
+\textbf{(a)} The task is to compute the set of all permutations of
+$n$ letters. We note that the solution in Example~\ref{subsec:Example-list-monads-1}
+used three source lines (such as \lstinline!x <- xs!), one for each
+letter. To generalize that code to $n$ letters, we would need to
+write a functor block with $n$ source lines. However, we cannot do
+that if $n$ is a run-time parameter not fixed in advance. So, the
+functor block must use recursion in $n$. Begin implementing \lstinline!permutations(xs)!
+as a recursive function:
+\begin{lstlisting}
+def permutations(xs: Seq[String]): Seq[String] = for {
+  x <- xs
+  xsWithoutX = xs.filter(_ != x)
+  ??? permutations(xsWithoutX) ??? // We need somehow to use a recursive call.
+\end{lstlisting}
+It is promising to use a recursive call of \lstinline!permutations()!
+with the sub-sequence \lstinline!xsWithoutX! that does not contain
+a chosen letter \lstinline!x!. It remains to formulate the code as
+nested iteration. Let us visualize the computation for \lstinline!xs == Seq("a","b","c")!.
+While iterating over \lstinline!xs!, we start with \lstinline!x == "a"!,
+which gives \lstinline!xsWithoutX == Seq("b", "c")!. Iterating over
+\lstinline!permutations(xsWithoutX)!, we obtain the permutations
+\lstinline!"bc"! and \lstinline!"cb"!. These permutations need to
+be concatenated with \lstinline!x == "a"!, yielding \lstinline!"abc"!
+and \lstinline!"acb"!, which is the correct part of the final answer.
+So, we write a nested iteration and concatenate the results:
+\begin{lstlisting}
+def permutations(xs: Seq[String]): Seq[String] = for {
+  x <- xs
+  xsWithoutX = xs.filter(_ != x)
+  rest <- permutations(xsWithoutX)
+} yield x + rest
+
+scala> permutations(Seq("a", "b", "c", "d"))
+res0: Seq[String] = List()
+\end{lstlisting}
+The code is wrong: it always returns an empty list! The reason is
+that we provided no base case for the recursion. Eventually the intermediate
+value \lstinline!xsWithoutX! becomes empty. A nested iteration with
+an empty list always makes the entire result also an empty list. To
+fix this, add a base case:
+\begin{lstlisting}
+def permutations(xs: Seq[String]): Seq[String] = if (xs.length == 1) xs else for {
+  x <- xs
+  xsWithoutX = xs.filter(_ != x)
+  rest <- permutations(xsWithoutX)
+} yield x + rest
+
+scala> permutations(Seq("a", "b", "c", "d"))
+res1: Seq[String] = List(abcd, abdc, acbd, acdb, adbc, adcb, bacd, badc, bcad, bcda, bdac, bdca, cabd, cadb, cbad, cbda, cdab, cdba, dabc, dacb, dbac, dbca, dcab, dcba) 
+\end{lstlisting}
+
+\textbf{(b)} To find all subsets of a set via nested iteration, we
+cannot directly extend the code from Example~\ref{subsec:Example-list-monads-2}
+because we cannot write an unknown number of source lines in a functor
+block. As in part \textbf{(a)}, we need to refactor the code and write
+a functor block that uses recursion.
+\begin{lstlisting}
+def subsets[A](xs: Set[A]): Set[Set[A]] = for {
+  x <- xs
+  xsWithoutX = xs - x           // Use the difference operation for sets.
+  ??? subsets(xsWithoutX) ???   // We need somehow to use a recursive call.
+\end{lstlisting}
+If \lstinline!xs == Set("a", "b", "c")! and \lstinline!x == "a"!
+during an iteration, we get \lstinline!xsWithoutX == Set("b", "c")!.
+Once we compute \lstinline!subsets(xsWithoutX)!, we need to use all
+those subsets together with \lstinline!x! and also without adding
+\lstinline!x!. We also should not forget to write the base case (an
+empty set \lstinline!xs!). So, the code becomes
+\begin{lstlisting}
+def subsets[A](xs: Set[A]): Set[Set[A]] = if (xs.isEmpty) Set(xs) else for {
+  x <- xs
+  xsWithoutX = xs - x
+  rest <- subsets(xsWithoutX)   // Recursive call.
+  maybeX <- Set(Set(x), Set())
+} yield maybeX ++ rest
+
+scala> subsets(Set("a", "b", "c", "d"))
+res0: Set[Set[String]] = Set(Set(), Set(a, c, d), Set(a, b), Set(b, c), Set(a, d), Set(a, b, d), Set(b, c, d), Set(a, c), Set(c, d), Set(a, b, c), Set(d), Set(b), Set(b, d), Set(a, b, c, d), Set(c), Set(a)) 
+\end{lstlisting}
+
+\textbf{(c)} To compute all sub-arrays of length $n$ from a given
+array, we rewrite the solution in Example~\ref{subsec:Example-list-monads-3}
+via a recursive function that computes the sequence of indices:
+\begin{lstlisting}
+def subindices(begin: Int, end: Int, n: Int): IndexedSeq[IndexedSeq[Int]] =
+  if (n == 0) IndexedSeq(IndexedSeq()) else for {
+    i <- begin until end
+    rest <- subindices(i + 1, end, n - 1)   // Recursive call.
+  } yield IndexedSeq(i) ++ rest
+
+scala> subindices(0, 4, 2)
+res0: IndexedSeq[IndexedSeq[Int]] = Vector(Vector(0, 1), Vector(0, 2), Vector(0, 3), Vector(0, 4), Vector(1, 2), Vector(1, 3), Vector(1, 4), Vector(2, 3), Vector(2, 4), Vector(3, 4))
+\end{lstlisting}
+The sequence of subarrays is easy to compute once the sequence of
+subarray indices is known: 
+\begin{lstlisting}
+def subarrays[A](n: Int, input: IndexedSeq[A]): IndexedSeq[IndexedSeq[A]] =
+  subindices(0, input.length, n).map(_.map(i => input(i)))
+
+scala> subarrays(4, IndexedSeq("a", "b", "c", "d", "e"))
+res1: IndexedSeq[IndexedSeq[String]] = Vector(Vector(a, b, c, d), Vector(a, b, c, e), Vector(a, b, d, e), Vector(a, c, d, e), Vector(b, c, d, e))
+\end{lstlisting}
+
+The solutions \textbf{(a)}\textendash \textbf{(c)} are not tail recursive
+because recursive calls within a source line in a functor block are
+translated into recursive calls not in tail positions but \emph{inside}
+\lstinline!.map! or \lstinline!.flatMap! methods. Achieving tail
+recursion in functor blocks requires a special technique described
+later in this book.
 
 \subsubsection{Example \label{subsec:Example-list-monads-5}\ref{subsec:Example-list-monads-5}}
 
@@ -325,26 +452,329 @@ Find all solutions of the ``$8$ queens'' problem.
 
 \subparagraph{Solution}
 
-{*}{*}{*}
+The $8$ queens must be placed on an $8\times8$ chess board so that
+no queen threatens any other queen. To make our work easier, we note
+that each queen must be placed in a different row. So, it is sufficient
+to find the column index for each queen. A solution is a sequence
+of $8$ indices.
+
+Begin by iterating over all possible column indices:
+\begin{lstlisting}
+val solutions = for {
+  x0 <- 0 until 8           // Queen 0 has coordinates (x0, 0).
+  x1 <- 0 until 8           // Queen 1 has coordinates (x1, 1).
+  x2 <- 0 until 8           // Queen 0 has coordinates (x2, 2).
+  ...
+\end{lstlisting}
+We could obtain all possible combinations of indices and then filter
+out the invalid positions. However, it is better to start filtering
+out as early as possible, since the total number of combinations grows
+quickly in nested iteration:
+\begin{lstlisting}
+val solutions = for {
+  x0 <- 0 until 8           // Queen 0 has coordinates (x0, 0).
+  x1 <- 0 until 8           // Queen 0 has coordinates (x1, 1).
+  if noThreat(x0, x1)       // Queens 0 and 1 do not threaten each other.
+  x2 <- 0 until 8           // Queen 0 has coordinates (x2, 2).
+  if noThreat(x0, x1, x2)   // Queen 2 does not threaten queens 0 and 1.
+  ...
+\end{lstlisting}
+It is clear that we need a helper function that decides whether a
+new queen threatens previous ones:
+\begin{lstlisting}
+def noThreat(otherX: Int, prev: Int*): Boolean = {   // `prev` is a sequence of arguments.
+  val otherY = prev.length
+  prev.zipWithIndex.forall { case (x, y) =>           // Check the vertical and the two diagonals.
+    x != otherX && x - y != otherX - otherY && x + y != otherX + otherY
+  }
+}
+\end{lstlisting}
+We used a feature of Scala allowing us to pass a sequence of arguments
+via the syntax \lstinline!Int*!, which means a variable number of
+arguments of type \lstinline!Int!. We can now complete the code and
+test it:
+\begin{lstlisting}
+val column = 0 until 8
+val solutions = for {
+  x0 <- column              // Queen 0 has coordinates (x0, 0).
+  x1 <- column              // Queen 0 has coordinates (x1, 1).
+  if noThreat(x1,  x0)      // Queen 1 does not threaten queen 0.
+  x2 <- column              // Queen 0 has coordinates (x2, 2).
+  if noThreat(x2,  x0, x1)  // Queen 2 does not threaten queens 0 and 1.
+  x3 <- column
+  if noThreat(x3,  x0, x1, x2)
+  x4 <- column
+  if noThreat(x4,  x0, x1, x2, x3)
+  x5 <- column
+  if noThreat(x5,  x0, x1, x2, x3, x4)
+  x6 <- column
+  if noThreat(x6,  x0, x1, x2, x3, x4, x5)
+  x7 <- column
+  if noThreat(x7,  x0, x1, x2, x3, x4, x5, x6)
+} yield Seq(x0, x1, x2, x3, x4, x5, x6, x7)
+
+scala> solutions.take(5)    // First 5 solutions.
+res0: IndexedSeq[Seq[Int]] = Vector(List(0, 4, 7, 5, 2, 6, 1, 3), List(0, 5, 7, 2, 6, 3, 1, 4), List(0, 6, 3, 5, 7, 1, 4, 2), List(0, 6, 4, 7, 1, 3, 5, 2), List(1, 3, 5, 7, 2, 0, 6, 4))
+\end{lstlisting}
+
 
 \subsubsection{Example \label{subsec:Example-list-monads-6}\ref{subsec:Example-list-monads-6}}
 
-Generalize example \ref{subsec:Example-list-monads-5} to solve the
-$n$-queens problem.
+Generalize Example~\ref{subsec:Example-list-monads-5} to solve the
+``$n$ queens'' problem.
 
 \subparagraph{Solution}
 
-{*}{*}{*}There is no known formula for the number of solutions of
-the $n$-queens problem.
+In this problem, $n$ queens must be placed on an $n\times n$ chess
+board. Since there is no known general formula for the number of solutions
+of the $n$-queens problem,\footnote{\texttt{\href{https://math.stackexchange.com/questions/1872444/}{https://math.stackexchange.com/questions/1872444/}}}
+we need to enumerate and count all solutions. As in the $8$-queens
+problem, each queen must be placed in a different row, and so we represent
+a solution by a sequence of $n$ column indices, each index between
+$0$ and $n-1$.
+
+Begin by writing code that expects to use itself recursively:
+\begin{lstlisting}
+def nQueens(n: Int): Seq[Seq[Int]] = for {
+  x0 <- 0 until n
+  ??? nQueens(n - 1) ???
+\end{lstlisting}
+We cannot compute the positions of new queens correctly unless we
+take into account the previously chosen positions for all previous
+queens. So, the recursive function must receive that information.
+Let us implement an auxiliary recursive function \lstinline!nQueensPartial!
+that computes all remaining positions given a sequence of (less than
+$n$) previously found queens:
+\begin{lstlisting}
+val column = 0 until n
+def nQueensPartial(n: Int, prev: Seq[Int]): Seq[Seq[Int]] = for {
+  x <- column
+  if noThreat(x, prev)         // The new queen does not threaten any previous queens.
+  rest <- nQueensPartial(n - 1, prev +: x)    // Find positions with n - 1 new queens.
+} yield x +: rest             // Prepend the new queen to the other queens' positions.
+\end{lstlisting}
+
+This code still has two problems: first, the base case ($n=0$) is
+not covered; second, the recursive function must be initially called
+with correct arguments. The complete code is
+\begin{lstlisting}
+def nQueens(n: Int): Seq[Seq[Int]] = {
+    val column = 0 until n
+    def nQueensPartial(m: Int, prev: Seq[Int]): Seq[Seq[Int]] = if (m == 0) Seq(Seq()) else for {
+        x <- column
+        if noThreat(x, prev: _*)  // Call a variable-arguments function using a value prev: Seq[Int].
+        rest <- nQueensPartial(m - 1, prev :+ x)
+      } yield x +: rest
+    nQueensPartial(n, Seq())
+}
+
+scala> (nQueens(8).length, nQueens(9).length, nQueens(10).length, nQueens(11).length)
+res0: (Int, Int, Int, Int) = (92,352,724,2680)
+\end{lstlisting}
+
 
 \subsubsection{Example \label{subsec:Example-list-monads-7}\ref{subsec:Example-list-monads-7}{*}}
 
-Transform Boolean formulas between CNF\footnote{\texttt{\href{https://en.wikipedia.org/wiki/Conjunctive_normal_form}{https://en.wikipedia.org/wiki/Conjunctive\_normal\_form}}}
-and DNF\footnote{\texttt{\href{https://en.wikipedia.org/wiki/Disjunctive_normal_form}{https://en.wikipedia.org/wiki/Disjunctive\_normal\_form}}}.
+Formulas of Boolean logic may be transformed by ``expanding brackets'',
+\begin{align*}
+{\color{greenunder}\text{expand brackets with a conjunction inside}:}\quad & (a\wedge b)\vee c=\left(a\vee c\right)\wedge\left(b\vee c\right)\quad,\\
+{\color{greenunder}\text{expand brackets with a disjunction inside}:}\quad & (a\vee b)\wedge c=\left(a\wedge c\right)\vee\left(b\wedge c\right)\quad.
+\end{align*}
+Implication is written as $(a\Rightarrow b)=((\neg a)\vee b)$. We
+can write these transformations in Scala code as
+
+\begin{wrapfigure}{l}{0.4\columnwidth}%
+\vspace{-0.6\baselineskip}
+\begin{lstlisting}
+(a && b) || c  ==  (a || c) && (b || c)
+(a || b) && c  ==  (a && c) || (b && c)
+(a implies b)  ==  ((!a) || b)
+\end{lstlisting}
+\vspace{-0.8\baselineskip}
+\end{wrapfigure}%
+
+\noindent So, we can rewrite any Boolean formula as a conjunction
+of disjunctions with no more nested conjunctions inside, e.g.~\lstinline*(a || b) && ((!c) || d || e)*.
+This form is called the \textbf{conjunctive normal form}\index{conjunctive normal form}\footnote{\texttt{\href{https://en.wikipedia.org/wiki/Conjunctive_normal_form}{https://en.wikipedia.org/wiki/Conjunctive\_normal\_form}}}
+(CNF) of a Boolean formula. We can also rewrite Boolean formula into
+a \emph{disjunction} of conjunctions with no more nesting inside,
+e.g.~\lstinline*(p && q && !r) || ((!x) && y)*. This is called the
+\textbf{disjunctive normal form}\index{disjunctive normal form}\footnote{\texttt{\href{https://en.wikipedia.org/wiki/Disjunctive_normal_form}{https://en.wikipedia.org/wiki/Disjunctive\_normal\_form}}}
+(DNF) of a Boolean formula. The task is to implement functions that
+convert formulas from CNF to DNF and back. 
 
 \subparagraph{Solution}
 
-{*}{*}{*}
+We begin by designing a data type to represent CNFs. Let the type
+parameter $A$ stand for the type of elementary Boolean formulas that
+we denoted by \lstinline!a!, \lstinline!b!, \lstinline*!c*, etc.,
+i.e.~Boolean formulas that contain no conjunctions or no disjunctions.
+Then we may represent a conjunction as a \lstinline!Set[A]!, and
+a disjunction of conjunctions as a \lstinline!Set[Set[A]]!. For instance,
+\lstinline!(a || b) && (c || d || e)! is represented by \lstinline!Set(Set(a, b), Set(c, d, e))!.
+Because we are using \lstinline!Set!, disjunction of two disjunctions
+is easily implemented as a union of sets. Since \lstinline!Set! eliminates
+repeated elements, the representation based on \lstinline!Set! will
+also automatically perform simplification of formulas such as \lstinline!(a || b || a) == (a || b)!.
+
+Conjunction of two conjunctions may be implemented as a union of sets
+for the same reason.
+
+We also need to figure out how to represent the Boolean constants
+\lstinline!true! and \lstinline!false! in the CNF. When we compute
+a conjunction such as \lstinline!(a || b) && c && true!, the result
+must be just \lstinline!(a || b) && c!. Since \lstinline!(a || b) && c!
+is represented as \lstinline!Set(Set(a, b), Set(c))!, and since we
+compute conjunctions via unions of sets, we expect to have the equation
+\begin{lstlisting}
+Set(Set(a, b), Set(c)) union Set(???) == Set(Set(a, b), Set(c))
+\end{lstlisting}
+This must hold for any formulas; so we must represent \lstinline!true!
+as an \emph{empty} set of disjunctions, \lstinline!Set()!.
+
+\begin{wrapfigure}{l}{0.4\columnwidth}%
+\vspace{-0.6\baselineskip}
+\begin{lstlisting}
+final case class CNF[A](s: Set[Set[A]])
+def trueCNF[A]    = CNF[A](Set())
+def falseCNF[A]   = CNF[A](Set(Set()))
+\end{lstlisting}
+\vspace{-0.8\baselineskip}
+\end{wrapfigure}%
+
+The value \lstinline!false! should have the property that for any
+group $g$ of disjunctions, e.g.~\lstinline!g == (x || y)!, we must
+have \lstinline!g || false == g!. Again, it appears that we must
+use an empty set to represent \lstinline!false!. However, CNF represents
+disjunctions by nested sets contained within conjunctions. Thus, \lstinline!Set(Set())!
+must stand for \lstinline!false!.
+
+Similar arguments hold for representing DNFs. We again use nested
+sets, but this time the conjunctions and disjunctions are swapped,
+so \lstinline!Set(Set(a, b), Set(c, d, e))! stands for the  DNF formula
+\lstinline!(a && b) || (c && d && e)!. The value \lstinline!Set()!
+represents an empty disjunction and stands for the constant \lstinline!false!,
+while the constant \lstinline!true! is \lstinline!Set(Set())!, a
+disjunction containing an empty conjunction.
+
+\begin{wrapfigure}{l}{0.4\columnwidth}%
+\vspace{-0.6\baselineskip}
+\begin{lstlisting}
+final case class DNF[A](s: Set[Set[A]])
+def trueDNF[A]    = DNF[A](Set(Set()))
+def falseDNF[A]   = DNF[A](Set())
+\end{lstlisting}
+\vspace{-1\baselineskip}
+\end{wrapfigure}%
+
+It is easy to make mistakes when reasoning about the constants \lstinline!true!
+and \lstinline!false! in these representations. We will need to test
+the code to make sure our implementations of \lstinline!true! and
+\lstinline!false! are correct.
+
+Before writing the full code, let us implement the DNF-to-CNF conversion
+for a short example: 
+\begin{lstlisting}
+     (a && b) || (c && d)         ---->          (a || c) && (a || d) && (b || c) && (b || d)
+                                 // The same formulas are written in the set-based representation as:
+DNF(Set(Set(a, b), Set(c, d)))    ---->      CNF(Set(Set(a, c), Set(a, d), Set(b, c), Set(b, d)))
+\end{lstlisting}
+A simple expression implementing this transformation for nested sets
+could look like this: 
+\begin{lstlisting}
+for {
+  x <- Set("a", "b")
+  y <- Set("c", "d")
+} yield Set(x) ++ Set(y)   // The result is Set(Set(a, c), Set(a, d), Set(b, c), Set(b, d)).
+\end{lstlisting}
+Generalizing this code to an arbitrary number of nested sets, we get
+a first draft of a solution,
+\begin{lstlisting}
+def toCNF[A](dnf: Set[Set[A]]): Set[Set[A]] = for {
+  x  <- dnf.head           // The `head` of a set; corresponds to Set("a", "b") in the example above.
+  ys <- toCNF(dnf.tail)    // The `tail` of a set; corresponds to Set(Set("c", "d")) in the example.
+                           // Converted to CNF, this corresponds to Set(Set("c"), Set("d")).
+} yield Set(x) ++ ys  
+\end{lstlisting}
+This code is not yet fully correct: we have no base case for the recursion,
+and the \lstinline!.head! method will crash for an empty set. To
+make the pattern matching on a \lstinline!Set! easier, let us implement
+a function
+\begin{lstlisting}
+def headTailOption[A](xs: Set[A]): Option[(A, Set[A])] =     // `List`-like pattern matching for Set.
+  if (xs.isEmpty) None else Some((xs.head, xs.tail))
+\end{lstlisting}
+With that function, we can write the final code as
+\begin{lstlisting}
+def toCNF[A](dnf: DNF[A]): CNF[A] = headTailOption(dnf.s) match {
+  case None => falseCNF[A]     // Base case: The empty set Set() means `false` in DNF.
+  case Some((head, tail)) => CNF(for {
+    x  <- head                 // The first group of conjunctions.
+    ys <- toCNF(DNF(tail)).s   // The remaining groups of conjunctions, recursively converted to CNF.
+  } yield ys + x)              // For sets, `ys + x` is the same as `Set(x) ++ ys`.
+}
+                               // Some tests for this code:
+val dnf1 = DNF(Set(Set("a", "b"), Set("c", "d", "e")))
+val cnf1 = CNF(Set(Set("a", "c"), Set("a", "d"), Set("a", "e"), Set("b", "c"), Set("b", "d"), Set("b", "e")))
+
+scala> toCNF(dnf1) == cnf1
+res0: Boolean = true 
+
+scala> (toCNF(trueDNF) == trueCNF, toCNF(falseDNF) == falseCNF)
+res1: (Boolean, Boolean) = (true,true)
+\end{lstlisting}
+Because the rules of Boolean logic are completely symmetric with respect
+to swapping the operations $\vee$ and $\wedge$, the function \lstinline!cnf2dnf!
+can be implemented via \lstinline!dnf2cnf! like this,
+\begin{lstlisting}
+def toDNF[A](cnf: CNF[A]): DNF[A] = DNF(toCNF(DNF(cnf.s)).s)
+
+scala> (toDNF(trueCNF) == trueDNF, toDNF(falseCNF) == falseDNF)
+res2: (Boolean, Boolean) = (true,true)
+\end{lstlisting}
+
+If we test some more, we will find that the functions \lstinline!toCNF!
+and \lstinline!toDNF! are not inverses:
+\begin{lstlisting}
+scala> toDNF(cnf1)     // Expected this to equal DNF(Set(Set("a", "b"), Set("c", "d", "e"))) == dnf1.
+res3: DNF[String] = DNF(Set(Set(b, a), Set(b, a, c, e), Set(d, a, b), Set(b, e, a), Set(b, a, c), Set(d, e, c, b), Set(d, e, c), Set(d, a, c, b), Set(e, a, b, c, d), Set(d, a, e, c), Set(d, a, e, b)))
+\end{lstlisting}
+However, we already verified that \lstinline!cnf1 == toCNF(dnf1)!.
+We expect the formula \lstinline!dnf1! to remain the same when we
+convert it to CNF and back to DNF. Why the discrepancy? The reason
+is that the transformations \lstinline!toDNF! and \lstinline!toCNF!
+fail to perform certain simplifications allowed in Boolean logic.
+For example, both \lstinline!(a) || (a && b)! and \lstinline!(a) && (a || b)!
+are equivalent to just \lstinline!(a)!. In the set-based representations,
+we must be able to simplify \lstinline!Set(Set("a"), Set("a", "b"))!
+to just \lstinline!Set(Set("a"))!. Generally, we may discard any
+conjunction group that happens to be a superset of another conjunction
+group, and similarly for disjunction groups. After these simplifications,
+the formula \lstinline!toDNF(cnf1)! becomes equal to \lstinline!dnf1!
+because, as we can see, all inner sets in \lstinline!toDNF(cnf1)!
+are supersets of either \lstinline!Set("a", "b")! or \lstinline!Set("c", "d", "e")))!
+or both. We can implement the simplifications as a function \lstinline!simplifyCNF!:
+\begin{lstlisting}
+def simplifyCNF[A](cnf: CNF[A]): CNF[A] = CNF(
+    cnf.s.toIndexedSeq.sortBy(_.size).foldLeft(Set[Set[A]]()) { case (prevGroups, group) =>
+        if (prevGroups.exists(_ subsetOf group)) prevGroups else prevGroups + group
+      }    // Omit `group` if it happens to be a superset of some previous group within `prevGroups`.
+)    // Since `prevGroups` is sorted by group size, we only need to check later groups for supersets.
+
+scala> simplifyCNF(CNF(Set(Set("a", "b"), Set("a", "b", "c", "d"))))
+res3: CNF[String] = CNF(Set(Set(a, b)))
+\end{lstlisting}
+With this function, we may define more practically useful transformations
+\lstinline!dnf2cnf! and \lstinline!cnf2dnf! as
+\begin{lstlisting}
+def dnf2cnf[A](dnf: DNF[A]): CNF[A] = simplifyCNF(toCNF(dnf))
+def cnf2dnf[A](cnf: CNF[A]): DNF[A] = DNF(dnf2cnf(DNF(cnf.s)).s)
+                                                     // Verify that dnf2cnf and cnf2dnf are inverses:
+scala> (dnf2cnf(cnf2dnf(cnf1)) == cnf1, cnf2dnf(dnf2cnf(dnf1)) == dnf1)
+res4: (Boolean, Boolean) = (true,true)
+\end{lstlisting}
+The conversion functions \lstinline!dnf2cnf! and \lstinline!cnf2dnf!
+are now inverses of each other.
 
 \subsection{Pass/fail monads}
 
@@ -463,7 +893,8 @@ Example of a \emph{non-monadic} tree-like functor:
 $F^{A}\equiv A+A\times A+A\times A\times A\times A+...$ (powers of
 2)
 
-Recursive definition: $F^{A}=A+F^{A\times A}$
+Recursive definition: $F^{A}=A+F^{A\times A}$ (regular-shaped binary
+tree)\index{regular-shaped tree!is not a monad}
 
 
 \subsection{Worked examples III: Tree-like monads}
@@ -588,8 +1019,6 @@ $\left(A\times S\rightarrow B\right)\times\left(A\times S\rightarrow S\right)$}{
 
 this will be $A\rightarrow\text{State}^{B}$ if {\footnotesize{}$\text{State}^{B}\equiv\left(S\rightarrow B\right)\times\left(S\rightarrow S\right)\equiv S\rightarrow B\times S$ }{\footnotesize\par}
 
-we used the ``arithmetic'' Curry-Howard: $b^{as}s^{as}=(b^{s}s^{s})^{a}=\left(\left(bs\right)^{s}\right)^{a}$
-
 
 \subsection{Exercises I}
 
@@ -630,6 +1059,9 @@ $F^{A}=A+A\times A+F^{A}+F^{A}\times F^{A}$
 Find the largest prime number below 1000 via a simple \href{https://en.wikipedia.org/wiki/Sieve_of_Eratosthenes}{Sieve of Eratosthenes};
 use the \texttt{\textcolor{blue}{\footnotesize{}State{[}S, Int{]}}}
 monad with \texttt{\textcolor{blue}{\footnotesize{}S = Array{[}Boolean{]}}} 
+
+The function \lstinline!subindices! in Example~\ref{subsec:Example-list-monads-4}(c)
+has a bug? If so, fix the base case.
 
 \section{Slides, part 2}
 
@@ -803,7 +1235,9 @@ S^{S^{S^{A}}}\ar[ru]\sp(0.5){\text{fmap}\,(\text{ftn}^{\left[A\right]})\ }\ar[rd
  & S^{S^{A}}\ar[ru]\sb(0.5){\text{ftn}^{\left[A\right]}}
 }
 \]
-}{\footnotesize\par}
+Note that the two intermediate values of type $S^{S^{A}}$ are }\emph{\footnotesize{}not}{\footnotesize{}
+necessarily equal; the associativity law requires only the final results
+of type $S^{A}$ to be equal.}{\footnotesize\par}
 
 
 \paragraph{Equivalence of a natural transformation and a ``lifting''}
@@ -811,8 +1245,8 @@ S^{S^{S^{A}}}\ar[ru]\sp(0.5){\text{fmap}\,(\text{ftn}^{\left[A\right]})\ }\ar[rd
 Equivalence of {\footnotesize{}$\text{flm}$} and {\footnotesize{}$\text{ftn}$}:
 {\footnotesize{}$\text{ftn}=\text{flm}\left(\text{id}\right)$; $\text{flm}\,f=\text{fmap}\,f\bef\text{ftn}$} 
 
-We saw this before: {\footnotesize{}$\text{deflate}=\text{fmapOpt}\left(\text{id}\right)$};
-{\footnotesize{}$\text{fmapOpt}\,f=\text{fmap}\:f\bef\text{deflate}$} 
+We saw this before: {\footnotesize{}$\text{deflate}=\text{liftOpt}\left(\text{id}\right)$};
+{\footnotesize{}$\text{liftOpt}\,f=\text{fmap}\:f\bef\text{deflate}$} 
 
 Is there a general pattern where two such functions are equivalent?
 
@@ -885,14 +1319,12 @@ we get{\footnotesize{} $\text{ftn}^{\uparrow}\bef\text{ftn}=\text{ftn}\bef\text{
 \texttt{\textcolor{blue}{\footnotesize{}flatten}} has the simplest
 type signature \emph{and} the fewest laws
 
-It is usually easy to check naturality!
-
 \textbf{Parametricity theorem}: Any \emph{pure, fully parametric}
 code for a function of type $F^{A}\rightarrow G^{A}$ will implement
 a natural transformation
 
-Checking \texttt{\textcolor{blue}{\footnotesize{}flatten}}'s associativity
-needs \emph{a lot} more work!
+We do not need to check naturality, but checking \texttt{\textcolor{blue}{\footnotesize{}flatten}}'s
+associativity needs \emph{a lot} more work!
 
 The \texttt{\textcolor{blue}{\footnotesize{}cats}} library has a \texttt{\textcolor{blue}{\footnotesize{}FlatMap}}
 type class, defining \texttt{\textcolor{blue}{\footnotesize{}flatten}}
@@ -957,7 +1389,7 @@ It is generally useful to have an ``empty context'' available:
 
 Adding the empty context to another context should be a no-op
 
-Empty context is followed by a generator:
+Empty context is followed by a source line:
 
 \texttt{\textcolor{blue}{\footnotesize{}}}%
 \begin{minipage}[c][1\totalheight][t]{0.49\columnwidth}%
@@ -982,7 +1414,7 @@ Empty context is followed by a generator:
 cont(y)) = cont(x)}}$\quad\quad\text{pure}\bef\text{flm}\,f=f$ \textcolor{gray}{\textendash{}
 left identity}
 
-Empty context is preceded by a generator:
+Empty context is preceded by a source line:
 
 \texttt{\textcolor{blue}{\footnotesize{}}}%
 \begin{minipage}[c][1\totalheight][t]{0.49\columnwidth}%
@@ -1077,58 +1509,6 @@ and $f\diamond\text{pure}=f$
 Associativity law: $\left(f\diamond g\right)\diamond h=f\diamond\left(g\diamond h\right)$
 
 Follows from the $\text{flm}$ law: $f\bef\text{flm}\left(g\bef\text{flm}h\right)=f\bef\text{flm}\,g\bef\text{flm}\,h$
-
-
-\paragraph{{*} Motivation for categories and functors}
-
-Compare different ``liftings'' seen so far, and generalize
-\begin{center}
-\vspace{-0.25cm}%
-\begin{tabular}{|c|c|c|c|}
-\hline 
-\textbf{Category} & \textbf{Type }$A\rightsquigarrow B$ & \textbf{Identity} & \textbf{Composition}\tabularnewline
-\hline 
-\hline 
-plain functions & $A\rightarrow B$ & $\text{id}:A\rightarrow A$ & $f^{A\rightarrow B}\bef g^{B\rightarrow C}$\tabularnewline
-\hline 
-lifted to $F$ & $F^{A}\rightarrow F^{B}$ & $\text{id}:F^{A}\rightarrow F^{A}$ & $f^{F^{A}\rightarrow F^{B}}\bef g^{F^{B}\rightarrow F^{C}}$\tabularnewline
-\hline 
-Kleisli over $F$ & $A\rightarrow F^{B}$ & $\text{pure}:A\rightarrow F^{A}$ & $f^{A\rightarrow F^{B}}\diamond g^{B\rightarrow F^{C}}$\tabularnewline
-\hline 
-\end{tabular}
-\par\end{center}
-
-\vspace{-0.15cm}Category theory generalizes this situation
-
-\textbf{Category}: a certain class of ``twisted functions'' $A\rightsquigarrow B$
-called \textbf{morphisms}
-
-For any two morphisms $f^{A\rightsquigarrow B}$ and $g^{B\rightsquigarrow C}$
-the \textbf{composition} morphism $f\diamond g$ of type $A\rightsquigarrow C$
-must exist
-
-For each type $A$, the \textbf{identity} morphism $\text{id}_{\diamond}$
-of type $A\rightsquigarrow A$ must exist
-
-Composition respects identity: $\text{id}_{\diamond}\diamond f=f$
-and $f\diamond\text{id}_{\diamond}=f$
-
-Composition is associative: $\left(f\diamond g\right)\diamond h=f\diamond\left(g\diamond h\right)$
-
-General \textbf{functor}: a map from one category to another
-
-A functor must \texttt{\textcolor{blue}{\footnotesize{}fmap}} each
-morphism from one category to the other
-
-Functor laws: \texttt{\textcolor{blue}{\footnotesize{}fmap}} must
-preserve identity and composition
-
-What we call ``functor'' is called \textbf{endofunctor} in category
-theory
-
-An endofunctor's \texttt{\textcolor{blue}{\footnotesize{}fmap}} goes
-from plain functions to $F$-lifted functions
-
 
 \paragraph{{*} From Kleisli back to \texttt{\textcolor{blue}{\footnotesize{}flatMap}} }
 
