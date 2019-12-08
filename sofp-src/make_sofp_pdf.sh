@@ -92,8 +92,14 @@ function create_draft {
 	egrep '(Computations in functor blocks. II. |Applied functional type theory|C The Curry-Howard |E A humorous disclaimer)' | egrep -o '[0-9]+$' | \
 		(read b1; read e1; read b2; read e2; pdftk sofp.pdf cat 1-$((b1-1)) $e1-$((b2-1)) $e2-end output $output_pdf; echo Draft page ranges 1-$((b1-1)) $e1-$((b2-1)) $e2-end )
 
-	echo Draft file created as $output_pdf, size `kbSize $output_pdf` bytes, with `pdfPages $output_pdf` pages.
-	
+	# Check that the page number did not grow by mistake after wrong formatting.
+	local draft_pages=`pdfPages $output_pdf`
+	local expected_pages=385
+	if [ $draft_pages -eq $expected_pages ]; then
+		echo Draft file created as $output_pdf, size `kbSize $output_pdf` bytes, with $draft_pages pages.
+	else
+		echo Error: Draft file has $draft_pages pages instead of expected $expected_pages. Please check.
+	fi
 }
 
 # Create the lulu.com draft file by selecting the chapters that have been proofread.
