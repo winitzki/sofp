@@ -1,5 +1,15 @@
 #!/bin/bash
 
+draft_pages=386
+# Cut out from here,
+draft_title_1="Computations in functor blocks. II\\."
+# to here:
+draft_title_2="Applied functional type theory"
+# Cut out from here:
+draft_title_3="Inferring code from types with the LJT algorithm"
+# to here:
+draft_title_4="E A humorous disclaimer"
+
 # Make a PDF package with embedded source archive.
 
 function run_latex_many_times {
@@ -89,16 +99,15 @@ function create_draft {
 	local base="$1" output_pdf="$2"
 	"$pdftk" $name.pdf dump_data output $name.data
 	egrep -v 'Bookmark(Level|Begin)' $name.data|fgrep Bookmark|perl -e 'undef $/; while(<>){ s/\nBookmarkPageNumber/ BookmarkPageNumber/ig; print; }' | \
-	egrep '(Computations in functor blocks. II. |Applied functional type theory|C The Curry-Howard |E A humorous disclaimer)' | egrep -o '[0-9]+$' | \
+	egrep "($draft_title_1|$draft_title_2|$draft_title_3|$draft_title_4)" | egrep -o '[0-9]+$' | \
 		(read b1; read e1; read b2; read e2; pdftk sofp.pdf cat 1-$((b1-1)) $e1-$((b2-1)) $e2-end output $output_pdf; echo Draft page ranges 1-$((b1-1)) $e1-$((b2-1)) $e2-end )
 
 	# Check that the page number did not grow by mistake after wrong formatting.
-	local draft_pages=`pdfPages $output_pdf`
-	local expected_pages=385
-	if [ $draft_pages -eq $expected_pages ]; then
+	local got_draft_pages=`pdfPages $output_pdf`
+	if [ $got_draft_pages -eq $draft_pages ]; then
 		echo Draft file created as $output_pdf, size `kbSize $output_pdf` bytes, with $draft_pages pages.
 	else
-		echo Error: Draft file has $draft_pages pages instead of expected $expected_pages. Please check.
+		echo Error: Draft file has $got_draft_pages pages instead of expected $draft_pages. Please check.
 	fi
 }
 
