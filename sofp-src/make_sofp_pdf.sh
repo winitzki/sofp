@@ -1,14 +1,18 @@
 #!/bin/bash
 
-draft_pages=386
-# Cut out from here,
-draft_title_1="Computations in functor blocks. II\\."
-# to here:
-draft_title_2="Applied functional type theory"
-# Cut out from here:
-draft_title_3="Inferring code from types with the LJT algorithm"
-# to here:
-draft_title_4="E A humorous disclaimer"
+# Requires pdftk and lyx.
+# Get lyx from www.lyx.org
+# For Mac, get pdftk from https://www.pdflabs.com/tools/pdftk-the-pdf-toolkit/pdftk_server-2.02-mac_osx-10.11-setup.pkg
+
+name="sofp"
+
+function git_commit_hash {
+	git rev-parse HEAD # Do not use --short here.
+}
+
+function source_hash {
+	cat $0 $name*.lyx | shasum -a 256 | cut -c 1-64
+}
 
 # Make a PDF package with embedded source archive.
 
@@ -43,6 +47,20 @@ function add_color {
 	fi
 }
 
+function add_source_hashes {
+	gitcommit=`git_commit_hash`
+	sourcehash=`source_hash`
+	echo $sourcehash > $name.source_hash1
+	LC_ALL=C sed -i "" -E -e "s/INSERTSOURCEHASH/$sourcehash/; s/INSERTGITCOMMIT/$gitcommit/" $name.tex
+	if diff -q $name.source_hash $name.source_hash1 > /dev/null; then
+		mv $name.source_hash1 $name.source_hash
+		false
+	else
+		mv $name.source_hash1 $name.source_hash
+		true
+	fi
+}
+
 function remove_lulu {
 	local base="$1"
         LC_ALL=C sed -i "" -e 's,^\(.publishers{Published by\),%\1,; s,^\(Published by\),%\1,; s,^\(ISBN:\),%\1,' "$base".tex
@@ -61,21 +79,32 @@ lyx="/Applications/LyX.app/Contents/MacOS/lyx"
 
 echo "Info: Using pdftk from '$pdftk' and lyx from '$lyx'"
 
-name="sofp"
 draft="$name-draft"
+srcbase="sofp-src"
+
 rm -f $name*tex
 
+echo "Exporting LyX files $name.lyx and its child documents into LaTeX..."
 "$lyx" --export pdflatex $name.lyx # Exports LaTeX for all child documents as well.
+echo "Post-processing LaTeX files..."
 for f in $name*tex; do add_color "$f"; done
-make_pdf_with_index "$name" # Output is $name.pdf, main file is $name.tex, and other .tex files are \include'd.
+if add_source_hashes $name.tex; then
+	echo "Creating a full PDF file..."
+	make_pdf_with_index "$name" # Output is $name.pdf, main file is $name.tex, and other .tex files are \include'd.
+	rm -rf "$srcbase"
+	mkdir "$srcbase"
+	# Copy the required source files to "$srcbase"/.
+	cp ../README.md $name*lyx $name*tex $name*dvi `fgrep includegraphics $name*tex | sed -e 's,[^{]*{\([^}]*\)}.*,\1.*,' |while read f; do ls $f ; done` *.sh "$srcbase"/
+	tar jcvf "$name-src.tar.bz2" "$srcbase"/
+	rm -rf "$srcbase"/
+	# Do not attach sources to the main PDF file.
+	#"$pdftk" "$name.pdf" attach_files "$name-src.tar.bz2" output "1$name.pdf"
+	#mv "1$name.pdf" "$name.pdf"
+	# Cleanup.
+	tar jcvf "$name-logs.tar.bz2" $name*log $name*ilg $name*idx $name*toc
+	echo "Log files are found in $name-logs.tar.bz2"
+fi
 
-srcbase="sofp-src"
-rm -rf "$srcbase"
-mkdir "$srcbase"
-# Copy the required source files to "$srcbase"/.
-cp ../README.md $name*lyx $name*tex $name*dvi `fgrep includegraphics $name*tex | sed -e 's,[^{]*{\([^}]*\)}.*,\1.*,' |while read f; do ls $f ; done` *.sh "$srcbase"/
-tar jcvf "$name-src.tar.bz2" "$srcbase"/
-rm -rf "$srcbase"/
 
 function kbSize {
  local file="$1"
@@ -87,36 +116,17 @@ function pdfPages {
  "$pdftk" "$file" dump_data | fgrep NumberOfPages | sed -e 's,^.* ,,'
 }
 
-# Do not attach sources to the main PDF file.
-#"$pdftk" "$name.pdf" attach_files "$name-src.tar.bz2" output "1$name.pdf"
-#mv "1$name.pdf" "$name.pdf"
 echo Result is "$name.pdf", size `kbSize "$name.pdf"` bytes, with `pdfPages "$name.pdf"` pages.
-# Cleanup.
-tar jcvf "$name-logs.tar.bz2" $name*log $name*ilg $name*idx $name*toc
-echo "Log files are found in $name-logs.tar.bz2"
-
-function create_draft {
-	local base="$1" output_pdf="$2"
-	"$pdftk" $name.pdf dump_data output $name.data
-	egrep -v 'Bookmark(Level|Begin)' $name.data|fgrep Bookmark|perl -e 'undef $/; while(<>){ s/\nBookmarkPageNumber/ BookmarkPageNumber/ig; print; }' | \
-	egrep "($draft_title_1|$draft_title_2|$draft_title_3|$draft_title_4)" | egrep -o '[0-9]+$' | \
-		(read b1; read e1; read b2; read e2; pdftk sofp.pdf cat 1-$((b1-1)) $e1-$((b2-1)) $e2-end output $output_pdf; echo Draft page ranges 1-$((b1-1)) $e1-$((b2-1)) $e2-end )
-
-	# Check that the page number did not grow by mistake after wrong formatting.
-	local got_draft_pages=`pdfPages $output_pdf`
-	if [ $got_draft_pages -eq $draft_pages ]; then
-		echo Draft file created as $output_pdf, size `kbSize $output_pdf` bytes, with $draft_pages pages.
-	else
-		echo Error: Draft file has $got_draft_pages pages instead of expected $draft_pages. Please check.
-	fi
-}
 
 # Create the lulu.com draft file by selecting the chapters that have been proofread.
-create_draft $name $draft.pdf
+# Also, check page counts.
+bash check_and_make_draft.sh
 
 # Attach sources to the draft file.
-"$pdftk" $draft.pdf attach_files "$name-src.tar.bz2" output $draft-src.pdf
-
+if test -s $name-src.tar.bz2 && test -s $draft.pdf; then  "$pdftk" $draft.pdf attach_files "$name-src.tar.bz2" output $draft-src.pdf
+else
+	echo Not attaching sources to draft since no source file $name-src.tar.bz2 is found or no $draft.pdf is found.
+fi
 if [ x"$1" == x-nolulu ]; then
 # Create a pdf file without references to lulu.com and without lulu.com's ISBN.
 mv "$name".pdf "$name"-lulu.pdf
@@ -129,5 +139,5 @@ mv "$name"-lulu.pdf "$name".pdf
 
 fi
 
-# Cleanup.
+# Cleanup?
 #rm -f $name*{idx,ind,aux,dvi,ilg,out,toc,log,ps,lof,lot,data}
