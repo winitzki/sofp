@@ -28,10 +28,10 @@ chapters=("Preface" "Mathematical formulas as code. I." \
  "\`\`Applied functional type theory'': A proposal" "Essay: Software engineers and software artisans" \
  "Essay: Towards functional data engineering with Scala" \
  "A Notations" "B Glossary of terms" "C Inferring code from types" \
- "D Parametricity theorems:" "E A humorous disclaimer" "F GNU Free Documentation License" \
+ "D Parametricity theorem" "E A humorous disclaimer" "F GNU Free Documentation License" \
  "List of Tables" "List of Figures" "Index" "END_OF_BOOK")
 
-pagecounts=(3 17 43 34 24 49 43 12 63 54 17 11 6 12 60 1 1 2 1 3 6 4 6 3 5 8 1 2 1 1 4)
+pagecounts=(3 17 43 34 24 49 43 12 63 54 17 11 6 12 60 1 1 2 1 3 6 4 6 3 5 11 1 2 1 1 4)
 
 function kbSize {
  local file="$1"
