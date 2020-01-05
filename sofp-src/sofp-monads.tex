@@ -797,7 +797,7 @@ val matrix = Seq(                    val matrix_T = Seq(
                Seq(1, 2, 3),                          Seq(1, 10),
                Seq(10, 20, 30)                        Seq(2, 20),
              )                                        Seq(3, 30)
-/* Both matrices have type Seq[Seq[Int]] */         )
+/* Both matrices have type Seq[Seq[Int]]. */        )
 \end{lstlisting}
 \vspace{-0.95\baselineskip}
 \end{wrapfigure}%
@@ -819,11 +819,11 @@ The value \lstinline!Seq(1, 10)! can be computed by the functor block
 \begin{lstlisting}
 for { row <- matrix } yield row(0)
 \end{lstlisting}
-This functor block needs to be written inside the yield value of the
-iterations of the indices:
+This functor block needs to be written \emph{inside} the \lstinline!yield!
+value of the iterations of the indices:
 \begin{lstlisting}
-scala> val matrix_T = for { index <- matrix.head.indices } // [0, 1, 2] are the column indices.
-                      yield { for { row <- matrix}         // Iterate over rows of the matrix.
+scala> val matrix_T = for { index <- matrix.head.indices }    // [0, 1, 2] are the column indices.
+                      yield { for { row <- matrix }        // Iterate over the rows of the matrix.
                               yield row(index)
                             }
 matrix_T: IndexedSeq[Seq[Int]] = Vector(List(1, 10), List(2, 20), List(3, 30))
@@ -835,20 +835,105 @@ programming replaces nested loops over column and row indices by nested
 functor blocks that use the column indices but directly iterate over
 rows.
 
-\textbf{(b)} {*}{*}{*}
+\textbf{(b)} To see how a vector-matrix dot product works, consider
+this example:
+\[
+\left|\begin{array}{ccc}
+a_{0} & a_{1} & a_{2}\end{array}\right|\cdot\left|\begin{array}{cc}
+b_{00} & b_{01}\\
+b_{10} & b_{11}\\
+b_{20} & b_{21}
+\end{array}\right|=\left|\begin{array}{cc}
+a_{0}\cdot b_{00}+a_{1}\cdot b_{10}+a_{2}\cdot b_{20} & a_{0}\cdot b_{01}+a_{1}\cdot b_{11}+a_{2}\cdot b_{21}\end{array}\right|\quad.
+\]
+The $2\times3$ matrix is represented as a sequence containing three
+nested sequences. We need to iterate over the first elements of the
+nested sequences ($b_{00}$, $b_{10}$, $b_{20}$) , multiply them
+with the corresponding elements ($a_{0}$, $a_{1}$, $a_{2}$) of
+the vector, and compute the sum of all products. The code for that
+is
+\begin{lstlisting}
+Seq(b00, b10, b20).zip(Seq(a0, a1, a2)).map { case (x, y) => x * y }.sum
+\end{lstlisting}
+Then we need to do the same with the second elements ($b_{01}$, $b_{11}$,
+$b_{21}$). To obtain the full code, we iterate over the indices of
+the nested sequences (as we did in part \textbf{(a)} for the transposition):
+\begin{lstlisting}
+import scala.math.Numeric.Implicits.infixNumericOps
+def vectorMatrixProduct[N: Numeric](vector: Seq[N], matrix: Seq[Seq[N]]): Seq[N] =
+  for { index <- matrix.head.indices } yield {
+    val b = for { row <- matrix } yield row(index)
+    val pairs = for { (x, y) <- b.zip(vector) } yield x * y 
+    pairs.sum
+  }
 
-\textbf{(c)} {*}{*}{*}
+scala> vectorMatrixProduct(Seq(3,4,5), matrix_T)
+res1: Seq[Int] = Vector(26, 260)
+\end{lstlisting}
 
-The code shown in this example is for illustration only; for high
+\textbf{(c)} The matrix-matrix dot product is defined as a matrix
+containing the results of the vector-matrix dot products, for all
+row vectors of the first matrix. For example,
+\[
+\left|\begin{array}{ccc}
+a_{00} & a_{01} & a_{02}\\
+a_{10} & a_{11} & a_{12}
+\end{array}\right|\cdot\left|\begin{array}{cc}
+b_{00} & b_{01}\\
+b_{10} & b_{11}\\
+b_{20} & b_{21}
+\end{array}\right|=\left|\begin{array}{cc}
+a_{00}\cdot b_{00}+a_{01}\cdot b_{10}+a_{02}\cdot b_{20} & a_{00}\cdot b_{01}+a_{01}\cdot b_{11}+a_{02}\cdot b_{21}\\
+a_{10}\cdot b_{00}+a_{11}\cdot b_{10}+a_{12}\cdot b_{20} & a_{10}\cdot b_{01}+a_{11}\cdot b_{11}+a_{12}\cdot b_{21}
+\end{array}\right|\quad.
+\]
+We reuse the solution of part \textbf{(b)} and write the code as
+\begin{lstlisting}
+def matrixProduct[N: Numeric](matrix1: Seq[Seq[N]], matrix2: Seq[Seq[N]]): Seq[Seq[N]] =
+  for { row1 <- matrix1 } yield vectorMatrixProduct(row1, matrix2)
+\end{lstlisting}
+
+The code shown in this example is for illustration only; for higher
 performance, matrix operations must be implemented through flat arrays
 rather than nested sequences.
 
-\subsubsection{Exercise \label{subsec:Exercise-m-matrix-vector-dot-product}\ref{subsec:Exercise-m-matrix-vector-dot-product}}
+\subsubsection{Exercise \label{subsec:Exercise-m-matrix-vector-dot-product}\ref{subsec:Exercise-m-matrix-vector-dot-product}\index{exercises}}
 
-Implement the matrix-vector dot product (regardless of performance)
-as a function
+Implement the matrix-vector dot product as a function
 \begin{lstlisting}
-def ???
+def matrixVectorProduct[N: Numeric](matrix: Seq[Seq[N]], vector: Seq[N]): Seq[N] = ???
+\end{lstlisting}
+The result of computing the matrix-vector product is a column vector,
+for example:
+\[
+\left|\begin{array}{ccc}
+a_{00} & a_{01} & a_{02}\\
+a_{10} & a_{11} & a_{12}
+\end{array}\right|\cdot\left|\begin{array}{c}
+b_{00}\\
+b_{10}\\
+b_{20}
+\end{array}\right|=\left|\begin{array}{c}
+a_{00}\cdot b_{00}+a_{01}\cdot b_{10}+a_{02}\cdot b_{20}\\
+a_{10}\cdot b_{00}+a_{11}\cdot b_{10}+a_{12}\cdot b_{20}
+\end{array}\right|\quad.
+\]
+
+
+\subsubsection{Exercise \label{subsec:Exercise-m-matrix-trace}\ref{subsec:Exercise-m-matrix-trace}}
+
+The \textbf{trace} of a square matrix\index{trace of a matrix} is
+the sum of its diagonal elements, e.g.
+\[
+\text{trace}\left|\begin{array}{ccc}
+a_{00} & a_{01} & a_{02}\\
+a_{10} & a_{11} & a_{12}\\
+a_{20} & a_{21} & a_{22}
+\end{array}\right|\triangleq a_{00}+a_{11}+a_{22}\quad.
+\]
+Implement the trace of a matrix (assuming a square matrix) as a function
+\begin{lstlisting}
+def trace[N: Numeric](matrix: Seq[Seq[N]]): N = ???
 \end{lstlisting}
 
 
@@ -877,8 +962,8 @@ functor:
 \{ }}\textcolor{darkgray}{\footnotesize{}// computations in the Try
 functor}{\footnotesize\par}
 
-\texttt{\textcolor{blue}{\footnotesize{}  x $\leftarrow$ Try(...)
-}}\textcolor{darkgray}{\footnotesize{}// first computation; may fail}{\footnotesize\par}
+\texttt{\textcolor{blue}{\footnotesize{}x $\leftarrow$ Try(...) }}\textcolor{darkgray}{\footnotesize{}//
+first computation; may fail}{\footnotesize\par}
 
 \texttt{\textcolor{blue}{\footnotesize{}  y = f(x) }}\textcolor{darkgray}{\footnotesize{}//
 no possibility of failure in this line}{\footnotesize\par}
