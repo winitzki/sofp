@@ -5,19 +5,19 @@
 
 name="sofp"
 
-# Cut out from here,
+# To create the draft version that contains only proofread chapters:
+# cut out from here,
 draft_title_1="Computations in functor blocks. II\\."
 # to here:
 draft_title_2="Applied functional type theory"
-# Cut out from here:
+# and then cut out from here:
 draft_title_3="Inferring code from types with the LJT algorithm"
 # to here:
-draft_title_4="E A humorous disclaimer"
+draft_title_4="D Parametricity theorem"
 
 # Checking the page counts.
-# Total number of pages in the book draft:
-draft_pages=386
-# Number of pages per proofread chapter:
+
+# A unique fragment of the title of each chapter:
 chapters=("Preface" "Mathematical formulas as code. I." \
  "Mathematical formulas as code. II." "The logic of types. I." "The logic of types. II." \
  "The logic of types. III." "Functors, contrafunctors, and profunctors"  \
@@ -31,7 +31,11 @@ chapters=("Preface" "Mathematical formulas as code. I." \
  "D Parametricity theorem" "E A humorous disclaimer" "F GNU Free Documentation License" \
  "List of Tables" "List of Figures" "Index" "END_OF_BOOK")
 
-pagecounts=(3 17 43 34 24 49 43 12 63 54 17 11 6 12 60 1 1 2 1 3 6 4 6 3 5 11 1 2 1 1 4)
+# The umber of pages in each chapter:
+pagecounts=(3 17 43 34 24 49 43 12 63 54 18 11 6 12 60 1 1 2 1 3 6 4 6 3 5 17 1 2 1 1 4)
+
+# Expected total number of pages in the book draft:
+draft_pages=403
 
 function kbSize {
  local file="$1"
