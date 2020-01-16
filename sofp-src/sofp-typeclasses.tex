@@ -1356,11 +1356,11 @@ for \emph{any} given type constructor. The code looks like this (the
 required \lstinline!import! declarations are omitted for brevity):
 \begin{lstlisting}
 def checkFunctorLaws[F[_], A, B, C]()(implicit ff: Functor[F],
-                     // The `Arbitrary` typeclass is provided by scalacheck.
+                               // The `Arbitrary` typeclass is provided by scalacheck.
       fa: Arbitrary[F[A]], ab: Arbitrary[A => B], bc: Arbitrary[B => C]) = {
-  // Identity law. The assertion must hold for all `fa`.
+                                // Identity law. The assertion must hold for all `fa`.
   forAll { (fa: F[A]) =>     fa.map(identity[A]) shouldEqual fa }
-  // Composition law. The assertion must hold for all `f`, `g`, `fa`.
+                   // Composition law. The assertion must hold for all `f`, `g`, `fa`.
   forAll { (f: A => B, g: B => C, fa: F[A]) =>
     fa.map(f).map(g) shouldEqual fa.map(f andThen g)
   }
@@ -1393,14 +1393,14 @@ of \lstinline!Monoid!, \lstinline!Semigroup!, etc.
 constructed instances.
 \end{itemize}
 In the following sections, we will show how to use this approach for
-some simple typeclasses. Later chapters of this book will systematically
-apply structural analysis to each considered typeclass.
+some simple typeclasses.
 
 \subsection{Extractors}
 
-Example~\ref{subsec:tc-Example-metadata-extractors} shows a typeclass
-that extracts metadata of fixed types from a value of type \lstinline!T!.
-The typeclass instance wraps a pair of functions,
+Our first typeclass is a generalization of Example~\ref{subsec:tc-Example-metadata-extractors}.
+The functionality was to extract metadata of fixed types from a value
+of type \lstinline!T!. The typeclass instance contained a pair of
+functions,
 \begin{lstlisting}
 final case class HasMetadata[T](getName: T => String, getCount: T => Long)
 \end{lstlisting}
@@ -1408,22 +1408,24 @@ In the type notation, this type constructor is written as
 \[
 \text{HasMetadata}^{T}\triangleq(T\rightarrow\text{String})\times(T\rightarrow\text{Long})\quad.
 \]
-Using the standard type equivalences (see Table~\ref{tab:Logical-identities-with-function-types}),
-we find that this type is equivalent to $T\rightarrow\text{String}\times\text{Long}$.
-So, let us denote $\text{String}\times\text{Long}$ by $Z$ and consider
-a more general typeclass whose instances are values of type $T\rightarrow Z$.
-We may call this typeclass a ``$Z$-extractor\index{extractor typeclass}''
-since types $T$ from its type domain permit us to extract values
-of type $Z$. With a fixed type $Z$, we denote the typeclass by
+A standard type equivalence (see Table~\ref{tab:Logical-identities-with-function-types})
+shows that this type is equivalent to $T\rightarrow\text{String}\times\text{Long}$.
+This motivates us to denote $\text{String}\times\text{Long}$ by $Z$
+and to consider a typeclass whose instances are values of type $T\rightarrow Z$.
+We may call this typeclass a ``$Z$-extractor\index{extractor typeclass}\index{typeclass!Extractor@\texttt{Extractor}}''
+since types $T$ from its type domain permit us somehow to extract
+values of type $Z$. With a fixed type $Z$, we denote the typeclass
+by
 \[
 \text{Extractor}^{T}\triangleq T\rightarrow Z\quad.
 \]
 \begin{lstlisting}
 final case class Extractor[Z, T](extract: T => Z)
 \end{lstlisting}
-To apply structural analysis, we check whether any of the standard
-type constructions produce new typeclass instances. The results are
-summarized in Table~\ref{tab:Type-constructions-for-Extractor}.
+What kind of types can have an Extractor typeclass instance? To answer
+that question, we apply structural analysis and check whether any
+of the standard type constructions produce new typeclass instances.
+The results are summarized in Table~\ref{tab:Type-constructions-for-Extractor}.
 Let us show the required calculations.
 
 \paragraph{Fixed types}
@@ -1639,11 +1641,8 @@ type recursion terminates), the extractor function will also terminate.
 
 To illustrate this construction, let us derive an \lstinline!Extractor!
 instance for the type $T$ defined by Eq.~(\ref{eq:example-good-recursive-equation-extractor}).
-
-The type constructor $S$ is defined by
-\[
-S^{A}\triangleq C\times\left(C\rightarrow Z+P\times A\right)\quad.
-\]
+That equation has the form $T=S^{T}$ with the type constructor $S$
+defined by $S^{A}\triangleq C\times\left(C\rightarrow Z+P\times A\right)$.
 \begin{lstlisting}
 type S[A] = (C, C => Either[Z, (P, A)])
 final case class TypeT(t: S[TypeT])   // Define the recursive type `TypeT`. 
@@ -1701,15 +1700,14 @@ res0: String = abc
 
 \paragraph{Why the recursion terminates}
 
-The above code shows, perhaps surprisingly, that the recursive definition~(\ref{eq:recursive-extractor-def})
-terminates. How does that work? One would expect that a recursive
-definition of the form $x\triangleq f(x)$ generates an infinite loop,
-as it does in this example:
+The above code shows that the recursive definition~(\ref{eq:recursive-extractor-def})
+terminates. But why? A recursive definition of the form $x\triangleq f(x)$
+can easily create an infinite loop, as in this code:
 \begin{lstlisting}
 def f(x: Int): Int = x + 1
-def bad: Int = f(bad)
+def x: Int = f(x)
 
-scala> bad
+scala> x                     // Infinite loop: f(f(f(f(...)))
 java.lang.StackOverflowError
 \end{lstlisting}
 The code for \lstinline!extractorT! works because \lstinline!extractorT!
@@ -1727,15 +1725,17 @@ $t\rightarrow f(t)$ is equivalent to just $f$, there is an important
 difference: using ``expanded functions'' in the code will make recursive
 definitions \index{recursive function!termination} terminate.
 
-To see an example of that, consider a recursive function $f$ defined
-via an equation $f\triangleq k(f)$, where $k$ is a suitable function.
-If we write Scala code as $f=k(f)$ using functions as values, we
-will create an infinite loop:
+To see an example of that, consider a recursive equation $f\triangleq k(f)$,
+where $k$ is some function. The Scala code \lstinline!val f = k(f)!
+creates an infinite loop when we compute anything that involves $f$:
 \begin{lstlisting}[mathescape=true]
 def k(f: Int => Int): Int => Int = { x => if (x <= 0) 1 else 2 * f(x - 1) }
-def f_bad: Int => Int = k(f_bad)    // This definition is invalid!
+def f: Int => Int = k(f)    // This definition is invalid!
 
-scala> f_bad(4)               // Infinite loop: k(k(k(k(....)))(4)
+scala> f                   // Infinite loop: k(k(k(k(...)))
+java.lang.StackOverflowError
+
+scala> f(4)                // Infinite loop: k(k(k(k(...)))(4)
 java.lang.StackOverflowError
 \end{lstlisting}
 This code is clearly invalid. But if we expand the right-hand side
@@ -1743,11 +1743,15 @@ of the recursive equation to
 \[
 f\triangleq t\rightarrow k(f)(t)
 \]
-instead of $f\triangleq k(f)$, the code will become valid:
+instead of $f\triangleq k(f)$, the code will become valid, and the
+infinite loop disappears:
 \begin{lstlisting}[mathescape=true]
-def f: Int => Int = { x => k(f)(x) }   // This defines $ f(n) = 2^n $ for $n \geq 0$.
+def f: Int => Int = { x => k(f)(x) }   // This defines $\color{dkgreen} f(n) = 2^n $ for $\color{dkgreen}n \geq 0$.
 
-scala> f(4)
+scala> f                               // We can compute f without an infinite loop.
+res0: Int => Int = <function1>
+
+scala> f(4)                            // We can compute f(4) without an infinite loop.
 res1: Int = 16
 \end{lstlisting}
 The recursive use of $f$ now occurs \emph{within} a function body,
@@ -1768,20 +1772,23 @@ the product, co-product, and function constructions, an \lstinline!Extractor!
 instance for $K$ can be derived systematically with no guessing:
 \begin{lstlisting}[mathescape=true]
 type K[Z,P,Q,R,S] = Either[(Z, P), (Q, Q => Either[Z, (R, R => (Z, S))])]
-implicit def extractorK[Z,P,Q,R,S]: Extractor[Z, K[Z,P,Q,R,S]] = {    // Create Extractor for types:
-  implicit val e1 = extractorPair[Z, Z, S]                            // $ Z \times S $.
-  implicit val e2 = extractorFunc[Z, (Z, S), R]                       // $ R\times\left(R\Rightarrow Z\times S\right) $.
-  implicit val e3 = extractorEither[Z, Z, (R, R => (Z, S))]           // $ Z+R\times\left(R\Rightarrow Z\times S\right) $.
-  implicit val e4 = extractorFunc[Z, Either[Z, (R, R => (Z, S))], Q]  // $ Q\times\left(Q\Rightarrow Z+R\times\left(R\Rightarrow Z\times S\right)\right) $.
-  implicit val e5 = extractorPair[Z, Z, P]                            // $ Z\times P $.
-  extractorEither[Z, (Z,P), (Q, Q => Either[Z, (R, R => (Z, S))])]    // Extractor for type $ K $.
+implicit def extractorK[Z,P,Q,R,S]: Extractor[Z, K[Z,P,Q,R,S]] = {    // Extractor values for types:
+  implicit val e1 = extractorPair[Z, Z, S]                            // $\color{dkgreen} Z \times S $. Needs Extractor[Z, Z].
+  implicit val e2 = extractorFunc[Z, (Z, S), R]                       // $\color{dkgreen} R\times\left(R\Rightarrow Z\times S\right) $.
+  implicit val e3 = extractorEither[Z, Z, (R, R => (Z, S))]           // $\color{dkgreen} Z+R\times\left(R\Rightarrow Z\times S\right) $.
+  implicit val e4 = extractorFunc[Z, Either[Z, (R, R => (Z, S))], Q]  // $\color{dkgreen} Q\times\left(Q\Rightarrow Z+R\times\left(R\Rightarrow Z\times S\right)\right) $.
+  implicit val e5 = extractorPair[Z, Z, P]                            // $\color{dkgreen} Z\times P $.
+  extractorEither[Z, (Z,P), (Q, Q => Either[Z, (R, R => (Z, S))])]    // Extractor for type $\color{dkgreen} K $.
 }
 \end{lstlisting}
+The code computes each implicit value \lstinline!e1!, \lstinline!e2!,
+..., using constructions that require previously computed values to
+be present as implicits.
 
 The \lstinline!Extractor! typeclass is often used with \lstinline!Z = String!
 as a way to ``print'' values of different types, and it is then
 called \lstinline!Show!\index{typeclass!Show@\texttt{Show}}. When
-\lstinline!Z = Array[Byte]!, the typeclass is often called a ``serializer\index{serializer}''.
+\lstinline!Z = Array[Byte]!, the typeclass is often called a ``serializer\index{serializer}''. 
 
 \begin{table}
 \begin{centering}
@@ -1888,9 +1895,9 @@ of type $A+B$ while ensuring that a value of type $A+\bbnum 0$ is
 never equal to a value of type $\bbnum 0+B$:
 \begin{lstlisting}[mathescape=true]
 implicit def eqEither[A: Eq, B: Eq] = Eq[Either[A, B]] {
-  case (Left(a1), Left(a2))     => a1 === a2    // Compare $a_1 + \bbnum0$ and $a_2 + \bbnum0$.
-  case (Right(b1), Right(b2))   => b1 === b2    // Compare $\bbnum0 + b_1$ and $\bbnum0 + b_2$.
-  case _                        => false   // $a + \bbnum0$ is never equal to $\bbnum0 + b$.
+  case (Left(a1), Left(a2))     => a1 === a2    // Compare $\color{dkgreen} a_1 + \bbnum0$ and $\color{dkgreen} a_2 + \bbnum0$.
+  case (Right(b1), Right(b2))   => b1 === b2    // Compare $\color{dkgreen} \bbnum0 + b_1$ and $\color{dkgreen} \bbnum0 + b_2$.
+  case _                        => false    // $\color{dkgreen} a + \bbnum0$ is never equal to $\color{dkgreen} \bbnum0 + b$.
 }
 \end{lstlisting}
 The laws hold for the new operation because the code defines values
@@ -2016,19 +2023,19 @@ As an example, let us define an \lstinline!Eq! instance for the type
 $T$ defined by $T\triangleq\text{Int}+T+\text{Int}\times T\times T$.
 \begin{lstlisting}[mathescape=true]
 type S[A] = Either[Either[Int, A], (Int, (A, A))]
-final case class T(s: S[T])                     // Recursive type equation $ T\triangleq\text{Int}+T+\text{Int}\times T\times T $.
+final case class T(s: S[T])                     // Recursive type equation $\color{dkgreen} T\triangleq\text{Int}+T+\text{Int}\times T\times T $.
 def eqS[A](implicit ti: Eq[A]): Eq[S[A]] = {    // Function of type Eq[A] => Eq[S[A]].
-  implicit val e1 = eqEither[Int, A]            // Instance for $ \text{Int}+A $.
-  implicit val e2 = eqPair[A, A]                // Instance for $ A\times A $.
-  implicit val e3 = eqPair[Int, (A, A)]         // Instance for $ \text{Int}\times A\times A $.
-  eqEither[Either[Int, A], (Int, (A, A))]       // Instance for $ \text{Int}+A+\text{Int}\times A\times A $.
+  implicit val e1 = eqEither[Int, A]            // Instance for $\color{dkgreen} \text{Int}+A $.
+  implicit val e2 = eqPair[A, A]                // Instance for $\color{dkgreen} A\times A $.
+  implicit val e3 = eqPair[Int, (A, A)]         // Instance for $\color{dkgreen} \text{Int}\times A\times A $.
+  eqEither[Either[Int, A], (Int, (A, A))]       // Instance for $\color{dkgreen} \text{Int}+A+\text{Int}\times A\times A $.
 }
 implicit def eqT: Eq[T] = Eq { case (T(s1), T(s2)) => eqS(eqT).equal(s1, s2) }
 \end{lstlisting}
 To test that the recursion terminates, define a value of type $T$
 and run a comparison:
 \begin{lstlisting}[mathescape=true]
-val t = T(Left(Right(T(Left(Left(10))))))   // $t: \bbnum 0+(10^{:\text{Int}}+\bbnum 0+\bbnum 0)^{:T}+\bbnum 0$
+val t = T(Left(Right(T(Left(Left(10))))))   // $\color{dkgreen}t: \bbnum 0+(10^{\scriptscriptstyle:\text{Int}}+\bbnum 0+\bbnum 0)^{\scriptscriptstyle:T}+\bbnum 0$
 
 scala> t === t
 res0: Boolean = true
@@ -2259,15 +2266,15 @@ The Scala code corresponding to the four possible definitions of $\oplus$
 is
 \begin{lstlisting}[mathescape=true]
 def semigroupEither1[A: Semigroup, B: Semigroup] = Semigroup[Either[A, B]] {
-  case (Left(a1), Left(a2))     =>  a1 |+| a2 // Here a1 |+| a2 is ${\color{dkgreen} a_1 \oplus_A a_2 }$.
-  case (Right(b1), Right(b2))   =>  b1 |+| b2 // Here b1 |+| b2 is ${\color{dkgreen} b_1 \oplus_B b_2}$.
-  case (Left(a), Right(b))      =>  a         // "Take ${\color{dkgreen}A}$" - discard all data of type ${\color{dkgreen}B}$.
+  case (Left(a1), Left(a2))     =>  a1 |+| a2 // Here a1 |+| a2 is $\color{dkgreen} a_1 \oplus_A a_2 $.
+  case (Right(b1), Right(b2))   =>  b1 |+| b2 // Here b1 |+| b2 is $\color{dkgreen} b_1 \oplus_B b_2$.
+  case (Left(a), Right(b))      =>  a         // "Take $\color{dkgreen}A$" - discard all data of type $\color{dkgreen}B$.
   case (Right(b), Left(a))      =>  a
 }
 def semigroupEither2[A: Semigroup, B: Semigroup] = Semigroup[Either[A, B]] {
   case (Left(a1), Left(a2))     =>  a1 |+| a2
   case (Right(b1), Right(b2))   =>  b1 |+| b2
-  case (Left(a), Right(b))      =>  b         // "Take ${\color{dkgreen}B}$" - discard all data of type ${\color{dkgreen}A}$.
+  case (Left(a), Right(b))      =>  b         // "Take $\color{dkgreen}B$" - discard all data of type $\color{dkgreen}A$.
   case (Right(b), Left(a))      =>  b
 }
 def semigroupEither3[A: Semigroup, B: Semigroup] = Semigroup[Either[A, B]] {
@@ -3094,7 +3101,7 @@ the syntax for defining \lstinline!pointedPair! is
 def pointedPair[F[_]: Pointed, G[_]: Pointed]: Pointed[Lambda[X => (F[X], G[X])]] = ???
 \end{lstlisting}
 Scala 3 will support a shorter syntax for nameless type-to-type functions,
-\lstinline![X] => (F[X], G[X])!. We will use the ``kind projector''
+e.g.~\lstinline![X] => (F[X], G[X])!. We will use the ``kind projector''
 syntax in this book's code examples.
 
 \paragraph{Fixed types}
