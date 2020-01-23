@@ -24,7 +24,7 @@ chapters=("Preface" "Mathematical formulas as code. I." \
  "Reasoning about code." "Typeclasses and functions of types" "Computations in functor blocks. I." \
  "Computations in functor blocks. II." "Applicative functors, contrafunctors, and profunctors" \
  "Traversable functors and profunctors" "\`\`Free'' type constructions" "Computations in functor blocks. III." \
- "Recursive types" "Co-inductive typeclasses. Comonads" "Irregular typeclasses" "Further directions" \
+ "Recursive types" "Co-inductive typeclasses. Comonads" "Irregular typeclasses" "Sample problems" \
  "\`\`Applied functional type theory'': A proposal" "Essay: Software engineers and software artisans" \
  "Essay: Towards functional data engineering with Scala" \
  "A Notations" "B Glossary of terms" "C Inferring code from types" \

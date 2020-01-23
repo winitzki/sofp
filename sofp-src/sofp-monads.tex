@@ -81,7 +81,7 @@ res6: Double = 63.20950497687006
 These examples show that converting nested iterations into a simple
 iteration means replacing all \lstinline!.map! functions by \lstinline!.flatMap!
 except for the last \lstinline!.map! call (as long as that call by
-itself would produce an ordinary, non-nested sequence).
+itself would produce a non-nested sequence).
 
 The \lstinline!for! / \lstinline!yield! syntax (or ``functor block'')
 is an easier way of flattening nested iterations: just use more left
@@ -148,11 +148,13 @@ val result = {
 \end{minipage}{\footnotesize\par}
 
 \vspace{0.2\baselineskip}
-One can imagine that each line produces an intermediate sequence of
-the same type. Further lines take that sequence as a source and continue
-calculations. If this intuition is correct, we should be able to refactor
-the code by cutting the calculation at any place and continuing in
-another functor block, without changing the result value:
+One can imagine that each line (which we can read as ``for all $i$
+in $\left[1,...,m\right]$'', ``for all $j$ in $\left[1,...,n\right]$'',
+etc.) will produce an intermediate sequence of the same type. Further
+lines take that sequence as a source and continue calculations. If
+this intuition is correct, we should be able to refactor the code
+by cutting the calculation at any place and continuing in another
+functor block, without changing the result value:
 
 \noindent \texttt{\textcolor{blue}{\footnotesize{}}}%
 \begin{minipage}[c]{0.475\columnwidth}%
@@ -161,7 +163,7 @@ another functor block, without changing the result value:
 val result = for {
   i <- 1 to m
   j <- 1 to n
-// At right, we will cut the block here, making
+// We will cut the block here, making
 // (i, j) available for further computations.
   x = f(i, j)
   k <- 1 to p
@@ -939,48 +941,71 @@ def trace[N: Numeric](matrix: Seq[Seq[N]]): N = ???
 
 \subsection{Pass/fail monads}
 
+The type \lstinline!Option[A]! can be viewed as a collection that
+can either empty or hold a single value of type \lstinline!A!. An
+``iteration'' over such a collection will perform a computation
+at most once:
+\begin{lstlisting}
+scala> for { x <- Some(123) } yield x * 2     // The computation is performed once.
+res0: Option[Int] = Some(246) 
+\end{lstlisting}
+When an \lstinline!Option! value is empty, the computation is not
+performed at all.
+\begin{lstlisting}
+scala> for { x <- None: Option[Int] } yield x * 2     // The computation is not performed at all.
+res1: Option[Int] = None
+\end{lstlisting}
+What would a \emph{nested} ``iteration'' over several \lstinline!Option!
+values do? When all of the \lstinline!Option! values are non-empty,
+the ``iteration'' will perform some computations using the wrapped
+values. However, if even just one of the \lstinline!Option! values
+happens to be empty, the entire computation will return an empty value:
+\begin{lstlisting}
+scala> for {
+         x <- Some(123)
+         y <- None
+         z <- Some(-1)
+       } yield x + y + z
+res2: Option[String] = None
+\end{lstlisting}
+
+Computations with \lstinline!Either! and \lstinline!Try! values
+follow the same logic: nested ``iteration'' will perform no computations
+unless all values are non-empty. This logic is useful for implementing
+a series of computations that could produce failures, where any failure
+should stop all further processing. For this reason, we call the the
+type constructors \lstinline!Option!, \lstinline!Either!, and \lstinline!Try!
+the ``pass/fail'' monads.\footnote{Later in this chapter, we will show that these type constructors are
+indeed monads.}
+
+The following schematic example illustrates this logic:
+\begin{lstlisting}
+val result: Try[A] = for { // Computations in the Try functor.
+  x <- Try(k())            // First computation `k()`, may fail.
+  y = f(x)                 // No possibility of failure in this line.
+  if p(y)                  // The entire expression will fail if `p(y) == false`.
+  z <- Try(g(x, y))        // The computation may also fail here.
+  r <- Try(h(x, y, z))     // May fail here as well.
+} yield r                  // If r has type A, the `result` has type Try[A].
+\end{lstlisting}
+The function \lstinline!Try()! catches exceptions thrown by its argument.
+If one of \lstinline!k()!, \lstinline!g(x, y)!, or \lstinline!h(x, y, z)!
+throws an exception, the corresponding \lstinline!Try(...)! value
+will evaluate to a \lstinline!Failure(...)! case class, and further
+computations will not be performed. The value of result will be equal
+to the first encountered failure. Only if all \lstinline!Try(...)!
+values evaluate to a \lstinline!Success(...)! case class, the entire
+
+In this way, a functor block replaces a series of nested \lstinline!if!
+/ \lstinline!else! or \lstinline!match! / \lstinline!case! expressions:
+
 \subsection{Tree-like semimonads and monads}
 
 \subsection{Single-value monads}
 
 \section{Slides, part 1}
 
-\paragraph{Intuitions for pass/fail monads}
-
-\texttt{\textcolor{blue}{\footnotesize{}Option}}, \texttt{\textcolor{blue}{\footnotesize{}Either}},
-\texttt{\textcolor{blue}{\footnotesize{}Try}}, \texttt{\textcolor{blue}{\footnotesize{}Future}}{\footnotesize\par}
-
-Container $F^{A}$ can hold $n=1$ or $n=0$ values of type $A$
-
-Such containers will have methods to create ``pass'' and ``fail''
-values
-
-Schematic example of a functor block program using the \texttt{\textcolor{blue}{\footnotesize{}Try}}
-functor:
-
-\texttt{\textcolor{blue}{\footnotesize{}val result: Try{[}A{]} = for
-\{ }}\textcolor{darkgray}{\footnotesize{}// computations in the Try
-functor}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}x $\leftarrow$ Try(...) }}\textcolor{darkgray}{\footnotesize{}//
-first computation; may fail}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}  y = f(x) }}\textcolor{darkgray}{\footnotesize{}//
-no possibility of failure in this line}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}  if p(y) }}\textcolor{darkgray}{\footnotesize{}//
-the entire expression will fail if this is false}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}  z $\leftarrow$ Try(g(x,
-y))}}\textcolor{darkgray}{\footnotesize{} // may fail here}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}  r $\leftarrow$ Try(...)}}\textcolor{darkgray}{\footnotesize{}
-// may fail here as well}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}\} yield r }}\textcolor{darkgray}{\footnotesize{}//
- r is of type A, so result is of type Try{[}A{]}}{\footnotesize\par}
-
-Computations may yield a result ($n=1$), or may fail ($n=0$)
+\paragraph{Intuitions for pass/fail monads }
 
 The functor block chains several such computations \emph{sequentially}
 
