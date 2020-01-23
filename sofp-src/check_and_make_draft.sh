@@ -67,7 +67,7 @@ function create_draft {
 	# Check that the page number did not grow by mistake after wrong formatting.
 	local got_draft_pages=`pdfPages $output_pdf`
 	if [ $got_draft_pages -eq $draft_pages ]; then
-		echo Draft file created as $output_pdf, size `kbSize $output_pdf` bytes, with $draft_pages pages.
+		echo Draft file created as $output_pdf, size `kbSize $output_pdf` bytes, with $draft_pages pages as expected.
 	else
 		echo Error: Draft file has $got_draft_pages pages instead of expected $draft_pages. Please check.
 	fi
@@ -88,7 +88,7 @@ function create_draft {
 		expected=${pagecounts[b]}
 #		echo "DEBUG: chapter=$chapter begin_page=$begin_page nextchapter=$nextchapter end_page=$end_page expected=$expected"
 		if [ $count -ne $expected ]; then
-			echo "Error: Chapter $chapter should have $expected pages but has $count"
+			echo "Error: Chapter $chapter should have $expected pages but has $count pages instead."
 		fi
 	done
 	echo Done.

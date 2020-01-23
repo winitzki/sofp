@@ -40,9 +40,10 @@ or if they wish to make comments or suggestions regarding the contents of the bo
 # Roadmap
 
 - Milestone 1 (achieved as of August 2019): chapters 1-6 are completed and available for purchase at lulu.com as a cheap (black/white) paperback.
-- Milestone 2 (ETA: November 2019): chapters 7, 8, 9, 10, 14 are completed. The draft is available for purchase at lulu.com (black/white, cheaper) and at blurb.com (color, more expensive) in paperback.
-- Milestone 3 (ETA: end of 2019): chapters 1-14 are completed and available for purchase at lulu.com (black/white, cheaper) and blurb.com (color, more expensive) as both paperback and hardcover versions.
-- Milestone 4 (ETA: mid-2020): possibly adding chapters 15-16, the entire book is completed after possible revisions and input from readers.
+- Milestone 2 (achieved as of December 2019): chapters 1-9 are completed.
+- Milestone 3 (ETA: March 2020): chapters 10 and 14 are completed. The draft is available for purchase at lulu.com (black/white, cheaper) and at blurb.com (color, more expensive) in paperback.
+- Milestone 4 (ETA: May 2020): chapters 1-14 are completed and available for purchase at lulu.com (black/white, cheaper) and blurb.com (color, more expensive) as both paperback and hardcover versions.
+- Milestone 5 (ETA: June 2020): possibly adding chapters 15-16 (not yet decided, may need to cut scope), the entire book is completed after possible revisions and input from readers.
 
 # Building a PDF version of the book from LyX sources
 
