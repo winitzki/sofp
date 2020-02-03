@@ -1172,8 +1172,8 @@ one.
 
 On the other hand, when the three arguments of \lstinline!longComputation(...)!
 are independent of each other, the three \lstinline!Future! values
-may be created up front, and then the functor block code represents
-the three ``long computations'' running in parallel:
+may be created up front. Then the functor block code represents the
+three ``long computations'' running in parallel:
 \begin{lstlisting}
 val long1 = longComputation(10.0)
 val long2 = longComputation(50.0)
@@ -1188,6 +1188,77 @@ val result2: Future[Double] = for {
 
 
 \subsection{Tree-like semimonads and monads}
+
+Tree-like type constructors are recursive type constructors such as
+those considered in Section~\ref{sec:Lists-and-trees:recursive-disjunctive-types}.
+Typically, a tree is a recursive disjunctive type constructor, e.g.~the
+binary tree defined by the type equation
+\[
+\text{BT}^{A}\triangleq A+\text{BT}^{A}\times\text{BT}^{A}.
+\]
+Statement~\ref{subsec:functor-Statement-functor-composition-1} showed
+that $\text{BT}^{A}$ is a functor by replacing the right-hand side
+$A+\text{BT}^{A}\times\text{BT}^{A}$ by an arbitrary ``structure
+bifunctor'' $S^{A,\text{BT}^{A}}$ and then showing that the type
+constructor $L^{A}$ defined by $L^{A}\triangleq S^{A,L^{A}}$ is
+a functor. As we will see, the type constructor $L^{A}$ will be a
+semimonad or a monad with certain choices of $S^{\bullet,\bullet}$.
+
+Begin by implementing the \lstinline!flatMap! method for the binary
+tree $BT^{\bullet}$. It is convenient to define the (equivalent)
+function $\text{flm}$ with type signature
+\[
+\text{flm}^{A,B}:(A\rightarrow\text{BT}^{B})\rightarrow\text{BT}^{A}\rightarrow BT^{B}\quad.
+\]
+\begin{lstlisting}[numbers=left]
+sealed trait BTree[A]
+final case class Leaf[A](x: A) extends BTree[A]
+final case class Branch[A](b1: BTree[A], b2: BTree[A]]) extends BTree[A]
+
+def flm[A, B](f: A => BTree[B]): BTree[A] => BTree[B] = {
+  case Leaf(x)          => f(x) // Here f(x) has type BTree[B], which could be a Leaf or a Branch.
+  case Branch(b1, b2)   => Branch(flm(f)(b1), flm(f)(b2))             // Recursive calls of `flm`.
+}
+\end{lstlisting}
+The same implementation is written in the code notation as
+\[
+\text{flm}^{A,B}(f^{:A\rightarrow\text{BT}^{B}})\triangleq\,\begin{array}{|c||c|}
+ & B+\text{BT}^{B}\times\text{BT}^{B}\\
+\hline A & f\\
+\text{BT}^{A}\times\text{BT}^{A} & b_{1}\times b_{2}\rightarrow\bbnum 0^{:B}+\overline{\text{flm}}(f)(b_{1})\times\overline{\text{flm}}(f)(b_{2})
+\end{array}\quad.
+\]
+Note how a ``leaf'' is replaced by an entire new tree in line~6
+above. This code can be generalized to the recursive type $\text{PT}^{A}$
+(``tree with $P$-shaped branching'') defined by
+\[
+\text{PT}^{A}\triangleq A+P^{\text{PT}^{A}}\quad,
+\]
+for any given functor $P^{\bullet}$. The disjunctive part $A+\bbnum 0$
+is replaced by a new tree:
+\begin{lstlisting}
+type P[A] = ...             // Define the functor P here.
+sealed abstract class PTree[P[_] : Functor, A]
+final case class Leaf[P[_] : Functor, A](x: A) extends PTree[P, A]
+final case class Branch[P[_] : Functor, A](p: P[PTree[P, A]]) extends PTree[P, A]
+
+def flm[A, B](f: A => PTree[B]): PTree[A] => PTree[B] = {
+  case Leaf(x)      => f(x) // Here f(x) has type PTree[B], which could be a Leaf or a Branch.
+  case Branch(p)    => Branch(p.map(t => flm(f)(t))  // Equivalently, Branch(p.map(flm(f))). 
+}
+\end{lstlisting}
+The same function is written in the code notation as
+\[
+\text{flm}^{A,B}\big(f^{:A\rightarrow P^{\text{PT}^{B}}}\big)\triangleq\,\begin{array}{|c||c|}
+ & B+P^{\text{PT}^{B}}\\
+\hline A & f\\
+P^{\text{PT}^{A}} & \big(\overline{\text{flm}}(f)\big)^{\uparrow P}
+\end{array}\quad.
+\]
+
+This technique of implementing \lstinline!flatMap! will not work
+for type constructors $L^{A}\triangleq S^{A,L^{A}}$ whose structure
+functor $S^{A,R}$ is not of the form $A+P^{R}$.
 
 \subsection{Special monads}
 
