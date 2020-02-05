@@ -7,9 +7,9 @@
 
 In a Scala programmer's view, functors are type constructors with
 a \lstinline!.map! method, filterable type constructors have a \lstinline!.filter!
-method, and \textbf{semimonads} are functors that additionally have
-a \lstinline!.flatMap! method. This chapter begins by developing
-an intuition for the behavior of the \lstinline!.flatMap! method.
+method, and \textbf{semimonads} are functors that have a \lstinline!.flatMap!
+method. This chapter begins by developing an intuition for the behavior
+of the \lstinline!.flatMap! method.
 
 \section{Practical use of semimonads}
 
@@ -197,7 +197,7 @@ This example illustrates the two features of functor blocks that often
 cause confusion:
 \begin{itemize}
 \item Each ``source'' line computes an intermediate sequence of the same
-type, so all values to the right of left arrows must use \emph{the
+type, so all values to the right of \lstinline!<-! must use \emph{the
 same} type constructor (or its subtypes).
 \item The entire functor block's result is again a sequence using the same
 type constructor. The result is \emph{not} the expression under \lstinline!yield!;
@@ -1215,7 +1215,7 @@ sealed trait BTree[A]
 final case class Leaf[A](x: A) extends BTree[A]
 final case class Branch[A](b1: BTree[A], b2: BTree[A]]) extends BTree[A]
 
-def flm[A, B](f: A => BTree[B]): BTree[A] => BTree[B] = {
+def flatMap[A, B](f: A => BTree[B]): BTree[A] => BTree[B] = {
   case Leaf(x)          => f(x) // Here f(x) has type BTree[B], which could be a Leaf or a Branch.
   case Branch(b1, b2)   => Branch(flm(f)(b1), flm(f)(b2))             // Recursive calls of `flm`.
 }
@@ -1228,9 +1228,21 @@ The same implementation is written in the code notation as
 \text{BT}^{A}\times\text{BT}^{A} & b_{1}\times b_{2}\rightarrow\bbnum 0^{:B}+\overline{\text{flm}}(f)(b_{1})\times\overline{\text{flm}}(f)(b_{2})
 \end{array}\quad.
 \]
-Note how a ``leaf'' is replaced by an entire new tree in line~6
-above. This code can be generalized to the recursive type $\text{PT}^{A}$
-(``tree with $P$-shaped branching'') defined by
+
+To visualize how the \lstinline!flatMap! method operates on binary
+trees,  let us compute \lstinline!tree1.flatMap(f)!, where we take
+\lstinline!tree1 = ! \Tree[  [ $a_1$ ] [ [ $a_2$ ] [ $a_3$ ] ] ] 
+and a function $f:A\rightarrow\text{BT}^{B}$ that has $f(a_{1})=$ \Tree[  [ $b_0$ ] [ $b_1$ ] ] ,
+$f(a_{2})=b_{2}$, and $f(a_{3})=$ \Tree[  [ $b_3$ ] [ $b_4$ ] ]\relax.
+(Here $a_{i}$ for $i=1,2,3$ are some values of type $A$ and $b_{i}$
+for $i=0,...,4$ are some values of type $B$.) Evaluating the code
+of \lstinline!flatMap!, we find \lstinline!tree1.flatMap(f)! = \Tree[  [ [ $b_0$ ] [ $b_1$ ] ] [ [ $b_2$ ] [ [ $b_3$ ] [ $b_4$ ] ] ] ]\relax. 
+
+So, we see that \lstinline!flatMap! works by grafting a subtree into
+every \lstinline!Leaf! of a given tree: A leaf is replaced by a new
+tree in line~6 in the code of \lstinline!flatMap!. That code can
+be generalized to the recursive type $\text{PT}^{A}$ (representing
+a ``tree with $P$-shaped branches'') defined by
 \[
 \text{PT}^{A}\triangleq A+P^{\text{PT}^{A}}\quad,
 \]
@@ -1242,9 +1254,9 @@ sealed abstract class PTree[P[_] : Functor, A]
 final case class Leaf[P[_] : Functor, A](x: A) extends PTree[P, A]
 final case class Branch[P[_] : Functor, A](p: P[PTree[P, A]]) extends PTree[P, A]
 
-def flm[A, B](f: A => PTree[B]): PTree[A] => PTree[B] = {
-  case Leaf(x)      => f(x) // Here f(x) has type PTree[B], which could be a Leaf or a Branch.
-  case Branch(p)    => Branch(p.map(t => flm(f)(t))  // Equivalently, Branch(p.map(flm(f))). 
+def flatMap[P[_]: Functor, A, B](f: A => PTree[P, B]): PTree[P, A] => PTree[P, B] = {
+  case Leaf(x)      => f(x)  // Here f(x) has type PTree, which could be a Leaf or a Branch.
+  case Branch(p)    => Branch(p.map(t => flm(f)(t))  // Conceptually, Branch(p.map(flm(f))). 
 }
 \end{lstlisting}
 The same function is written in the code notation as
@@ -1256,11 +1268,48 @@ P^{\text{PT}^{A}} & \big(\overline{\text{flm}}(f)\big)^{\uparrow P}
 \end{array}\quad.
 \]
 
-This technique of implementing \lstinline!flatMap! will not work
-for type constructors $L^{A}\triangleq S^{A,L^{A}}$ whose structure
-functor $S^{A,R}$ is not of the form $A+P^{R}$.
+It is possible to implement \lstinline!flatMap! for more general
+type constructors $L$ defined by $L^{A}\triangleq P^{A}+P^{R}$ for
+some functor $P$. Such $L^{A}$ can be visualized as trees with $P$-shaped
+branches and $P$-shaped leaves.
+\begin{lstlisting}
+type P[A] = ...             // Define the functor P here.
+sealed abstract class PLPT[P[_] : Functor, A]
+final case class Leaf[P[_] : Functor, A](px: P[A]) extends PLPT[P, A]
+final case class Branch[P[_] : Functor, A](pb: P[PLPT[P, A]]) extends PLPT[P, A]
+
+def flatMap[P[_]: Functor, A, B](f: A => PLPT[P, B]): PLPT[P, A] => PLPT[P, B] = {
+  case Leaf(px)      => Branch(px.map(f))   // Here px.map(f) has type P[PLPT[P, B]].
+  case Branch(pb)    => Branch(pb.map(t => flm(f)(t))
+}
+\end{lstlisting}
+\[
+\text{flm}^{A,B}\big(f^{:A\rightarrow P^{\text{PLPT}^{B}}}\big)\triangleq\,\begin{array}{|c||cc|}
+ & P^{B} & P^{\text{PLPT}^{B}}\\
+\hline P^{A} & \bbnum 0 & f^{\uparrow P}\\
+P^{\text{PLPT}^{A}} & \bbnum 0 & \big(\overline{\text{flm}}(f)\big)^{\uparrow P}
+\end{array}\quad.
+\]
+The code of \lstinline!flatMap! for the \lstinline!PLPT! tree never
+creates any leaves, only branches. We will see later how this prevents
+\lstinline!PLPT! from being a full monad (it is only a semimonad;
+a \lstinline!pure! method cannot satisfy the required laws). Nevertheless,
+having a lawful \lstinline!flatMap! is sufficient for using \lstinline!PLPT!
+in functor blocks.
+
+The following examples illustrate some use cases for tree-like monads.
+
+{*}{*}{*}
 
 \subsection{Special monads}
+
+This chapter started with the list-like monads whose \lstinline!flatMap!
+method is motivated via the properties of nested iteration. We then
+looked at pass/fail monads and tree-like monads, which generalize
+nested iteration to{*}{*}{*}It turns out that the \lstinline!flatMap!
+method can be generalized to many other type constructors.
+
+{*}{*}{*}
 
 \section{Slides, part 1 }
 
@@ -1296,18 +1345,6 @@ tree)\index{regular-shaped tree!is not a monad}
 
 
 \subsection{Worked examples III: Tree-like monads}
-
-How \texttt{\textcolor{blue}{\footnotesize{}flatMap}} works for a
-binary tree: assume \texttt{\textcolor{blue}{\footnotesize{}f:\ A
-$\rightarrow$ Tree{[}B{]}}} and
-
-\texttt{\textcolor{blue}{\footnotesize{}tree1}} =  \Tree[  [ $a_1$ ] [ [ $a_2$ ] [ $a_3$ ] ] ] 
-; $f(a_{1})=$ \Tree[  [ $b_0$ ] [ $b_1$ ] ] ; $f(a_{2})=b_{2}$;
-$f(a_{3})=$ \Tree[  [ $b_3$ ] [ $b_4$ ] ]  
-
-then \texttt{\textcolor{blue}{\footnotesize{}tree1.flatMap(f)}} = \Tree[  [ [ $b_0$ ] [ $b_1$ ] ] [ [ $b_2$ ] [ [ $b_3$ ] [ $b_4$ ] ] ] ]  
-
-grafting subtrees plays the role of ``flattening''
 
 Typical tasks for tree-like monads:
 

@@ -139,5 +139,7 @@ mv "$name"-lulu.pdf "$name".pdf
 
 fi
 
+bash spelling_check.sh
+
 # Cleanup?
 #rm -f $name*{idx,ind,aux,dvi,ilg,out,toc,log,ps,lof,lot,data}
