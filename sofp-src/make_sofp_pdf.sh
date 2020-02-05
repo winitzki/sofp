@@ -94,7 +94,7 @@ if add_source_hashes $name.tex; then
 	rm -rf "$srcbase"
 	mkdir "$srcbase"
 	# Copy the required source files to "$srcbase"/.
-	cp ../README.md $name*lyx $name*tex $name*dvi `fgrep includegraphics $name*tex | sed -e 's,[^{]*{\([^}]*\)}.*,\1.*,' |while read f; do ls $f ; done` *.sh "$srcbase"/
+	cp ../README.md excluded_words $name*lyx $name*tex $name*dvi `fgrep includegraphics $name*tex | sed -e 's,[^{]*{\([^}]*\)}.*,\1.*,' |while read f; do ls $f ; done` *.sh "$srcbase"/
 	tar jcvf "$name-src.tar.bz2" "$srcbase"/
 	rm -rf "$srcbase"/
 	# Do not attach sources to the main PDF file.
