@@ -4,9 +4,13 @@ This is the official source repository for the new book _The Science of Function
 
 The book is a tutorial exposition of the theoretical knowledge that functional programmers need. The material is developed from first principles and contains complete explanations, derivations, and proofs of almost all required results.
 
-A recorded slide presentation, ["Reasoning about types and code"](https://www.youtube.com/watch?v=tgr_dV7_53s), illustrates some of the topics and methods of this book.
+## Related video presentations
 
-Another related presentation is ["What did category theory ever did for us (functional programmers)](https://www.youtube.com/watch?v=Zau8CxsfxOo).
+["Reasoning about types and code"](https://www.youtube.com/watch?v=tgr_dV7_53s) illustrates some of the topics and methods of this book.
+
+["What did category theory ever did for us (functional programmers)](https://www.youtube.com/watch?v=Zau8CxsfxOo).
+
+["Parametricity properties of purely functional code"](https://youtu.be/vTWLtBTEmAY)
 
 # Source code
 
