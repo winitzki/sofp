@@ -1301,48 +1301,314 @@ P^{\text{PLPT}^{A}} & \bbnum 0 & \big(\overline{\text{flm}}(f)\big)^{\uparrow P}
 The code of \lstinline!flatMap! for the \lstinline!PLPT! tree never
 creates any leaves, only branches. We will see later how this prevents
 \lstinline!PLPT! from being a full monad (it is only a semimonad;
-a \lstinline!pure! method cannot satisfy the required laws). Nevertheless,
+no \lstinline!pure! method can satisfy the required laws). Nevertheless,
 having a lawful \lstinline!flatMap! is sufficient for using \lstinline!PLPT!
 in functor blocks.
 
-The following examples illustrate some use cases for tree-like monads.
+The following examples show some use cases for tree-like monads.
 
 \subsubsection{Example \label{subsec:Example-monad-branching-properties}\ref{subsec:Example-monad-branching-properties}\index{solved examples}}
 
-Implement the \lstinline!flatMap! operation for a rose tree with
-\lstinline!String!-labeled branches.
+Implement the \lstinline!flatMap! operation for a tree of configuration
+properties of the form
+\begin{lstlisting}
+url: "http://server:8000"
+enable_auth: "true"
+users:
+  user:
+    name: "abcde"
+    pass: "12345"
+  user2:
+    name: "fghij"
+    pass: "67890"
+\end{lstlisting}
+Write a function to convert trees into strings in this format.
 
 \subparagraph{Solution}
 
-{*}{*}{*}
+The code for this data structure must support any number of simple
+properties or branches with \lstinline!String! labels. A suitable
+structure is a tree with $P$-shaped leaves and $P$-shaped branches,
+where the functor $P$ is defined as $P^{A}\triangleq\text{List}^{\text{String}\times A}$.
+Implement the tree type:
+\begin{lstlisting}
+sealed trait PropTree[A]  // Introduce the type parameter A for the values of properties.
+final case class Simple[A](props: List[(String, A)])                  extends PropTree[A]
+final case class Branches[A](branches: List[(String, PropTree[A])])   extends PropTree[A]
+\end{lstlisting}
+To pretty-print trees of this type, we need to keep track of the current
+level of indentation:
+\begin{lstlisting}
+def prettyPrint[A](pt: PropTree[A], indent: String = "")(toString: A => String): String = (pt match {
+  case Simple(props) => props.map { case (name, a) => indent + name + ": " + toString(a) }
+  case Branches(brs) => brs.map { case (name, ps) => indent + name + ":\n" +
+    prettyPrint(ps, indent + "  ")(toString) }
+}).mkString("\n") + "\n"
+\end{lstlisting}
+For convenience, the methods \lstinline!.flatMap! and \lstinline!.toString!
+can be defined directly on the trait,
+\begin{lstlisting}
+sealed trait PropTree[A] {
+  def flatMap[B](f: A => PropTree[B]): PropTree[B] = this match {
+    case Simple(props) => Branches(props.map { case (name, a) => (name, f(a)) })
+    case Branches(brs) => Branches(brs.map { case (name, ps) => (name, ps.flatMap(f)) })
+  }
+  override def toString: String = prettyPrint(this)(_.toString)
+}
+\end{lstlisting}
+
+The following code illustrates the \lstinline!.flatMap! operation
+by replacing all integer leaf values below \lstinline!100! by a simple
+property and other values by a branch of properties:
+\begin{lstlisting}
+val pt1 = Simple(List("quantity1" -> 50, "quantity2" -> 250))
+
+scala> println(pt1.toString)
+quantity1: 50
+quantity2: 250
+
+val pt2 = pt1.flatMap { x => if (x < 100) Simple(List("value" -> x)) else Branches(List(
+               "large" -> Simple(List("value" -> x / 100, "factor" -> 100)),
+               "small" -> Simple(List("value" -> x % 100, "factor" -> 1)),
+        )) }
+
+scala> println(pt2.toString)
+quantity1:
+  value: 50
+quantity2:
+  large:
+    value: 2
+    factor: 100
+  small:
+    value: 50
+    factor: 1
+\end{lstlisting}
+
 
 \subsubsection{Example \label{subsec:Example-monad-substitution-language}\ref{subsec:Example-monad-substitution-language}}
 
 Implement variable substitution for a simple arithmetic language.
+Example usage:
+\begin{lstlisting}
+val expr1: Term[String] = Const(123) * Var("a") + Const(456) * Var("b")
+val expr2: Term[String] = Const(20) * Var("c")
+
+scala> expr1.flatMap { x => if (x == "a") expr2 else Var(x) } // Substitute "a" = expr2 in expr1.
+res0: Term[String] = Plus(Mult(Const(123), Mult(Const(20), Var("c"))), Mult(Const(456), Var("b"))) 
+\end{lstlisting}
+
 
 \subparagraph{Solution}
 
-{*}{*}{*}
+Begin by implementing the basic functionality of the language: constants,
+variables, addition, and multiplication. The type parameter \lstinline!A!
+in \lstinline!Term[A]! is the type of labels for variables. 
+\begin{lstlisting}
+sealed trait Term[A] {
+  def +(other: Term[A]): Term[A] = Plus(this, other)
+  def *(other: Term[A]): Term[A] = Mult(this, other)
+  def map[B](f: A => B): Term[B] = ???
+  def flatMap[B](f: A => Term[B]): Term[B] = ???
+}
+final case class Const[A](value: Int)                extends Term[A]
+final case class Var[A](name: A)                     extends Term[A]
+final case class Plus[A](t1: Term[A], t2: Term[A])   extends Term[A]
+final case class Mult[A](t1: Term[A], t2: Term[A])   extends Term[A]
+\end{lstlisting}
+The type constructor \lstinline!Term! is an example of an abstract
+syntax tree\index{abstract syntax tree} and can be equivalently defined
+as
+\[
+\text{Term}^{A}\triangleq L^{A}+S^{\text{Term}^{A}}\quad,\quad\quad L^{A}\triangleq\text{Int}+A\quad,\quad\quad S^{B}\triangleq B\times B+B\times B\quad,
+\]
+where the functors $L$ and $S$ describe the structure of the leaves
+and the branches of the tree.
+
+The code of the \lstinline!.map! method is
+\begin{lstlisting}
+  // This code must be within `trait Term[A]`.
+  def map[B](f: A => B): Term[B] = this match {
+    case Const(value)   => Const(value)
+    case Var(name)      => Var(f(name))
+    case Plus(t1, t2)   => Plus(t1 map f, t2 map f)
+    case Mult(t1, t2)   => Mult(t1 map f, t2 map f)
+  }
+\end{lstlisting}
+The code of \lstinline!.flatMap! replaces variables by new trees,
+leaving everything else unchanged:
+\begin{lstlisting}
+  // This code must be within `trait Term[A]`.
+  def flatMap[B](f: A => Term[B]): Term[B] = this match {
+    case Const(value)   => Const(value)
+    case Var(name)      => f(name)
+    case Plus(t1, t2)   => Plus(t1 flatMap f, t2 flatMap f)
+    case Mult(t1, t2)   => Mult(t1 flatMap f, t2 flatMap f)
+  }
+\end{lstlisting}
+
+Note that the \lstinline!flatMap! functions for lists, pass/fail
+monads, and tree-like monads are information-preserving: no data is
+discarded from the original tree or from any computed results.
 
 \subsubsection{Example \label{subsec:Example-regular-shaped-tree-not-monad}\ref{subsec:Example-regular-shaped-tree-not-monad}}
 
-Show that a regular-shaped binary tree does not support a \lstinline!flatMap!
-operation.\index{regular-shaped tree!is not a monad}
+Show that a regular-shaped binary tree does \emph{not} support an
+information-preserving \lstinline!flatMap! operation.\index{regular-shaped tree!is not a monad}
 
 \subparagraph{Solution}
 
-A regular-shaped binary tree is defined by $R^{A}\triangleq A+R^{A\times A}$.
-{*}{*}{*}
+The type constructor $R^{A}$for a regular-shaped binary tree is defined
+by $R^{A}\triangleq A+R^{A\times A}$. We can (non-rigorously) view
+the type $R^{A}$ as a disjunction with ``infinitely many'' parts,
+\[
+R^{A}=A+A\times A+A\times A\times A\times A+...\quad,
+\]
+where the $n^{\text{th}}$ part ($n=1,2,...$) is a product of $2^{n}$
+copies of $A$. The \lstinline!flatMap! function must have the type
+\[
+\text{flm}:(A\rightarrow R^{B})\rightarrow R^{A}\rightarrow R^{B}\quad.
+\]
+A possible value $r$ of type $R^{A}$ is, say, a product of $4$
+copies of $A$. How could \lstinline!flatMap! apply to that value?
+For any function $f^{:A\rightarrow R^{B}}$, we must compute a result
+value $\text{flm}\,(f)(r)$ of type $R^{B}$. The only way of obtaining
+a value of type $R^{B}$ is to apply $f$ to some value of type $A$.
+But the given argument $r$ contains $4$ such values. If we apply
+$f$ to each one of them, we will obtain $4$ different values of
+type $R^{B}$. Some of these values may correspond to the part $B\times B$
+in the disjunction, others to $B\times B\times B\times B$, etc. The
+total number of values of type $B$ depends on the result of that
+computation and is not necessarily equal to a power of $2$. Then
+it will be impossible to accommodate all of those values of type $B$
+within a \emph{single} regular-shaped tree of type $R^{B}$. If we
+discard some values of type $B$ so that the rest fits into the regular-shaped
+tree $R^{B}$, we would lose information. So, it is not possible to
+implement an information-preserving \lstinline!flatMap! for a regular-shaped
+binary tree.
 
-\subsection{Special monads}
+\subsection{The \texttt{Reader} monad}
 
 This chapter started with the list-like monads whose \lstinline!flatMap!
-method is motivated via the properties of nested iteration. We then
-looked at pass/fail monads and tree-like monads, which generalize
-nested iteration to{*}{*}{*}It turns out that the \lstinline!flatMap!
-method can be generalized to many other type constructors.
+method is motivated by the properties of nested iteration. We then
+looked at tree-like monads, which generalize nested list iterations
+to tree grafting. It turns out that the \lstinline!flatMap! method
+can be generalized to many other type constructors that are useful
+for various programming tasks no longer related to nested iteration.
+
+In general, a semimonad $L^{A}$ is no longer a collection of data
+items of type $A$. Instead, $L^{A}$ can be regarded (heuristically)
+as a value of type $A$ wrapped in a special ``computational context''.
+If an ordinary function of type $A\rightarrow B$ is a ``computation
+with no special context'', we view ``computations in the context
+of $L$'' as functions of type $A\rightarrow L^{B}$ (as in \lstinline!flatMap!'s
+argument type). Different monads \textemdash{} list-like, pass/fail,
+tree-like, \lstinline!Future!, etc., \textemdash{} represent ``contexts''
+of different kinds.
+
+In some cases, this vague idea of ``context'' can be made precise
+by rewriting the desired type of the computation in the form $A\rightarrow L^{B}$.
+This and the next subsections describe some well-known monads that
+can be derived in that approach: the \lstinline!Reader!, \lstinline!Writer!,
+\lstinline!Eval!, \lstinline!State!, and \lstinline!Continuation!
+monads.
+
+The first of these, the \lstinline!Reader!, corresponds to a computation
+that computes a result while using some additional data of a fixed
+type $Z$. A function consuming (``reading'') that additional data
+will have type $A\times Z\rightarrow B$ instead of $A\rightarrow B$.
+It remains to rewrite the type $A\times Z\rightarrow B$ in the form
+$A\rightarrow L^{B}$ with a suitable choice of a type constructor
+$L^{\bullet}$. By currying, we obtain an equivalent type
+\[
+(A\times Z\rightarrow B)\cong(A\rightarrow Z\rightarrow B)\quad,
+\]
+which has the form $A\rightarrow L^{B}$ if we define $L^{B}\triangleq Z\rightarrow B$.
+This type constructor is called the \lstinline!Reader! monad\index{monads!Reader monad@\texttt{Reader} monad}.
+The Scala definition \lstinline!type Reader[Z, A] = Z => A! is written
+in the type notation as
+\[
+\text{Read}_{Z}^{A}\triangleq Z\rightarrow A\quad.
+\]
+
+Fully parametric implementations of \lstinline!map! and \lstinline!flatMap!
+directly follow from their type signatures:
+\begin{lstlisting}
+def map[A, B](r: Z => A)(f: A => B): (Z => B) = r andThen f
+def flatMap[A, B](r: Z => A)(f: A => Z => B): (Z => B) = { z => f(r(z))(z) }
+\end{lstlisting}
+
+What are the use cases for \lstinline!Reader!? If we write a functor
+block with a value of type \lstinline!Reader[Z, A]! as a ``source''
+value, it follows that other source values must have type \lstinline!Reader[Z, B]!,
+\lstinline!Reader[Z, C]!, and so on. In other words, the type $Z$
+must be fixed for the entire functor block. So, data of type $Z$
+plays the role of a \emph{common dependency} that may be used by all
+computations within the functor block.
+
+As an example, consider {*}{*}{*}
+
+{*}{*}{*} final result needs to be obtained by ``running'' the monad{*}{*}{*}
+
+\subsection{The \texttt{Writer} monad}
+
+\subsection{The \texttt{Eval} monad}
+
+\subsection{The \texttt{State} monad}
+
+\subsection{The \texttt{Continuation} monad}
 
 {*}{*}{*}
+
+\subsection{Exercises\index{exercises}}
+
+\subsubsection{Exercise \label{subsec:Exercise-monads-p1}\ref{subsec:Exercise-monads-p1}}
+
+For a given \texttt{\textcolor{blue}{\footnotesize{}Set{[}Int{]}}},
+compute all subsets $\left(w,x,y,z\right)$ of size 4 such that $w<x<y<z$
+and $w+z=x+y$.
+
+\subsubsection{Exercise \label{subsec:Exercise-monads-p1-1}\ref{subsec:Exercise-monads-p1-1}}
+
+Given 3 sequences $xs$, $ys$, $zs$ of type \texttt{\textcolor{blue}{\footnotesize{}Seq{[}Int{]}}},
+compute all $\left(x,y,z\right)$ such that $x\in xs$, $y\in ys$,
+$z\in zs$ and $x<y<z$ and $x+y+z<10$.
+
+\subsubsection{Exercise \label{subsec:Exercise-monads-p1-2}\ref{subsec:Exercise-monads-p1-2}}
+
+Solve the $n$-queens problem on an $3\times3\times3$ cube.
+
+\subsubsection{Exercise \label{subsec:Exercise-monads-p1-3}\ref{subsec:Exercise-monads-p1-3}}
+
+Write a tiny library for arithmetic using \lstinline!Future!s, implementing
+the functions
+\begin{lstlisting}
+def const(implicit ec: ExecutionContext): Int => Future[Int] = ???
+def add(x: Int)(implicit ec: ExecutionContext): Int => Future[Int] = ???
+def isEqual(x: Int)(implicit ec: ExecutionContext): Int => Future[Boolean] = ??? 
+\end{lstlisting}
+Use these functions to write a functor block (\lstinline!for!/\lstinline!yield!)
+program that computes $1+2+...+100$ via a parallel computation and
+verifies that the result is correct.
+
+\subsubsection{Exercise \label{subsec:Exercise-monads-p1-4}\ref{subsec:Exercise-monads-p1-4}}
+
+Read a file into a string and write it to another file using Java
+\lstinline!Files! and \lstinline!Paths! API. Use \lstinline!Try!
+and \lstinline!for!/\lstinline!yield! to make this safe.
+
+\subsubsection{Exercise \label{subsec:Exercise-monads-p1-5}\ref{subsec:Exercise-monads-p1-5}}
+
+Given a semigroup $W$, make a semimonad out of $F^{A}\triangleq E\rightarrow A\times W$.
+
+\subsubsection{Exercise \label{subsec:Exercise-monads-p1-6}\ref{subsec:Exercise-monads-p1-6}}
+
+Implement a semimonad instance for the (recursive) type constructor
+$F^{A}\triangleq A+A\times A+F^{A}+F^{A}\times F^{A}$.
+
+\subsubsection{Exercise \label{subsec:Exercise-monads-p1-7}\ref{subsec:Exercise-monads-p1-7}}
+
+Find the largest prime number below $1000$ via a simple \href{https://en.wikipedia.org/wiki/Sieve_of_Eratosthenes}{Sieve of Eratosthenes};
+use the \lstinline!State[S, Int]! monad with \lstinline!S = Array[Boolean]!. 
 
 \section{Slides, part 1 }
 
@@ -1437,50 +1703,6 @@ $x^{A}\rightarrow f(x,s)$ and $s^{S}:=g(x,s)$; the type is{\footnotesize{}
 $\left(A\times S\rightarrow B\right)\times\left(A\times S\rightarrow S\right)$}{\footnotesize\par}
 
 this will be $A\rightarrow\text{State}^{B}$ if {\footnotesize{}$\text{State}^{B}\equiv\left(S\rightarrow B\right)\times\left(S\rightarrow S\right)\equiv S\rightarrow B\times S$ }{\footnotesize\par}
-
-
-\subsection{Exercises I}
-
-For a given \texttt{\textcolor{blue}{\footnotesize{}Set{[}Int{]}}},
-compute all subsets $\left(w,x,y,z\right)$ of size 4 such that $w<x<y<z$
-and $w+z=x+y$
-
-Given 3 sequences $xs$, $ys$, $zs$ of type \texttt{\textcolor{blue}{\footnotesize{}Seq{[}Int{]}}},
-compute all $\left(x,y,z\right)$ such that $x\in xs$, $y\in ys$,
-$z\in zs$ and $x<y<z$ and $x+y+z<10$
-
-Solve the $n$-queens problem on an $3\times3\times3$ cube
-
-Write a tiny library for arithmetic using \texttt{\textcolor{blue}{\footnotesize{}Future}}'s;
-use it to compute $1+2+...+100$ via \texttt{\textcolor{blue}{\footnotesize{}for}}/\texttt{\textcolor{blue}{\footnotesize{}yield}}
-and verify the result. E.g.\ implement: 
-
-\texttt{\textcolor{blue}{\footnotesize{}const: Int $\rightarrow$
-Future{[}Int{]}}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}add(x: Int): Int $\rightarrow$
-Future{[}Int{]}}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}isEqual(x: Int): Int $\rightarrow$
-Future{[}Boolean{]} }}{\footnotesize\par}
-
-Read a file into a string and write it to another file using Java
-\texttt{\textcolor{blue}{\footnotesize{}Files}} and \texttt{\textcolor{blue}{\footnotesize{}Paths}}
-API\texttt{\textcolor{blue}{\footnotesize{}. }}Use \texttt{\textcolor{blue}{\footnotesize{}Try}}
-and \texttt{\textcolor{blue}{\footnotesize{}for}}/\texttt{\textcolor{blue}{\footnotesize{}yield}}
-to make this safe.
-
-Given a semigroup $W$, make a semimonad out of $F^{A}\equiv E\rightarrow A\times W$ 
-
-Implement a semimonad instance for the (recursive) type constructor
-$F^{A}=A+A\times A+F^{A}+F^{A}\times F^{A}$
-
-Find the largest prime number below 1000 via a simple \href{https://en.wikipedia.org/wiki/Sieve_of_Eratosthenes}{Sieve of Eratosthenes};
-use the \texttt{\textcolor{blue}{\footnotesize{}State{[}S, Int{]}}}
-monad with \texttt{\textcolor{blue}{\footnotesize{}S = Array{[}Boolean{]}}} 
-
-The function \lstinline!subindices! in Example~\ref{subsec:Example-list-monads-4}(c)
-has a bug? If so, fix the base case.
 
 \section{Slides, part 2}
 

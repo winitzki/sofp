@@ -1330,7 +1330,7 @@ lawful functors with respect to the type parameter \lstinline!K!.
 The reason for the failure is complicated. A value of type \lstinline!Set[K]!
 represents a set of zero or more values of type \lstinline!K!, and
 it is enforced that all values in the set are distinct. So, the correct
-functionality of \lstinline!Set! implies that we are able to\emph{
+functionality of \lstinline!Set! requires us to be able to\emph{
 }check whether two values of type \lstinline!K! are equal. A standard
 way of comparing values for equality is the \lstinline!.equals! method
 defined in the Scala library:
@@ -1352,40 +1352,39 @@ will have a lawful \lstinline!.equals! method. In some cases, however,
 data types could redefine their \lstinline!.equals! method for application-specific
 purposes and violate some of the required laws.
 
-Here are two examples of law-breaking but potentially useful code
+Here are two examples of law-breaking (but potentially useful) code
 for \lstinline!.equals!. The first example\footnote{This example is based on a comment by \index{Pawel@Pawe\l{} Szulc}Pawe\l{}
-Szulc at \texttt{\href{https://gist.github.com/tpolecat/7401433}{https://gist.github.com/tpolecat/7401433}}} is a disjunctive type $A+B$ whose \lstinline!.equals! method always
-returns \lstinline!false! for any values of type $\bbnum 0+B$:
+Szulc at \texttt{\href{https://gist.github.com/tpolecat/7401433}{https://gist.github.com/tpolecat/7401433}}} is a disjunctive type $A+B$ whose \lstinline!.equals! method allows
+only values of type $A+\bbnum 0$ to be equal:
 \begin{lstlisting}
-final case class LookA[A, B](eab: Either[A, B]) {
+final case class OnlyA[A, B](eab: Either[A, B]) {
   override def equals(y: Any): Boolean = (eab, y) match {
-    case (Left(a1), LookA(Left(a2)))   => a1 == a2
-    case _                             => false    // Never equal unless both are `Left`.
+    case (Left(a1), OnlyA(Left(a2)))   => a1 == a2  // Values Left(a1) and Left(a2) might be equal.
+    case _                             => false     // Never equal unless both are `Left`.
   }
 }
 \end{lstlisting}
 This implementation of \lstinline!.equals! is mathematically invalid:
 it violates the reflexivity law ($\forall x.\,x=x$) because values
-of the form \lstinline!LookA(Right(...))! are never equal to each
-other:
+of the form \lstinline!OnlyA! are never equal to each other.
 \begin{lstlisting}
-scala> LookA(Right(0)) equals LookA(Right(0))
+scala> OnlyA(Right(0)) equals OnlyA(Right(0))
 res2: Boolean = false
 \end{lstlisting}
-As a result, the library code of \lstinline!Set[LookA]! will fail
-to detect that e.g.~several values \lstinline!LookA(Right(0))! are
+As a result, the library code of \lstinline!Set[OnlyA]! will fail
+to detect that e.g.~several values \lstinline!OnlyA(Right(0))! are
 equal. The composition law of functors will fail when intermediate
 values of that type are used:
 \begin{lstlisting}
-val f: LookA[Int, Int] => Int = { case LookA(Left(a)) => a; case LookA(Right(a)) => a }
-val g: Int => LookA[Int, Int] = { a => LookA(Right(a)) }
+val f: OnlyA[Int, Int] => Int = { case OnlyA(Left(a)) => a; case OnlyA(Right(a)) => a }
+val g: Int => OnlyA[Int, Int] = { a => OnlyA(Right(a)) }
 val xs = Seq(0, 0, 0).map(g).toSet
 
 scala> xs.map(f andThen g)  // `Set` fails to detect identical values.
-res3: Set[LookA[Int,Int]] = Set(LookA(Right(0)), LookA(Right(0)), LookA(Right(0)))
+res3: Set[OnlyA[Int,Int]] = Set(OnlyA(Right(0)), OnlyA(Right(0)), OnlyA(Right(0)))
 
 scala> xs.map(f).map(g)     // `Set` detects identical values.
-res4: Set[LookA[Int,Int]] = Set(LookA(Right(0)))
+res4: Set[OnlyA[Int,Int]] = Set(OnlyA(Right(0)))
 \end{lstlisting}
 
 The second example is a product type $A\times B$ whose \lstinline!.equals!
@@ -1393,8 +1392,8 @@ method ignores the part of type $B$:
 \begin{lstlisting}
 final case class IgnoreB[A, B](a: A, b: B) {
   override def equals(y: Any): Boolean = y match {
-    case IgnoreB(a2, b2)   => a == a2 // Equal as long as the parts of type A are equal.
-    case _                 => false
+    case IgnoreB(a2, b2)   => a == a2  // Equal as long as the parts of type A are equal.
+    case _                 => false    // Never equal to a value of another type (not IgnoreB).
   }
 }
 
