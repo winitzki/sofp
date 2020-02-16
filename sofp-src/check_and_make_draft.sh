@@ -32,7 +32,7 @@ chapters=("Preface" "Mathematical formulas as code. I." \
  "List of Tables" "List of Figures" "Index" "END_OF_BOOK")
 
 # The number of pages in each chapter:
-pagecounts=(3 17 43 34 24 49 43 12 63 54 24 11 6 12 60 1 1 2 1 3 6 4 6 3 5 17 1 2 1 1 4)
+pagecounts=(3 17 43 34 24 49 43 12 63 54 27 11 6 12 60 1 1 2 1 3 6 4 6 3 5 17 1 2 1 1 4)
 
 # Expected total number of pages in the book draft:
 draft_pages=403
