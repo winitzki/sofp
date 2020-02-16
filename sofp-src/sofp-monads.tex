@@ -1486,7 +1486,7 @@ tree $R^{B}$, we would lose information. So, it is not possible to
 implement an information-preserving \lstinline!flatMap! for a regular-shaped
 binary tree.
 
-\subsection{The \texttt{Reader} monad}
+\subsection{The \texttt{Reader} monad\index{monads!Reader@\lstinline!Reader!}}
 
 This chapter started with the list-like monads whose \lstinline!flatMap!
 method is motivated by the properties of nested iteration. We then
@@ -1553,7 +1553,8 @@ the command's exit code and the output.
 \begin{lstlisting}
 type RunSh = (String, String) => (Int, String)
 \end{lstlisting}
-A simple implementation is
+A simple implementation (that does not handle any runtime exceptions)
+is
 \begin{lstlisting}
 import sys.process._
 val runSh: RunSh = { (command, input) =>
@@ -1705,7 +1706,7 @@ Scala's implicit arguments reproduce the code style of the \lstinline!Reader!
 monad in a more idiomatic way (especially with Scala 3's implicit
 function types\footnote{See \texttt{\href{https://www.scala-lang.org/blog/2016/12/07/implicit-function-types.html}{https://www.scala-lang.org/blog/2016/12/07/implicit-function-types.html}}}). 
 
-\subsection{The \texttt{Writer} monad}
+\subsection{The \texttt{Writer} monad\index{monads!Writer@\lstinline!Writer!}}
 
 The \lstinline!Writer! monad represents a function of type $A\rightarrow B$
 that returns its result (of type $B$) and additionally outputs some
@@ -1719,7 +1720,8 @@ rigorously as the product of the two function types,
 \left(A\rightarrow B\right)\times\left(A\rightarrow W\right)\cong A\rightarrow B\times W\quad.
 \]
 Since this type must be of the form $A\rightarrow L^{B}$, we must
-define the functor $L$ as $L^{A}\triangleq A\times W$.
+define the functor $L$ as $L^{A}\triangleq A\times W$. This is the
+type constructor of the \lstinline!Writer! monad, denoted by $\text{Write}^{\bullet,W}\triangleq A\times W$.
 
 If several computations are performed one after another in the \lstinline!Writer!
 monad, the logging information should be ``accumulated'' in some
@@ -1736,9 +1738,11 @@ final case class Writer[A, W: Semigroup](a: A, log: W) {
    Writer(b, log |+| newLog)    // Use the semigroup operation |+|.
 }
 \end{lstlisting}
+\begin{comment}
 \[
-\text{flm}\,(f^{:A\rightarrow B\times W})\triangleq a\times w\rightarrow\left(\nabla_{1}f(a)\right)\times\left(w\oplus\nabla_{2}f(a)\right)\quad.
+\text{flm}_{\text{Write}}(f^{:A\rightarrow B\times W})\triangleq a\times w\rightarrow\left(\nabla_{1}f(a)\right)\times\left(w\oplus\nabla_{2}f(a)\right)\quad.
 \]
+\end{comment}
 
 The logging type $W$ is often a monoid (a semigroup with an ``empty''
 value). If so, \lstinline!Writer[A, W]! will be a full monad whose
@@ -1756,8 +1760,13 @@ and a semigroup operation \lstinline!|+|! by
 \begin{lstlisting}
 final case class Logs(begin: LocalDateTime, end: LocalDateTime, message: String) {
   def |+|(other: Logs): Logs = Logs(begin, other.end, message + "\n" + other.message)
-}
+}      // For simplicity, we assume that timestamps will be monotonically increasing.
 \end{lstlisting}
+The type \lstinline!Logs! is not a monoid because its binary operation
+discards some of the input data, so the ``empty'' value satisfying
+the identity laws (see Eq.~(\ref{eq:identity-laws-of-monoid}) in
+Example~\ref{subsec:tc-Example-Monoids}) cannot be defined.
+
 We can now use the semimonad \lstinline!Writer[A, Logs]!. For convenience,
 define this helper function:
 \begin{lstlisting}
@@ -1769,33 +1778,136 @@ def log[A](message: String)(x: A): Logged[A] = {
 \end{lstlisting}
 Some example calculations with this code:
 \begin{lstlisting}
-def compute[A](x: => A): A = { Thread.sleep(100L); x }         // Simulate a long computation.
+def compute[A](x: => A): A = { Thread.sleep(100L); x }           // Simulate a long computation.
 
 scala> val result: Logged[Double] = for {
-  x <- log("begin with 3")(compute(3))                    // The source type is `Logged[Int]`.
+  x <- log("begin with 3")(compute(3))              // The initial source type is `Logged[Int]`.
   y <- log("add 1")(compute(x + 1))
-  z <- log("multiply by 2.0")(compute(y * 2.0)) // The result's type becomes `Logged[Double]`.
-} yield z                               // The computation should take between 300 and 400 ms.
+  z <- log("multiply by 2.0")(compute(y * 2.0))   // The result's type becomes `Logged[Double]`.
+} yield z                                 // The computation should take between 300 and 400 ms.
 res0: Logged[Double] = Writer(8.0,Logs(2020-02-15T22:02:42.313,2020-02-15T22:02:42.484,begin with 3
 add 1
 multiply by 2.0))
 \end{lstlisting}
 
+Unlike the \lstinline!Reader! monad, which delays all computations
+until a ``runner'' is called, a monadic value of type \lstinline!Writer[A, W]!
+already contains the final computed values of types \lstinline!A!
+and \lstinline!W!.
 
-\subsection{The \texttt{State} monad}
+\subsection{The \texttt{State} monad\index{monads!State@\lstinline!State!}}
 
-State: A sequence of steps that update state while returning results
+Heuristically, the \lstinline!Reader! monad $\text{Read}^{Z,A}$
+is able to ``read'' values of type $Z$, while the \lstinline!Writer!
+monad $\text{Write}^{A,W}$ can ``write'' values of type $W$, in
+addition to computing their main result of type $A$. The \lstinline!State!
+monad, denoted by $\text{State}^{S,A}$, combines the functionality
+of \lstinline!Reader! and \lstinline!Writer! in a special way: the
+additional value of type $S$ is automatically passed from one computation
+to the next. 
 
-$\text{State}^{A}\equiv S\rightarrow A\times S$ where $S$ is the
-fixed ``state'' value type
+To derive the required type constructor, consider a computation of
+type $A\rightarrow B$ that additionally needs to read and to output
+a value of type $S$. Since the total input is a pair of $A$ and
+$S$, and the total output is a pair of $B$ and $S$, this kind of
+computation is represented by a function of type $A\times S\rightarrow B\times S$.
+We now try to rewrite this type in the form $A\rightarrow L^{B}$
+with a suitable type constructor $L$. It is clear that we need to
+curry the argument $A$. The result is 
+\[
+\left(A\times S\rightarrow B\times S\right)\cong\left(A\rightarrow S\rightarrow B\times S\right)=A\rightarrow L^{B}\quad,\quad\text{where}\quad L^{B}\triangleq S\rightarrow B\times S\quad.
+\]
+So, the \lstinline!State! monad must be defined by the type constructor
+$\text{State}^{S,A}\triangleq S\rightarrow A\times S$. This is a
+function that computes a value of type $A$ while using and possibly
+updating the ``state value'' of type $S$.
 
-State: A computation can update state ($S$) while producing a result
+To code of the \lstinline!flatMap! method for this type constructor
+was derived in Example~\ref{subsec:ch-solvedExample-9}(c). It does
+indeed pass the updated state value to the next computation:
+\begin{lstlisting}
+type State[S, A] = S => (A, S)
+def flatMap[S, A, B](prev: State[S, A])(f: A => State[S, B]): State[S, B] = { s =>
+    val (a, newState) = prev(s) // Compute result of type `A`, updating the state.
+    f(a)(newState)              // Pass the updated state to the next computation.
+}
+\end{lstlisting}
 
-$x^{A}\rightarrow f(x,s)$ and $s^{S}:=g(x,s)$; the type is $\left(A\times S\rightarrow B\right)\times\left(A\times S\rightarrow S\right)$
+An example of using the \lstinline!State! monad is the task of implementing
+a random number generator. A simple generator is the \textbf{Lehmer
+algorithm}\index{Lehmer algorithm}\footnote{See \texttt{\href{https://en.wikipedia.org/wiki/Lehmer_random_number_generator}{https://en.wikipedia.org/wiki/Lehmer\_random\_number\_generator}}},
+which generates integer sequences $x_{n}$ defined by
+\[
+x_{n+1}\triangleq\left(48271x_{n}\right)\text{mod}\,(2^{31}-1)\quad,\quad\quad1\leq x_{0}\leq2^{31}-1\quad.
+\]
+The ``updating'' function for this sequence, $x_{n+1}=\text{lehmer}\,(x_{n})$,
+can be implemented as 
+\begin{lstlisting}
+def lehmer(x: Long): Long = x * 48271L % 0xffffffffL
+\end{lstlisting}
 
-this will be $A\rightarrow\text{State}^{B}$ if $\text{State}^{B}\equiv\left(S\rightarrow B\right)\times\left(S\rightarrow S\right)\equiv S\rightarrow B\times S$ 
+To use the generator, we need to provide an initial value $x_{0}$
+(the ``seed'') and then call the function \lstinline!lehmer! repeatedly
+on successive values. The code would look like this:
 
-\subsection{The \texttt{Eval} monad}
+\begin{wrapfigure}{l}{0.438\columnwidth}%
+\vspace{-0.8\baselineskip}
+\begin{lstlisting}
+val s0 = 123456789L      // A "seed" value.
+val s1 = lehmer(s0)
+... // Code that uses the updated state s1.
+val s2 = lehmer(s1)
+... // Code that uses the updated state s2.
+val s3 = lehmer(s2)           // And so on.
+\end{lstlisting}
+
+\vspace{-1\baselineskip}
+\end{wrapfigure}%
+
+\noindent We need to keep track of all state values \lstinline!s1!,
+\lstinline!s2!, ..., that are handled in the middle of other computations.
+This ``bookkeeping'' is error-prone since we might reuse a previous
+generator state by mistake. The \lstinline!State! monad gives a solution
+that keeps track of the updated state values automatically and correctly.
+This comes at a cost: we need to convert all computations into \lstinline!State!-typed
+monadic programs.
+
+As a simple example, consider the task of generating uniformly distributed
+floating-point numbers in the interval $\left[0,1\right]$. We need
+to maintain the generator state while computing the result. The floating-point
+generator is implemented as a monadic value of type \lstinline!State[Long, Double]!:
+\begin{lstlisting}
+val rngUniform: State[Long, Double] = { oldState =>
+  val result = (oldState - 1).toDouble / (0xffffffffL - 2).toDouble // Enfore the interval [0, 1].
+  val newState = lehmer(oldState)
+  (result, newState)
+}
+\end{lstlisting}
+Code using \lstinline!rngUniform! will be of the same monadic type
+\lstinline!State[Long, A]!:
+\begin{lstlisting}
+val program: State[Long, String] = for {   // Assume .flatMap and .map methods are defined for State.
+  x <- rngUniform
+  y <- rngUniform
+} yield s"Pair is $x, $y"
+\end{lstlisting}
+
+Monadic programs of this type can be now composed in an arbitrary
+way. The ``bookkeeping'' around the state values is safely handled
+by the \lstinline!State! monad and hidden from the programmer's view.
+When the entire monadic program has been composed, it needs to be
+``run'' to extract its result value. Since the type \lstinline!State[S, A]!
+is a function with argument of type $S$, the ``runner'' is just
+an application of that function to a ``seed'' value:
+\begin{lstlisting}
+val seed = 123456789L
+
+scala> program(seed)
+res0: (String, Long) = ("Pair is 0.028744523433557146, 0.5269012540999576", 216621204L)
+\end{lstlisting}
+
+
+\subsection{The eager/lazy evaluation monad (\texttt{Eval})\index{monads!lazy/eager evaluation (Eval)@lazy/eager evaluation (\lstinline!Eval!)}}
 
 The monads we considered so far (\lstinline!Reader!, \lstinline!Writer!,
 and \lstinline!State!) are used for managing extra information about
@@ -1804,13 +1916,66 @@ a value of a certain type. We now turn to monads whose ``context''
 is not a value; instead, these monads represent computations with
 a nonstandard evaluation strategy. 
 
-The first of these monads is called \lstinline!Eval!.{*}{*}{*}
+The first of these monads is called \lstinline!Eval!, and its task
+is to encapsulate lazy and eager evaluations into a single type. A
+value of type \lstinline!Eval[A]! can be eager (available now) or
+lazy (available later). Values of these sub-types can be combined
+with correct logic: for instance, a combination of eager and lazy
+values automatically becomes lazy.
 
-Eval: Perform a sequence of lazy or memoized computations
+To derive the type constructor, note that lazy values of type $A$
+are equivalent to functions of type $\bbnum 1\rightarrow A$. So,
+the disjunctive type $\text{Eval}^{A}\triangleq A+\left(\bbnum 1\rightarrow A\right)$
+represents a value that is either lazy or eager:
+\begin{lstlisting}
+sealed trait Eval[A]
+final case class Eager[A](x: A)              extends Eval[A]
+final case class Lazy[A](lazyX: Unit => A)   extends Eval[A]
+\end{lstlisting}
+It is useful to have functions converting between eager and lazy values
+whenever needed:
+\begin{lstlisting}
+def get: Eval[A] => A = {
+  case Eager(x)    => x
+  case Lazy(lazyX) => lazyX(())
+}
 
-$\text{Eval}^{A}\equiv A+\left(1\rightarrow A\right)$
+def now(x: A): Eval[A] = Eager(x)
+def later(e: => A): Eval[A] = Lazy(_ => e)
+\end{lstlisting}
+Now we can implement a \lstinline!flatMap! method that correctly
+keeps track of the evaluation strategy:
+\begin{lstlisting}
+def flatMap[A, B](f: A => Eval[B]): Eval[A] => Eval[B] = {
+  case Eager(x)    => f(x)         // This value can be eager or lazy, according to f(x).
+  case Lazy(lazyX) => Lazy(_ => get(f(lazyX(()))))  // Call `get` to avoid nested Lazy().
+}
+\end{lstlisting}
+Assuming that \lstinline!.map! and \lstinline!.flatMap! are defined
+as extension methods for \lstinline!Eval!, we may use functor blocks
+to combine eager and lazy computations freely:
 
-\subsection{The \texttt{Continuation} monad}
+\begin{wrapfigure}{l}{0.631\columnwidth}%
+\vspace{-0.8\baselineskip}
+\begin{lstlisting}
+val result: Eval[Int] = for {
+  x <- later(longComputation1()) // Delay the long computation.
+  y <- now(x + 2)       // Short computation, no need to delay.
+  z <- later(longComputation2(y * 100))
+} yield z
+\end{lstlisting}
+
+\vspace{-1\baselineskip}
+\end{wrapfigure}%
+
+\noindent The value of \lstinline!result! is a lazy computation because
+it involves lazy steps. It is quick to compute \lstinline!result!
+because the long computations are not yet started. To extract the
+final value of type \lstinline!Int! out of \lstinline!result!, we
+need to evaluate \lstinline!get(result)!, which will take a longer
+time.
+
+\subsection{The continuation monad (\texttt{Cont})\index{monads!continuation (Cont)@continuation (\lstinline!Cont!)}}
 
 Cont: A chain of asynchronous operations
 
