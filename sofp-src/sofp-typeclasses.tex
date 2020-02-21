@@ -4,6 +4,7 @@
 \global\long\def\gunderline#1{\mathunderline{greenunder}{#1}}%
 \global\long\def\bef{\forwardcompose}%
 \global\long\def\bbnum#1{\custombb{#1}}%
+\global\long\def\pplus{{\displaystyle }{+\negmedspace+}}%
 
 
 \section{Motivation and first examples}
@@ -1045,7 +1046,7 @@ containing all elements from \lstinline!x!, \lstinline!y!, and \lstinline!z!
 in their original order. It is evident that the concatenation \lstinline!x ++ (y ++ z)!
 is a list with the same elements in the same order. However, a rigorous
 proof of the associativity law for lists, starting from the code of
-the \lstinline!concat! function, requires significant work (see Section~\ref{subsec:Proofs-for-associativity-law-lists-and-arrays}). 
+the \lstinline!concat! function, requires significant work (see Section~\ref{subsec:Proofs-for-associativity-law-lists-and-arrays-concat}). 
 
 \subsubsection{Example \label{subsec:tc-Example-semigroup-alternative-implementations}\ref{subsec:tc-Example-semigroup-alternative-implementations}
 (alternative semigroup implementations)}
@@ -1350,33 +1351,35 @@ res0: Seq[(String, Int)] = List(("abc", 1), ("abc", 2), ("abc", 3))
 typeclass does not enforce the functor laws on the implementation.
 It is the programmer responsibility to verify that the laws hold.
 
-One way of checking the laws is to use the \texttt{scalacheck} library\footnote{\texttt{\href{https://www.scalacheck.org}{https://www.scalacheck.org}}}
-that automatically runs random tests for a given assertion. Using
+One way of checking the laws is to use the \texttt{scalacheck} library\index{verifying laws with scalacheck@verifying laws with \texttt{scalacheck}}\footnote{\texttt{\href{https://www.scalacheck.org}{https://www.scalacheck.org}}}
+that automatically runs random tests for the given assertions, trying
+to discover a set of values for which some assertion fails. Using
 the \lstinline!Functor! typeclass constraint, we can implement a
 function (in our terminology, a PTVF) that checks the functor laws
-for \emph{any} given type constructor. The code looks like this (the
-required \lstinline!import! declarations are omitted for brevity):
+for \emph{any} given type constructor \lstinline!F[_]!:
 \begin{lstlisting}
-def checkFunctorLaws[F[_], A, B, C]()(implicit ff: Functor[F],
-                               // The `Arbitrary` typeclass is provided by scalacheck.
-      fa: Arbitrary[F[A]], ab: Arbitrary[A => B], bc: Arbitrary[B => C]) = {
-                                // Identity law. The assertion must hold for all `fa`.
-  forAll { (fa: F[A]) =>     fa.map(identity[A]) shouldEqual fa }
-                   // Composition law. The assertion must hold for all `f`, `g`, `fa`.
-  forAll { (f: A => B, g: B => C, fa: F[A]) =>
-    fa.map(f).map(g) shouldEqual fa.map(f andThen g)
+import org.scalacheck.Arbitrary
+import org.scalatest.prop.GeneratorDrivenPropertyChecks
+class FunctorTest extends Matchers with GeneratorDrivenPropertyChecks {
+  def checkFunctorLaws[F[_], A, B, C]()(implicit ff: Functor[F],     // Use the `Arbitrary` typeclass
+      fa: Arbitrary[F[A]], ab: Arbitrary[A => B], bc: Arbitrary[B => C]) = {    // from `scalacheck`.
+    forAll { (fa: F[A]) => fa.map(identity[A]) shouldEqual fa }  // Identity law. "For all `fa`, ..."
+    forAll { (f: A => B, g: B => C, fa: F[A]) =>          // Composition law. The assertion must hold
+      fa.map(f).map(g) shouldEqual fa.map(f andThen g)    // for all `f`, `g`, `fa`.
+    }
   }
+  // Check the laws for F = Seq using specific types instead of type parameters A, B, C.
+  checkFunctorLaws[Seq, Int, String, Double]()
 }
-// Check the laws for F = Seq using specific types instead of type parameters A, B, C.
-checkFunctorLaws[Seq, Int, String, Double]()
 \end{lstlisting}
 
 The \texttt{scalacheck} library will substitute a large number of
-random values into the given assertions, aiming to discover a set
-of values for which some condition fails. While a test of laws with
-\texttt{scalacheck} (it might find a bug), it does not provide a rigorous
-proof that the laws hold: the laws are tested only with a finite number
-of values and with type parameters set to specific types.
+random values into the given assertions, Note that the laws are being
+tested only with a finite number of values and with type parameters
+set to specific types. While it is useful to test laws with \texttt{scalacheck}
+(we might find a bug), only a symbolic derivation provides a rigorous
+proof that the laws hold. One of the main themes of this book is to
+show how to perform symbolic derivations efficiently.
 
 \section{Deriving typeclass instances via structural analysis of types}
 
@@ -2874,7 +2877,7 @@ to the wrapped value via \lstinline!map!:
 \begin{wrapfigure}{l}{0.41\columnwidth}%
 \vspace{-0.8\baselineskip}
 \begin{lstlisting}[mathescape=true]
-pure(x).map(f)    //   $\text{pu}_{F}(x)\triangleright\, \scriptstyle{f^{\uparrow F}}$
+pure(x).map(f)    //   $\color{dkgreen}\text{pu}_{F}(x)\triangleright\, \scriptstyle{f^{\uparrow F}}$
 \end{lstlisting}
 \vspace{-0.8\baselineskip}
 \end{wrapfigure}%
@@ -3387,7 +3390,7 @@ F^{B}\ar[r]\sp(0.5){\text{ex}_{F}} & B
 }
 \]
 
-\vspace{-2.5\baselineskip}
+\vspace{-1.5\baselineskip}
 \end{wrapfigure}%
 
 \noindent The naturality law formulates our expectation that the extractor
@@ -3412,17 +3415,19 @@ may not be computable via fully parametric code. So, we cannot deduce
 any further information from the naturality law of co-pointed functors. 
 
 However, if $F$ is a pointed functor, we \emph{will} have a chosen
-value $\text{wu}_{F}:F^{\bbnum 1}$ to which we may then apply the
-naturality law~(\ref{eq:naturality-law-of-extract}) and obtain
+value $\text{wu}_{F}:F^{\bbnum 1}$ to which we may then apply both
+sides of the naturality law~(\ref{eq:naturality-law-of-extract})
+and obtain\footnote{The symbol $\overset{!}{=}$ means ``must be equal, according to
+what we know''.}
 \[
-\text{wu}_{F}\triangleright\text{ex}_{F}\bef f=\text{wu}_{F}\triangleright f^{\uparrow F}\bef\text{ex}_{F}\quad.
+\text{wu}_{F}\triangleright\text{ex}_{F}\bef f\overset{!}{=}\text{wu}_{F}\triangleright f^{\uparrow F}\bef\text{ex}_{F}\quad.
 \]
 Calculating both sides separately, we find
 \begin{align*}
  & \text{wu}_{F}\triangleright\text{ex}_{F}\bef f=\text{wu}_{F}\triangleright\text{ex}_{F}\triangleright f=1\triangleright f=b\quad.\\
  & \text{wu}_{F}\triangleright f^{\uparrow F}\bef\text{ex}_{F}=b\triangleright\text{pu}_{F}\bef\text{ex}_{F}\quad.
 \end{align*}
-It remains to show that $b\triangleright\text{pu}_{F}\bef\text{ex}_{F}=b$.
+So, we know that $b\triangleright\text{pu}_{F}\bef\text{ex}_{F}\overset{!}{=}b$.
 This can hold for all $b^{:B}$ only if 
 \[
 \text{pu}_{F}\bef\text{ex}_{F}=\text{id}\quad.
@@ -5144,7 +5149,7 @@ $\text{Fix}^{S}$ can be implemented if every function-type sub-expression
 $C^{A}\rightarrow P^{A}$ in $S^{A}$ involves a pointed functor $P$
 (i.e.~if $P^{\bbnum 1}\not\cong\bbnum 0$).
 
-\subsection{Proofs of associativity of \texttt{concat} for lists and arrays\label{subsec:Proofs-for-associativity-law-lists-and-arrays}}
+\subsection{Proofs of associativity of \texttt{concat} for lists and arrays\label{subsec:Proofs-for-associativity-law-lists-and-arrays-concat}}
 
 The \lstinline!concat! function is defined for both lists and arrays,
 and works similarly for these data types:
@@ -5189,17 +5194,16 @@ property of the array concatenation.
 \subsubsection{Statement \label{subsec:Statement-concat-array-associativity}\ref{subsec:Statement-concat-array-associativity}}
 
 For arrays, $\text{Array}_{n}^{A}\triangleq\text{Int}_{[0,n-1]}\rightarrow A$,
-the \lstinline!concat! function (denoted $\negmedspace+\!+$) defined
-by
+the \lstinline!concat! function (denoted $\pplus$) defined by
 \[
-a_{1}^{:\text{Array}_{n_{1}}^{A}}\negmedspace+\negthickspace+a_{2}^{:\text{Array}_{n_{2}}^{A}}\triangleq i^{:\text{Int}_{[0,n_{1}+n_{2}-1]}}\rightarrow\begin{cases}
+a_{1}^{:\text{Array}_{n_{1}}^{A}}\pplus a_{2}^{:\text{Array}_{n_{2}}^{A}}\triangleq i^{:\text{Int}_{[0,n_{1}+n_{2}-1]}}\rightarrow\begin{cases}
 0\leq i<n_{1}: & a_{1}(i)\\
 n_{1}\leq i<n_{1}+n_{2}: & a_{2}(i-n_{1})
 \end{cases}
 \]
 satisfies the associativity law
 \[
-(a_{1}\negmedspace+\negthickspace+a_{2})\negmedspace+\negthickspace+a_{3}=a_{1}\negmedspace+\negthickspace+(a_{2}\negmedspace+\negthickspace+a_{3})\quad.
+(a_{1}\pplus a_{2})\pplus a_{3}=a_{1}\pplus(a_{2}\pplus a_{3})\quad.
 \]
 
 
@@ -5208,7 +5212,7 @@ satisfies the associativity law
 Both sides of the law evaluate to the same partial function of type
 $\text{Int}\rightarrow A$:
 \[
-(a_{1}\negmedspace+\negthickspace+a_{2})\negmedspace+\negthickspace+a_{3}=a_{1}\negmedspace+\negthickspace+(a_{2}\negmedspace+\negthickspace+a_{3})=i^{:\text{Int}_{[0,n_{1}+n_{2}+n_{3}-1]}}\rightarrow\begin{cases}
+(a_{1}\pplus a_{2})\pplus a_{3}=a_{1}\pplus(a_{2}\pplus a_{3})=i^{:\text{Int}_{[0,n_{1}+n_{2}+n_{3}-1]}}\rightarrow\begin{cases}
 0\leq i<n_{1}: & a_{1}(i)\\
 n_{1}\leq i<n_{1}+n_{2}: & a_{2}(i-n_{1})\\
 n_{1}+n_{2}\leq i<n_{1}+n_{2}+n_{3}: & a_{3}(i-n_{1}-n_{2})
@@ -5360,17 +5364,17 @@ def concat[A](p: List[A], q: List[A])
 \noindent \vspace{-1.9\baselineskip}
 
 \[
-p^{:\text{List}^{A}}\negmedspace+\negthickspace+q^{:\text{List}^{A}}\triangleq p\triangleright\begin{array}{|c||c|}
+p^{:\text{List}^{A}}\pplus q^{:\text{List}^{A}}\triangleq p\triangleright\begin{array}{|c||c|}
  & \text{List}^{A}\\
 \hline \bbnum 1 & q\\
-A\times\text{List}^{A} & a\times t\rightarrow\bbnum 0+a\times(t\negmedspace+\negthickspace+q)
-\end{array}\quad.
+A\times\text{List}^{A} & a\times t\rightarrow\bbnum 0+a\times(t\overline{\pplus}q)
+\end{array}\quad,
 \]
 and is equivalent to the \lstinline!concat! function on arrays defined
 in Statement~\ref{subsec:Statement-concat-array-associativity}:
 \begin{align*}
-\forall a^{:\text{Array}_{n_{1}}^{A}},b^{:\text{Array}_{n_{2}}^{A}}.\quad & f_{1}(a)\negmedspace+\negthickspace+f_{1}(b)=f_{1}(a\negmedspace+\negthickspace+b)\quad,\\
-\forall p^{:\text{List}^{A}},q^{:\text{List}^{A}}.\quad & f_{2}(p)\negmedspace+\negthickspace+f_{2}(q)=f_{2}(p\negmedspace+\negthickspace+q)\quad,
+\forall a^{:\text{Array}_{n_{1}}^{A}},b^{:\text{Array}_{n_{2}}^{A}}.\quad & f_{1}(a)\pplus f_{1}(b)=f_{1}(a\pplus b)\quad,\\
+\forall p^{:\text{List}^{A}},q^{:\text{List}^{A}}.\quad & f_{2}(p)\pplus f_{2}(q)=f_{2}(p\pplus q)\quad,
 \end{align*}
 where $f_{1}$, $f_{2}$ are the isomorphism maps defined in Statement~\ref{subsec:Statement-array-list-equivalence}.
 
@@ -5379,15 +5383,14 @@ where $f_{1}$, $f_{2}$ are the isomorphism maps defined in Statement~\ref{subsec
 If we show the property for $f_{2}$, we can apply $f_{1}$ to both
 sides and obtain the other property.
 
-The base case for lists is $[]\negmedspace+\negthickspace+q=q$. This
-is clearly isomorphic to concatenating an empty array with another
-array since $f_{2}([])$ is an empty array. 
+The base case for lists is $[]\pplus q=q$. This is clearly isomorphic
+to concatenating an empty array with another array since $f_{2}([])$
+is an empty array. 
 
-The inductive step is $p\negmedspace+\negthickspace+q$ where $p$
-is a non-empty list, $p=\bbnum 0+a^{:A}\times t^{:\text{List}^{A}}$.
-We need to show that
+The inductive step is $p\pplus q$ where $p$ is a non-empty list,
+$p=\bbnum 0+a^{:A}\times t^{:\text{List}^{A}}$. We need to show that
 \[
-f_{2}(\bbnum 0+a\times t)\negmedspace+\negthickspace+f_{2}(q)=f_{2}((\bbnum 0+a\times t)\negmedspace+\negthickspace+q)=f_{2}(\bbnum 0+a\times(t\negmedspace+\negthickspace+q))\quad.
+f_{2}(\bbnum 0+a\times t)\pplus f_{2}(q)=f_{2}((\bbnum 0+a\times t)\pplus q)=f_{2}(\bbnum 0+a\times(t\pplus q))\quad.
 \]
 By definition of $f_{2}$, we have
 \begin{align*}
@@ -5395,22 +5398,22 @@ By definition of $f_{2}$, we have
 i=0: & a\\
 i\geq1: & \overline{f_{2}}(t)(i-1)
 \end{cases}\quad,\\
- & f_{2}(\bbnum 0+a\times(t\negmedspace+\negthickspace+q))=i\rightarrow\begin{cases}
+ & f_{2}(\bbnum 0+a\times(t\pplus q))=i\rightarrow\begin{cases}
 i=0: & a\\
-i\geq1: & \overline{f_{2}}(t\negmedspace+\negthickspace+q)(i-1)
+i\geq1: & \overline{f_{2}}(t\pplus q)(i-1)
 \end{cases}\quad.
 \end{align*}
-The inductive assumption guarantees that $\overline{f_{2}}(t\negmedspace+\negthickspace+q)=f_{2}(t)\negmedspace+\negthickspace+f_{2}(q)$.
+The inductive assumption guarantees that $\overline{f_{2}}(t\pplus q)=f_{2}(t)\pplus f_{2}(q)$.
 Using the definition of array concatenation and assuming that the
 length of $t$ is $n_{1}$ and the length $q$ is $n_{2}$, we get
 \[
-f_{2}(\bbnum 0+a\times(t\negmedspace+\negthickspace+q))=i\rightarrow\begin{cases}
+f_{2}(\bbnum 0+a\times(t\pplus q))=i\rightarrow\begin{cases}
 i=0: & a\\
 1\leq i<n_{1}+1: & f_{2}(t)(i-1)\\
 n_{1}+1\leq i<n_{1}+1+n_{2}: & f_{2}(q)(i-n_{1}-1)
 \end{cases}\quad.
 \]
-This is the same array as the concatenation $f_{2}(\bbnum 0+a\times t)\negmedspace+\negthickspace+f_{2}(q)$.
+This is the same array as the concatenation $f_{2}(\bbnum 0+a\times t)\pplus f_{2}(q)$.
 This concludes the proof.
 
 \subsection{``Kinds'' and higher-order type functions}
