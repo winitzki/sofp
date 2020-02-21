@@ -1,1 +1,4 @@
-cat misspelled_words|while read word; do echo "^$word\$" >> excluded_words; done
+ex=excluded_words
+sed -e 's|^\(.*\)$|^\1$|' < misspelled_words >> $ex
+sort $ex > $ex.1
+mv $ex.1 $ex
