@@ -87,6 +87,11 @@ rm -f $name*tex
 echo "Exporting LyX files $name.lyx and its child documents into LaTeX..."
 "$lyx" --export pdflatex $name.lyx # Exports LaTeX for all child documents as well.
 echo "Post-processing LaTeX files..."
+## Remove mathpazo. This is a mistake: should not remove it.
+#LC_ALL=C sed -i "" -e 's/^.*usepackage.*mathpazo.*$//' sofp.tex
+# Replace ugly Palatino quote marks by sans-serif marks.
+LC_ALL=C sed -i "" -e 's|``|\\textsf{``}|g; s|“|\\textsf{``}|g; '" s|''|\\\\textsf{''}|g; s|”|\\\\textsf{''}|g;  " sofp*.tex
+# Add color to equation displays.
 for f in $name*tex; do add_color "$f"; done
 if add_source_hashes $name.tex; then
 	echo "Creating a full PDF file..."
