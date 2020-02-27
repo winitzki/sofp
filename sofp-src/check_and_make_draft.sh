@@ -17,6 +17,9 @@ draft_title_4="D Parametricity theorem"
 
 # Checking the page counts.
 
+# The number of pages in each chapter:
+pagecounts=(3 17 43 34 24 49 43 12 63 54 51 11 6 12 60 1 1 2 1 3 6 4 6 3 5 17 1 2 1 1 4)
+
 # A unique fragment of the title of each chapter:
 chapters=("Preface" "Mathematical formulas as code. I." \
  "Mathematical formulas as code. II." "The logic of types. I." "The logic of types. II." \
@@ -30,9 +33,6 @@ chapters=("Preface" "Mathematical formulas as code. I." \
  "A Notations" "B Glossary of terms" "C Inferring code from types" \
  "D Parametricity theorem" "E A humorous disclaimer" "F GNU Free Documentation License" \
  "List of Tables" "List of Figures" "Index" "END_OF_BOOK")
-
-# The number of pages in each chapter:
-pagecounts=(3 17 43 34 24 49 43 12 63 54 49 11 6 12 60 1 1 2 1 3 6 4 6 3 5 17 1 2 1 1 4)
 
 # Expected total number of pages in the book draft:
 draft_pages=403

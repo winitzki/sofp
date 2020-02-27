@@ -4377,7 +4377,7 @@ implicit class SemimonadOps[F[_]: Semimonad, A](fa: F[A]) { // Define flatMap as
   def flatMap[B](f: A => F[B]): F[B] = implicitly[Semimonad[F]].flatMap(fa)(f)
 }
 def checkSemimonadLaws[F[_], A, B, C]()(implicit ff: Semimonad[F],   // Use the `Arbitrary` typeclass
-      fa: Arbitrary[F[A]], ab: Arbitrary[A => B], bc: Arbitrary[B => C]) = {    // from `scalacheck`.
+   fa: Arbitrary[F[A]], ab: Arbitrary[A => F[B]], bc: Arbitrary[B => F[C]]) = { // from `scalacheck`.
     forAll { (f: A => F[B], g: B => F[C], fa: F[A]) =>               // Associativity law of flatMap.
       fa.flatMap(x => f(x).flatMap(g)) shouldEqual fa.flatMap(f).flatMap(g)
     }
@@ -5034,10 +5034,30 @@ g.flatMap(pure) == g
 {\color{greenunder}\text{right identity law of }M:}\quad & \text{flm}_{M}(\text{pu}_{M})=\text{id}^{:M^{A}\rightarrow M^{A}}\quad.\label{eq:monad-right-identity-law-for-flatMap}
 \end{align}
 
+A typeclass for monads and a law-checking test function can be defined
+by
+\begin{lstlisting}
+abstract class Monad[F[_]: Functor : Semimonad] {
+  def pure[A](a: A): F[A]
+}
+def checkMonadLaws[F[_], A, B]()(implicit mf: Monad[F], sf: Semimonad[F],
+      aa: Arbitrary[A], af: Arbitrary[F[A]], ab: Arbitrary[A => F[B]]) = {
+    forAll { (x: A, g: A => F[B]) =>               
+      mf.pure(x).flatMap(g) shouldEqual g(x)   // Left identity law.
+    }
+    forAll { (fa: F[A]) =>               
+      fa.flatMap(mf.pure[A]) shouldEqual fa   // Right identity law.
+    }
+}
+\end{lstlisting}
+
 Note that \lstinline!pure! is the same method as in the \lstinline!Pointed!
 typeclass (Sections~\ref{subsec:Pointed-functors:-motivation}\textendash \ref{subsec:Pointed-functors:-structural-analysis}).
 So, we could say that a monad is a pointed semimonad whose \lstinline!pure!
 method obeys the two identity laws~(\ref{eq:monad-left-identity-law-for-flatMap})\textendash (\ref{eq:monad-right-identity-law-for-flatMap}).
+While the \lstinline!pure! method can be replaced by a simpler \textsf{``}wrapped
+unit\textsf{''} method ($\text{wu}_{M}$), derivations turned out to be easier
+when using $\text{pu}_{M}$.
 
 The \lstinline!Pointed! typeclass requires the \lstinline!pure!
 method to satisfy the naturality law~(\ref{eq:naturality-law-of-pure}).
@@ -5405,8 +5425,8 @@ monad,
 \[
 A\rightarrow\text{Cont}^{R,B}=A\rightarrow\left(B\rightarrow R\right)\rightarrow R\quad.
 \]
-The first step of the \textsf{``}flipped Kleisli\textsf{''} technique is to change
-the type of the Kleisli functions by flipping their two curried arguments.
+The first step of the flipped Kleisli technique is to change the type
+of the Kleisli functions by flipping their two curried arguments.
 We obtain functions of type
 \[
 \left(B\rightarrow R\right)\rightarrow A\rightarrow R\quad.
@@ -5815,10 +5835,11 @@ semigroups, monads, and semimonads.
 
 \paragraph{Co-products}
 
-A co-product of two monads is generally not a monad (and not even
-a semimonad); see Exercise~\ref{subsec:Exercise-1-monads-6} for
-a counterexample. An exception is a co-product with the \emph{identity}
-monad:
+As a rule, the co-product of two monads ($F^{A}+G^{A}$) is not a
+monad. For simple examples, see Exercise~\ref{subsec:Exercise-1-monads-6}
+for $\bbnum 1+F^{A}$ (where $F^{A}\triangleq A\times A$) and Exercise~\ref{subsec:Exercise-1-monads-4}
+for $M^{A}+M^{A}$ with an arbitrary monad $M$. An exception to that
+rule is a co-product with the \emph{identity} monad:
 
 \subsubsection{Statement \label{subsec:Statement-co-product-with-identity-monad}\ref{subsec:Statement-co-product-with-identity-monad}}
 
@@ -5865,7 +5886,7 @@ F^{A} & \text{id}
 \]
 
 \noindent Lifting this function to $F$, we can convert $F^{A+F^{A}}$
-into $F^{F^{A}}$ and then into $F^{A}$ via $F$\textsf{'}s \lstinline!flatten!
+into $F^{F^{A}}$ and finally into $F^{A}$ via $F$\textsf{'}s \lstinline!flatten!
 method:
 
 \begin{wrapfigure}{l}{0.58\columnwidth}%
@@ -5881,7 +5902,7 @@ def flatten_L[A]: L[L[A]] => L[A] = {
 \vspace{-3\baselineskip}
 \end{wrapfigure}%
 
-~\vspace{-0.95\baselineskip}
+~\vspace{-1.25\baselineskip}
 \[
 \text{ftn}_{L}\triangleq\,\begin{array}{|c||cc|}
  & A & F^{A}\\
@@ -6138,7 +6159,7 @@ already seen that $Z\rightarrow A$ is a monad (a \lstinline!Reader!)
 when $Z$ is a fixed type. The type expression $Z\rightarrow A$ is
 indeed of the form $H^{A}\rightarrow F^{A}$ where the type constructors
 are set to $H^{A}\triangleq Z$ and $F^{A}\triangleq A$. The following
-statements show some generalizations of the \lstinline!Reader! monad
+statements show two generalizations of the \lstinline!Reader! monad
 to other $H$ and $F$.
 
 \subsubsection{Statement \label{subsec:Statement-monad-construction-1}\ref{subsec:Statement-monad-construction-1}}
@@ -6149,40 +6170,214 @@ is $L^{A}\triangleq Z\rightarrow F^{A}$.
 \subparagraph{Proof}
 
 As with many monads of function type, derivations are made shorter
-by using the flipped Kleisli formulation. We assume that the Kleisli
-composition $\diamond_{_{F}}$ is known and satisfies the associativity
-law. When $F$ is a monad, we assume that its pure method $\text{pu}_{F}$
-is known and satisfies the identity laws. The ordinary Kleisli functions
-have types $A\rightarrow Z\rightarrow F^{B}$, so the flipped Kleisli
-functions have types $Z\rightarrow A\rightarrow F^{B}$. We begin
-by defining the flipped Kleisli composition $\tilde{\diamond}_{_{L}}$
-and the method $\text{pu}_{L}$:
-\[
-f^{:Z\rightarrow A\rightarrow F^{B}}\diamond_{_{L}}g^{:Z\rightarrow B\rightarrow F^{C}}\triangleq
-\]
+by using the Kleisli formulation of monads. We assume that $F$\textsf{'}s
+Kleisli composition $\diamond_{_{F}}$ is known and satisfies the
+associativity law. When $F$ is a monad, we assume that its pure method
+$\text{pu}_{F}$ is known and satisfies the identity laws. For the
+monad $L$, we will define the \index{flipped@\textsf{``}flipped Kleisli\textsf{''} technique}flipped
+Kleisli composition $\tilde{\diamond}_{_{L}}$ and prove its laws.
 
-{*}{*}{*}
+The ordinary Kleisli functions have types $A\rightarrow Z\rightarrow F^{B}$,
+so the flipped Kleisli functions have types $Z\rightarrow A\rightarrow F^{B}$.
+We begin by defining the flipped Kleisli composition $\tilde{\diamond}_{_{L}}$
+and the flipped method $\tilde{\text{pu}}_{L}$ that has type $Z\rightarrow A\rightarrow F^{A}$
+(note that we use the \emph{non-flipped} methods $\diamond_{_{F}}$
+and $\text{pu}_{F}$ of the monad $F$):
+\begin{align*}
+ & f^{:Z\rightarrow A\rightarrow F^{B}}\tilde{\diamond}_{_{L}}g^{:Z\rightarrow B\rightarrow F^{C}}\triangleq z^{:Z}\rightarrow f(z)\diamond_{_{F}}g(z)\quad,\\
+ & \tilde{\text{pu}}_{L}\triangleq\_^{:Z}\rightarrow\text{pu}_{F}\quad.
+\end{align*}
+To verify the laws, it is convenient to substitute an arbitrary $z^{:Z}$
+and define $\tilde{\diamond}_{_{L}}$ and $\tilde{\text{pu}}_{L}$
+by
+\[
+z\triangleright(f\tilde{\diamond}_{_{L}}g)\triangleq(z\triangleright f)\diamond_{_{F}}(z\triangleright g)\quad,\quad\quad z\triangleright\tilde{\text{pu}}_{L}\triangleq\text{pu}_{F}\quad.
+\]
+For the left-hand side of the associativity law, we write
+\[
+z\triangleright\big((f\tilde{\diamond}_{_{L}}g)\tilde{\diamond}_{_{L}}h\big)=\big(z\triangleright(f\tilde{\diamond}_{_{L}}g)\big)\diamond_{_{F}}(z\triangleright h)=\big(z\triangleright f)\diamond_{_{F}}(z\triangleright g)\diamond_{_{F}}(z\triangleright h)\quad,
+\]
+where we omitted parentheses around $\diamond_{_{F}}$ since its associativity
+is given. The right-hand side:
+\[
+z\triangleright\big(f\tilde{\diamond}_{_{L}}(g\tilde{\diamond}_{_{L}}h\big)=(z\triangleright f)\diamond_{_{F}}\big(z\triangleright(g\tilde{\diamond}_{_{L}}h)\big)=\big(z\triangleright f)\diamond_{_{F}}(z\triangleright g)\diamond_{_{F}}(z\triangleright h)\quad.
+\]
+We obtained the same expression for both sides of the law.
+
+Assuming now that $F$ is a monad with a lawful \lstinline!pure!
+method, we verify $L$\textsf{'}s identity laws:
+\begin{align*}
+{\color{greenunder}\text{left identity law of }L:}\quad & z\triangleright\big(\tilde{\text{pu}}_{L}\tilde{\diamond}_{_{L}}f\big)=(z\triangleright\tilde{\text{pu}}_{L})\diamond_{_{F}}(z\triangleright f)=\gunderline{\text{pu}_{F}\diamond_{_{F}}}(z\triangleright f)=z\triangleright f\quad,\\
+{\color{greenunder}\text{right identity law of }L:}\quad & z\triangleright\big(f\tilde{\diamond}_{_{L}}\tilde{\text{pu}}_{L}\big)=(z\triangleright f)\diamond_{_{F}}(z\triangleright\tilde{\text{pu}}_{L})=(z\triangleright f)\,\gunderline{\diamond_{_{F}}\text{pu}_{F}}=z\triangleright f\quad.
+\end{align*}
+
+It remains to convert the flipped Kleisli methods $\tilde{\diamond}_{_{L}}$
+and $\tilde{\text{pu}}_{L}$ to the code of $L$\textsf{'}s \lstinline!flatMap!
+and \lstinline!pure!:
+\begin{lstlisting}
+type L[A] = Z => F[A]        // The type Z and a semimonad F must be defined previously.
+def flatMap_L[A, B](la: L[A])(f: A => L[B]): L[B] = { z => la(z).flatMap(a => f(a)(z)) }
+def pure_L[A](a: A): L[A] = { _ => implicitly[Monad[F]].pure(a) }
+\end{lstlisting}
+
 
 \subsubsection{Statement \label{subsec:Statement-monad-construction-2}\ref{subsec:Statement-monad-construction-2}}
 
-$F^{A}\triangleq H^{A}\rightarrow A\times G^{A}$ for any contrafunctor
-$H^{A}$ and functor $G^{A}$: semimonad
-
-Obtain a full monad only when $G^{A}\triangleq\bbnum 1$, i.e.\ $F^{A}\triangleq H^{A}\rightarrow A$
+For any contrafunctor $H^{A}$, the functor $L^{A}\triangleq H^{A}\rightarrow A$
+is a monad.
 
 \subparagraph{Proof}
 
-{*}{*}{*}
+We use the flipped Kleisli formulation for $L$ and the ordinary Kleisli
+formulation for $F$. The flipped $L$-Kleisli functions have types
+$H^{B}\rightarrow A\rightarrow B$ instead of $A\rightarrow H^{B}\rightarrow B$.
+The flipped Kleisli composition $\tilde{\diamond}_{_{L}}$ of an $f^{:H^{B}\rightarrow A\rightarrow B}$
+and a $g^{:H^{C}\rightarrow B\rightarrow C}$ must be a function of
+type $H^{C}\rightarrow A\rightarrow C$. To deduce this function,
+begin with a typed hole:
+\[
+f^{:H^{B}\rightarrow A\rightarrow B}\tilde{\diamond}_{_{L}}g^{:H^{C}\rightarrow B\rightarrow C}=k^{:H^{C}}\rightarrow\text{???}^{:A\rightarrow C}\quad.
+\]
+Looking at the available data, we notice that a value of type $A\rightarrow C$
+will be found if we apply $f$ and $g$ to some arguments and then
+compose the resulting functions of types $A\rightarrow B$ and $B\rightarrow C$:
+\[
+\text{???}^{:A\rightarrow C}=f(\text{???}^{:H^{B}})\bef g(\text{???}^{:H^{C}})\quad.
+\]
+We already have a value $h$ of type $H^{C}$, so we can apply $g(k)$
+and get a function of type $B\rightarrow C$. The remaining typed
+hole requires a value of type $H^{B}$; but we only have the value
+$k^{:H^{C}}$. We cannot create values of a contrafunctor type $H^{B}$
+from scratch. The only way of filling that type hole is to transform
+$k$ into the type $H^{B}$. This is possible by lifting a function
+of type $B\rightarrow C$ to the contrafunctor $H$, and we already
+have such a function, namely $g(k)$. So we write
+\[
+\text{???}^{:H^{B}}=k^{:H^{C}}\triangleright(\text{???}^{:B\rightarrow C})^{\downarrow H}=k\triangleright(g(k))^{\downarrow H}\quad.
+\]
+Putting the entire code together and substituting an arbitrary value
+$k^{:H^{C}}$, we get
+\begin{equation}
+k^{:H^{C}}\triangleright\big(f^{:H^{B}\rightarrow A\rightarrow B}\tilde{\diamond}_{_{L}}g^{:H^{C}\rightarrow B\rightarrow C}\big)\triangleq f\big(k\triangleright(g(k))^{\downarrow H}\big)\bef g(k)\quad.\label{eq:def-of-Kleisli-for-exp-construction-h-a-a}
+\end{equation}
+
+The flipped \lstinline!pure! method ($\tilde{\text{pu}}_{L}$) is
+defined by
+\begin{equation}
+\tilde{\text{pu}}_{L}^{:H^{A}\rightarrow A\rightarrow A}\triangleq\_^{:H^{A}}\rightarrow\text{id}^{:A\rightarrow A}\quad,\quad\quad\tilde{\text{pu}}_{L}(k)=\text{id}\quad.\label{eq:def-of-pure-for-exp-construction-h-a-a}
+\end{equation}
+
+These code formulas can be converted to the following Scala definitions
+of \lstinline!pure! and \lstinline!flatMap!:
+\begin{lstlisting}[mathescape=true]
+type L[A] = H[A] => A // The contrafunctor H must be defined previously.
+def pure_L[A](a: A): L[A] = { _ => a }
+def flatMap_L[B, C](lb: L[B])(g: B => L[C]): L[C] = { (k: H[C]) =>
+  val bc: (B => C) = { b => g(b)(k) } // Corresponds to $\color{dkgreen}g(k):B\rightarrow C$.
+  val hb: H[B] = k.contramap(bc)     // Fill the typed hole $\color{dkgreen}\textrm{???}:\,\scriptstyle H^B$.
+  g(lb(hb))(k)          // Corresponds to the composition $\color{dkgreen} f(...) \bef g(k)$.
+}
+\end{lstlisting}
+
+Let us now verify the monad laws of $L$ in the flipped Kleisli form.
+The identity laws:
+\begin{align*}
+{\color{greenunder}\text{expect }g(k):}\quad & k\triangleright\big(\tilde{\text{pu}}_{L}\tilde{\diamond}_{_{L}}g\big)=\gunderline{\tilde{\text{pu}}_{L}(k\triangleright(g(k))^{\downarrow H})}\bef g(k)=\gunderline{\text{id}}\bef g(k)=g(k)\quad,\\
+{\color{greenunder}\text{expect }f(k):}\quad & k\triangleright\big(f\tilde{\diamond}_{_{L}}\tilde{\text{pu}}_{L}\big)=f(k\triangleright(\gunderline{\tilde{\text{pu}}_{L}(k)})^{\downarrow H})\bef\gunderline{\tilde{\text{pu}}_{L}(k)}=f(k\triangleright\gunderline{\text{id}^{\downarrow H}})\bef\gunderline{\text{id}}=f(k)\quad.
+\end{align*}
+
+To verify the associativity law, write the two sides separately and
+use Eq.~(\ref{eq:def-of-Kleisli-for-exp-construction-h-a-a}) repeatedly:
+\begin{align*}
+ & k^{:H^{C}}\triangleright\big((f\tilde{\diamond}_{_{L}}g)\tilde{\diamond}_{_{L}}h\big)=\big(\gunderline{(f\tilde{\diamond}_{_{L}}g)(k\triangleright(h(k))^{\downarrow H})}\big)\bef h(k)=\big(\gunderline{k\triangleright(h(k))^{\downarrow H}\triangleright(f\tilde{\diamond}_{_{L}}g)}\big)\bef h(k)\\
+ & \quad=f\big(k\triangleright(h(k))^{\downarrow H}\triangleright(g(k\triangleright(h(k))^{\downarrow H}))^{\downarrow H}\big)\bef g(k\triangleright(h(k))^{\downarrow H})\bef h(k)\quad,\\
+ & k\triangleright\big(f\tilde{\diamond}_{_{L}}(g\tilde{\diamond}_{_{L}}h)\big)=f\big(k\triangleright(\gunderline{(g\tilde{\diamond}_{_{L}}h)(k)})^{\downarrow H}\big)\bef\gunderline{(g\tilde{\diamond}_{_{L}}h)(k)}=f\big(k\triangleright(\gunderline{k\triangleright(g\tilde{\diamond}_{_{L}}h)})^{\downarrow H}\big)\bef\gunderline{k\triangleright(g\tilde{\diamond}_{_{L}}h)}\\
+ & \quad=f\big(k\triangleright(\gunderline{g(k\triangleright(h(k))^{\downarrow H})\bef h(k)})^{\downarrow H}\big)\bef g(k\triangleright(h(k))^{\downarrow H})\bef h(k)\\
+{\color{greenunder}\text{lift to }H:}\quad & \quad=f\big(k\triangleright(h(k))^{\downarrow H}\triangleright(g(k\triangleright(h(k))^{\downarrow H}))^{\downarrow H}\big)\bef g(k\triangleright(h(k))^{\downarrow H})\bef h(k)\quad.
+\end{align*}
+Now both sides are rewritten into identical expressions. This confirms
+the associativity law for $L$.
+
+Statement~\ref{subsec:Statement-monad-construction-2} applies to
+type constructors of the form $H^{A}\rightarrow A$ but not to $H^{A}\rightarrow G^{A}$
+with an arbitrary monad $G$. It turns out that $H^{A}\rightarrow G^{A}$
+is a monad when the contrafunctor $H$ is suitably adapted to the
+monad $G$. The necessary properties of $H$ are formulated by the
+notion of \index{$M$-filterable contrafunctors} $G$-filterable contrafunctor,
+which we introduced in Section~\ref{subsec:Motivation-for-using-category-theory}.
+
+For a given monad $G$, a contrafunctor $H$ is $G$\textbf{-filterable}
+if it has the special \lstinline!lift! method,
+\[
+\text{lift}_{G,H}:(B\rightarrow G^{C})\rightarrow H^{C}\rightarrow H^{B}\quad,
+\]
+satisfying the identity and composition laws
+\[
+\text{lift}_{G,H}(\text{pu}_{G})=\text{id}^{:H^{A}\rightarrow H^{A}}\quad,\quad\quad\text{lift}_{G,H}(f\diamond_{_{G}}g)=\text{lift}_{G,H}(f)\bef\text{lift}_{G,H}(g)\quad.
+\]
+We will now use these properties to generalize Statements~\ref{subsec:Statement-monad-construction-1}
+and~\ref{subsec:Statement-monad-construction-2}.
 
 \subsubsection{Statement \label{subsec:Statement-monad-construction-3}\ref{subsec:Statement-monad-construction-3}}
 
-$F^{A}\triangleq H^{A}\rightarrow G^{A}$ where $G$ is a (semi)monad
-and $H$ is a $G$-filterable contrafunctor.
+For any (semi)monad $G$ and any $G$-filterable contrafunctor $H$,
+the functor $L$ defined by $L^{A}\triangleq H^{A}\rightarrow G^{A}$
+is a (semi)monad.
 
 \subparagraph{Proof}
 
-{*}{*}{*}
+We use the flipped Kleisli formulation for $L$ and the ordinary Kleisli
+formulation for $G$. The flipped $L$-Kleisli functions have types
+$H^{B}\rightarrow A\rightarrow G^{B}$ instead of $A\rightarrow H^{B}\rightarrow G^{B}$.
+The flipped Kleisli composition $\tilde{\diamond}_{_{L}}$ of an $f^{:H^{B}\rightarrow A\rightarrow G^{B}}$
+and a $g^{:H^{C}\rightarrow B\rightarrow G^{C}}$ must be a function
+of type $H^{C}\rightarrow A\rightarrow G^{C}$. Similarly to what
+we did in the proof of Statement~\ref{subsec:Statement-monad-construction-2},
+we will define $\tilde{\diamond}_{_{L}}$ by applying $f$ and $g$
+to typed holes, getting values of types $A\rightarrow G^{B}$ and
+$B\rightarrow G^{C}$, and applying the given operation $\diamond_{_{G}}$:
+\[
+f^{:H^{B}\rightarrow A\rightarrow G^{B}}\tilde{\diamond}_{_{L}}g^{:H^{C}\rightarrow B\rightarrow G^{C}}=k^{:H^{C}}\rightarrow\text{???}^{:A\rightarrow G^{C}}=k^{:H^{C}}\rightarrow f(\text{???}^{:H^{B}})\diamond_{_{G}}g(\text{???}^{:H^{C}})\quad.
+\]
+The typed hole $\text{???}^{:H^{C}}$ is filled by $k$, while $\text{???}^{:H^{B}}$
+is obtained from $k$ using $\text{lift}_{G,H}$:
+\[
+\text{???}^{:H^{B}}=k\triangleright\text{lift}_{G,H}(\text{???}^{:B\rightarrow G^{C}})=k\triangleright\text{lift}_{G,H}(g(k))\quad.
+\]
+Putting the code together, we obtain
+\begin{align*}
+ & k^{:H^{C}}\triangleright\big(f^{:H^{B}\rightarrow A\rightarrow G^{B}}\tilde{\diamond}_{_{L}}g^{:H^{C}\rightarrow B\rightarrow G^{C}}\big)\triangleq f\big(k\triangleright\text{lift}_{G,H}(g(k))\big)\diamond_{_{G}}g(k)\quad,\\
+ & k^{:H^{C}}\triangleright\tilde{\text{pu}}_{L}\triangleq\text{pu}_{G}\quad.
+\end{align*}
+These definitions reduce to Eqs.~(\ref{eq:def-of-Kleisli-for-exp-construction-h-a-a})\textendash (\ref{eq:def-of-pure-for-exp-construction-h-a-a})
+if we set $G$ to the identity monad, $G^{A}=\text{Id}^{A}\triangleq A$
+. Any contrafunctor $H$ is $\text{Id}$-filterable because we can
+define
+\[
+\text{lift}_{\text{Id},H}(f^{:B\rightarrow C})\triangleq f^{\downarrow H}\quad.
+\]
 
+To verify the laws, we perform derivations quite similar to those
+in the proof of Statement~\ref{subsec:Statement-monad-construction-2}.
+
+We use the laws of $\text{lift}_{G,H}$, which we will write simply
+as \textsf{``}$\text{lift}$\textsf{''} for brevity:
+\begin{align*}
+{\color{greenunder}\text{expect }g(k):}\quad & k\triangleright\big(\tilde{\text{pu}}_{L}\tilde{\diamond}_{_{L}}g\big)=\gunderline{\tilde{\text{pu}}_{L}(k\triangleright\text{lift}(g(k)))}\diamond_{_{G}}g(k)=\text{pu}_{G}\diamond_{_{G}}g(k)=g(k)\quad,\\
+{\color{greenunder}\text{expect }f(k):}\quad & k\triangleright\big(f\tilde{\diamond}_{_{L}}\tilde{\text{pu}}_{L}\big)=f(k\triangleright\gunderline{\text{lift}(\tilde{\text{pu}}_{L}(k))})\bef\gunderline{\tilde{\text{pu}}_{L}(k)}=f(k\triangleright\gunderline{\text{id}})\diamond_{_{G}}\text{pu}_{G}=f(k)\quad.
+\end{align*}
+
+To verify the associativity law, use the associativity of $\diamond_{_{G}}$
+and the composition law of $\text{lift}_{G,H}$:
+\begin{align*}
+ & k^{:H^{C}}\triangleright\big((f\tilde{\diamond}_{_{L}}g)\tilde{\diamond}_{_{L}}h\big)=\big(\gunderline{(f\tilde{\diamond}_{_{L}}g)(k\triangleright\text{lift}(h(k)))}\big)\diamond_{_{G}}h(k)=\big(\gunderline{k\triangleright\text{lift}(h(k))\triangleright(f\tilde{\diamond}_{_{L}}g)}\big)\diamond_{_{G}}h(k)\\
+ & \quad=f\big(k\triangleright\text{lift}(h(k))\triangleright\text{lift}(g(k\triangleright\text{lift}(h(k))))\big)\diamond_{_{G}}g(k\triangleright\text{lift}(h(k)))\diamond_{_{G}}h(k)\quad,\\
+ & k\triangleright\big(f\tilde{\diamond}_{_{L}}(g\tilde{\diamond}_{_{L}}h)\big)=f\big(k\triangleright\text{lift}(\gunderline{(g\tilde{\diamond}_{_{L}}h)(k)})\big)\diamond_{_{G}}\gunderline{(g\tilde{\diamond}_{_{L}}h)(k)}=f\big(k\triangleright\text{lift}(\gunderline{k\triangleright(g\tilde{\diamond}_{_{L}}h)})\big)\diamond_{_{G}}\gunderline{k\triangleright(g\tilde{\diamond}_{_{L}}h)}\\
+ & \quad=f\big(k\triangleright\text{lift}(\gunderline{g(k\triangleright\text{lift}(h(k)))\diamond_{_{G}}h(k)})\big)\diamond_{_{G}}g(k\triangleright\text{lift}(h(k)))\diamond_{_{G}}h(k)\\
+ & \quad=f\big(k\triangleright\text{lift}(h(k))\bef\text{lift}(g(k\triangleright\text{lift}(h(k))))\big)\diamond_{_{G}}g(k\triangleright\text{lift}(h(k)))\diamond_{_{G}}h(k)\quad.
+\end{align*}
+In the $\triangleright$-notation, we have $k\triangleright p\triangleright q=k\triangleright p\bef q$.
+Both sides are now rewritten into identical expressions. 
 
 \paragraph{Recursive types}
 
@@ -6266,9 +6461,9 @@ a fully explicit calculation.
 
 \subsubsection{Exercise \label{subsec:Exercise-1-monads-4}\ref{subsec:Exercise-1-monads-4}}
 
-Show that the functor $F^{A}\triangleq\bbnum 2\times M^{A}$ (where
-$M^{A}$ is an arbitrary monad) can be made into a semimonad but not
-into a monad.
+Given an arbitrary monad $M$, show that the functor $F^{A}\triangleq\bbnum 2\times M^{A}$
+(which is equivalent to $M^{A}+M^{A}$) can be made into a semimonad
+but not into a full monad.
 
 \subsubsection{Exercise \label{subsec:Exercise-1-monads-5}\ref{subsec:Exercise-1-monads-5}}
 
