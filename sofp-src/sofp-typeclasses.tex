@@ -4722,6 +4722,16 @@ Proof of monoid laws:
 Show that if \lstinline!S! is a semigroup then \lstinline!Option[S]!
 and \lstinline!Option[(S, S)]! are monoids.
 
+\subsubsection{Exercise \label{subsec:Exercise-1-monads-1}\ref{subsec:Exercise-1-monads-1}}
+
+A framework implements a \textsf{``}route\textsf{''} type $R$ as $R\triangleq Q\rightarrow(E+S)$,
+where $Q$ is a query, $E$ is an error response, and $S$ is a success
+response. A server is defined as a combination of several routes.
+For a given query $Q$, the response is the first route (if it exists)
+that yields a success response. Implement the route combination operation
+and show that it makes $R$ into a semigroup. What would be necessary
+to make $R$ into a monoid?
+
 \subsubsection{Exercise \label{subsec:tc-Exercise-5}\ref{subsec:tc-Exercise-5}}
 
 Using the \texttt{cats} library, implement a \lstinline!Functor!
@@ -5424,9 +5434,7 @@ also seen types parameterized by type constructors, e.g.
 \begin{lstlisting}
 trait Functor[F[_]] { ... }
 \end{lstlisting}
-It is helpful to introduce terminology that distinguishes the different
-ways in which types can be parameterized.
-
+It is important to distinguish the ways in which types can be parameterized.
 A type constructor such as \lstinline!List! can be understood as
 a type-to-type function (TTF): given a type, e.g.~\lstinline!Int!,
 it produces another type, \lstinline!List[Int]!. It is a type error
@@ -5439,7 +5447,7 @@ scala> val x: List[List] = ???
                    ^
 \end{lstlisting}
 To describe the restriction on possible type parameters of \lstinline!List!,
-we say that \lstinline!List! has a \textbf{kind signature}\index{kind signature}
+we say that \lstinline!List! has \textbf{kind signature}\index{kind signature}
 $*\rightarrow*$. The symbol $*$ means an ordinary type (not a type
 function), i.e.~a type that can have values. In the type notation,
 we can write \textsf{``}kind signatures\textsf{''} as
@@ -5716,21 +5724,21 @@ are constrained to represent the mutable / immutable versions of a
 supported data structure (for example, \lstinline!Mut = mutable.Set!
 and \lstinline!Immut = immutable.Set!, etc.)?
 
-As we have seen, a typeclass constraint for a single type parameter,
-such as \lstinline!func[A: Monoid]!, is implemented by requiring
-an \textsf{``}evidence value\textsf{''}\index{evidence value}\index{typeclass!evidence value}
+A typeclass constraint for a single type parameter, such as \lstinline!func[A: Monoid]!,
+is implemented by requiring an \textsf{``}evidence value\textsf{''}\index{evidence value}\index{typeclass!evidence value}
 of type \lstinline!Monoid[A]! as an additional argument of the function
 \lstinline!func!. Implementing a type relation for \emph{two} type
 parameters \lstinline!A!, \lstinline!B! is similar: We define a
-type constructor, say \lstinline!Rel[A, B]!, and create some evidence
-values of that type with specific chosen type parameters \lstinline!A!,
-\lstinline!B!. Any function that needs a relation constraint on its
-type parameters \lstinline!A!, \lstinline!B! will take an implicit
-\textsf{``}evidence argument\textsf{''} of type \lstinline!Rel[A, B]!. This will
-prevent our code from using that function with types \lstinline!A!,
-\lstinline!B! that are not in the required relation.
+type constructor, say \lstinline!Rel[_, _]!, and create some evidence
+values of type \lstinline!Rel[A, B]! with chosen type parameters
+\lstinline!A!, \lstinline!B!. Any function, say \lstinline!f[A, B]!,
+that needs a relation constraint on its type parameters will take
+an extra evidence argument of type \lstinline!Rel[A, B]!. This will
+prevent our code from using \lstinline!f[A, B]! with types \lstinline!A!,
+\lstinline!B! that are not in the required relation. 
 
-The code for \lstinline!convertNumber! can be written like this:
+Using this technique, we can define a relation \lstinline!MayConvert!
+and write the code for \lstinline!convertNumber!:
 \begin{lstlisting}
 final case class MayConvert[A, B](convert: A => B)  // Evidence value contains a conversion function.
 implicit val ev1 = MayConvert[Short, Float](_.toFloat)          // Evidence value for [Short, Float].
@@ -5904,14 +5912,14 @@ res3: Quantity[FT] = Quantity(4.0)
 
 \subsection{Inheritance and automatic conversions of typeclasses\label{subsec:Inheritance-and-automatic-typeclass}}
 
-It often happens that one typeclass implies another; for example,
+It often happens that one typeclass is a subset of another; for example,
 a \lstinline!Monoid! instance for a type $T$ means that $T$ already
 has the properties of both \lstinline!Semigroup! and \lstinline!HasDefault!
 typeclasses. One says that the \lstinline!Monoid! typeclass \textbf{inherits}\index{typeclass!inheritance}
 from the \lstinline!Semigroup! and \lstinline!HasDefault! typeclasses.
 We may want to express inheritance relations between typeclasses,
 so that e.g.~a \lstinline!Monoid! instance should automatically
-imply the presence of a \lstinline!Semigroup! instance without extra
+imply the presence of a \lstinline!Semigroup! instance, without extra
 code.
 
 One way of inheriting a typeclass is to add a constraint to the new
@@ -5929,11 +5937,9 @@ implicit val c1 = Semigroup[Int](_ + _)
 implicit val c2 = Monoid[Int](0)  // Works only if a `Semigroup[Int]` is available.
 \end{lstlisting}
 
-Given a \lstinline!Monoid! instance, how can we recover the inherited
-\lstinline!Semigroup! instance? We need to extract the implicit value
-of type \lstinline!Semigroup[T]! that was passed to the \lstinline!Monoid!
-class constructor. This is achieved by adding an implicit function
-and by redefining the \lstinline!Monoid! class as follows,
+Given a \lstinline!Monoid[T]! instance, how can we recover the inherited
+implicit value of type \lstinline!Semigroup[T]!? This is achieved
+by redefining the \lstinline!Monoid! class like this,
 \begin{lstlisting}
 final case class Monoid[T](empty: T)(implicit val semigroup: Semigroup[T])   // Use `implicit val`.
 implicit def semigroupFromMonoid[T](implicit ti: Monoid[T]): Semigroup[T] = ti.semigroup
@@ -5966,14 +5972,13 @@ implicit val c: Monoid[Int] = new Monoid[Int] {
 \lstinline!def combine...! even if we \emph{do} already have a \lstinline!Semigroup!
 instance. However, conversion from \lstinline!Monoid[T]! to \lstinline!Semigroup[T]!
 is now automatic due to \textbf{object-oriented inheritance}\index{object-oriented inheritance}:
-\lstinline!Monoid[T]! is automatically considered a subtype of \lstinline!Semigroup[T]!
+Scala considers \lstinline!Monoid[T]! a subtype of \lstinline!Semigroup[T]!
 because the \lstinline!Monoid! class is declared as \lstinline!extends Semigroup!.
 
 A problem with the object-oriented inheritance is that automatic conversions
 to parent typeclasses cannot be \emph{disabled}. When several typeclasses
 inherit from the same parent typeclass, duplicate implicit instances
-of the parent typeclass may be present. This will give a compile-time
-error:
+of the parent typeclass will be present, which is a compile-time error:
 \begin{lstlisting}
 trait TC[A]                    // Parent typeclass.
 trait TC1[A] extends TC[A]     // Two different typeclasses TC1 and TC2 inherit from TC.
@@ -5992,10 +5997,8 @@ producing duplicate instances by choosing which implicit conversions
 to import:
 \begin{lstlisting}
 final case class TC[A]()
-
 final case class TC1[A]()(implicit val tc: TC[A])                      // TC1 inherits TC.
 object TC1 { implicit def toTC[A](implicit x: TC1[A]): TC[A] = x.tc }
-
 final case class TC2[A]()(implicit val tc: TC[A])                      // TC2 inherits TC.
 object TC2 { implicit def toTC[A](implicit x: TC2[A]): TC[A] = x.tc }
 
