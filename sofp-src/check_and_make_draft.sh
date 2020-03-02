@@ -5,8 +5,11 @@
 
 name="sofp"
 
+# Expected total number of pages in the book draft:
+draft_pages=402
+
 # The number of pages in each chapter:
-pagecounts=(3 17 43 34 24 49 43 12 63 54 55 11 6 12 60 1 1 2 1 3 6 4 6 3 5 17 1 2 1 1 4)
+pagecounts=(3 17 42 34 24 49 43 12 63 54 55 11 6 12 60 1 1 2 1 3 6 4 6 3 5 17 1 2 1 1 4)
 
 # To create the draft version that contains only proofread chapters:
 # cut out from here,
@@ -33,9 +36,6 @@ chapters=("Preface" "Mathematical formulas as code. I." \
  "A Notations" "B Glossary of terms" "C Inferring code from types" \
  "D Parametricity theorem" "E A humorous disclaimer" "F GNU Free Documentation License" \
  "List of Tables" "List of Figures" "Index" "END_OF_BOOK")
-
-# Expected total number of pages in the book draft:
-draft_pages=403
 
 function kbSize {
  local file="$1"
