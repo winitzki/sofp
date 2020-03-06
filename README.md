@@ -22,7 +22,8 @@ The book is published under the [GNU Free Documentation License](https://www.gnu
 Permission is granted to _copy, distribute and/or modify_ this book under the terms of that license.
 This means the book is free (as in "freedom") and will stay free forever.
 
-This repository contains the full source code for the book (LyX and LaTeX / jpg / eps) and shell scripts for building a PDF version of the book.
+This repository contains the current PDF version (both the [full uncorrected draft](sofp-src/sofp.pdf) and the [finished part of the draft](sofp-src/sofp-draft.pdf))
+and also the full source code for the book (LyX and LaTeX / jpg / eps) and shell scripts for building a PDF version of the book.
 So, this is a "transparent" copy in the sense of the GNU license.
 
 This repository also contains the slides for YouTube presentations that initiated the work on this book. The talk slides are not part of the book and may be partially obsolete both in content and in the notation used.
@@ -39,7 +40,8 @@ The draft version is [available for purchase on leanpub](https://leanpub.com/sof
 
 A printed version of the current draft can be purchased at lulu.com: [http://www.lulu.com/content/paperback-book/the-science-of-functional-programming/24915714](http://www.lulu.com/content/paperback-book/the-science-of-functional-programming/24915714).
 
-This printed version contains only the chapters whose text has been edited and proofread. It corresponds to the PDF file [sofp-src/sofp-draft.pdf](sofp-src/sofp-draft.pdf).
+This printed version contains only the chapters whose text has been edited and proofread. It corresponds to the PDF file
+[sofp-src/sofp-draft.pdf](sofp-src/sofp-draft.pdf).
 
 Readers are invited to create github issues in this repository and comment if they find something not clearly explained or wrong in the book,
 or if they wish to make comments or suggestions regarding the contents of the book.
