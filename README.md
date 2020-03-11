@@ -30,7 +30,7 @@ This repository also contains the slides for YouTube presentations that initiate
 
 # Current status of the book
 
-Chapters 1-9 as well as some appendices and discussion chapters are ready after a second proofreading of the draft. Chapter 14 is in preparation.
+Chapters 1-10 as well as some appendices and discussion chapters are ready after a second proofreading of the draft. Chapter 14 is in preparation.
 
 # Leanpub version of the draft
 
