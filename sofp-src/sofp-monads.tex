@@ -1319,7 +1319,6 @@ Implement the \lstinline!flatMap! operation for a tree of configuration
 properties of the form
 \begin{lstlisting}
 url: http://server:8000
-enable_auth: true
 users:
   user:
     name: abcde
@@ -1367,7 +1366,7 @@ The following code illustrates the \lstinline!flatMap! operation
 by replacing all integer leaf values below \lstinline!100! by a simple
 property and other values by a branch of properties:
 \begin{lstlisting}
-val pt1 = Simple(List("quantity1" -> 50, "quantity2" -> 250))
+val pt1: PropTree[Int] = Simple(List("quantity1" -> 50, "quantity2" -> 250))
 
 scala> println(pt1.toString)
 quantity1: 50
@@ -1375,8 +1374,8 @@ quantity2: 250
 
 val pt2 = pt1.flatMap { x => if (x < 100) Simple(List("value" -> x)) else Branches(List(
                "large" -> Simple(List("value" -> x / 100, "factor" -> 100)),
-               "small" -> Simple(List("value" -> x % 100, "factor" -> 1)),
-        )) }
+               "small" -> Simple(List("value" -> x % 100, "factor" -> 1))
+          )) }
 
 scala> println(pt2.toString)
 quantity1:
@@ -1456,8 +1455,8 @@ discarded from the original tree or from any computed results.
 
 \subsubsection{Example \label{subsec:Example-regular-shaped-tree-not-monad}\ref{subsec:Example-regular-shaped-tree-not-monad}}
 
-Show that a regular-shaped binary tree does \emph{not} support a \lstinline!flatMap!
-operation whose code is information-preserving.\index{regular-shaped tree!is not a monad}
+Show that a regular-shaped tree \emph{cannot} have an information-preserving
+\lstinline!flatMap!.\index{regular-shaped tree!is not a monad}
 
 \subparagraph{Solution}
 
@@ -1501,19 +1500,25 @@ It turns out that the \lstinline!flatMap! method can be generalized
 to many other type constructors that are useful for various programming
 tasks not limited to nested iteration.
 
-In general, a semimonad $L^{A}$ is no longer a collection of data
+In general, a (semi)monad $L^{A}$ is no longer a collection of data
 items of type $A$. Instead, $L^{A}$ can be regarded (informally)
 as a value of type $A$ wrapped in a special \textsf{``}computational effect\textsf{''}.
-An ordinary function of type $A\rightarrow B$ is a \textsf{``}computation
-with empty effect\textsf{''}, and we view \textsf{``}computations with an $L$-effect\textsf{''}
-as functions of type $A\rightarrow L^{B}$ (as in \lstinline!flatMap!\textsf{'}s
-argument type). In this view, different monads \textemdash{} such
-as list-like, pass/fail, tree-like, or \lstinline!Future! \textemdash{}
-implement different kinds of effects. 
+We view \textsf{``}computations with an $L$-effect\textsf{''} as functions of type
+$A\rightarrow L^{B}$ (as in \lstinline!flatMap!\textsf{'}s argument type).
+In this view, different monads \textemdash{} such as list-like, pass/fail,
+tree-like, or \lstinline!Future! \textemdash{} implement different
+kinds of effects. An ordinary function of type $A\rightarrow B$ is
+a computation with a \textsf{``}trivial effect\textsf{''}.
 
-In some cases, this vague idea of \textsf{``}effect\textsf{''} can be made precise
-by writing the required type of the computation in the form $A\rightarrow L^{B}$.
-This and the next subsections describe some well-known monads that
+Informally, an \textsf{``}$L$-effect\textsf{''} describes everything that a function
+of type $A\rightarrow L^{B}$ needs to do beyond computing a value
+of type $B$. %
+\begin{comment}
+In some cases, this vague idea of \textsf{``}effect\textsf{''} can be made concrete
+by writing the required type of the computation in the form $A\rightarrow L^{B}$
+with a specific type constructor $L$ .
+\end{comment}
+{} This and the next subsections describe some well-known monads that
 can be derived in that approach: namely, the \lstinline!Reader!,
 \lstinline!Writer!, \lstinline!Eval!, \lstinline!State!, and \lstinline!Continuation!
 monads.
@@ -1580,7 +1585,7 @@ commands:
 scala> runSh("echo -n abcd", "") // Use `-n` to avoid trailing newlines.
 res0: (Int, String) = (0, "abcd")
 
-scala> runSh("cat", "xyz")._2  // Equivalent to `cat < $(echo -n xyz)`.
+scala> runSh("cat", "xyz")._2   // Equivalent to `cat < $(echo -n xyz)`.
 res1: String = "xyz"
 \end{lstlisting}
 
@@ -1599,8 +1604,9 @@ def filterFiles(runSh: RunSh, files: String, patterns: String): String =
 def lineCounts(runSh: RunSh, files: String): Array[Int] = files.split("\n")   // Array of file names.
   .map { file => runSh("wc -l $file", "")._2.replaceAll("^ +", "").split(" ")(0).toInt }
 \end{lstlisting}
-The code is only for illustration; it assumes that file names do not
-contain the newline character \lstinline!"\n"!.
+This code assumes that file names do not contain the newline character
+\lstinline!"\n"!. Use this code only as an illustration of a use
+case for the \lstinline!Reader! monad.
 
 We can now write the program like this:
 \begin{lstlisting}
@@ -1682,15 +1688,14 @@ programs, running a monadic program means performing \textbf{dependency
 injection}\index{dependency injection}. At the point of running a
 \lstinline!Reader! program, we have the full flexibility of choosing
 the value of the dependency. The code guarantees that the dependency
-will be passed to all individual parts of the monadic program.
+will be passed to each individual part of the monadic program.
 
 \paragraph{Implicit values for dependency injection}
 
 Scala\textsf{'}s implicit argument feature allows us to solve the problem of
 dependency injection in a different way. Instead of converting all
 code to use the \lstinline!Reader! monad, we convert all code to
-use an implicit argument for the common dependency. The resulting
-code for \lstinline!getLineCount! looks like this:
+use an implicit argument for the common dependency:
 \begin{lstlisting}
 def listFilesIm(dir: String)(implicit runSh: RunSh): String = ...
 def filterFilesIm(patterns: String)(files: String)(implicit runSh: RunSh): String = ...
@@ -1703,9 +1708,9 @@ def getLineCountIm(dir: String, patterns: String)(implicit runSh: RunSh): Int = 
   counts.sum
 }
 \end{lstlisting}
-Note the similarity of this code and the code that uses the \lstinline!Reader!
-monad: All functions are curried, and their type signatures are exactly
-the same up to the \lstinline!implicit! keyword in the last argument.
+Compare this code and the code that uses the \lstinline!Reader! monad:
+all functions are curried, and their type signatures are exactly the
+same up to the \lstinline!implicit! keyword in the last argument.
 Scala\textsf{'}s implicit arguments reproduce the code style of the \lstinline!Reader!
 monad in a more idiomatic way (especially with Scala 3\textsf{'}s implicit
 function types\footnote{See \texttt{\href{https://www.scala-lang.org/blog/2016/12/07/implicit-function-types.html}{https://www.scala-lang.org/blog/2016/12/07/implicit-function-types.html}}}). 
@@ -5142,7 +5147,7 @@ names.
 
 \subsection{Monad laws in terms of Kleisli functions}
 
-A \textbf{Kleisli function}\index{Kleisli functions|textit} is a
+A \textbf{Kleisli function}\index{Kleisli!functions|textit} is a
 function with type signature $A\rightarrow M^{B}$ where $M$ is a
 monad. We first encountered Kleisli functions in Section~\ref{subsec:Motivation-and-laws-for-liftopt}
 when deriving the laws of filterable functors using the \lstinline!liftOpt!
