@@ -6,14 +6,14 @@
 name="sofp"
 
 # Expected total number of pages in the book draft:
-draft_pages=402
+draft_pages=465
 
 # The number of pages in each chapter:
 pagecounts=(3 17 42 34 24 49 43 12 63 54 63 11 6 12 57 1 1 2 1 3 6 4 6 3 5 17 1 2 1 1 4)
 
 # To create the draft version that contains only proofread chapters:
 # cut out from here,
-draft_title_1="Computations in functor blocks. II\\."
+draft_title_1="Applicative functors,"
 # to here:
 draft_title_2="Applied functional type theory"
 # and then cut out from here:
