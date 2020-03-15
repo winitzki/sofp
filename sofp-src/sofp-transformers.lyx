@@ -3880,6 +3880,10 @@ for {
 
 \end_inset
 
+
+\end_layout
+
+\begin_layout Standard
 One way of combining two effect is by using functor composition, 
 \begin_inset listings
 inline true
@@ -3915,7 +3919,13 @@ val r: Future[Option[Int]] = for {
 
 \begin_layout Plain Layout
 
-    case Some(x)  => for {   // This expression must be a Future[Option[Int]].
+    case None     => Future.successful(None)     // This expression must
+ be a Future[Option[Int]].
+\end_layout
+
+\begin_layout Plain Layout
+
+    case Some(x)  => for {
 \end_layout
 
 \begin_layout Plain Layout
@@ -3930,13 +3940,13 @@ val r: Future[Option[Int]] = for {
 
 \begin_layout Plain Layout
 
-          case Some(y) => Future(Option(y + 3)) // Must return a Future[Option[I
-nt]] here.
+          case None    => Future.successful(None) // Must return a Future[Option[
+Int]] everywhere.
 \end_layout
 
 \begin_layout Plain Layout
 
-          case None    => Future.successful(None)
+          case Some(y) => Future(Option(y + 3))
 \end_layout
 
 \begin_layout Plain Layout
@@ -3951,24 +3961,19 @@ nt]] here.
 
 \begin_layout Plain Layout
 
-    case None     => Future.successful(None)
-\end_layout
-
-\begin_layout Plain Layout
-
   }
 \end_layout
 
 \begin_layout Plain Layout
 
-  ...
+} yield tOpt
 \end_layout
 
 \end_inset
 
 The nested type constructor forces us to use pattern matching with nested
- functor blocks, since that is the only way of extracting values of type
- 
+ functor blocks, since that is the only way of getting access to values
+ of type 
 \begin_inset listings
 inline true
 status open
@@ -3980,7 +3985,7 @@ A
 
 \end_inset
 
- from 
+ within 
 \begin_inset listings
 inline true
 status open
@@ -3993,9 +3998,14 @@ Future[Option[A]]
 \end_inset
 
 .
- This makes the code hard to read and to change.
- A first step to solving this problem is by rewriting this monadic program
- as a direct chain of computations depending on the results of previous
+ The code is repetitive and deeply nested, which makes it hard to read and
+ to change.
+ 
+\end_layout
+
+\begin_layout Standard
+The first step towards solving the problem is by rewriting this monadic
+ program as a direct chain of computations depending on the results of previous
  ones:
 \begin_inset listings
 inline false
@@ -4003,7 +4013,7 @@ status open
 
 \begin_layout Plain Layout
 
-val r: Future[Option[Int]] = for { // This will not compile...
+val r: Future[Option[Int]] = for { // This will not compile.
 \end_layout
 
 \begin_layout Plain Layout
@@ -4013,7 +4023,7 @@ val r: Future[Option[Int]] = for { // This will not compile...
 
 \begin_layout Plain Layout
 
-  y <- Future(Option(x + 1)  // y: Int
+  y <- Future(Option(x + 1)) // y: Int
 \end_layout
 
 \begin_layout Plain Layout
@@ -4023,12 +4033,12 @@ val r: Future[Option[Int]] = for { // This will not compile...
 
 \begin_layout Plain Layout
 
-  ...
+} yield z
 \end_layout
 
 \end_inset
 
-In order to be able to write code like that, we need to implement the 
+To be able to write code in this way, we need to implement the 
 \begin_inset listings
 inline true
 status open
@@ -4065,7 +4075,7 @@ A
 \end_inset
 
 .
- Indeed, this is possible if we wrap the type constructor 
+ Let us wrap the type 
 \begin_inset listings
 inline true
 status open
@@ -4077,19 +4087,115 @@ Future[Option[A]]
 
 \end_inset
 
- into a class:
+ into a class and implement 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+map
+\end_layout
+
+\end_inset
+
+ and 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+flatMap
+\end_layout
+
+\end_inset
+
+ as methods:
 \begin_inset listings
 inline false
 status open
 
 \begin_layout Plain Layout
 
-***
+case class FutOpt[A](nested: Future[Option[A]]) {
+\end_layout
+
+\begin_layout Plain Layout
+
+  def map[B](f: A => B)(implicit ec: ExecutionContext): FutOpt[B] = FutOpt(neste
+d.map(_.map(f)))
+\end_layout
+
+\begin_layout Plain Layout
+
+  def flatMap[B](f: A => FutOpt[B])(implicit ec: ExecutionContext): FutOpt[B]
+ =
+\end_layout
+
+\begin_layout Plain Layout
+
+    FutOpt(nested.flatMap {
+\end_layout
+
+\begin_layout Plain Layout
+
+      case None    => Future.successful(None) // Must return a Future[Option[B]]
+ here.
+\end_layout
+
+\begin_layout Plain Layout
+
+      case Some(x) => f(x).nested
+\end_layout
+
+\begin_layout Plain Layout
+
+    })
+\end_layout
+
+\begin_layout Plain Layout
+
+}
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+import scala.concurrent.ExecutionContext.Implicits.global
+\end_layout
+
+\begin_layout Plain Layout
+
+val r: FutOpt[Int] = for {           // This code compiles now.
+\end_layout
+
+\begin_layout Plain Layout
+
+  x <- FutOpt(Future(Option(1)))     // x: Int
+\end_layout
+
+\begin_layout Plain Layout
+
+  y <- FutOpt(Future(Option(x + 1))) // y: Int
+\end_layout
+
+\begin_layout Plain Layout
+
+  z <- FutOpt(Future(Option(y + 3))) // z: Int
+\end_layout
+
+\begin_layout Plain Layout
+
+} yield z
 \end_layout
 
 \end_inset
 
-
+***
 \end_layout
 
 \begin_layout Section
