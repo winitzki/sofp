@@ -3768,7 +3768,7 @@ Practical use
 \end_layout
 
 \begin_layout Subsection
-Combining effects by functor composition
+Combining monadic effects by functor composition
 \end_layout
 
 \begin_layout Standard
@@ -3828,7 +3828,59 @@ Option
 \end_layout
 
 \begin_layout Standard
-Functor composition, 
+The type constructors 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Future
+\end_layout
+
+\end_inset
+
+ and 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Option
+\end_layout
+
+\end_inset
+
+ are not subtypes of each other, so we cannot simply use them together in
+ a functor block:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+for {
+\end_layout
+
+\begin_layout Plain Layout
+
+  x <- Future(1)
+\end_layout
+
+\begin_layout Plain Layout
+
+  y <- Option(x + 1) // Type error.
+\end_layout
+
+\begin_layout Plain Layout
+
+  ...
+\end_layout
+
+\end_inset
+
+One way of combining two effect is by using functor composition, 
 \begin_inset listings
 inline true
 status open
@@ -3840,14 +3892,199 @@ Future[Option[A]]
 
 \end_inset
 
-, is one way of combining two functors.
- Consider this code:
+.
+ However, working directly with that data type is inconvenient:
 \begin_inset listings
 inline false
 status open
 
 \begin_layout Plain Layout
 
+val r: Future[Option[Int]] = for {
+\end_layout
+
+\begin_layout Plain Layout
+
+  xOpt <- Future(Option(1))  // xOpt: Option[Int]
+\end_layout
+
+\begin_layout Plain Layout
+
+  tOpt <- xOpt match {       // yOpt: Option[Int]
+\end_layout
+
+\begin_layout Plain Layout
+
+    case Some(x)  => for {   // This expression must be a Future[Option[Int]].
+\end_layout
+
+\begin_layout Plain Layout
+
+        yOpt <- Future(Option(x + 1))
+\end_layout
+
+\begin_layout Plain Layout
+
+        zOpt <- yOpt match { // zOpt: Option[Int]
+\end_layout
+
+\begin_layout Plain Layout
+
+          case Some(y) => Future(Option(y + 3)) // Must return a Future[Option[I
+nt]] here.
+\end_layout
+
+\begin_layout Plain Layout
+
+          case None    => Future.successful(None)
+\end_layout
+
+\begin_layout Plain Layout
+
+        }
+\end_layout
+
+\begin_layout Plain Layout
+
+      } yield zOpt
+\end_layout
+
+\begin_layout Plain Layout
+
+    case None     => Future.successful(None)
+\end_layout
+
+\begin_layout Plain Layout
+
+  }
+\end_layout
+
+\begin_layout Plain Layout
+
+  ...
+\end_layout
+
+\end_inset
+
+The nested type constructor forces us to use pattern matching with nested
+ functor blocks, since that is the only way of extracting values of type
+ 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+A
+\end_layout
+
+\end_inset
+
+ from 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Future[Option[A]]
+\end_layout
+
+\end_inset
+
+.
+ This makes the code hard to read and to change.
+ A first step to solving this problem is by rewriting this monadic program
+ as a direct chain of computations depending on the results of previous
+ ones:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+val r: Future[Option[Int]] = for { // This will not compile...
+\end_layout
+
+\begin_layout Plain Layout
+
+  x <- Future(Option(1))     // x: Int
+\end_layout
+
+\begin_layout Plain Layout
+
+  y <- Future(Option(x + 1)  // y: Int
+\end_layout
+
+\begin_layout Plain Layout
+
+  z <- Future(Option(y + 3)) // z: Int
+\end_layout
+
+\begin_layout Plain Layout
+
+  ...
+\end_layout
+
+\end_inset
+
+In order to be able to write code like that, we need to implement the 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+flatMap
+\end_layout
+
+\end_inset
+
+ operation directly on the type 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Future[Option[A]]
+\end_layout
+
+\end_inset
+
+ with respect to the type parameter 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+A
+\end_layout
+
+\end_inset
+
+.
+ Indeed, this is possible if we wrap the type constructor 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Future[Option[A]]
+\end_layout
+
+\end_inset
+
+ into a class:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+***
 \end_layout
 
 \end_inset
@@ -12978,7 +13215,7 @@ name "subsec:Rigid-monad-construction-1-choice"
 \end_layout
 
 \begin_layout Standard
-The construction I call 
+The construction called 
 \begin_inset Index idx
 status open
 
