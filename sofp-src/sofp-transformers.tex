@@ -578,7 +578,7 @@ and $T_{\text{Cont}}$ transformers have no \texttt{\textcolor{blue}{\footnotesiz
 
 \section{Practical use}
 
-\subsection{Combining effects by functor composition}
+\subsection{Combining monadic effects by functor composition}
 
 Monads describe effects that depend on previously computed values.
 It is often necessary to combine effects of several monads in one
@@ -588,11 +588,72 @@ value. To describe a possibly missing value that is also computed
 concurrently, we need somehow to combine \lstinline!Future! with
 \lstinline!Option!.
 
-Functor composition, \lstinline!Future[Option[A]]!, is one way of
-combining two functors. Consider this code:
+The type constructors \lstinline!Future! and \lstinline!Option!
+are not subtypes of each other, so we cannot simply use them together
+in a functor block:
 \begin{lstlisting}
+for {
+  x <- Future(1)
+  y <- Option(x + 1) // Type error.
+  ...
 \end{lstlisting}
 
+One way of combining two effect is by using functor composition, \lstinline!Future[Option[A]]!.
+However, working directly with that data type is inconvenient:
+\begin{lstlisting}
+val r: Future[Option[Int]] = for {
+  xOpt <- Future(Option(1))  // xOpt: Option[Int]
+  tOpt <- xOpt match {       // yOpt: Option[Int]
+    case None     => Future.successful(None)     // This expression must be a Future[Option[Int]].
+    case Some(x)  => for {
+        yOpt <- Future(Option(x + 1))
+        zOpt <- yOpt match { // zOpt: Option[Int]
+          case None    => Future.successful(None) // Must return a Future[Option[Int]] everywhere.
+          case Some(y) => Future(Option(y + 3))
+        }
+      } yield zOpt
+  }
+} yield tOpt
+\end{lstlisting}
+The nested type constructor forces us to use pattern matching with
+nested functor blocks, since that is the only way of getting access
+to values of type \lstinline!A! within \lstinline!Future[Option[A]]!.
+The code is repetitive and deeply nested, which makes it hard to read
+and to change. 
+
+The first step towards solving the problem is by rewriting this monadic
+program as a direct chain of computations depending on the results
+of previous ones:
+\begin{lstlisting}
+val r: Future[Option[Int]] = for { // This will not compile.
+  x <- Future(Option(1))     // x: Int
+  y <- Future(Option(x + 1)) // y: Int
+  z <- Future(Option(y + 3)) // z: Int
+} yield z
+\end{lstlisting}
+To be able to write code in this way, we need to implement the \lstinline!flatMap!
+operation directly on the type \lstinline!Future[Option[A]]! with
+respect to the type parameter \lstinline!A!. Let us wrap the type
+\lstinline!Future[Option[A]]! into a class and implement \lstinline!map!
+and \lstinline!flatMap! as methods:
+\begin{lstlisting}
+case class FutOpt[A](nested: Future[Option[A]]) {
+  def map[B](f: A => B)(implicit ec: ExecutionContext): FutOpt[B] = FutOpt(nested.map(_.map(f)))
+  def flatMap[B](f: A => FutOpt[B])(implicit ec: ExecutionContext): FutOpt[B] =
+    FutOpt(nested.flatMap {
+      case None    => Future.successful(None) // Must return a Future[Option[B]] here.
+      case Some(x) => f(x).nested
+    })
+}
+
+import scala.concurrent.ExecutionContext.Implicits.global
+val r: FutOpt[Int] = for {           // This code compiles now.
+  x <- FutOpt(Future(Option(1)))     // x: Int
+  y <- FutOpt(Future(Option(x + 1))) // y: Int
+  z <- FutOpt(Future(Option(y + 3))) // z: Int
+} yield z
+\end{lstlisting}
+{*}{*}{*}
 
 \section{Laws and structure}
 
@@ -2598,7 +2659,7 @@ open questions I have about rigid monads.
 
 \subsection{Rigid monad construction 1: choice\label{subsec:Rigid-monad-construction-1-choice}}
 
-The construction I call \index{monads!choice monad}the \textbf{choice}
+The construction called \index{monads!choice monad}the \textbf{choice}
 monad, $R^{A}\triangleq H^{A}\rightarrow A$, defines a rigid monad
 $R$ for \emph{any} given contrafunctor $H$. 
 
