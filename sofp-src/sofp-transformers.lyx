@@ -261,375 +261,3626 @@ name "chap:monad-transformers"
 \end_layout
 
 \begin_layout Section
-Slides
+Practical use
 \end_layout
 
-\begin_layout Paragraph
-Combining monadic effects II.
- Lifting into a larger monad
+\begin_layout Subsection
+Combining monadic effects via functor composition
 \end_layout
 
 \begin_layout Standard
-
-\size footnotesize
-\begin_inset ERT
+Monads describe effects that depend on previously computed values.
+ It is often necessary to combine effects of several monads in one value.
+ For example, a value of type 
+\begin_inset listings
+inline true
 status open
 
 \begin_layout Plain Layout
 
+Future
+\end_layout
 
-\backslash
-vspace{-0.15cm}
+\end_inset
+
+ can be computed concurrently, while 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Option
+\end_layout
+
+\end_inset
+
+ represents a possibly missing value.
+ To describe a possibly missing value that is also computed concurrently,
+ we need somehow to combine 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Future
+\end_layout
+
+\end_inset
+
+ with 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Option
+\end_layout
+
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+The type constructors 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Future
+\end_layout
+
+\end_inset
+
+ and 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Option
+\end_layout
+
+\end_inset
+
+ are not subtypes of each other, so we cannot simply use them together in
+ a functor block:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+for {
+\end_layout
+
+\begin_layout Plain Layout
+
+  x <- Future(1)
+\end_layout
+
+\begin_layout Plain Layout
+
+  y <- Option(x + 1) // Type error.
+\end_layout
+
+\begin_layout Plain Layout
+
+  ...
 \end_layout
 
 \end_inset
 
 
-\size default
-If a 
+\end_layout
+
+\begin_layout Standard
+One way of combining two effects is by using functor composition, 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Future[Option[A]]
+\end_layout
+
+\end_inset
+
+.
+ However, we run into a problem if we want to chain a computation to the
+ value within the nested type.
+ For instance, this code will not compile:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+for {
+\end_layout
+
+\begin_layout Plain Layout
+
+  xOpt <- Future(Option(1))       // xOpt: Option[Int]
+\end_layout
+
+\begin_layout Plain Layout
+
+  x    <- xOpt    // We would like to get x: Int here.
+\end_layout
+
+\begin_layout Plain Layout
+
+  ...
+\end_layout
+
+\end_inset
+
+The source type must be consistent within the entire functor block; we cannot
+ mix source lines of 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Future
+\end_layout
+
+\end_inset
+
+ and 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Option
+\end_layout
+
+\end_inset
+
+ types.
+ If we try working directly with the nested data type, we will have to write
+ code like this:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+val result: Future[Option[Int]] = for {
+\end_layout
+
+\begin_layout Plain Layout
+
+  xOpt <- Future(Option(1))  // xOpt: Option[Int]
+\end_layout
+
+\begin_layout Plain Layout
+
+  tOpt <- xOpt match {       // yOpt: Option[Int]
+\end_layout
+
+\begin_layout Plain Layout
+
+    case None     => Future.successful(None)     // This expression must
+ be a Future[Option[Int]].
+\end_layout
+
+\begin_layout Plain Layout
+
+    case Some(x)  => for {
+\end_layout
+
+\begin_layout Plain Layout
+
+        yOpt <- Future(Option(x + 1))
+\end_layout
+
+\begin_layout Plain Layout
+
+        zOpt <- yOpt match { // zOpt: Option[Int]
+\end_layout
+
+\begin_layout Plain Layout
+
+          case None    => Future.successful(None) // Must return a Future[Option[
+Int]] everywhere.
+\end_layout
+
+\begin_layout Plain Layout
+
+          case Some(y) => Future(Option(y + 3))
+\end_layout
+
+\begin_layout Plain Layout
+
+        }
+\end_layout
+
+\begin_layout Plain Layout
+
+      } yield zOpt
+\end_layout
+
+\begin_layout Plain Layout
+
+  }
+\end_layout
+
+\begin_layout Plain Layout
+
+} yield tOpt
+\end_layout
+
+\end_inset
+
+The nested type constructor forces us to use pattern matching with nested
+ functor blocks, since that is the only way of getting access to values
+ of type 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+A
+\end_layout
+
+\end_inset
+
+ within 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Future[Option[A]]
+\end_layout
+
+\end_inset
+
+.
+ The code is repetitive and deeply nested, which makes it hard to read and
+ to change.
+ 
+\end_layout
+
+\begin_layout Standard
+The first step towards solving the problem is by rewriting this monadic
+ program as a direct chain of computations depending on the results of previous
+ ones:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+val result: Future[Option[Int]] = for { // This will not compile!
+\end_layout
+
+\begin_layout Plain Layout
+
+  x <- Future(Option(1))     // x: Option[Int]
+\end_layout
+
+\begin_layout Plain Layout
+
+  y <- Future(Option(x + 1)) // Type error: x + 1 is undefined.
+\end_layout
+
+\begin_layout Plain Layout
+
+  z <- Future(Option(y + 3)) // We would like x, y, and z to be integers.
+\end_layout
+
+\begin_layout Plain Layout
+
+} yield z
+\end_layout
+
+\end_inset
+
+To be able to write code in this way, we need to implement the 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+flatMap
+\end_layout
+
+\end_inset
+
+ operation directly on the type 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Future[Option[A]]
+\end_layout
+
+\end_inset
+
+ with respect to the type parameter 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+A
+\end_layout
+
+\end_inset
+
+.
+ Let us wrap the type 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Future[Option[A]]
+\end_layout
+
+\end_inset
+
+ into a class and implement 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+map
+\end_layout
+
+\end_inset
+
+ and 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+flatMap
+\end_layout
+
+\end_inset
+
+ as methods:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+final case class FutOpt[A](nested: Future[Option[A]]) {
+\end_layout
+
+\begin_layout Plain Layout
+
+  def map[B](f: A => B)(implicit ec: ExecutionContext): FutOpt[B] = FutOpt(neste
+d.map(_.map(f)))
+\end_layout
+
+\begin_layout Plain Layout
+
+  def flatMap[B](f: A => FutOpt[B])(implicit ec: ExecutionContext): FutOpt[B]
+ =
+\end_layout
+
+\begin_layout Plain Layout
+
+    FutOpt(nested.flatMap {      // Provide a function Option[A] => Future[Option
+[B]].
+\end_layout
+
+\begin_layout Plain Layout
+
+      case None    => Future.successful(None) // Must return a Future[Option[B]]
+ here.
+\end_layout
+
+\begin_layout Plain Layout
+
+      case Some(x) => f(x).nested
+\end_layout
+
+\begin_layout Plain Layout
+
+    })
+\end_layout
+
+\begin_layout Plain Layout
+
+}
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+import scala.concurrent.ExecutionContext.Implicits.global
+\end_layout
+
+\begin_layout Plain Layout
+
+val result: FutOpt[Int] = for {      // This code compiles now.
+\end_layout
+
+\begin_layout Plain Layout
+
+  x <- FutOpt(Future(Option(1)))     // x: Int
+\end_layout
+
+\begin_layout Plain Layout
+
+  y <- FutOpt(Future(Option(x + 1))) // y: Int
+\end_layout
+
+\begin_layout Plain Layout
+
+  z <- FutOpt(Future(Option(y + 3))) // z: Int
+\end_layout
+
+\begin_layout Plain Layout
+
+} yield z
+\end_layout
+
+\end_inset
+
+To improve usability, we may define conversions from 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Future
+\end_layout
+
+\end_inset
+
+ to 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+FutOpt
+\end_layout
+
+\end_inset
+
+ and from 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Option
+\end_layout
+
+\end_inset
+
+ to 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+FutOpt
+\end_layout
+
+\end_inset
+
+:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+implicit class FutOptLift1[A](fut: Future[A])(implicit ec: ExecutionContext)
+ {
+\end_layout
+
+\begin_layout Plain Layout
+
+  def lift: FutOpt[A] = FutOpt(fut.map(x => Some(x)))
+\end_layout
+
+\begin_layout Plain Layout
+
+}
+\end_layout
+
+\begin_layout Plain Layout
+
+implicit class FutOptLift2[A](opt: Option[A]) {
+\end_layout
+
+\begin_layout Plain Layout
+
+  def lift: FutOpt[A] = FutOpt(Future.successful(opt))
+\end_layout
+
+\begin_layout Plain Layout
+
+}
+\end_layout
+
+\end_inset
+
+After defining the 
 \begin_inset Quotes eld
 \end_inset
 
-big monad
+lifts
+\begin_inset Quotes erd
+\end_inset
+
+, we may rewrite the previous code in a more readable form:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+val result: FutOpt[Int] = for {
+\end_layout
+
+\begin_layout Plain Layout
+
+  x <- Option(1).lift     // x: Int
+\end_layout
+
+\begin_layout Plain Layout
+
+  y <- Future(x + 1).lift // y: Int
+\end_layout
+
+\begin_layout Plain Layout
+
+  z <- Option(y + 3).lift // z: Int
+\end_layout
+
+\begin_layout Plain Layout
+
+} yield z  // After some time, this evaluates to `FutOpt(Future(Success(Some(5))
+))`.
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+We may hope to apply the same technique when mixing effects from arbitrary
+ monads, such as:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+val result: SomeBigMonad[Int] = for {  // After some definitions, this code
+ will work:
+\end_layout
+
+\begin_layout Plain Layout
+
+  x <- (1 to n).lift                   // x: Int
+\end_layout
+
+\begin_layout Plain Layout
+
+  y <- Future { computation(x) }.lift  // y: Int
+\end_layout
+
+\begin_layout Plain Layout
+
+  z <- Try { maybeError(y) }.lift      // z: Int
+\end_layout
+
+\begin_layout Plain Layout
+
+} yield z
+\end_layout
+
+\end_inset
+
+This code will work if we somehow create a new monad that 
+\begin_inset Quotes eld
+\end_inset
+
+unifies
 \begin_inset Quotes erd
 \end_inset
 
  
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Seq
+\end_layout
+
+\end_inset
+
+, 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Future
+\end_layout
+
+\end_inset
+
+, and 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Try
+\end_layout
+
+\end_inset
+
+.
+ 
+\end_layout
+
+\begin_layout Standard
+It turns out that there is no simple recipe for implementing a 
+\begin_inset Quotes eld
+\end_inset
+
+unified
+\begin_inset Quotes erd
+\end_inset
+
+ monad for a given set of monads.
+ Developing the necessary techniques is the main focus of this chapter.
+\end_layout
+
+\begin_layout Standard
+We have seen that 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Future[A]
+\end_layout
+
+\end_inset
+
+ and 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Option[A]
+\end_layout
+
+\end_inset
+
+ are combined in a new monad as 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Future[Option[A]]
+\end_layout
+
+\end_inset
+
+.Does functor composition always work? If 
+\begin_inset Formula $M_{1}$
+\end_inset
+
+ and 
+\begin_inset Formula $M_{2}$
+\end_inset
+
+ are monads then at least one of the compositions, 
+\begin_inset Formula $M_{1}\circ M_{2}$
+\end_inset
+
+ or 
+\begin_inset Formula $M_{2}\circ M_{1}$
+\end_inset
+
+, is often a monad.
+ However, 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Option[Future[A]]
+\end_layout
+
+\end_inset
+
+ is not a monad.
+ By trial and error, we can find further examples where the functor composition
+ works and where it does not (marked with a strike-through line):
+\end_layout
+
+\begin_layout Standard
+\align center
+\begin_inset Tabular
+<lyxtabular version="3" rows="7" columns="4">
+<features tabularvalignment="middle">
+<column alignment="center" valignment="top">
+<column alignment="center" valignment="top">
+<column alignment="center" valignment="top">
+<column alignment="center" valignment="top">
+<row>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\series bold
+\size small
+Monad 
+\begin_inset Formula $M_{1}^{A}$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\series bold
+\size small
+Monad 
+\begin_inset Formula $M_{2}^{A}$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\series bold
+\size small
+\begin_inset Formula $M_{1}\circ M_{2}$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\series bold
+\size small
+\begin_inset Formula $M_{2}\circ M_{1}$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size small
+\begin_inset Formula $\text{Future}^{A}$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size small
+\begin_inset Formula $Z+A$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size small
+\begin_inset Formula $\text{Future}^{Z+A}$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size small
+\strikeout on
+\begin_inset Formula $Z+\text{Future}^{A}$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
 \family typewriter
 \size footnotesize
-\color blue
-BigM[A]
-\family default
-\size default
-\color inherit
- 
+Future[A]
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+State[S, A]
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+\strikeout on
+Future[State[S, A]]
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\family typewriter
+\size footnotesize
+\strikeout on
+State[S, Future[A]]
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size small
+\begin_inset Formula $W\times A$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size small
+\begin_inset Formula $Z+A$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size small
+\begin_inset Formula $W\times\left(Z+A\right)$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size small
+\begin_inset Formula $Z+W\times A$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size small
+\begin_inset Formula $\text{List}^{A}$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size small
+\begin_inset Formula $Z\rightarrow A$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size small
+\strikeout on
+\begin_inset Formula $\text{List}^{Z\rightarrow A}$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size small
+\begin_inset Formula $Z\rightarrow\text{List}^{A}$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size small
+\begin_inset Formula $\text{List}^{A}$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size small
+\begin_inset Formula $Z+A$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+\begin_inset Formula $\text{List}^{Z+A}$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size small
+\strikeout on
+\begin_inset Formula $Z+\text{List}^{A}$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size small
+\begin_inset Formula $\bbnum 1+A$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size small
+\begin_inset Formula $Z\rightarrow A$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size small
+\strikeout on
+\begin_inset Formula $\bbnum 1+\left(Z\rightarrow A\right)$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size small
+\begin_inset Formula $Z\rightarrow\bbnum 1+A$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+</row>
+</lyxtabular>
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+It turns out that some monads do not compose in either order, while others
+ have a 
+\begin_inset Quotes eld
+\end_inset
+
+preferred
+\begin_inset Quotes erd
+\end_inset
+
+ order (we will see proofs of these properties later in this chapter).
+ For instance, the 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Reader
+\end_layout
+
+\end_inset
+
+ monad 
+\begin_inset Formula $Z\rightarrow A$
+\end_inset
+
+ always composes on the outside (Statement
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "subsec:Statement-monad-construction-1"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+) but not necessarily on the inside.
+ On the other hand, pass/fail monads 
+\begin_inset Formula $M^{A}\triangleq Z+A$
+\end_inset
+
+ composes when it is on the inside.
+\end_layout
+
+\begin_layout Standard
+When the monad composition works both ways, the two resulting monads represent
+ inequivalent combinations of effects.
+ For example, the 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Writer
+\end_layout
+
+\end_inset
+
+ monad 
+\begin_inset Formula $W\times A$
+\end_inset
+
+ (appending an output message) and the pass/fail monads 
+\begin_inset Formula $Z+A$
+\end_inset
+
+ (allowing failure) can be composed in two ways.
+ The monad 
+\begin_inset Formula $M^{A}\triangleq W\times\left(Z+A\right)$
+\end_inset
+
+ describes a computation that may fail but always outputs a message; but
+ the monad 
+\begin_inset Formula $M^{A}\triangleq Z+W\times A$
+\end_inset
+
+ will not output any message on failure.
+\end_layout
+
+\begin_layout Standard
+When functor composition works, implementing the 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+lift
+\end_layout
+
+\end_inset
+
+ methods is straightforward:
+\end_layout
+
+\begin_layout Subsubsection
+Example 
+\begin_inset CommandInset label
+LatexCommand label
+name "subsec:Example-lift-for-List-Try-composition"
+
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "subsec:Example-lift-for-List-Try-composition"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+
+\begin_inset Index idx
+status collapsed
+
+\begin_layout Plain Layout
+solved examples
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Implement a composition of 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+List
+\end_layout
+
+\end_inset
+
+ and 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Try
+\end_layout
+
+\end_inset
+
+ monads for use in functor blocks.
+\end_layout
+
+\begin_layout Subparagraph
+Solution
+\end_layout
+
+\begin_layout Standard
+Since 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Try
+\end_layout
+
+\end_inset
+
+ is a pass/fail monad, we must compose it 
 \emph on
-somehow
+inside
 \emph default
- combines all the needed effects:
-\end_layout
-
-\begin_layout Standard
-
-\size footnotesize
-\begin_inset ERT
-status open
-
-\begin_layout Plain Layout
-
-
-\backslash
-vspace{-0.15cm}
-\backslash
-hspace{-0.35cm}
-\end_layout
-
-\end_inset
-
-
-\family typewriter
-\color blue
-
-\begin_inset Box Frameless
-position "t"
-hor_pos "c"
-has_inner_box 1
-inner_pos "t"
-use_parbox 0
-use_makebox 0
-width "49col%"
-special "none"
-height "1in"
-height_special "totalheight"
-thickness "0.4pt"
-separation "3pt"
-shadowsize "4pt"
-framecolor "black"
-backgroundcolor "none"
-status open
-
-\begin_layout LyX-Code
-
-\family roman
-\size footnotesize
-\color darkgray
-// This could be valid Scala...
-\end_layout
-
-\begin_layout LyX-Code
-
-\family typewriter
-\size footnotesize
-\color blue
-val result: BigM[Int] = for {
-\end_layout
-
-\begin_layout LyX-Code
-
-\family typewriter
-\size footnotesize
-\color blue
-   i 
-\begin_inset Formula $\leftarrow$
-\end_inset
-
- lift
-\begin_inset Formula $_{1}$
-\end_inset
-
-(1 to n)
-\end_layout
-
-\begin_layout LyX-Code
-
-\family typewriter
-\size footnotesize
-\color blue
-   j 
-\begin_inset Formula $\leftarrow$
-\end_inset
-
- lift
-\begin_inset Formula $_{2}$
-\end_inset
-
-(Future{ q(i) })
-\end_layout
-
-\begin_layout LyX-Code
-
-\family typewriter
-\size footnotesize
-\color blue
-   k 
-\begin_inset Formula $\leftarrow$
-\end_inset
-
- lift
-\begin_inset Formula $_{3}$
-\end_inset
-
-(maybeError(j))
-\end_layout
-
-\begin_layout LyX-Code
-
-\family typewriter
-\size footnotesize
-\color blue
-} yield f(k)
-\end_layout
-
-\end_inset
-
- 
-\begin_inset Box Frameless
-position "t"
-hor_pos "c"
-has_inner_box 1
-inner_pos "t"
-use_parbox 0
-use_makebox 0
-width "49col%"
-special "none"
-height "1in"
-height_special "totalheight"
-thickness "0.4pt"
-separation "3pt"
-shadowsize "4pt"
-framecolor "black"
-backgroundcolor "none"
-status open
-
-\begin_layout LyX-Code
-
-\family typewriter
-\size footnotesize
-\color blue
- 
-\family roman
-\color darkgray
-// If we define the various
-\end_layout
-
-\begin_layout LyX-Code
-
-\family roman
-\size footnotesize
-\color darkgray
- // required 
+ other monads; so we define the 
 \begin_inset Quotes eld
 \end_inset
 
-lifting
+unified
 \begin_inset Quotes erd
 \end_inset
 
- functions:
-\end_layout
+ monad type as 
+\begin_inset listings
+inline true
+status open
 
-\begin_layout LyX-Code
+\begin_layout Plain Layout
 
-\family typewriter
-\size footnotesize
-\color blue
-def lift
-\begin_inset Formula $_{1}$
-\end_inset
-
-[A]: Seq[A] 
-\begin_inset Formula $\rightarrow$
-\end_inset
-
- BigM[A] = ???
-\end_layout
-
-\begin_layout LyX-Code
-
-\family typewriter
-\size footnotesize
-\color blue
-def lift
-\begin_inset Formula $_{2}$
-\end_inset
-
-[A]: Future[A] 
-\begin_inset Formula $\rightarrow$
-\end_inset
-
- BigM[A] = ???
-\end_layout
-
-\begin_layout LyX-Code
-
-\family typewriter
-\size footnotesize
-\color blue
-def lift
-\begin_inset Formula $_{3}$
-\end_inset
-
-[A]: Try[A] 
-\begin_inset Formula $\rightarrow$
-\end_inset
-
- BigM[A] = ???   
+List[Try[A]]
 \end_layout
 
 \end_inset
 
+.
+ We wrap the type 
+\begin_inset listings
+inline true
+status open
 
-\begin_inset VSpace defskip
+\begin_layout Plain Layout
+
+List[Try[A]]
+\end_layout
+
+\end_inset
+
+ into a class, implement 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+map
+\end_layout
+
+\end_inset
+
+ and 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+flatMap
+\end_layout
+
+\end_inset
+
+ as methods, and then define the two 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+lift
+\end_layout
+
+\end_inset
+
+ functions as extension methods:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+final case class ListTry[A](value: List[Try[A]]) {
+\end_layout
+
+\begin_layout Plain Layout
+
+  def map[B](f: A => B): ListTry[B] = ListTry(value.map(_.map(f)))
+\end_layout
+
+\begin_layout Plain Layout
+
+  def flatMap[B](f: A => ListTry[B]): ListTry[B] = ListTry(
+\end_layout
+
+\begin_layout Plain Layout
+
+    value.flatMap {         // Provide a function Try[A] => List[Try[B]]
+ here.
+\end_layout
+
+\begin_layout Plain Layout
+
+      case Failure(t)   => List(Failure(t))
+\end_layout
+
+\begin_layout Plain Layout
+
+      case Success(a)   => f(a).value
+\end_layout
+
+\begin_layout Plain Layout
+
+    }
+\end_layout
+
+\begin_layout Plain Layout
+
+  )
+\end_layout
+
+\begin_layout Plain Layout
+
+}      // Change names from `lift` to `up` because `lift` is already defined
+ for `List` class.
+\end_layout
+
+\begin_layout Plain Layout
+
+implicit class ListTryLift1[A](l: List[A]) { def up: ListTry[A] = ListTry(l.map(S
+uccess(_))) }
+\end_layout
+
+\begin_layout Plain Layout
+
+implicit class ListTryLift2[A](t: Try[A]) { def up: ListTry[A] = ListTry(List(t)
+) }
+\end_layout
+
+\end_inset
+
+After these definitions, we can write functor blocks that use 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+List
+\end_layout
+
+\end_inset
+
+ and 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Try
+\end_layout
+
+\end_inset
+
+ as needed:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+scala> for {
+\end_layout
+
+\begin_layout Plain Layout
+
+         x <- List(1, 2, 3).up
+\end_layout
+
+\begin_layout Plain Layout
+
+         y <- Try(x + 100).up
+\end_layout
+
+\begin_layout Plain Layout
+
+       } yield y
+\end_layout
+
+\begin_layout Plain Layout
+
+res0: ListTry[Int] = ListTry(List(Success(101), Success(102), Success(103)))
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+Combining monads via monad transformers
+\end_layout
+
+\begin_layout Standard
+Not all monads combine with others via functor composition.
+ But even for those that do, the method used in Example
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "subsec:Example-lift-for-List-Try-composition"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+ requires writing custom wrapper classes for 
+\emph on
+each pair
+\emph default
+ of monads.
+ The length of the required code would be quadratic in the number of supported
+ monads.
+ To avoid the code explosion, we will use a different approach to organizing
+ the code that combines monads.
+\end_layout
+
+\begin_layout Standard
+The main idea of that approach is to fix the first monad 
+\begin_inset Formula $L$
+\end_inset
+
+ (the 
+\begin_inset Quotes eld
+\end_inset
+
+base
+\begin_inset Quotes erd
+\end_inset
+
+ monad) and to write code that combines 
+\begin_inset Formula $L$
+\end_inset
+
+ with an arbitrary second monad 
+\begin_inset Formula $M$
+\end_inset
+
+ (the 
+\begin_inset Quotes eld
+\end_inset
+
+foreign
+\begin_inset Quotes erd
+\end_inset
+
+ monad).
+ The result is a new, 
+\begin_inset Quotes eld
+\end_inset
+
+transformed
+\begin_inset Quotes erd
+\end_inset
+
+ monad, denoted by 
+\begin_inset Formula $T_{L}^{M}$
+\end_inset
+
+.
+ It turns out that the code of 
+\begin_inset Formula $T_{L}^{M}$
+\end_inset
+
+ is fully parametric in 
+\begin_inset Formula $M$
+\end_inset
+
+.
+ In other words, the code of the 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+pure
+\end_layout
+
+\end_inset
+
+ and 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+flatMap
+\end_layout
+
+\end_inset
+
+ methods for 
+\begin_inset Formula $T_{L}^{M}$
+\end_inset
+
+ will work in the same way for all foreign monads 
+\begin_inset Formula $M$
+\end_inset
+
+ and will only depend on 
+\begin_inset Formula $M$
+\end_inset
+
+'s monadic methods (
+\begin_inset Formula $\text{pu}_{M}$
+\end_inset
+
+ and 
+\begin_inset Formula $\text{flm}_{M}$
+\end_inset
+
+).
+ The monad 
+\begin_inset Formula $T_{L}^{M}$
+\end_inset
+
+ is called the 
+\begin_inset Quotes eld
+\end_inset
+
+
+\begin_inset Formula $L$
+\end_inset
+
+-transformer applied to 
+\begin_inset Formula $M$
+\end_inset
+
+
+\begin_inset Quotes erd
+\end_inset
+
+ or the 
+\begin_inset Quotes eld
+\end_inset
+
+transformed monad 
+\begin_inset Formula $M$
+\end_inset
+
+
+\begin_inset Quotes erd
+\end_inset
+
+.
+ The 
+\series bold
+monad transformer
+\series default
+ of
+\begin_inset Index idx
+status open
+
+\begin_layout Plain Layout
+monad transformer
+\end_layout
+
+\end_inset
+
+ the monad 
+\begin_inset Formula $L$
+\end_inset
+
+ is the type constructor 
+\begin_inset Formula $T_{L}^{M}$
+\end_inset
+
+ viewed as a function of its type parameters 
+\begin_inset Formula $M$
+\end_inset
+
+ and 
+\begin_inset Formula $A$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+To illustrate this approach, let us implement the transformer for the 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Try
+\end_layout
+
+\end_inset
+
+ monad.
+ We begin with Example
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "subsec:Example-lift-for-List-Try-composition"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+ that combines 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Try
+\end_layout
+
+\end_inset
+
+ with 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+List
+\end_layout
+
+\end_inset
+
+, but we now view 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Try
+\end_layout
+
+\end_inset
+
+ as the base monad and 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+List
+\end_layout
+
+\end_inset
+
+ as the foreign monad.
+ The goal is to replace 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+List
+\end_layout
+
+\end_inset
+
+ by an arbitrary foreign monad 
+\begin_inset Formula $M$
+\end_inset
+
+, so that the resulting code works in the same way for all monads 
+\begin_inset Formula $M$
+\end_inset
+
+.
+ To achieve that, we annotate the code of Example
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "subsec:Example-lift-for-List-Try-composition"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+ to make explicit the usage of the 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+List
+\end_layout
+
+\end_inset
+
+ monad's methods 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+pure
+\end_layout
+
+\end_inset
+
+ and 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+flatMap
+\end_layout
+
+\end_inset
+
+
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+final case class ListTry[A](value: List[Try[A]]) { // We are using List.map,
+ List.pure, List.flatMap.
+\end_layout
+
+\begin_layout Plain Layout
+
+  def map[B](f: A => B): ListTry[B] = ListTry(value.map(_.map(f))) // Using
+ List.map here.
+\end_layout
+
+\begin_layout Plain Layout
+
+  def flatMap[B](f: A => ListTry[B]): ListTry[B] = ListTry(
+\end_layout
+
+\begin_layout Plain Layout
+
+    value.flatMap {         // Using List.flatMap here.
+\end_layout
+
+\begin_layout Plain Layout
+
+      case Failure(t)   => List(Failure(t)) // This is List.pure(Failure(t)).
+\end_layout
+
+\begin_layout Plain Layout
+
+      case Success(a)   => f(a).value
+\end_layout
+
+\begin_layout Plain Layout
+
+    }
+\end_layout
+
+\begin_layout Plain Layout
+
+  )
+\end_layout
+
+\begin_layout Plain Layout
+
+}  
+\end_layout
+
+\end_inset
+
+It is now straightforward to generalize that code to an arbitrary foreign
+ monad 
+\begin_inset Formula $M$
+\end_inset
+
+:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+final case class TryT[M[_]: Monad : Functor, A](value: M[Try[A]]) {
+\end_layout
+
+\begin_layout Plain Layout
+
+  def map[B](f: A => B): TryT[M, B] = TryT(value.map(_.map(f)))     // Using
+ M's map here.
+\end_layout
+
+\begin_layout Plain Layout
+
+  def flatMap[B](f: A => TryT[M, B]): TryT[M, B] = TryT(
+\end_layout
+
+\begin_layout Plain Layout
+
+    value.flatMap {                                                 // Using
+ M's flatMap here.
+\end_layout
+
+\begin_layout Plain Layout
+
+      case Failure(t)   => Monad[M].pure(Failure(t)) // Use `Monad[M].pure`
+ instead of List().
+\end_layout
+
+\begin_layout Plain Layout
+
+      case Success(a)   => f(a).value
+\end_layout
+
+\begin_layout Plain Layout
+
+    }
+\end_layout
+
+\begin_layout Plain Layout
+
+  )
+\end_layout
+
+\begin_layout Plain Layout
+
+}  
+\end_layout
+
+\end_inset
+
+The 
+\begin_inset Quotes eld
+\end_inset
+
+foreign lift
+\begin_inset Quotes erd
+\end_inset
+
+ and the 
+\begin_inset Quotes eld
+\end_inset
+
+base lift
+\begin_inset Quotes erd
+\end_inset
+
+ also use the methods of the foreign monad 
+\begin_inset Formula $M$
+\end_inset
+
+:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+implicit class TryTLift[M[_]: Monad : Functor, A](m: M[A]) {
+\end_layout
+
+\begin_layout Plain Layout
+
+  def up: TryT[M, A] = TryT(m.map(Success(_)))
+\end_layout
+
+\begin_layout Plain Layout
+
+}
+\end_layout
+
+\begin_layout Plain Layout
+
+implicit class TryTBaseLift[M[_]: Monad : Functor, A](t: Try[A]) {
+\end_layout
+
+\begin_layout Plain Layout
+
+  def up: TryT[M, A] = TryT(Monad[M].pure(t))
+\end_layout
+
+\begin_layout Plain Layout
+
+}
+\end_layout
+
+\end_inset
+
+ After these definitions, we are able to combine 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Try
+\end_layout
+
+\end_inset
+
+ with any other monad 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+M
+\end_layout
+
+\end_inset
+
+, as long as an implicit values of type 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Monad[M]
+\end_layout
+
+\end_inset
+
+ and 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Functor[M]
+\end_layout
+
+\end_inset
+
+ are in scope.
+ The code will look like this:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+implicit val functorList: Functor[List] = ...
+ // Create a Functor typeclass instance for List.
+\end_layout
+
+\begin_layout Plain Layout
+
+implicit val monadList: Monad[List] = ...
+     // Create a Monad typeclass instance for List.
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+scala> val result = for {
+\end_layout
+
+\begin_layout Plain Layout
+
+         x <- List(1, 2, 3).up
+\end_layout
+
+\begin_layout Plain Layout
+
+         y <- Try(x + 100).up
+\end_layout
+
+\begin_layout Plain Layout
+
+       } yield y
+\end_layout
+
+\begin_layout Plain Layout
+
+res0: TryT[List, Int] = TryT(List(Success(101), Success(102), Success(103)))
+\end_layout
+
 \end_inset
 
 
 \end_layout
 
 \begin_layout Standard
-Example 1: combining as 
-\family typewriter
-\size footnotesize
-\color blue
-BigM[A] = Future[Option[A]]
+This example shows how to define the monad transformer 
+\begin_inset Formula $T_{\text{Try}}^{M}$
+\end_inset
+
+ that works parametrically in the foreign monad 
+\begin_inset Formula $M$
+\end_inset
+
+.
+ The result is a type constructor that we denote by 
+\begin_inset Formula $T_{\text{Try}}^{M,A}$
+\end_inset
+
+.
+ We can use that type as a monad with respect to the type parameter 
+\begin_inset Formula $A$
+\end_inset
+
+.
+ Similar code is required for 
+\begin_inset Formula $T_{\text{Read}}^{M}$
+\end_inset
+
+, 
+\begin_inset Formula $T_{\text{Write}}^{M}$
+\end_inset
+
+, 
+\begin_inset Formula $T_{\text{State}}^{M}$
+\end_inset
+
+, and all other monads.
+ The advantage of the transformer approach is that the code for 
+\begin_inset Formula $T_{L}^{M}$
+\end_inset
+
+ needs to be written once for every base monad 
+\begin_inset Formula $L$
+\end_inset
+
+ (and not for every pair 
+\begin_inset Formula $L$
+\end_inset
+
+, 
+\begin_inset Formula $M$
+\end_inset
+
+).
+\end_layout
+
+\begin_layout Subsection
+Monad transformers for the standard monads
+\end_layout
+
+\begin_layout Standard
+While the code of 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+TryT
+\end_layout
+
+\end_inset
+
+ works, it leaves us with further questions.
+ The code of 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+TryT
+\end_layout
+
+\end_inset
+
+ is specific to the 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Try
+\end_layout
+
+\end_inset
+
+ monad and uses its internal structure such as the 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Failure
+\end_layout
+
+\end_inset
+
+ and 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Success
+\end_layout
+
+\end_inset
+
+ subtypes.
+ It is not obvious how to define the type of a monad transformer 
+\begin_inset Formula $T_{L}^{M}$
+\end_inset
+
+ for an arbitrary given base monad 
+\begin_inset Formula $L$
+\end_inset
+
+.
+ The code for 
+\begin_inset Formula $T_{L}^{M}$
+\end_inset
+
+
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\bar no
+\strikeout off
+\xout off
+\uuline off
+\uwave off
+\noun off
+\color none
+'s
 \family default
+\series default
+\shape default
 \size default
+\emph default
+\bar default
+\strikeout default
+\xout default
+\uuline default
+\uwave default
+\noun default
 \color inherit
- with liftings:
+ methods is parametric in 
+\begin_inset Formula $M$
+\end_inset
+
+ but not in 
+\begin_inset Formula $L$
+\end_inset
+
+ (this is reflected in the notation: 
+\begin_inset Formula $L$
+\end_inset
+
+ is a 
+\emph on
+subscript
+\emph default
+ in 
+\begin_inset Formula $T_{L}^{M}$
+\end_inset
+
+).
+ Changing the base monad 
+\begin_inset Formula $L$
+\end_inset
+
+ to another monad requires a complete rewrite of 
+\begin_inset Formula $T_{L}^{M}$
+\end_inset
+
+'s code.
 \end_layout
 
 \begin_layout Standard
+There seems to be no general recipe for implementing a monad transformer
+ 
+\begin_inset Formula $T_{L}^{M}$
+\end_inset
 
-\size footnotesize
-\begin_inset ERT
+ given a monad 
+\begin_inset Formula $L$
+\end_inset
+
+, even when the code for 
+\begin_inset Formula $L$
+\end_inset
+
+ is known and is fully parametric.
+ On the other hand, monad transformers are available for every known example
+ of an explicitly defined, fully parametric monad.
+ For some monads, functor composition works straightforwardly; for other
+ monads, transformers need to be defined by special tricks.
+ Table
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "tab:Known-monad-transformers"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+ shows the types of monad transformers that are known to work.
+ 
+\end_layout
+
+\begin_layout Standard
+\begin_inset Wrap table
+lines 0
+placement l
+overhang 0in
+width "57col%"
+status open
+
+\begin_layout Plain Layout
+\align center
+\begin_inset VSpace -40baselineskip%
+\end_inset
+
+
+\begin_inset Tabular
+<lyxtabular version="3" rows="8" columns="3">
+<features tabularvalignment="middle">
+<column alignment="center" valignment="top">
+<column alignment="center" valignment="top">
+<column alignment="center" valignment="top">
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\series bold
+\size small
+Name
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\series bold
+\size small
+Base monad
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\series bold
+\size small
+Transformer type
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size small
+\begin_inset listings
+inline true
 status open
 
 \begin_layout Plain Layout
 
-
-\backslash
-vspace{-0.4cm}
+\size small
+Reader
 \end_layout
 
 \end_inset
 
 
-\family typewriter
-\color blue
-def lift
-\begin_inset Formula $_{1}$
-\end_inset
-
-[A]: Option[A] 
-\begin_inset Formula $\rightarrow$
-\end_inset
-
- Future[Option[A]] = Future.successful(_)
 \end_layout
 
-\begin_layout Standard
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
 
-\family typewriter
-\size footnotesize
-\color blue
-def lift
-\begin_inset Formula $_{2}$
+\begin_layout Plain Layout
+
+\size small
+\begin_inset Formula $L^{A}\triangleq R\rightarrow A$
 \end_inset
 
-[A]: Future[A] 
-\begin_inset Formula $\rightarrow$
-\end_inset
 
- Future[Option[A]] = _.map(x 
-\begin_inset Formula $\rightarrow$
-\end_inset
-
- Some(x))
 \end_layout
 
-\begin_layout Standard
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
 
-\size footnotesize
-\begin_inset ERT
+\begin_layout Plain Layout
+
+\size small
+\begin_inset Formula $T_{L}^{M,A}\triangleq R\rightarrow M^{A}$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size small
+\begin_inset listings
+inline true
 status open
 
 \begin_layout Plain Layout
 
-
-\backslash
-vspace{-0.15cm}
+\size small
+Either
 \end_layout
 
 \end_inset
 
 
-\size default
-Example 2: combining as 
-\family typewriter
-\size footnotesize
-\color blue
-BigM[A] = List[Try[A]]
-\family default
-\size default
-\color inherit
- with liftings:
 \end_layout
 
-\begin_layout Standard
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
 
-\size footnotesize
-\begin_inset ERT
+\begin_layout Plain Layout
+
+\size small
+\begin_inset Formula $L^{A}\triangleq Z+A$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size small
+\begin_inset Formula $T_{L}^{M,A}\triangleq M^{Z+A}$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size small
+\begin_inset listings
+inline true
 status open
 
 \begin_layout Plain Layout
 
-
-\backslash
-vspace{-0.05cm}
+\size small
+Writer
 \end_layout
 
 \end_inset
 
 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size small
+\begin_inset Formula $L^{A}\triangleq A\times W$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size small
+\begin_inset Formula $T_{L}^{M,A}\triangleq M^{A\times W}$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size small
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+\size small
+List
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size small
+\begin_inset Formula $L^{A}\triangleq\bbnum 1+A\times L^{A}$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size small
+\begin_inset Formula $T_{L}^{M,A}\triangleq M^{\bbnum 1+A\times T_{L}^{M,A}}$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size small
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+\size small
+State
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size small
+\begin_inset Formula $L^{A}\triangleq S\rightarrow A\times S$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size small
+\begin_inset Formula $T_{L}^{M,A}\triangleq S\rightarrow M^{A\times S}$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size small
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+\size small
+Cont
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size small
+\begin_inset Formula $L^{A}\triangleq\left(A\rightarrow R\right)\rightarrow R$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size small
+\begin_inset Formula $T_{L}^{M,A}\triangleq(A\rightarrow M^{R})\rightarrow M^{R}$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size small
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+\size small
+Sel
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size small
+\begin_inset Formula $L^{A}\triangleq\left(A\rightarrow R\right)\rightarrow A$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+
+\size small
+\begin_inset Formula $T_{L}^{M,A}\triangleq(M^{A}\rightarrow R)\rightarrow M^{A}$
+\end_inset
+
+
+\end_layout
+
+\end_inset
+</cell>
+</row>
+</lyxtabular>
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+\begin_inset CommandInset label
+LatexCommand label
+name "tab:Known-monad-transformers"
+
+\end_inset
+
+Known monad transformers for some monads.
+\end_layout
+
+\end_inset
+
+
+\begin_inset VSpace -60baselineskip%
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\noindent
+We can see from this table that monad transformers are created in different
+ ways: composing inside the foreign monad (
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Either
+\end_layout
+
+\end_inset
+
+, 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Writer
+\end_layout
+
+\end_inset
+
+); composing outside the foreign monad (
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Reader
+\end_layout
+
+\end_inset
+
+, 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Sel
+\end_layout
+
+\end_inset
+
+); moving the recursive definition inside the foreign monad (
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+List
+\end_layout
+
+\end_inset
+
+); and mixing the foreign monad in a special way with the original monad
+ (
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+State
+\end_layout
+
+\end_inset
+
+, 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Cont
+\end_layout
+
+\end_inset
+
+).
+ 
+\end_layout
+
+\begin_layout Standard
+The only known justification for the choice of transformers in Table
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "tab:Known-monad-transformers"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+ is that they work and obey the required laws, while no alternative transformers
+ are known.
+ We will derive and prove the required laws for these and many other transformer
+s later in this chapter.
+ For now, we accept the results of Table
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "tab:Known-monad-transformers"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+ as correct and turn to other tasks regarding the practical use of monad
+ transformers.
+ The first task is to obtain the implementations of monad methods and lifts
+ for the transformers from Table
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "tab:Known-monad-transformers"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+The type constructors for monad transformers are conventionally named 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+ReaderT
+\end_layout
+
+\end_inset
+
+, 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+EitherT
+\end_layout
+
+\end_inset
+
+, etc.
+ The implementation for the 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+ReaderT
+\end_layout
+
+\end_inset
+
+ transformer was already given in the proof of Statement
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "subsec:Statement-monad-construction-1"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+.
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+final case class ReaderT[M[_]: Monad : Functor, R, A](run: R => M[A]) {
+\end_layout
+
+\begin_layout Plain Layout
+
+  def map[B](f: A => B): ReaderT[M, R, B] = ReaderT(r => run(r).map(f))
+\end_layout
+
+\begin_layout Plain Layout
+
+  def flatMap[B](f: A => ReaderT[M, R, B]): ReaderT[M, R, B] = ReaderT {
+\end_layout
+
+\begin_layout Plain Layout
+
+    r => run(r)            // Type is M[A].
+\end_layout
+
+\begin_layout Plain Layout
+
+           .flatMap(f)     // Type is M[ReaderT[M, R, B]].
+\end_layout
+
+\begin_layout Plain Layout
+
+           .map(_.run(r))  // Type is M[B].
+\end_layout
+
+\begin_layout Plain Layout
+
+  }
+\end_layout
+
+\begin_layout Plain Layout
+
+}  
+\end_layout
+
+\end_inset
+
+The 
+\begin_inset Quotes eld
+\end_inset
+
+foreign lift
+\begin_inset Quotes erd
+\end_inset
+
+ and the 
+\begin_inset Quotes eld
+\end_inset
+
+base lift
+\begin_inset Quotes erd
+\end_inset
+
+ for 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+ReaderT
+\end_layout
+
+\end_inset
+
+ are implemented by
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+implicit class ReaderTLift[M[_]: Monad : Functor, R, A](m: M[A]) {
+\end_layout
+
+\begin_layout Plain Layout
+
+  def up: ReaderT[M, R, A] = ReaderT(_ => m) // The Reader monad's pure
+ method.
+\end_layout
+
+\begin_layout Plain Layout
+
+}
+\end_layout
+
+\begin_layout Plain Layout
+
+implicit class ReaderTBaseLift[M[_]: Monad : Functor, R, A](t: R => A) {
+\end_layout
+
+\begin_layout Plain Layout
+
+  def up: ReaderT[M, R, A] = ReaderT(r => Monad[M].pure(t(r)))
+\end_layout
+
+\begin_layout Plain Layout
+
+}
+\end_layout
+
+\end_inset
+
+The lifts are written in the code notation as
+\begin_inset Formula 
+\begin{align*}
+\text{foreign lift}:\quad & \text{flift}:M^{A}\rightarrow T_{\text{Reader}}^{M,A}\quad,\quad\quad\text{flift}\,(m^{:M^{A}})\triangleq\_^{:R}\rightarrow m=\text{pu}_{\text{Reader}}(m)\quad,\\
+\text{base lift}:\quad & \text{blift}:(R\rightarrow A)\rightarrow T_{\text{Reader}}^{M,A}\quad,\quad\quad\text{blift}\,(t^{:R\rightarrow A})\triangleq r^{:R}\rightarrow\text{pu}_{M}(t(r))=t\bef\text{pu}_{M}\quad.
+\end{align*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+The transformer 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+EitherT
+\end_layout
+
+\end_inset
+
+ is similar to 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+TryT
+\end_layout
+
+\end_inset
+
+ since the type 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Try[A]
+\end_layout
+
+\end_inset
+
+ is equivalent to 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Either[Throwable, A]
+\end_layout
+
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+Let us implement the 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+WriterT
+\end_layout
+
+\end_inset
+
+ transformer:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+final case class WriterT[M[_]: Monad : Functor, W: Monoid, A](t: M[(A, W)])
+ {
+\end_layout
+
+\begin_layout Plain Layout
+
+  def map[B](f: A => B): WriterT[M, W, B] = WriterT(t.map { case (a, w) =>
+ (f(a), w) })
+\end_layout
+
+\begin_layout Plain Layout
+
+  def flatMap[B](f: A => WriterT[M, W, B]): WriterT[M, W, B] = WriterT(
+\end_layout
+
+\begin_layout Plain Layout
+
+    t.flatMap { case (a, w1) => f(a).t.map { case (b, w2) => (b, w1 |+| w2)
+ }  })
+\end_layout
+
+\begin_layout Plain Layout
+
+}  
+\end_layout
+
+\end_inset
+
+The 
+\begin_inset Quotes eld
+\end_inset
+
+foreign lift
+\begin_inset Quotes erd
+\end_inset
+
+ and the 
+\begin_inset Quotes eld
+\end_inset
+
+base lift
+\begin_inset Quotes erd
+\end_inset
+
+ for 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+WriterT
+\end_layout
+
+\end_inset
+
+ are (omitting some Scala boilerplate):
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+def flift[A]: M[A] => M[(A, W)] = _.map { a => (a, Monoid[W].empty) }
+\end_layout
+
+\begin_layout Plain Layout
+
+def blift[A]: ((A, W)) => M[(A, W)] = { t => Monad[M].pure(t) }
+\end_layout
+
+\end_inset
+
+
+\begin_inset Formula 
+\begin{align*}
+\text{foreign lift}:\quad & \text{flift}:M^{A}\rightarrow T_{\text{Writer}}^{M,A}\quad,\quad\quad m^{:M^{A}}\triangleright\text{flift}\triangleq m\triangleright(a\rightarrow a\times e_{w})^{\uparrow M}\quad,\\
+\text{base lift}:\quad & \text{blift}:(R\rightarrow A)\rightarrow T_{\text{Writer}}^{M,A}\quad,\quad\quad\text{blift}\triangleq\text{pu}_{M}\quad.
+\end{align*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Comparing the lifts for 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+ReaderT
+\end_layout
+
+\end_inset
+
+ and 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+WriterT
+\end_layout
+
+\end_inset
+
+, we notice some common features of lifts for compositional transformers
+ (
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+ReaderT
+\end_layout
+
+\end_inset
+
+, 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+EitherT
+\end_layout
+
+\end_inset
+
+, 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+WriterT
+\end_layout
+
+\end_inset
+
+): one of the lifts is equal to a 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+pure
+\end_layout
+
+\end_inset
+
+ method, and the other is equal to a lifted 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+pure
+\end_layout
+
+\end_inset
+
+ method.
+ We will see later that this pattern applies to all monad transformers defined
+ via functor composition.
+\end_layout
+
+\begin_layout Standard
+We now turn to the 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+ListT
+\end_layout
+
+\end_inset
+
+ transformer.
+ To make the code more concise, we use the 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Option
+\end_layout
+
+\end_inset
+
+ type to represent 
+\begin_inset Formula $\bbnum 1+A\times T_{\text{List}}^{M,A}$
+\end_inset
+
+ in the recursive type 
+\begin_inset Formula $T_{\text{List}}^{M,A}\triangleq M^{\bbnum 1+A\times T_{\text{List}}^{M,A}}$
+\end_inset
+
+:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+final case class ListT[M[_]: Monad : Functor, A](value: M[Option[(A, ListT[M,
+ A])]]) {
+\end_layout
+
+\begin_layout Plain Layout
+
+  def map[B](f: A => B): ListT[M, B] = ListT(t.map(_.map { // Use M's and
+ Option's map methods.
+\end_layout
+
+\begin_layout Plain Layout
+
+    case (head, tail) => (f(head), tail.map(f))
+\end_layout
+
+\begin_layout Plain Layout
+
+  }))
+\end_layout
+
+\begin_layout Plain Layout
+
+  def flatMap[B](f: A => ListT[M, B]): ListT[M, B] = ListT(
+\end_layout
+
+\begin_layout Plain Layout
+
+    t.flatMap { // Here we need a function of type Option[(A, ListT)] =>
+ M[Option[(A, ListT)]].
+\end_layout
+
+\begin_layout Plain Layout
+
+      case None => Monad[M].pure(None)
+\end_layout
+
+\begin_layout Plain Layout
+
+      case Some((head, tail)) => f(head).value // Type is M[Option[(A, ListT)]].
+\end_layout
+
+\begin_layout Plain Layout
+
+    
+\end_layout
+
+\begin_layout Plain Layout
+
+          
+\end_layout
+
+\begin_layout Plain Layout
+
+  })
+\end_layout
+
+\begin_layout Plain Layout
+
+}  
+\end_layout
+
+\end_inset
+
+The 
+\begin_inset Quotes eld
+\end_inset
+
+foreign lift
+\begin_inset Quotes erd
+\end_inset
+
+ and the 
+\begin_inset Quotes eld
+\end_inset
+
+base lift
+\begin_inset Quotes erd
+\end_inset
+
+ for 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+ListT
+\end_layout
+
+\end_inset
+
+ are:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+def flift[A]: M[A] => ListT[M, A] = { m => ListT(m) }
+\end_layout
+
+\begin_layout Plain Layout
+
+def blift[A]: ((A, W)) => M[(A, W)] = { t => Monad[M].pure(t) }
+\end_layout
+
+\end_inset
+
+
+\begin_inset Formula 
+\begin{align*}
+\text{foreign lift}:\quad & \text{flift}:M^{A}\rightarrow T_{\text{Writer}}^{M,A}\quad,\quad\quad m^{:M^{A}}\triangleright\text{flift}\triangleq m\triangleright(a\rightarrow a\times e_{w})^{\uparrow M}\quad,\\
+\text{base lift}:\quad & \text{blift}:(R\rightarrow A)\rightarrow T_{\text{Writer}}^{M,A}\quad,\quad\quad\text{blift}\triangleq\text{pu}_{M}\quad.
+\end{align*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Section
+Slides
 \end_layout
 
 \begin_layout Standard
@@ -654,26 +3905,6 @@ Remains to be understood:
 
 \begin_layout Standard
 Finding suitable laws for the liftings; checking that the laws hold
-\end_layout
-
-\begin_layout Standard
-Building a 
-\begin_inset Quotes eld
-\end_inset
-
-big monad
-\begin_inset Quotes erd
-\end_inset
-
- out of 
-\begin_inset Quotes eld
-\end_inset
-
-smaller
-\begin_inset Quotes erd
-\end_inset
-
- ones, with lawful liftings
 \end_layout
 
 \begin_layout Standard
@@ -3143,1967 +6374,7 @@ mrun
 \end_layout
 
 \begin_layout Section
-Practical use
-\end_layout
-
-\begin_layout Subsection
-Combining monadic effects by functor composition
-\end_layout
-
-\begin_layout Standard
-Monads describe effects that depend on previously computed values.
- It is often necessary to combine effects of several monads in one value.
- For example, a value of type 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Future
-\end_layout
-
-\end_inset
-
- can be computed concurrently, while 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Option
-\end_layout
-
-\end_inset
-
- represents a possibly missing value.
- To describe a possibly missing value that is also computed concurrently,
- we need somehow to combine 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Future
-\end_layout
-
-\end_inset
-
- with 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Option
-\end_layout
-
-\end_inset
-
-.
-\end_layout
-
-\begin_layout Standard
-The type constructors 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Future
-\end_layout
-
-\end_inset
-
- and 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Option
-\end_layout
-
-\end_inset
-
- are not subtypes of each other, so we cannot simply use them together in
- a functor block:
-\begin_inset listings
-inline false
-status open
-
-\begin_layout Plain Layout
-
-for {
-\end_layout
-
-\begin_layout Plain Layout
-
-  x <- Future(1)
-\end_layout
-
-\begin_layout Plain Layout
-
-  y <- Option(x + 1) // Type error.
-\end_layout
-
-\begin_layout Plain Layout
-
-  ...
-\end_layout
-
-\end_inset
-
-
-\end_layout
-
-\begin_layout Standard
-One way of combining two effects is by using functor composition, 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Future[Option[A]]
-\end_layout
-
-\end_inset
-
-.
- However, we run into a problem if we want to chain a computation to the
- value within the nested type.
- For instance, this code will not compile:
-\begin_inset listings
-inline false
-status open
-
-\begin_layout Plain Layout
-
-for {
-\end_layout
-
-\begin_layout Plain Layout
-
-  xOpt <- Future(Option(1))       // xOpt: Option[Int]
-\end_layout
-
-\begin_layout Plain Layout
-
-  x    <- xOpt    // We would like to get x: Int here.
-\end_layout
-
-\begin_layout Plain Layout
-
-  ...
-\end_layout
-
-\end_inset
-
-The source type must be consistent within the entire functor block; we cannot
- mix source lines of 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Future
-\end_layout
-
-\end_inset
-
- and 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Option
-\end_layout
-
-\end_inset
-
- types.
- If we try working directly with the nested data type, we will have to write
- code like this:
-\begin_inset listings
-inline false
-status open
-
-\begin_layout Plain Layout
-
-val result: Future[Option[Int]] = for {
-\end_layout
-
-\begin_layout Plain Layout
-
-  xOpt <- Future(Option(1))  // xOpt: Option[Int]
-\end_layout
-
-\begin_layout Plain Layout
-
-  tOpt <- xOpt match {       // yOpt: Option[Int]
-\end_layout
-
-\begin_layout Plain Layout
-
-    case None     => Future.successful(None)     // This expression must
- be a Future[Option[Int]].
-\end_layout
-
-\begin_layout Plain Layout
-
-    case Some(x)  => for {
-\end_layout
-
-\begin_layout Plain Layout
-
-        yOpt <- Future(Option(x + 1))
-\end_layout
-
-\begin_layout Plain Layout
-
-        zOpt <- yOpt match { // zOpt: Option[Int]
-\end_layout
-
-\begin_layout Plain Layout
-
-          case None    => Future.successful(None) // Must return a Future[Option[
-Int]] everywhere.
-\end_layout
-
-\begin_layout Plain Layout
-
-          case Some(y) => Future(Option(y + 3))
-\end_layout
-
-\begin_layout Plain Layout
-
-        }
-\end_layout
-
-\begin_layout Plain Layout
-
-      } yield zOpt
-\end_layout
-
-\begin_layout Plain Layout
-
-  }
-\end_layout
-
-\begin_layout Plain Layout
-
-} yield tOpt
-\end_layout
-
-\end_inset
-
-The nested type constructor forces us to use pattern matching with nested
- functor blocks, since that is the only way of getting access to values
- of type 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-A
-\end_layout
-
-\end_inset
-
- within 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Future[Option[A]]
-\end_layout
-
-\end_inset
-
-.
- The code is repetitive and deeply nested, which makes it hard to read and
- to change.
- 
-\end_layout
-
-\begin_layout Standard
-The first step towards solving the problem is by rewriting this monadic
- program as a direct chain of computations depending on the results of previous
- ones:
-\begin_inset listings
-inline false
-status open
-
-\begin_layout Plain Layout
-
-val result: Future[Option[Int]] = for { // This will not compile!
-\end_layout
-
-\begin_layout Plain Layout
-
-  x <- Future(Option(1))     // x: Option[Int]
-\end_layout
-
-\begin_layout Plain Layout
-
-  y <- Future(Option(x + 1)) // Type error: x + 1 is undefined.
-\end_layout
-
-\begin_layout Plain Layout
-
-  z <- Future(Option(y + 3)) // We would like x, y, and z to be integers.
-\end_layout
-
-\begin_layout Plain Layout
-
-} yield z
-\end_layout
-
-\end_inset
-
-To be able to write code in this way, we need to implement the 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-flatMap
-\end_layout
-
-\end_inset
-
- operation directly on the type 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Future[Option[A]]
-\end_layout
-
-\end_inset
-
- with respect to the type parameter 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-A
-\end_layout
-
-\end_inset
-
-.
- Let us wrap the type 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Future[Option[A]]
-\end_layout
-
-\end_inset
-
- into a class and implement 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-map
-\end_layout
-
-\end_inset
-
- and 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-flatMap
-\end_layout
-
-\end_inset
-
- as methods:
-\begin_inset listings
-inline false
-status open
-
-\begin_layout Plain Layout
-
-final case class FutOpt[A](nested: Future[Option[A]]) {
-\end_layout
-
-\begin_layout Plain Layout
-
-  def map[B](f: A => B)(implicit ec: ExecutionContext): FutOpt[B] = FutOpt(neste
-d.map(_.map(f)))
-\end_layout
-
-\begin_layout Plain Layout
-
-  def flatMap[B](f: A => FutOpt[B])(implicit ec: ExecutionContext): FutOpt[B]
- =
-\end_layout
-
-\begin_layout Plain Layout
-
-    FutOpt(nested.flatMap {      // Provide a function Option[A] => Future[Option
-[B]].
-\end_layout
-
-\begin_layout Plain Layout
-
-      case None    => Future.successful(None) // Must return a Future[Option[B]]
- here.
-\end_layout
-
-\begin_layout Plain Layout
-
-      case Some(x) => f(x).nested
-\end_layout
-
-\begin_layout Plain Layout
-
-    })
-\end_layout
-
-\begin_layout Plain Layout
-
-}
-\end_layout
-
-\begin_layout Plain Layout
-
-\end_layout
-
-\begin_layout Plain Layout
-
-import scala.concurrent.ExecutionContext.Implicits.global
-\end_layout
-
-\begin_layout Plain Layout
-
-val result: FutOpt[Int] = for {      // This code compiles now.
-\end_layout
-
-\begin_layout Plain Layout
-
-  x <- FutOpt(Future(Option(1)))     // x: Int
-\end_layout
-
-\begin_layout Plain Layout
-
-  y <- FutOpt(Future(Option(x + 1))) // y: Int
-\end_layout
-
-\begin_layout Plain Layout
-
-  z <- FutOpt(Future(Option(y + 3))) // z: Int
-\end_layout
-
-\begin_layout Plain Layout
-
-} yield z
-\end_layout
-
-\end_inset
-
-To improve usability, we may define conversions from 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Future
-\end_layout
-
-\end_inset
-
- to 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-FutOpt
-\end_layout
-
-\end_inset
-
- and from 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Option
-\end_layout
-
-\end_inset
-
- to 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-FutOpt
-\end_layout
-
-\end_inset
-
-:
-\begin_inset listings
-inline false
-status open
-
-\begin_layout Plain Layout
-
-implicit class FutureToFutOpt[A](fut: Future[A])(implicit ec: ExecutionContext)
- {
-\end_layout
-
-\begin_layout Plain Layout
-
-  def lift: FutOpt[A] = FutOpt(fut.map(x => Some(x)))
-\end_layout
-
-\begin_layout Plain Layout
-
-}
-\end_layout
-
-\begin_layout Plain Layout
-
-implicit class OptionToFutOpt[A](opt: Option[A]) {
-\end_layout
-
-\begin_layout Plain Layout
-
-  def lift: FutOpt[A] = FutOpt(Future.successful(opt))
-\end_layout
-
-\begin_layout Plain Layout
-
-}
-\end_layout
-
-\end_inset
-
-After defining the 
-\begin_inset Quotes eld
-\end_inset
-
-lifts
-\begin_inset Quotes erd
-\end_inset
-
-, we may rewrite the previous code in a more readable form:
-\begin_inset listings
-inline false
-status open
-
-\begin_layout Plain Layout
-
-val result: FutOpt[Int] = for {
-\end_layout
-
-\begin_layout Plain Layout
-
-  x <- Option(1).lift     // x: Int
-\end_layout
-
-\begin_layout Plain Layout
-
-  y <- Future(x + 1).lift // y: Int
-\end_layout
-
-\begin_layout Plain Layout
-
-  z <- Option(y + 3).lift // z: Int
-\end_layout
-
-\begin_layout Plain Layout
-
-} yield z  // After some time, this evaluates to `FutOpt(Future(Success(Some(5))
-))`.
-\end_layout
-
-\end_inset
-
-
-\end_layout
-
-\begin_layout Standard
-We may hope to apply the same technique when mixing effects from arbitrary
- monads, such as:
-\begin_inset listings
-inline false
-status open
-
-\begin_layout Plain Layout
-
-val result: SomeBigMonad[Int] = for {  // After some definitions, this code
- will work:
-\end_layout
-
-\begin_layout Plain Layout
-
-  x <- (1 to n).lift                   // x: Int
-\end_layout
-
-\begin_layout Plain Layout
-
-  y <- Future { computation(x) }.lift  // y: Int
-\end_layout
-
-\begin_layout Plain Layout
-
-  z <- Try { maybeError(y) }.lift      // z: Int
-\end_layout
-
-\begin_layout Plain Layout
-
-} yield z
-\end_layout
-
-\end_inset
-
-This code will work if we somehow create a new monad that 
-\begin_inset Quotes eld
-\end_inset
-
-unifies
-\begin_inset Quotes erd
-\end_inset
-
- 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Seq
-\end_layout
-
-\end_inset
-
-, 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Future
-\end_layout
-
-\end_inset
-
-, and 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Try
-\end_layout
-
-\end_inset
-
-.
- 
-\end_layout
-
-\begin_layout Standard
-It turns out that there is no simple recipe for implementing a 
-\begin_inset Quotes eld
-\end_inset
-
-unified
-\begin_inset Quotes erd
-\end_inset
-
- monad for a given set of monads.
- Developing the necessary techniques is the main focus of this chapter.
-\end_layout
-
-\begin_layout Standard
-We have seen that 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Future[A]
-\end_layout
-
-\end_inset
-
- and 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Option[A]
-\end_layout
-
-\end_inset
-
- are combined in a new monad as 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Future[Option[A]]
-\end_layout
-
-\end_inset
-
-.Does functor composition always work? If 
-\begin_inset Formula $M_{1}$
-\end_inset
-
- and 
-\begin_inset Formula $M_{2}$
-\end_inset
-
- are monads then at least one of the compositions, 
-\begin_inset Formula $M_{1}\circ M_{2}$
-\end_inset
-
- or 
-\begin_inset Formula $M_{2}\circ M_{1}$
-\end_inset
-
-, is often a monad.
- However, 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Option[Future[A]]
-\end_layout
-
-\end_inset
-
- is not a monad.
- By trial and error, we can find further examples where the functor composition
- works and where it does not (marked with a strike-through line):
-\end_layout
-
-\begin_layout Standard
-\align center
-\begin_inset Tabular
-<lyxtabular version="3" rows="7" columns="4">
-<features tabularvalignment="middle">
-<column alignment="center" valignment="top">
-<column alignment="center" valignment="top">
-<column alignment="center" valignment="top">
-<column alignment="center" valignment="top">
-<row>
-<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\series bold
-\size small
-Monad 
-\begin_inset Formula $M_{1}^{A}$
-\end_inset
-
-
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\series bold
-\size small
-Monad 
-\begin_inset Formula $M_{2}^{A}$
-\end_inset
-
-
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\series bold
-\size small
-\begin_inset Formula $M_{1}\circ M_{2}$
-\end_inset
-
-
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\series bold
-\size small
-\begin_inset Formula $M_{2}\circ M_{1}$
-\end_inset
-
-
-\end_layout
-
-\end_inset
-</cell>
-</row>
-<row>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size small
-\begin_inset Formula $\text{Future}^{A}$
-\end_inset
-
-
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size small
-\begin_inset Formula $Z+A$
-\end_inset
-
-
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size small
-\begin_inset Formula $\text{Future}^{Z+A}$
-\end_inset
-
-
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size small
-\strikeout on
-\begin_inset Formula $Z+\text{Future}^{A}$
-\end_inset
-
-
-\end_layout
-
-\end_inset
-</cell>
-</row>
-<row>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\family typewriter
-\size footnotesize
-Future[A]
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\family typewriter
-\size footnotesize
-State[S, A]
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\family typewriter
-\size footnotesize
-\strikeout on
-Future[State[S, A]]
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\family typewriter
-\size footnotesize
-\strikeout on
-State[S, Future[A]]
-\end_layout
-
-\end_inset
-</cell>
-</row>
-<row>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size small
-\begin_inset Formula $W\times A$
-\end_inset
-
-
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size small
-\begin_inset Formula $Z+A$
-\end_inset
-
-
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size small
-\begin_inset Formula $W\times\left(Z+A\right)$
-\end_inset
-
-
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size small
-\begin_inset Formula $Z+W\times A$
-\end_inset
-
-
-\end_layout
-
-\end_inset
-</cell>
-</row>
-<row>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size small
-\begin_inset Formula $\text{List}^{A}$
-\end_inset
-
-
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size small
-\begin_inset Formula $Z\rightarrow A$
-\end_inset
-
-
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size small
-\strikeout on
-\begin_inset Formula $\text{List}^{Z\rightarrow A}$
-\end_inset
-
-
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size small
-\begin_inset Formula $Z\rightarrow\text{List}^{A}$
-\end_inset
-
-
-\end_layout
-
-\end_inset
-</cell>
-</row>
-<row>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size small
-\begin_inset Formula $\text{List}^{A}$
-\end_inset
-
-
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size small
-\begin_inset Formula $Z+A$
-\end_inset
-
-
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-\begin_inset Formula $\text{List}^{Z+A}$
-\end_inset
-
-
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size small
-\strikeout on
-\begin_inset Formula $Z+\text{List}^{A}$
-\end_inset
-
-
-\end_layout
-
-\end_inset
-</cell>
-</row>
-<row>
-<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size small
-\begin_inset Formula $\bbnum 1+A$
-\end_inset
-
-
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size small
-\begin_inset Formula $Z\rightarrow A$
-\end_inset
-
-
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size small
-\strikeout on
-\begin_inset Formula $\bbnum 1+\left(Z\rightarrow A\right)$
-\end_inset
-
-
-\end_layout
-
-\end_inset
-</cell>
-<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
-\begin_inset Text
-
-\begin_layout Plain Layout
-
-\size small
-\begin_inset Formula $Z\rightarrow\bbnum 1+A$
-\end_inset
-
-
-\end_layout
-
-\end_inset
-</cell>
-</row>
-</lyxtabular>
-
-\end_inset
-
-
-\end_layout
-
-\begin_layout Standard
-It turns out that some monads do not compose in either order, while others
- have a 
-\begin_inset Quotes eld
-\end_inset
-
-preferred
-\begin_inset Quotes erd
-\end_inset
-
- order (we will see proofs of these properties later in this chapter).
- For instance, the 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Reader
-\end_layout
-
-\end_inset
-
- monad 
-\begin_inset Formula $Z\rightarrow A$
-\end_inset
-
- always composes on the outside (Statement
-\begin_inset space ~
-\end_inset
-
-
-\begin_inset CommandInset ref
-LatexCommand ref
-reference "subsec:Statement-monad-construction-1"
-plural "false"
-caps "false"
-noprefix "false"
-
-\end_inset
-
-) but not necessarily on the inside.
- On the other hand, pass/fail monads 
-\begin_inset Formula $M^{A}\triangleq Z+A$
-\end_inset
-
- composes when it is on the inside.
-\end_layout
-
-\begin_layout Standard
-When the monad composition works both ways, the two resulting monads represent
- inequivalent combinations of effects.
- For example, the 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Writer
-\end_layout
-
-\end_inset
-
- monad 
-\begin_inset Formula $W\times A$
-\end_inset
-
- (appending an output message) and the pass/fail monads 
-\begin_inset Formula $Z+A$
-\end_inset
-
- (allowing failure) can be composed in two ways.
- The monad 
-\begin_inset Formula $M^{A}\triangleq W\times\left(Z+A\right)$
-\end_inset
-
- describes a computation that may fail but always outputs a message; but
- the monad 
-\begin_inset Formula $M^{A}\triangleq Z+W\times A$
-\end_inset
-
- will not output any message on failure.
-\end_layout
-
-\begin_layout Standard
-When functor composition works, implementing the 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-lift
-\end_layout
-
-\end_inset
-
- methods is straightforward:
-\end_layout
-
-\begin_layout Subsubsection
-Example 
-\begin_inset CommandInset label
-LatexCommand label
-name "subsec:Example-lift-for-List-Try-composition"
-
-\end_inset
-
-
-\begin_inset CommandInset ref
-LatexCommand ref
-reference "subsec:Example-lift-for-List-Try-composition"
-plural "false"
-caps "false"
-noprefix "false"
-
-\end_inset
-
-
-\begin_inset Index idx
-status collapsed
-
-\begin_layout Plain Layout
-solved examples
-\end_layout
-
-\end_inset
-
-
-\end_layout
-
-\begin_layout Standard
-Implement a composition of 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-List
-\end_layout
-
-\end_inset
-
- and 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Try
-\end_layout
-
-\end_inset
-
- monads for use in functor blocks.
-\end_layout
-
-\begin_layout Subparagraph
-Solution
-\end_layout
-
-\begin_layout Standard
-Since 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Try
-\end_layout
-
-\end_inset
-
- is a pass/fail monad, we must compose it 
-\emph on
-inside
-\emph default
- other monads; so we define the 
-\begin_inset Quotes eld
-\end_inset
-
-unified
-\begin_inset Quotes erd
-\end_inset
-
- monad type as 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-List[Try[A]]
-\end_layout
-
-\end_inset
-
-.
- We wrap the type 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-List[Try[A]]
-\end_layout
-
-\end_inset
-
- into a class, implement 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-map
-\end_layout
-
-\end_inset
-
- and 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-flatMap
-\end_layout
-
-\end_inset
-
- as methods, and then define the two 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-lift
-\end_layout
-
-\end_inset
-
- functions as extension methods:
-\begin_inset listings
-inline false
-status open
-
-\begin_layout Plain Layout
-
-final case class ListTry[A](value: List[Try[A]]) {
-\end_layout
-
-\begin_layout Plain Layout
-
-  def map[B](f: A => B): ListTry[B] = ListTry(value.map(_.map(f)))
-\end_layout
-
-\begin_layout Plain Layout
-
-  def flatMap[B](f: A => ListTry[B]): ListTry[B] = ListTry(
-\end_layout
-
-\begin_layout Plain Layout
-
-    value.flatMap {         // Provide a function Try[A] => List[Try[B]]
- here.
-\end_layout
-
-\begin_layout Plain Layout
-
-      case Failure(t)   => List(Failure(t))
-\end_layout
-
-\begin_layout Plain Layout
-
-      case Success(a)   => f(a).value
-\end_layout
-
-\begin_layout Plain Layout
-
-    }
-\end_layout
-
-\begin_layout Plain Layout
-
-  )
-\end_layout
-
-\begin_layout Plain Layout
-
-}       // Change names from `lift` to `up` because `lift` is already defined
- for `List` class.
-\end_layout
-
-\begin_layout Plain Layout
-
-implicit class ListToListTry[A](l: List[A]) { def up: ListTry[A] = ListTry(l.map(
-Success(_))) }
-\end_layout
-
-\begin_layout Plain Layout
-
-implicit class TryToListTry[A](t: Try[A]) { def up: ListTry[A] = ListTry(List(t)
-) }
-\end_layout
-
-\end_inset
-
-After these definitions, we can write functor blocks that combine 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-List
-\end_layout
-
-\end_inset
-
- and 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Try
-\end_layout
-
-\end_inset
-
-:
-\begin_inset listings
-inline false
-status open
-
-\begin_layout Plain Layout
-
-scala> for {
-\end_layout
-
-\begin_layout Plain Layout
-
-         x <- List(1, 2, 3).up
-\end_layout
-
-\begin_layout Plain Layout
-
-         y <- Try(x + 100).up
-\end_layout
-
-\begin_layout Plain Layout
-
-       } yield y
-\end_layout
-
-\begin_layout Plain Layout
-
-res2: ListTry[Int] = ListTry(List(Success(101), Success(102), Success(103)))
-\end_layout
-
-\end_inset
-
-
-\end_layout
-
-\begin_layout Subsection
-Combining monads via monad transformers
-\end_layout
-
-\begin_layout Standard
-Not all monads combine with others via functor composition.
- But even for those that do, the method used in Example
-\begin_inset space ~
-\end_inset
-
-
-\begin_inset CommandInset ref
-LatexCommand ref
-reference "subsec:Example-lift-for-List-Try-composition"
-plural "false"
-caps "false"
-noprefix "false"
-
-\end_inset
-
- requires writing custom wrapper classes for 
-\emph on
-each pair
-\emph default
- of monads.
- The length of the required code would be quadratic in the number of supported
- monads.
- To avoid the code explosion, we will use a different approach to organizing
- the code that combines monads.
-\end_layout
-
-\begin_layout Standard
-The main idea of that approach is to fix the first monad 
-\begin_inset Formula $L$
-\end_inset
-
- (the 
-\begin_inset Quotes eld
-\end_inset
-
-base
-\begin_inset Quotes erd
-\end_inset
-
- monad) and to write code that combines 
-\begin_inset Formula $L$
-\end_inset
-
- with an arbitrary second monad 
-\begin_inset Formula $M$
-\end_inset
-
- (the 
-\begin_inset Quotes eld
-\end_inset
-
-foreign
-\begin_inset Quotes erd
-\end_inset
-
- monad).
- The result is a new, 
-\begin_inset Quotes eld
-\end_inset
-
-transformed
-\begin_inset Quotes erd
-\end_inset
-
- monad, denoted by 
-\begin_inset Formula $T_{L}^{M}$
-\end_inset
-
-.
- It turns out that the code of 
-\begin_inset Formula $T_{L}^{M}$
-\end_inset
-
- is fully parametric in 
-\begin_inset Formula $M$
-\end_inset
-
-.
- In other words, the code of the 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-pure
-\end_layout
-
-\end_inset
-
- and 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-flatMap
-\end_layout
-
-\end_inset
-
- methods for 
-\begin_inset Formula $T_{L}^{M}$
-\end_inset
-
- will work in the same way for all foreign monads 
-\begin_inset Formula $M$
-\end_inset
-
- and will only depend on 
-\begin_inset Formula $M$
-\end_inset
-
-'s monadic methods (
-\begin_inset Formula $\text{pu}_{M}$
-\end_inset
-
- and 
-\begin_inset Formula $\text{flm}_{M}$
-\end_inset
-
-).
- The monad 
-\begin_inset Formula $T_{L}^{M}$
-\end_inset
-
- is called the 
-\begin_inset Quotes eld
-\end_inset
-
-
-\begin_inset Formula $L$
-\end_inset
-
--transformer applied to 
-\begin_inset Formula $M$
-\end_inset
-
-
-\begin_inset Quotes erd
-\end_inset
-
- or the 
-\begin_inset Quotes eld
-\end_inset
-
-transformed monad 
-\begin_inset Formula $M$
-\end_inset
-
-
-\begin_inset Quotes erd
-\end_inset
-
-.
- The 
-\series bold
-monad transformer
-\series default
- of
-\begin_inset Index idx
-status open
-
-\begin_layout Plain Layout
-monad transformer
-\end_layout
-
-\end_inset
-
- the monad 
-\begin_inset Formula $L$
-\end_inset
-
- is the type constructor 
-\begin_inset Formula $T_{L}^{M}$
-\end_inset
-
- viewed as a function of its type parameters 
-\begin_inset Formula $M$
-\end_inset
-
- and 
-\begin_inset Formula $A$
-\end_inset
-
-.
-\end_layout
-
-\begin_layout Standard
-To illustrate this approach, let us implement the transformer for the 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Try
-\end_layout
-
-\end_inset
-
- monad.
- We begin with Example
-\begin_inset space ~
-\end_inset
-
-
-\begin_inset CommandInset ref
-LatexCommand ref
-reference "subsec:Example-lift-for-List-Try-composition"
-plural "false"
-caps "false"
-noprefix "false"
-
-\end_inset
-
- that combines 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Try
-\end_layout
-
-\end_inset
-
- with 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-List
-\end_layout
-
-\end_inset
-
-, but we now view 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Try
-\end_layout
-
-\end_inset
-
- as the base monad and 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-List
-\end_layout
-
-\end_inset
-
- as the foreign monad.
- The goal is to replace 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-List
-\end_layout
-
-\end_inset
-
- by an arbitrary foreign monad 
-\begin_inset Formula $M$
-\end_inset
-
-, so that the resulting code works in the same way for all monads 
-\begin_inset Formula $M$
-\end_inset
-
-.
- To achieve that, we rewrite the code of Example
-\begin_inset space ~
-\end_inset
-
-
-\begin_inset CommandInset ref
-LatexCommand ref
-reference "subsec:Example-lift-for-List-Try-composition"
-plural "false"
-caps "false"
-noprefix "false"
-
-\end_inset
-
- so that we can clearly see the usage of the methods 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-pure
-\end_layout
-
-\end_inset
-
- and 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-flatMap
-\end_layout
-
-\end_inset
-
- from the 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-List
-\end_layout
-
-\end_inset
-
- monad:
-\begin_inset listings
-inline false
-status open
-
-\begin_layout Plain Layout
-
-def
-\end_layout
-
-\end_inset
-
-***
-\end_layout
-
-\begin_layout Standard
-The decisive advantage of the transformer approach is that we only need
- to write the code for 
-\begin_inset Formula $T_{L}^{M}$
-\end_inset
-
- once for every base monad 
-\begin_inset Formula $L$
-\end_inset
-
- (and not for every pair 
-\begin_inset Formula $L$
-\end_inset
-
-, 
-\begin_inset Formula $M$
-\end_inset
-
-).
- 
+Laws and structure
 \end_layout
 
 \begin_layout Subsection
@@ -5116,12 +6387,8 @@ Our next goal is to derive the properties required for the new monad to
  ***
 \end_layout
 
-\begin_layout Section
-Laws and structure
-\end_layout
-
 \begin_layout Subsection
-Laws of monad transformers
+The laws of monad transformers
 \begin_inset CommandInset label
 LatexCommand label
 name "subsec:Laws-of-monad-transformers"
