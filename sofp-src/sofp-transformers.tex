@@ -325,7 +325,7 @@ The advantage of the transformer approach is that the code for $T_{L}^{M}$
 needs to be written once for every base monad $L$ (and not for every
 pair $L$, $M$).
 
-\subsection{Monad transformers for standard monads}
+\subsection{Monad transformers for standard monads\label{subsec:Monad-transformers-for-standard-monads}}
 
 While the code of \lstinline!TryT! works, it leaves us with further
 questions. The code of \lstinline!TryT! is specific to the \lstinline!Try!
@@ -388,7 +388,7 @@ The specific choices of the transformer type constructors in Table~\ref{tab:Know
 are far from obvious.\footnote{The difficulty of this task is illustrated by the history of the \lstinline!ListT!
 transformer in the Haskell standard library. The type constructor
 for \lstinline!ListT! was chosen incorrectly in 2002 and remained
-so until it was corrected in 2007. See a discussion in \texttt{\href{https://wiki.haskell.org/index.php?title=ListT_done_right&oldid=10815}{https://wiki.haskell.org/index.php?title=ListT\_done\_right\&oldid=10815}}} The only justification for those choices is that they work and obey
+so until it was corrected in 2007. See a discussion in \texttt{\href{https://wiki.haskell.org/index.php?title=ListT_done_right}{https://wiki.haskell.org/index.php?title=ListT\_done\_right}}} The only justification for those choices is that they work and obey
 the required laws, while no alternative transformers are known. We
 will derive and prove the required laws for these and other transformers
 later in this chapter. For now, we accept the results of Table~\ref{tab:Known-monad-transformers}
@@ -1096,7 +1096,7 @@ as a type parameter
 
 For any monad $N^{\bullet}$ and a monad morphism $f:M^{\bullet}\leadsto N^{\bullet}$
 we need to have a monad morphism $T_{L}^{M,\bullet}\leadsto T_{L}^{N,\bullet}$
-for the transformed monads: $\text{mrun}_{L}^{M}:\left(M^{\bullet}\leadsto N^{\bullet}\right)\rightarrow T_{L}^{M,\bullet}\leadsto T_{L}^{N,\bullet}$
+for the transformed monads: $\text{frun}_{L}^{M}:\left(M^{\bullet}\leadsto N^{\bullet}\right)\rightarrow T_{L}^{M,\bullet}\leadsto T_{L}^{N,\bullet}$
 with the \textsf{``}lifting\textsf{''} laws
 
 If we implement $T_{L}^{M,\bullet}$ only via $M$\textsf{'}s monad methods,
@@ -1208,7 +1208,7 @@ known)
 
 $T_{\text{Cod}}$, $T_{\text{Sel}}$, and $T_{\text{Cont}}$ transformers
 have no \texttt{\textcolor{blue}{\footnotesize{}blift}}, \texttt{\textcolor{blue}{\footnotesize{}brun}},
-or \texttt{\textcolor{blue}{\footnotesize{}mrun}} 
+or \texttt{\textcolor{blue}{\footnotesize{}frun}} 
 
 Are there monad morphisms between Cod, Sel, and Cont?
 \end{comment}
@@ -1430,6 +1430,217 @@ parametric code.
 
 \subsection{Motivation for the laws of monad transformer runners}
 
+A monad\textsf{'}s runner $\theta_{M}:M^{A}\rightarrow A$ extracts results
+of type $A$ from monadic values of type $M^{A}$. The use of a runner
+will agree with programmer\textsf{'}s intuition if the runner obeys the laws
+of monad morphisms (see Definition~\ref{subsec:Definition-monad-morphism});
+a runner $\theta_{M}$ must be a monad morphism $M\leadsto\text{Id}$
+between $M$ and the identity monad ($\text{Id}$). Heuristically,
+a runner \textsf{``}executes\textsf{''} or \textsf{``}runs\textsf{''} the effects of the monad $M$
+and delivers a pure value as a result.
+
+How can we extract the result values from a monad stack that combines
+the effects of several monads? Let us try to create a runner $\theta_{T}:T_{L}^{M,A}\rightarrow A$
+for the transformed monad $T_{L}^{M}$ assuming that both $L$ and
+$M$ have known runners $\theta_{L}$ and $\theta_{M}$.
+
+As a first example, assume a compositional transformer such as $T_{L}^{M}=L\circ M$;
+this is the case for $L=\text{Reader}$ and some other monads. Given
+a runner $\theta_{M}$, we may first run $M$\textsf{'}s effects by lifting
+$\theta_{M}$ to $L$,
+\[
+\theta_{M}^{\uparrow L}:L^{M^{A}}\rightarrow L^{A}\quad.
+\]
+The result of type $A$ can be now extracted by using $L$\textsf{'}s runner.
+So, we may write
+\[
+\theta_{T}\triangleq\theta_{M}^{\uparrow L}\bef\theta_{L}\quad.
+\]
+If we first run the effects of $L$ and then those of $M$, the result
+will be the same: $\theta_{L}^{\uparrow L}\bef\theta_{M}=\theta_{M}\bef\theta_{L}$
+by the (assumed) naturality of $\theta_{L}$. So, the runners are
+commutative, which is intuitively to be expected since the two runners
+work on different effects that are separately present in a value of
+type $T_{L}^{M}$.
+
+A similar solution is available for composed-inside transformers $T_{L}^{M}=M\circ L$.
+We may run just the effects of one of the monads, or both if needed,
+and the runners are commutative.
+
+Now consider a non-compositional transformer such as \lstinline!StateT!:
+\[
+T_{\text{State}}^{M,A}=S\rightarrow M^{A\times S}\quad.
+\]
+In this case, we cannot run the effects of \lstinline!State! using
+$\theta_{\text{State}}$ or the effects of $M$ using $\theta_{M}^{\uparrow\text{State}}$:
+the types do not match.
+\begin{align*}
+ & \text{frun}:T_{\text{State}}^{M,A}\rightarrow M^{A}=(S\rightarrow M^{A\times S})\rightarrow M^{A}\quad\quad\text{vs.}\quad\theta_{\text{State}}:\left(S\rightarrow A\times S\right)\rightarrow A\quad,\\
+ & \text{brun}:T_{\text{State}}^{M,A}\rightarrow\text{State}^{S,A}=(S\rightarrow M^{A\times S})\rightarrow S\rightarrow A\times S\quad\quad\text{vs.}\quad\theta_{M}^{\uparrow\text{State}}:(S\rightarrow M^{A}\times S)\rightarrow S\rightarrow A\times S\quad.
+\end{align*}
+We need to use new runners specially adapted to \lstinline!StateT!,
+as shown in Section~\ref{subsec:Monad-transformers-for-standard-monads}.
+The foreign runner (\lstinline!frun!) is a function of $\theta_{M}$
+and works for all foreign monads $M$. The base runner \lstinline!brun!,
+however, is not a function of $\theta_{\text{State}}$ but has custom
+code. The commutativity of runners,
+\[
+\text{frun}_{\text{State}}(\theta_{M})\bef\theta_{\text{State}}(i)\overset{?}{=}\text{brun}_{\text{State}}(i)\bef\theta_{M}\quad,
+\]
+is no longer automatic and needs to be verified. Apply both sides
+to a value $t^{:T_{\text{State}}^{M,A}}$:
+\begin{align*}
+{\color{greenunder}\text{left-hand side}:}\quad & t\triangleright\text{frun}_{\text{State}}(\theta_{M})\bef\theta_{\text{State}}(i)=t\triangleright(t\rightarrow t\bef\theta_{M})\bef(t\rightarrow i\triangleright t\triangleright\pi_{1})\\
+{\color{greenunder}\text{compute composition}:}\quad & \quad=i\triangleright(t\bef\theta_{M})\triangleright\pi_{1}=i\triangleright t\bef\theta_{M}\bef\pi_{1}\quad,\\
+{\color{greenunder}\text{left-hand side}:}\quad & t\triangleright\text{brun}_{\text{State}}(i)\bef\theta_{M}=t\triangleright(t\rightarrow i\triangleright t\triangleright\pi_{1}^{\uparrow M})\triangleright\theta_{M}=i\triangleright t\bef\gunderline{\pi_{1}^{\uparrow M}\bef\theta_{M}}\\
+{\color{greenunder}\text{naturality of }\theta_{M}:}\quad & \quad=i\triangleright t\bef\theta_{M}\bef\pi_{1}\quad.
+\end{align*}
+Both sides are now equal, which proves the commutativity of runners.
+
+These examples motivate the requirement that a monad transformer should
+come equipped with a base runner $\text{brun}_{L}:T_{L}^{M}\leadsto M$
+and a foreign runner $\text{frun}_{L}(\theta_{M}):T_{L}^{M}\leadsto L$
+as long as the monads $L$ and $M$ have runners $\theta_{L}$ and
+$\theta_{M}$. The foreign runner must be a function of $M$\textsf{'}s runner
+($\theta_{M}$). The effects of the base monad and of the foreign
+monad may be run in any order, and the results must be the same.
+
+Some monads $M$ do not admit monad morphisms $M\leadsto\text{Id}$
+but instead have useful monad morphisms $M\leadsto N$ with suitable
+target monads $N$. A monad morphism $M\leadsto N$ may partially
+run the effects of $M$ and represent the results using $N$\textsf{'}s effects.
+For instance, the continuation monad can be mapped to a task monad
+such as \lstinline!Future!; the \lstinline!Option! monad is mapped
+to the \lstinline!Either! monad. 
+
+When a foreign monad $M$ requires a \textsf{``}extended\textsf{''} runner of the
+form $\phi:M\leadsto N$ with a nontrivial target $N\not\cong\text{Id}$,
+we would like to be able to map the monad stacks accordingly as $T_{L}^{M}\leadsto T_{L}^{N}$,
+partially running the effects of $M$ but keeping the effects of $L$
+unchanged. It is natural to expect that the same foreign runner ($\text{frun}_{L}$)
+should be able to use $\phi$ instead of $\theta_{M}$. We can then
+easily compute a map $\text{frun}_{L}\left(\phi\right):T_{L}^{M}\leadsto T_{L}^{N}$
+that runs the stacks as required.
+
+When the base monad $L$ requires a runner with a nontrivial target
+$K$, we would similarly need a monad morphism $T_{L}^{M}\leadsto T_{K}^{M}$,
+in order to partially run the effects of $L$. Since $T_{K}^{M}$
+depends on $K$ non-parametrically, we cannot expect to have a universal
+base runner that uses $\phi:L\leadsto K$ as a parameter. The extended
+base runner $\text{brun}_{L,K}:T_{L}^{M}\leadsto T_{K}^{M}$ will
+need to have custom code specially adapted to the monads $L$ and
+$K$.
+
+The pass/fail monads (such as \lstinline!Option! and \lstinline!Try!)
+show one example where the extended base runner exists, because the
+monad transformers for pass/fail monads work by functor composition.
+If $L^{A}=\bbnum 1+A$ and $K^{A}\triangleq E+A$ (where $E$ is a
+fixed type representing error information), we can choose an arbitrary
+runner $\phi:L\leadsto K$ and compute the corresponding base runner
+as 
+\[
+\text{brun}_{L,K}:(T_{L}^{M}\leadsto T_{K}^{M})\triangleq\phi^{\uparrow M}\quad.
+\]
+
+Apart from the laws of monad morphisms, do we need additional properties
+for all these runners? For intuition, recall the example with the
+continuation monad\textsf{'}s runner (Section~\ref{subsec:The-continuation-monad})
+that works by first converting \lstinline!Cont! $\leadsto$ \lstinline!Future!
+and then \lstinline!Future! $\leadsto$ \lstinline!Id!. Denote the
+two extended runners by
+\[
+\phi_{1}:\text{Cont}^{R,A}\rightarrow\text{Future}^{A}\quad,\quad\quad\phi_{2}:\text{Future}^{A}\rightarrow A\quad.
+\]
+The runner for \lstinline!Cont! is then defined by $\theta_{\text{Cont}}\triangleq\phi_{1}\bef\phi_{2}$.
+Now consider how we would run a monad stack $T_{L}^{\text{Cont}}$.
+We may use the foreign runner with $\theta_{\text{Cont}}$ as
+\[
+\text{frun}_{L}(\theta_{\text{Cont}}):T_{L}^{\text{Cont}}\leadsto L\quad.
+\]
+We could also use the extended runners to map $T_{L}^{\text{Cont}}\leadsto T_{L}^{\text{Future}}$
+and then $T_{L}^{\text{Future}}\leadsto T_{L}^{\text{Id}}\cong L$:
+\[
+\text{frun}_{L}(\phi_{1}):T_{L}^{\text{Cont}}\leadsto T_{L}^{\text{Future}}\quad,\quad\quad\text{frun}_{L}(\phi_{2}):T_{L}^{\text{Future}}\leadsto L\quad.
+\]
+Intuitively, we would expect that the composition of these two runners
+should be the same as when running $T_{L}^{\text{Cont}}$ directly
+into $L$:
+\[
+\text{frun}_{L}(\phi_{1})\bef\text{frun}_{L}(\phi_{2})\overset{!}{=}\text{frun}_{L}(\theta_{\text{Cont}})=\text{frun}_{L}(\phi_{1}\bef\phi_{2})\quad.
+\]
+The composition $\phi_{1}\bef\phi_{2}$ of any two monad morphisms
+$\phi_{1}$ and $\phi_{2}$ is again a monad morphism (Statement~\ref{subsec:Statement-monadic-morphism-composition}).
+This suggests a \textbf{composition law}\index{composition law!of foreign monad runners},
+\[
+\text{frun}_{L}(\phi_{1})\bef\text{frun}_{L}(\phi_{2})\overset{!}{=}\text{frun}_{L}(\phi_{1}\bef\phi_{2})\quad.
+\]
+This law is similar to the composition law of \lstinline!map!. By
+analogy, we also impose the \textbf{identity law}\index{identity laws!of foreign monad runners}:
+\[
+\text{frun}_{L}(\text{id}^{:M^{A}\rightarrow M^{A}})\overset{!}{=}\text{id}^{:T_{L}^{M,A}\rightarrow T_{L}^{M,A}}\quad.
+\]
+
+Finally, let us consider the usage of a monad stack $T_{L}^{M}$ within
+a functor block. Typically, we would lift some values of types $L^{A}$
+or $M^{A}$ to the stack; at the end of the computation, we may run
+some (or all) of the effects. There are two possssible cases: we lift
+a monadic value and then run the effects of the same monad; or we
+run the effects of the other monad. 
+
+In the first case, we lift a value $m:M^{A}$ to the stack $T_{L}^{M}$
+and then run the effects of $M$ using $\text{frun}_{L}(\theta_{M})$,
+getting a value of type $L^{A}$. The result is a transformation
+\[
+\text{lift}\bef\text{frun}_{L}(\theta_{M}):M^{A}\rightarrow L^{A}\quad.
+\]
+Note that both \lstinline!lift! and \lstinline!frun! are monad morphisms,
+so their composition is again a monad morphism $M\leadsto L$. Since
+$M$ is an arbitrary foreign monad, we cannot expect the monad $L$
+to describe any effects of the foreign monad $M$. So, the result
+value of type $L^{A}$ must have an empty $L$-effect, that is, it
+must be created from a value $a^{:A}$ via $\text{pu}_{L}$. The only
+way to obtain a value $a^{:A}$ is by applying a runner $\theta_{M}$
+to the value $m:M^{A}$. We obtain the law 
+\[
+m\triangleright\text{lift}\triangleright\text{frun}_{L}(\theta_{M})=m\triangleright\theta_{M}\triangleright\text{pu}_{L}\quad,\quad\quad\text{lift}\bef\text{frun}_{L}(\theta_{M})=\theta_{M}\bef\text{pu}_{L}\quad.
+\]
+
+The analogous law for \lstinline!blift! and \lstinline!brun! is
+\[
+\text{blift}\bef\text{brun}=\theta_{L}\bef\text{pu}_{M}\quad.
+\]
+
+In the second case, we lift a value $m:M^{A}$ to the stack, obtaining
+a value $t\triangleq\text{lift}\left(m\right)$, and then apply the
+\emph{base} runner to $t$ (running just the effects of $L$). This
+yields a monad morphism $M^{A}\rightarrow M^{A}$. We expect this
+to be an identity function because the monad $M$ is arbitrary, and
+the code of \lstinline!lift! and \lstinline!brun! must be generic
+in $M$. This requirement is written as the law
+\[
+m\triangleright\text{lift}\triangleright\text{brun}_{L}\overset{!}{=}m\quad,\quad\quad\text{lift}\bef\text{brun}\overset{!}{=}\text{id}\quad,
+\]
+called the \textbf{non-degeneracy law}\index{monad transformers!non-degeneracy law}
+of \lstinline!lift! and \lstinline!brun!. The law requires \lstinline!lift!
+and \lstinline!brun! to preserve all information about $M$-effects.
+The analogous non-degeneracy law for \lstinline!blift! and \lstinline!frun!
+is
+\[
+\text{blift}\bef\text{frun}_{L}(\theta_{M})=\text{id}\quad.
+\]
+
+
+\subsection{Category theory view of lifts and runners }
+
+The lifting composition law{*}{*}{*} suggests that we should consider
+a lifting from monad morphisms $M\leadsto N$ to monad morphisms $T_{L}^{M}\leadsto T_{L}^{N}$.
+In the language of category theory, a monad morphism is a morphism
+in the category of monads. So, it appears that $\text{frun}_{L}$
+is the morphism mapping function for a (categorical) functor from
+the category of monads ($M$, $N$, ...) to the category of monad
+stacks with base $L$. The objects of that category are monads $T_{L}^{M}$,
+$T_{L}^{N}$, etc., all with the same base monad $L$.
+
 {*}{*}{*}
 
 \subsection{Summary of the laws of monad transformers\label{subsec:Laws-of-monad-transformers}}
@@ -1450,39 +1661,39 @@ monad $M$, the function $\text{lift}:M^{A}\rightarrow T_{L}^{M,A}$
 is a monad morphism. (In a shorter notation, $\text{lift}:M\leadsto T_{L}^{M}$.)
 \item \textbf{Runner laws}:\index{monad transformers!runner laws} For any
 monads $M$, $N$ and any monad morphism $\phi:M\leadsto N$, the
-runner $\text{mrun}\left(\phi\right):T_{L}^{M}\leadsto T_{L}^{N}$
-is a monad morphism. Moreover, the function \lstinline!mrun! lifts
+runner $\text{frun}\left(\phi\right):T_{L}^{M}\leadsto T_{L}^{N}$
+is a monad morphism. Moreover, the function \lstinline!frun! lifts
 monad morphisms from $M\leadsto N$ to $T_{L}^{M}\leadsto T_{L}^{N}$
-and must satisfy the corresponding \textbf{lifting laws}\index{monad transformers!lifting laws of runner}:
+and must satisfy the corresponding \textbf{functor laws}\index{monad transformers!functor laws of runner}:
 \[
-\text{mrun}\left(\text{id}\right)=\text{id}\quad,\quad\quad\text{mrun}\left(\phi\right)\bef\text{mrun}\left(\chi\right)=\text{mrun}\left(\phi\bef\chi\right)\quad.
+\text{frun}\left(\text{id}\right)=\text{id}\quad,\quad\quad\text{frun}\left(\phi\right)\bef\text{frun}\left(\chi\right)=\text{frun}\left(\phi\bef\chi\right)\quad.
 \]
 It follows from the identity law $T_{L}^{\text{Id}}\cong L$ that
 the base monad $L$ can be lifted into $T_{L}^{M}$: Setting $\phi=\text{pu}_{M}:\text{Id}\leadsto M$,
 we obtain
 \[
-\text{mrun}\left(\text{pu}_{M}\right):T_{L}^{\text{Id}}\leadsto T_{L}^{M}=L\leadsto T_{L}^{M}.
+\text{frun}\left(\text{pu}_{M}\right):T_{L}^{\text{Id}}\leadsto T_{L}^{M}=L\leadsto T_{L}^{M}.
 \]
-This function is called the \index{monad transformers!base lifting}\textbf{base
-lifting}, $\text{mrun}\left(\text{pu}_{M}\right)\triangleq\text{blift}:L^{A}\rightarrow T_{L}^{M,A}$.
-The base lifting automatically satisfies the non-degeneracy law,
+This function is called the \index{monad transformers!base lift}\textbf{base
+lift}, $\text{blift}\triangleq\text{frun}\left(\text{pu}_{M}\right):L^{A}\rightarrow T_{L}^{M,A}$.
+The base lift automatically satisfies the non-degeneracy law,
 \[
-\text{blift}\bef\text{mrun}\left(\phi^{:M\leadsto\text{Id}}\right)=\text{id}\quad,
+\text{blift}\bef\text{frun}_{L}(\phi^{:M\leadsto\text{Id}})=\text{id}\quad,
 \]
 for any monad morphism $\phi:M\leadsto\text{Id}$, because the left-hand
-side equals $\text{mrun}\left(\text{pu}_{M}\bef\phi\right)$, and
+side equals $\text{frun}\left(\text{pu}_{M}\bef\phi\right)$, and
 the composition law for monad morphisms gives $\text{pu}_{M}\bef\phi=\text{pu}_{\text{Id}}=\text{id}$.
 \item \textbf{Base runner laws}:\index{monad transformers!base runner laws}
-For any monad morphism $\theta:L\leadsto\text{Id}$ and for any monad
-$M$, the base runner $\text{brun}\left(\theta\right):T_{L}^{M}\leadsto M$
+For any monad morphism $\theta_{L}:L\leadsto\text{Id}$ and for any
+monad $M$, the base runner $\text{brun}\left(\theta_{L}\right):T_{L}^{M}\leadsto M$
 is a monad morphism. The base runner must also satisfy the \textbf{non-degeneracy
 law},\index{monad transformers!non-degeneracy law} 
 \[
 \text{lift}\bef\text{brun}\left(\theta\right)=\text{id}\quad.
 \]
 Since the monad transformer is specific to the base monad $L$ and
-does not support an arbitrary other base monad, there are no lifting
-laws for \lstinline!brun!, unlike \lstinline!mrun!. So the non-degeneracy
+does not support an arbitrary other base monad, there are no functor
+laws for \lstinline!brun!, unlike \lstinline!frun!. The non-degeneracy
 law for \lstinline!brun! is not an automatic consequence of other
 laws.
 \end{enumerate}
@@ -1503,40 +1714,40 @@ that does not work correctly even though it has the methods with the
 required type signatures.
 
 The simplest example of an incorrect monad transformer is obtained
-by defining the transformed monad to be the unit monad, $T_{L}^{M,A}\triangleq\bbnum 1$,
+by defining the new monad to be the unit monad, $T_{L}^{M,A}\triangleq\bbnum 1$,
 for any monads $L$ and $M$. It is clear that this \textsf{``}transformer\textsf{''}
 is completely wrong: it cannot possibly keep the information about
-the monads $L$ and $M$, because the methods of the unit monad discard
-\emph{all} information and return $1$. However, the type constructor
-$T_{L}^{M,A}$ still has all the required methods $\text{pu}_{T}$,
-$\text{ftn}_{T}$, $\text{lift}_{T}$, $\text{mrun}_{T}$, and $\text{brun}_{T}$
+the effects of $L$ and $M$, because the methods of the unit monad
+discard \emph{all} information and return $1$. However, the type
+constructor $T_{L}^{M,A}$ has all the required methods $\text{pu}_{T}$,
+$\text{ftn}_{T}$, $\text{lift}_{T}$, $\text{frun}_{T}$, and $\text{brun}_{T}$
 with the required type signatures (they are constant functions returning
 $1$). All these functions are automatically monad morphisms, since
 a function from any monad to the unit monad is always a monad morphism.
-So, the fake \textsf{``}transformer\textsf{''} satisfies almost all of the monad transformer
+So, the fake \textsf{``}transformer\textsf{''} satisfies many of the monad transformer
 laws! However, the identity law $T_{L}^{\text{Id}}\cong L$ and the
 non-degeneracy law $\text{lift}\bef\text{brun}\left(\theta\right)=\text{id}$
 are violated since $T_{L}^{\text{Id}}=\bbnum 1\not\cong L$ and $\text{lift}\bef\text{brun}\left(\theta\right)=\left(\_\rightarrow1\right)\neq\text{id}$.
 For this reason, the unit monad is not a lawful monad transformer.
 
 This simple example demonstrates the importance of the monad transformer
-laws. A malicious programmer could give us a fake implementation of
-a \textsf{``}transformer\textsf{''} that appears to have all the methods with the
-correct type signatures but, instead of a bigger monad, constructs
-a unit monad dressed up as a type constructor $T_{L}^{M,A}$. The
-only way for us to detect the fraud is to find that the identity law
-and the non-degeneracy law are violated.
+laws. We could be given a fake implementation of a \textsf{``}transformer\textsf{''}
+that appears to have all the methods with the correct type signatures
+but, instead of a bigger monad, constructs a unit monad dressed up
+as a type constructor $T_{L}^{M,A}$. The only way for us to detect
+the fraud is to find that the identity law and the non-degeneracy
+law are violated.
 
-Other examples of fake \textsf{``}transformers\textsf{''} violating some of the laws
-are $T_{L}^{M}=L$ (no lifting law) and $T_{L}^{M}=M$ (no identity
+Other examples of incorrect \textsf{``}transformers\textsf{''} violating some of the
+laws are $T_{L}^{M}=L$ (no lifting law) and $T_{L}^{M}=M$ (no identity
 law).
 
-In these cases, it is intuitively clear that the fake transformer
-definitions are incorrect because the information about either $L$
-or $M$ is missing in $T_{L}^{M}$. A potentially working definition
-of $T_{L}^{M}$ must be a type constructor whose definition somehow
-combines both $L$ and $M$. Many such definitions are possible, but
-few will satisfy the monad transformer laws.
+In these cases, it is intuitively clear that the transformer definitions
+are incorrect because the information about either $L$ or $M$ is
+missing in $T_{L}^{M}$. A potentially working definition of $T_{L}^{M}$
+must be a type constructor that somehow combines both $L$ and $M$.
+Many such definitions are possible, but few will satisfy the monad
+transformer laws.
 
 \subsection{Examples of failure to define a generic monad transformer}
 
@@ -1737,23 +1948,23 @@ Therefore, $T_{P}^{S}=T_{P}^{T_{Q}^{M}}$ is a monad, as required.
 We need to show that $T_{P}^{T_{Q}^{\text{Id}}}\cong T_{P}^{Q}$ via
 a monadic isomorphism. The identity law for $T_{Q}$ says that $T_{Q}^{\text{Id}}\cong Q$
 via a monadic isomorphism. So, we already have a monad morphism $\phi:Q\leadsto T_{Q}^{\text{Id}}$
-and its inverse, $\chi:T_{Q}^{\text{Id}}\leadsto Q$. The runner $\text{mrun}_{P}$
+and its inverse, $\chi:T_{Q}^{\text{Id}}\leadsto Q$. The runner $\text{frun}_{P}$
 for $T_{P}$ can be applied to both $\phi$ and $\chi$ since they
 are monad morphisms. So we obtain two new monad morphisms,
 \[
-\text{mrun}_{P}\left(\phi\right):T_{P}^{Q}\leadsto T_{P}^{T_{Q}^{\text{Id}}}\quad;\quad\quad\text{mrun}_{P}\left(\chi\right):T_{P}^{T_{Q}^{\text{Id}}}\leadsto T_{P}^{Q}\quad.
+\text{frun}_{P}\left(\phi\right):T_{P}^{Q}\leadsto T_{P}^{T_{Q}^{\text{Id}}}\quad;\quad\quad\text{frun}_{P}\left(\chi\right):T_{P}^{T_{Q}^{\text{Id}}}\leadsto T_{P}^{Q}\quad.
 \]
 Are these two monad morphisms inverses of each other? To show this,
 we need to verify that
 \[
-\text{mrun}_{P}\left(\phi\right)\bef\text{mrun}_{P}\left(\chi\right)=\text{id}\quad,\quad\quad\text{mrun}_{P}\left(\chi\right)\bef\text{mrun}_{P}\left(\phi\right)=\text{id}\quad.
+\text{frun}_{P}\left(\phi\right)\bef\text{frun}_{P}\left(\chi\right)=\text{id}\quad,\quad\quad\text{frun}_{P}\left(\chi\right)\bef\text{frun}_{P}\left(\phi\right)=\text{id}\quad.
 \]
-By the runner law for $T_{P}$, we have $\text{mrun}_{P}\left(f\right)\bef\text{mrun}_{P}\left(g\right)=\text{mrun}_{P}\left(f\bef g\right)$
-for any two monad morphisms $f$ and $g$. We also have $\text{mrun}_{P}\left(\text{id}\right)=\text{id}$
+By the runner law for $T_{P}$, we have $\text{frun}_{P}\left(f\right)\bef\text{frun}_{P}\left(g\right)=\text{frun}_{P}\left(f\bef g\right)$
+for any two monad morphisms $f$ and $g$. We also have $\text{frun}_{P}\left(\text{id}\right)=\text{id}$
 by the same law. So, 
 \begin{align*}
-\text{mrun}_{P}\left(\phi\right)\bef\text{mrun}_{P}\left(\chi\right) & =\text{mrun}_{P}\left(\phi\bef\chi\right)=\text{mrun}_{P}\left(\text{id}\right)=\text{id}\quad,\\
-\text{mrun}_{P}\left(\chi\right)\bef\text{mrun}_{P}\left(\phi\right) & =\text{mrun}_{P}\left(\chi\bef\phi\right)=\text{mrun}_{P}\left(\text{id}\right)=\text{id}\quad.
+\text{frun}_{P}\left(\phi\right)\bef\text{frun}_{P}\left(\chi\right) & =\text{frun}_{P}\left(\phi\bef\chi\right)=\text{frun}_{P}\left(\text{id}\right)=\text{id}\quad,\\
+\text{frun}_{P}\left(\chi\right)\bef\text{frun}_{P}\left(\phi\right) & =\text{frun}_{P}\left(\chi\bef\phi\right)=\text{frun}_{P}\left(\text{id}\right)=\text{id}\quad.
 \end{align*}
 We have indeed obtained a monadic isomorphism between $T_{P}^{Q}$
 and $T_{P}^{T_{Q}^{\text{Id}}}$.
@@ -1775,9 +1986,9 @@ of monad morphisms is again a monad morphism by Statement~\ref{subsec:Statement-
 
 We need to show that there exists a lawful lifting 
 \[
-\text{mrun}_{R}:\left(M\leadsto N\right)\rightarrow T_{P}^{T_{Q}^{M}}\leadsto T_{P}^{T_{Q}^{N}}\quad.
+\text{frun}_{R}:\left(M\leadsto N\right)\rightarrow T_{P}^{T_{Q}^{M}}\leadsto T_{P}^{T_{Q}^{N}}\quad.
 \]
-First, we have to define $\text{mrun}_{R}\phi$ for any given $\phi:M\leadsto N$.
+First, we have to define $\text{frun}_{R}\phi$ for any given $\phi:M\leadsto N$.
 We use the lifting law for $T_{Q}$ to get a monad morphism
 \[
 \text{lift}_{Q}\phi:T_{Q}^{M}\leadsto T_{Q}^{N}\quad.
@@ -1944,7 +2155,7 @@ in this way? Monad transformers depend on the structure on the base
 monad, but not on the structure of the foreign monad; the transformer\textsf{'}s
 methods \lstinline!pure! and \lstinline!flatten! are generic in
 the foreign monad. This is expressed via the monad transformer laws
-for the runners \lstinline!mrun! and \lstinline!brun!, which we
+for the runners \lstinline!frun! and \lstinline!brun!, which we
 will need to derive separately for each of the two kinds of transformers.
 
 \subsection{Motivation for the \texttt{swap} function}
@@ -2682,7 +2893,7 @@ So, the lifting laws for $T$ follow from the laws of \lstinline!swap!.
 \subsection{Monad transformer runner laws: Proofs}
 
 The laws of runners are not symmetric with respect to the base monad
-and the foreign monad: the runner, \lstinline!mrun!, is generic in
+and the foreign monad: the runner, \lstinline!frun!, is generic in
 the foreign monad (but not in the base monad). In each case, the \lstinline!swap!
 function must be monadically natural with respect to the \emph{foreign}
 monad. So, this law needs to be written differently, depending on
@@ -2693,15 +2904,15 @@ when either $L$ or $M$ is the base monad.
 
 the runners are
 \begin{align*}
-\text{mrun}\,\phi^{:M^{\bullet}\leadsto N^{\bullet}} & :L^{M^{\bullet}}\leadsto L^{N^{\bullet}}\quad,\quad\quad\text{mrun}\,\phi=\phi^{\uparrow L}\quad;\\
+\text{frun}\,\phi^{:M^{\bullet}\leadsto N^{\bullet}} & :L^{M^{\bullet}}\leadsto L^{N^{\bullet}}\quad,\quad\quad\text{frun}\,\phi=\phi^{\uparrow L}\quad;\\
 \text{brun}\,\theta^{:L^{\bullet}\leadsto\bullet} & :L^{M^{\bullet}}\leadsto M^{\bullet}\quad,\quad\quad\text{brun}\,\theta=\theta\quad.
 \end{align*}
-The laws of runners require that $\text{mrun}\,\phi$ and $\text{brun}\,\theta$
+The laws of runners require that $\text{frun}\,\phi$ and $\text{brun}\,\theta$
 must be monad morphisms, i.e.~the identity and composition laws must
-hold for $\text{mrun}\,\phi$ and $\text{brun}\,\theta$:
+hold for $\text{frun}\,\phi$ and $\text{brun}\,\theta$:
 \begin{align*}
-\text{pu}_{L\circ M}\bef\text{mrun}\,\phi & =\text{pu}_{L\circ N}\quad,\\
-\text{ftn}_{L\circ M}\bef\text{mrun}\,\phi & =\left(\text{mrun}\,\phi\right)^{\uparrow M\uparrow L}\bef\text{mrun}\,\phi\bef\text{ftn}_{L\circ N}\quad,\\
+\text{pu}_{L\circ M}\bef\text{frun}\,\phi & =\text{pu}_{L\circ N}\quad,\\
+\text{ftn}_{L\circ M}\bef\text{frun}\,\phi & =\left(\text{frun}\,\phi\right)^{\uparrow M\uparrow L}\bef\text{frun}\,\phi\bef\text{ftn}_{L\circ N}\quad,\\
 \text{pu}_{L\circ M}\bef\text{brun}\,\theta & =\text{pu}_{M}\quad,\\
 \text{ftn}_{L\circ M}\bef\text{brun}\,\theta & =\left(\text{brun}\,\theta\right)^{\uparrow M\uparrow L}\bef\text{brun}\,\theta\bef\text{ftn}_{M}\quad.
 \end{align*}
@@ -2719,18 +2930,18 @@ N^{L^{A}}\ar[r]\sb(0.5){\text{sw}_{L,N}} & L^{N^{A}} &  & M^{A}
 }
 \]
 
-The first law to be shown is the identity law for $\text{mrun}\,\phi$:
+The first law to be shown is the identity law for $\text{frun}\,\phi$:
 \begin{align*}
-{\color{greenunder}\text{expect this to equal }\text{pu}_{L\circ N}:}\quad & \text{pu}_{L\circ M}\bef\text{mrun}\,\phi\\
-{\color{greenunder}\text{definitions of }\text{mrun}\text{ and }\text{pu}_{L\circ M}:}\quad & =\text{pu}_{M}\bef\gunderline{\text{pu}_{L}\bef\phi^{\uparrow L}}\\
+{\color{greenunder}\text{expect this to equal }\text{pu}_{L\circ N}:}\quad & \text{pu}_{L\circ M}\bef\text{frun}\,\phi\\
+{\color{greenunder}\text{definitions of }\text{frun}\text{ and }\text{pu}_{L\circ M}:}\quad & =\text{pu}_{M}\bef\gunderline{\text{pu}_{L}\bef\phi^{\uparrow L}}\\
 {\color{greenunder}\text{naturality of }\text{pu}_{L}:}\quad & =\gunderline{\text{pu}_{M}\bef\phi}\bef\text{pu}_{L}\\
 {\color{greenunder}\text{identity law for }\phi:}\quad & =\text{pu}_{N}\bef\text{pu}_{L}\\
 {\color{greenunder}\text{definition of }\text{pu}_{L\circ N}:}\quad & =\text{pu}_{L\circ N}\quad.
 \end{align*}
-The next law to be shown is the composition law for $\text{mrun}\,\phi$:
+The next law to be shown is the composition law for $\text{frun}\,\phi$:
 \begin{align*}
-{\color{greenunder}\text{expect this to equal }\text{ftn}_{T}\bef\phi^{\uparrow L}:}\quad & \left(\text{mrun}\,\phi\right)^{\uparrow M\uparrow L}\bef\text{mrun}\,\phi\bef\text{ftn}_{L\circ N}\\
-{\color{greenunder}\text{definitions of }\text{mrun}\text{ and }\text{ftn}_{L\circ N}:}\quad & =\phi^{\uparrow L\uparrow M\uparrow L}\bef\gunderline{\phi^{\uparrow L}\bef\text{sw}_{L,N}^{\uparrow L}}\bef\text{ftn}_{L}\bef\text{ftn}_{N}^{\uparrow L}\\
+{\color{greenunder}\text{expect this to equal }\text{ftn}_{T}\bef\phi^{\uparrow L}:}\quad & \left(\text{frun}\,\phi\right)^{\uparrow M\uparrow L}\bef\text{frun}\,\phi\bef\text{ftn}_{L\circ N}\\
+{\color{greenunder}\text{definitions of }\text{frun}\text{ and }\text{ftn}_{L\circ N}:}\quad & =\phi^{\uparrow L\uparrow M\uparrow L}\bef\gunderline{\phi^{\uparrow L}\bef\text{sw}_{L,N}^{\uparrow L}}\bef\text{ftn}_{L}\bef\text{ftn}_{N}^{\uparrow L}\\
 {\color{greenunder}\text{monadic naturality of }\text{sw}_{L,M}:}\quad & =\gunderline{\phi^{\uparrow L\uparrow M\uparrow L}\bef\text{sw}_{L,M}^{\uparrow L}}\bef\phi^{\uparrow L\uparrow L}\bef\text{ftn}_{L}\bef\text{ftn}_{N}^{\uparrow L}\\
 {\color{greenunder}\text{naturality of }\text{sw}_{L,M}:}\quad & =\text{sw}_{L,M}^{\uparrow L}\bef\gunderline{\phi^{\uparrow M\uparrow L\uparrow L}\bef\phi^{\uparrow L\uparrow L}\bef\text{ftn}_{L}}\bef\text{ftn}_{N}^{\uparrow L}\\
 {\color{greenunder}\text{naturality of }\text{ftn}_{L}:}\quad & =\text{sw}_{L,M}^{\uparrow L}\bef\text{ftn}_{L}\bef\gunderline{\left(\phi^{\uparrow M}\bef\phi\bef\text{ftn}_{N}\right)}^{\uparrow L}\\
@@ -2763,11 +2974,11 @@ to the right and $\theta$ to the left:
 \end{align*}
 We have transformed both sides of the law into the same expression.
 
-The lifting laws for $\text{mrun}$ are
+The lifting laws for $\text{frun}$ are
 \[
-\text{mrun}\left(\text{id}\right)=\text{id}\quad,\quad\quad\text{mrun}\left(\phi\right)\bef\text{mrun}\left(\chi\right)=\text{mrun}\left(\phi\bef\chi\right)\quad.
+\text{frun}\left(\text{id}\right)=\text{id}\quad,\quad\quad\text{frun}\left(\phi\right)\bef\text{frun}\left(\chi\right)=\text{frun}\left(\phi\bef\chi\right)\quad.
 \]
-Since $\text{mrun}\left(\phi\right)=\phi^{\uparrow L}$ in our case,
+Since $\text{frun}\left(\phi\right)=\phi^{\uparrow L}$ in our case,
 these laws hold because they are the same as the functor laws of $L$.
 
 Finally, we verify the non-degeneracy law for $\text{brun}$:
@@ -2782,15 +2993,15 @@ Finally, we verify the non-degeneracy law for $\text{brun}$:
 
 the runners have the type signatures
 \begin{align*}
-\text{mrun}\,\phi^{:L^{\bullet}\leadsto N^{\bullet}} & :L^{M^{\bullet}}\leadsto N^{M^{\bullet}}\quad,\quad\quad\text{mrun}\,\phi=\phi\quad;\\
+\text{frun}\,\phi^{:L^{\bullet}\leadsto N^{\bullet}} & :L^{M^{\bullet}}\leadsto N^{M^{\bullet}}\quad,\quad\quad\text{frun}\,\phi=\phi\quad;\\
 \text{brun}\,\theta^{:M^{\bullet}\leadsto\bullet} & :L^{M^{\bullet}}\leadsto L^{\bullet}\quad,\quad\quad\text{brun}\,\theta=\theta^{\uparrow L}\quad.
 \end{align*}
-The laws of runners require that $\text{mrun}\,\phi$ and $\text{brun}\,\theta$
+The laws of runners require that $\text{frun}\,\phi$ and $\text{brun}\,\theta$
 must be monad morphisms, i.e.~the identity and composition laws must
-hold for $\text{mrun}\,\phi$ and $\text{brun}\,\theta$:
+hold for $\text{frun}\,\phi$ and $\text{brun}\,\theta$:
 \begin{align*}
-\text{pu}_{L\circ M}\bef\text{mrun}\,\phi & =\text{pu}_{N\circ M}\quad,\\
-\text{ftn}_{L\circ M}\bef\text{mrun}\,\phi & =\left(\text{mrun}\,\phi\right)^{\uparrow M\uparrow L}\bef\text{mrun}\,\phi\bef\text{ftn}_{N\circ M}\quad,\\
+\text{pu}_{L\circ M}\bef\text{frun}\,\phi & =\text{pu}_{N\circ M}\quad,\\
+\text{ftn}_{L\circ M}\bef\text{frun}\,\phi & =\left(\text{frun}\,\phi\right)^{\uparrow M\uparrow L}\bef\text{frun}\,\phi\bef\text{ftn}_{N\circ M}\quad,\\
 \text{pu}_{L\circ M}\bef\text{brun}\,\theta & =\text{pu}_{L}\quad,\\
 \text{ftn}_{L\circ M}\bef\text{brun}\,\theta & =\left(\text{brun}\,\theta\right)^{\uparrow M\uparrow L}\bef\text{brun}\,\theta\bef\text{ftn}_{L}\quad.
 \end{align*}
@@ -2807,15 +3018,15 @@ M^{N^{A}}\ar[r]\sb(0.5){\text{sw}_{N,M}} & N^{M^{A}} &  & L^{A}
 
 The first law to be proved is
 \begin{align*}
-{\color{greenunder}\text{expect to equal }\text{pu}_{N\circ M}:}\quad & \text{pu}_{L\circ M}\bef\text{mrun}\,\phi\\
-{\color{greenunder}\text{definitions of }\text{mrun}\text{ and }\text{pu}_{L\circ M}:}\quad & =\text{pu}_{M}\bef\gunderline{\text{pu}_{L}\bef\phi}\\
+{\color{greenunder}\text{expect to equal }\text{pu}_{N\circ M}:}\quad & \text{pu}_{L\circ M}\bef\text{frun}\,\phi\\
+{\color{greenunder}\text{definitions of }\text{frun}\text{ and }\text{pu}_{L\circ M}:}\quad & =\text{pu}_{M}\bef\gunderline{\text{pu}_{L}\bef\phi}\\
 {\color{greenunder}\text{identity law for }\phi:}\quad & =\text{pu}_{M}\bef\text{pu}_{N}\\
 {\color{greenunder}\text{definition of }\text{pu}_{N\circ M}:}\quad & =\text{pu}_{N\circ M}\quad.
 \end{align*}
-The next law is the composition law for $\text{mrun}\,\phi$:
+The next law is the composition law for $\text{frun}\,\phi$:
 \begin{align*}
-{\color{greenunder}\text{expect this to equal }\text{ftn}_{T}\bef\phi:}\quad & \left(\text{mrun}\,\phi\right)^{\uparrow M\uparrow L}\bef\text{mrun}\,\phi\bef\text{ftn}_{N\circ M}\\
-{\color{greenunder}\text{definitions of }\text{mrun}\text{ and }\text{ftn}_{N\circ M}:}\quad & =\phi^{\uparrow M\uparrow L}\bef\gunderline{\phi\bef\text{sw}_{N,M}^{\uparrow N}}\bef\text{ftn}_{N}\bef\text{ftn}_{M}^{\uparrow N}\\
+{\color{greenunder}\text{expect this to equal }\text{ftn}_{T}\bef\phi:}\quad & \left(\text{frun}\,\phi\right)^{\uparrow M\uparrow L}\bef\text{frun}\,\phi\bef\text{ftn}_{N\circ M}\\
+{\color{greenunder}\text{definitions of }\text{frun}\text{ and }\text{ftn}_{N\circ M}:}\quad & =\phi^{\uparrow M\uparrow L}\bef\gunderline{\phi\bef\text{sw}_{N,M}^{\uparrow N}}\bef\text{ftn}_{N}\bef\text{ftn}_{M}^{\uparrow N}\\
 {\color{greenunder}\text{naturality of }\phi:}\quad & =\gunderline{\phi^{\uparrow M\uparrow L}\bef\text{sw}_{N,M}^{\uparrow L}}\bef\phi\bef\text{ftn}_{N}\bef\text{ftn}_{M}^{\uparrow N}\\
 {\color{greenunder}\text{monadic naturality of }\text{sw}_{N,M}\text{ raised to }L:}\quad & =\text{sw}_{L,M}^{\uparrow L}\bef\gunderline{\phi^{\uparrow L}\bef\phi\bef\text{ftn}_{N}}\bef\text{ftn}_{M}^{\uparrow N}\\
 {\color{greenunder}\text{composition law for }\phi:}\quad & =\text{sw}_{L,M}^{\uparrow L}\bef\text{ftn}_{L}\bef\gunderline{\phi\bef\text{ftn}_{M}^{\uparrow N}}\\
@@ -2849,11 +3060,11 @@ left:
 {\color{greenunder}\text{composition law for }\theta:}\quad & =\gunderline{\theta^{\uparrow L}}\bef\theta^{\uparrow L\uparrow L}\bef\text{ftn}_{L}\quad.
 \end{align*}
 
-The lifting laws for $\text{mrun}$ are
+The lifting laws for $\text{frun}$ are
 \[
-\text{mrun}\left(\text{id}\right)=\text{id}\quad,\quad\quad\text{mrun}\left(\phi\right)\bef\text{mrun}\left(\chi\right)=\text{mrun}\left(\phi\bef\chi\right)\quad.
+\text{frun}\left(\text{id}\right)=\text{id}\quad,\quad\quad\text{frun}\left(\phi\right)\bef\text{frun}\left(\chi\right)=\text{frun}\left(\phi\bef\chi\right)\quad.
 \]
-Since $\text{mrun}\left(\phi\right)=\phi$ in our case, these laws
+Since $\text{frun}\left(\phi\right)=\phi$ in our case, these laws
 are trivially satisfied.
 
 Finally, the non-degeneracy law for $\text{brun}$:
@@ -4232,14 +4443,14 @@ Then the two \textsf{``}liftings\textsf{''} and the two \textsf{``}runners\texts
 \begin{align*}
 \text{lift}:M^{\bullet}\leadsto R^{M^{\bullet}} & \triangleq\text{pure}_{R}\quad,\\
 \text{blift}:R^{\bullet}\leadsto R^{M^{\bullet}} & \triangleq\text{pure}_{M}^{\uparrow R}\quad,\\
-\text{mrun}\,\big(\phi^{:M^{\bullet}\leadsto N^{\bullet}}\big):R^{M^{\bullet}}\rightarrow R^{N^{\bullet}} & \triangleq\phi^{\uparrow R}\quad,\\
+\text{frun}\,\big(\phi^{:M^{\bullet}\leadsto N^{\bullet}}\big):R^{M^{\bullet}}\rightarrow R^{N^{\bullet}} & \triangleq\phi^{\uparrow R}\quad,\\
 \text{brun}\,\theta^{:R^{\bullet}\leadsto\bullet}:R^{M^{\bullet}}\rightarrow M^{\bullet} & \triangleq\theta^{:R^{M^{\bullet}}\leadsto M^{\bullet}}\quad,
 \end{align*}
 will satisfy the identity laws
 \begin{align*}
 \text{pure}_{M}\bef\text{lift} & =\text{pure}_{T}\quad,\\
 \text{pure}_{R}\bef\text{blift} & =\text{pure}_{T}\quad,\\
-\text{pure}_{R^{M}}\bef\left(\text{mrun}\,\phi\right) & =\text{pure}_{N}\bef\text{pure}_{R}\quad,\\
+\text{pure}_{R^{M}}\bef\left(\text{frun}\,\phi\right) & =\text{pure}_{N}\bef\text{pure}_{R}\quad,\\
 \text{pure}_{R^{M}}\bef\left(\text{brun}\,\theta\right) & =\text{pure}_{M}\quad,
 \end{align*}
 where we assume that $\phi:M^{\bullet}\leadsto N^{\bullet}$ and $\theta:M^{\bullet}\leadsto\bullet$
@@ -4258,8 +4469,8 @@ The third law follows from the identity law for $\phi$,
 \]
  if we write
 \begin{align*}
- & \text{pure}_{R^{M}}\bef\left(\text{mrun}\,\phi\right)\\
-{\color{greenunder}\text{definitions of }\text{pure}_{R^{M}}\text{ and }\text{mrun}:}\quad & =\text{pure}_{M}\bef\text{pure}_{R}\bef\phi^{\uparrow R}\\
+ & \text{pure}_{R^{M}}\bef\left(\text{frun}\,\phi\right)\\
+{\color{greenunder}\text{definitions of }\text{pure}_{R^{M}}\text{ and }\text{frun}:}\quad & =\text{pure}_{M}\bef\text{pure}_{R}\bef\phi^{\uparrow R}\\
 {\color{greenunder}\text{naturality of }\text{pure}_{R}:}\quad & =\text{pure}_{M}\bef\phi\bef\text{pure}_{R}\\
 {\color{greenunder}\text{identity law for }\phi:}\quad & =\text{pure}_{N}\bef\text{pure}_{R}\quad.
 \end{align*}
@@ -4288,7 +4499,7 @@ defined as
 \begin{align*}
 \text{lift}^{:M^{\bullet}\leadsto T^{\bullet}} & \triangleq\text{pure}_{R}\quad,\\
 \text{blift}^{:R^{\bullet}\leadsto T^{\bullet}} & \triangleq\text{pure}_{M}^{\uparrow R}\quad,\\
-\text{mrun}\,\phi^{:M^{\bullet}\leadsto N^{\bullet}} & \triangleq\phi^{\uparrow R}\quad,\\
+\text{frun}\,\phi^{:M^{\bullet}\leadsto N^{\bullet}} & \triangleq\phi^{\uparrow R}\quad,\\
 \text{brun}\,\theta^{:R^{\bullet}\leadsto\bullet} & \triangleq\theta^{:R^{M^{\bullet}}\leadsto M^{\bullet}}\quad.
 \end{align*}
 Each of these four methods is a monad morphism for any monad morphism
@@ -4297,15 +4508,15 @@ $\phi:M^{\bullet}\leadsto N^{\bullet}$, where $M$ and $N$ are arbitrary
 
 Proof.
 
-Since $\text{blift}$ is a special case of $\text{mrun}$, we only
+Since $\text{blift}$ is a special case of $\text{frun}$, we only
 need to prove the monad morphism laws for the three methods: $\text{lift}$,
-$\text{mrun}$, and $\text{brun}$.
+$\text{frun}$, and $\text{brun}$.
 
 The identity laws follow from Statement~5, since $T_{R}^{M,\bullet}=R^{M^{\bullet}}$
 is a functor composition. It remains to verify the composition laws,
 \begin{align*}
 \left(f^{:A\rightarrow M^{B}}\bef\text{lift}\right)\diamond_{R^{M}}\left(g^{:B\rightarrow M^{C}}\bef\text{lift}\right) & =\left(f\diamond_{M}g\right)\bef\text{lift}\quad,\\
-\left(f^{:A\rightarrow R^{M^{B}}}\bef\text{mrun}\,\phi\right)\diamond_{R^{N}}\left(g^{:B\rightarrow R^{M^{C}}}\bef\text{mrun}\,\phi\right) & =\left(f\diamond_{R^{M}}g\right)\bef\text{mrun}\,\phi\quad,\\
+\left(f^{:A\rightarrow R^{M^{B}}}\bef\text{frun}\,\phi\right)\diamond_{R^{N}}\left(g^{:B\rightarrow R^{M^{C}}}\bef\text{frun}\,\phi\right) & =\left(f\diamond_{R^{M}}g\right)\bef\text{frun}\,\phi\quad,\\
 \left(f^{:A\rightarrow R^{M^{B}}}\bef\text{brun}\,\theta\right)\diamond_{M}\left(g^{:B\rightarrow R^{M^{C}}}\bef\text{brun}\,\theta\right) & =\left(f\diamond_{R^{M}}g\right)\bef\text{brun}\,\theta\quad.
 \end{align*}
 
@@ -5271,9 +5482,9 @@ However, this transformer does not have the base lifting morphism
 \]
 since this type signature cannot be implemented. The co-density transformer
 also does not have any of the required \textsf{``}runner\textsf{''} transformations
-$\text{mrun}$ and $\text{brun}$,
+$\text{frun}$ and $\text{brun}$,
 \begin{align*}
-\text{mrun} & :\left(M^{\bullet}\leadsto N^{\bullet}\right)\rightarrow\left(\forall B.\left(A\rightarrow M^{F^{B}}\right)\rightarrow M^{F^{B}}\right)\rightarrow\forall C.\left(A\rightarrow N^{F^{C}}\right)\rightarrow N^{F^{C}}\quad,\\
+\text{frun} & :\left(M^{\bullet}\leadsto N^{\bullet}\right)\rightarrow\left(\forall B.\left(A\rightarrow M^{F^{B}}\right)\rightarrow M^{F^{B}}\right)\rightarrow\forall C.\left(A\rightarrow N^{F^{C}}\right)\rightarrow N^{F^{C}}\quad,\\
 \text{brun} & :\left(\left(\forall B.\left(A\rightarrow F^{B}\right)\rightarrow F^{B}\right)\rightarrow A\right)\rightarrow\left(\forall C.\left(A\rightarrow M^{F^{C}}\right)\rightarrow M^{F^{C}}\right)\rightarrow M^{A}\quad.
 \end{align*}
 \end{itemize}
