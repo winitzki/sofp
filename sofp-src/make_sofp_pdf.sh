@@ -61,6 +61,14 @@ function add_source_hashes {
 	fi
 }
 
+function insert_examples_exercises_count { # This is replaced in the root file only.
+	local base="$1" target="$2"
+	local exercises=`cat "$base"-*.tex | LC_ALL=C fgrep -c '\subsubsection{Exercise '`
+	local examples=`cat "$base"-*.tex | LC_ALL=C fgrep -c '\subsubsection{Example '`
+	local stmts=`cat "$base"-*.tex | LC_ALL=C fgrep -c '\subsubsection{Statement '`
+	LC_ALL=C sed -i "" -e "s,NUMBEROFEXAMPLES,$examples,g; s,NUMBEROFEXERCISES,$exercises,g; s,NUMBEROFSTATEMENTS,$stmts,g;" "$target"
+}
+
 function remove_lulu {
 	local base="$1"
         LC_ALL=C sed -i "" -e 's,^\(.publishers{Published by\),%\1,; s,^\(Published by\),%\1,; s,^\(ISBN:\),%\1,' "$base".tex
@@ -87,6 +95,8 @@ rm -f $name*tex
 echo "Exporting LyX files $name.lyx and its child documents into LaTeX..."
 "$lyx" --export pdflatex $name.lyx # Exports LaTeX for all child documents as well.
 echo "Post-processing LaTeX files..."
+# Insert the number of examples and exercises. This replacement is only for the root file.
+insert_examples_exercises_count $name $name.tex
 ## Remove mathpazo. This is a mistake: should not remove it.
 #LC_ALL=C sed -i "" -e 's/^.*usepackage.*mathpazo.*$//' sofp.tex
 # Replace ugly Palatino quote marks and apostrophes by sans-serif marks.
