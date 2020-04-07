@@ -84,7 +84,7 @@ except for the last \lstinline!map! call (that by itself produces
 a non-nested sequence).
 
 The \lstinline!for!/\lstinline!yield! syntax (or \textsf{``}functor block\textsf{''})
-is an easier way of flattening nested iterations: just use a source
+is an easier way of flattening nested iterations: just use a new source
 line for each level of nesting. Compare the two following code fragments
 line by line:
 
@@ -138,7 +138,7 @@ val t = for {
 
 ~\vspace{-0.3\baselineskip}
 \[
-T=\left\{ \left.x+y+z~\right|~x\in P,\,y\in Q,\,z\in R,\,f(x,y,z)=0\right\} \quad.
+T=\left\{ \left.x+y+z~\right|~x\in P,\,y\in Q,\,z\in R,\,f(x,y,z)=0\,\right\} \quad.
 \]
 Here, $P$, $Q$, $R$ are given sets of numbers, and the result is
 a set $T$ of numbers obtained by adding some $x$ from $P$, some
@@ -146,7 +146,7 @@ $y$ from $Q$, and some $z$ from $R$ such that $f(x,y,z)=0$. A
 direct implementation of this formula is the code shown at left. Here,
 \lstinline!p!, \lstinline!q!, \lstinline!r! are given collections
 (say, arrays) and the result \lstinline!t! is again an array. Just
-like the mathematical formula\textsf{'}s result is a collection of some $x+y$
+like the mathematical formula\textsf{'}s result is a collection of some $x+y+z$
 values, the functor block\textsf{'}s result is a collection of values computed
 after the \lstinline!yield! keyword.
 
@@ -1847,18 +1847,18 @@ a random number generator. A simple generator is the \textbf{Lehmer
 algorithm}\index{Lehmer algorithm},\footnote{See \texttt{\href{https://en.wikipedia.org/wiki/Lehmer_random_number_generator}{https://en.wikipedia.org/wiki/Lehmer\_random\_number\_generator}}}
 which generates integer sequences $x_{n}$ defined by
 \[
-x_{n+1}\triangleq\left(48271*x_{n}\right)\%\,(2^{31}-1)\quad,\quad\quad1\leq x_{0}\leq2^{31}-1\quad.
+x_{n+1}\triangleq\left(48271*x_{n}\right)\%\,(2^{31}-1)\quad,\quad\quad1\leq x_{n}\leq2^{31}-2\quad,\quad\quad n=0,1,2,...
 \]
 The \textsf{``}updating\textsf{''} function for this sequence, $x_{n+1}=\text{lehmer}\,(x_{n})$,
 can be implemented as 
 \begin{lstlisting}
-def lehmer(x: Long): Long = x * 48271L % 0xffffffffL
+def lehmer(x: Long): Long = x * 48271L % ((1L << 31) - 1)
 \end{lstlisting}
 In many applications, one needs uniformly distributed floating-point
 numbers in the interval $\left[0,1\right]$. To produce such numbers,
 let us define a helper function:
 \begin{lstlisting}
-def uniform(x: Long): Double = (x - 1).toDouble / (0xffffffffL - 2)   // Enforce the interval [0, 1].
+def uniform(x: Long): Double = (x - 1).toDouble / ((1L << 31) - 3)   // Enforce the interval [0, 1].
 \end{lstlisting}
 
 To use the uniform generator, we need to provide an initial value
@@ -1871,10 +1871,10 @@ repeatedly on successive values. The code would look like this:
 val s0 = 123456789L  // A "seed" value.
 val s1 = lehmer(s0)
 val r1 = uniform(s1)
-... // Use random value r1.
+... // Use pseudo-random value r1.
 val s2 = lehmer(s1)
 val r2 = uniform(s2)
-... // Use random value r2.
+... // Use pseudo-random value r2.
 val s3 = lehmer(s2)       // And so on.
 \end{lstlisting}
 
@@ -1903,11 +1903,11 @@ val rngUniform: State[Long, Double] = { oldState =>
 Code using \lstinline!rngUniform! will be of the monadic type \lstinline!State[Long, A]!
 for some \lstinline!A!:
 \begin{lstlisting}
-val program: State[Long, String] = for { // Assume flatMap and map methods are defined for State.
+val program: State[Long, String] = for {  // Assume flatMap and map methods are defined for State.
   r1 <- rngUniform
-  ... // Use random value r1. The internal state of rngUniform is maintained automatically.
+  ... // Use pseudo-random value r1. The internal state of rngUniform is maintained automatically.
   r2 <- rngUniform
-  ... // Use random value r2.
+  ... // Use pseudo-random value r2.
 } yield s"Pair is $r1, $r2" // Compute result of type String.
 \end{lstlisting}
 
@@ -1929,11 +1929,11 @@ res0: (String, Long) = ("Pair is 0.028744523433557146, 0.5269012540999576", 2166
 
 \subsection{The eager/lazy evaluation monad (\texttt{Eval})\label{subsec:The-eager-lazy-evaluation-monad}}
 
-The monads considered so far (\lstinline!Reader!, \lstinline!Writer!,
-and \lstinline!State!) manage extra information about computations.
-Those monads\textsf{'} effects can be viewed as holding a value of
-a certain type. We now turn to monads whose effects are not values
-but nonstandard evaluation strategies. 
+The monads \lstinline!Reader!, \lstinline!Writer!, and \lstinline!State!
+manage extra information about computations. Those monads\textsf{'}
+effects can be viewed as working with an extra value of a certain
+fixed type. We now turn to monads whose effects are not values but
+nonstandard evaluation strategies. 
 
 The first of these monads is called \lstinline!Eval!, and its task
 is to encapsulate lazy and eager evaluations into a single type. A
@@ -5170,10 +5170,10 @@ This resembles the forward composition of ordinary functions, $\left(\bef\right)
 except for different types of functions. If $M$ is a monad, the implementation
 of $\diamond_{_{M}}$ is
 
-\begin{wrapfigure}{l}{0.64\columnwidth}%
+\begin{wrapfigure}{l}{0.67\columnwidth}%
 \vspace{-0.8\baselineskip}
 \begin{lstlisting}
-def <>[M: Monad, A,B,C](f: A => M[B], g: B => M[C]): A => M[C] =
+def <>[M[_]: Monad, A,B,C](f: A => M[B], g: B => M[C]): A => M[C] =
   { x => f(x).flatMap(g) }
 \end{lstlisting}
 \vspace{-0.9\baselineskip}
@@ -5189,7 +5189,7 @@ The Kleisli composition can be equivalently expressed by a functor
 block code as
 
 \begin{lstlisting}[mathescape=true]
-def <>[M: Monad, A,B,C](f: A => M[B], g: B => M[C]): A => M[C] = { x =>
+def <>[M[_]: Monad, A,B,C](f: A => M[B], g: B => M[C]): A => M[C] = { x =>
   for {
     y <- f(x)
     z <- g(y)
@@ -6472,7 +6472,7 @@ are
 \[
 \text{Sel}^{Z,A}\triangleq\left(A\rightarrow Z\right)\rightarrow A\quad,\quad\quad\text{Search}^{Z,A}\triangleq\left(A\rightarrow\bbnum 1+Z\right)\rightarrow\bbnum 1+A\quad,\quad\quad L^{A}\triangleq\left(\bbnum 1+A\rightarrow Z\right)\rightarrow\bbnum 1+A\quad.
 \]
-The first two of these monads are the selector monad\index{monads!Sel (selector monad)@\texttt{Sel} (selector monad)}
+The first two of these monads are the selector monad\index{monads!Sel (selector) monad@\texttt{Sel} (selector) monad}
 and the \index{monads!Search monad@\texttt{Search} monad}search monad.\footnote{See \texttt{\href{http://math.andrej.com/2008/11/21/a-haskell-monad-for-infinite-search-in-finite-time/}{http://math.andrej.com/2008/11/21/a-haskell-monad-for-infinite-search-in-finite-time/}}}
 Statement~\ref{subsec:Statement-monad-construction-3} shows how
 to implement the monad methods for these monads and guarantees that
@@ -6805,7 +6805,7 @@ Consider the functor $D^{A}\triangleq\bbnum 1+A\times A$ (in Scala,
 and \lstinline!pure! methods for $D$ in two or more different ways,
 and show that some of the monad laws fail to hold for each of those
 implementations.\footnote{One can prove that $D^{A}\triangleq\bbnum 1+A\times A$ cannot be
-a monad; see \href{https://stackoverflow.com/questions/49742377/}{https://stackoverflow.com/questions/49742377/}}
+a lawful monad; see \href{https://stackoverflow.com/questions/49742377/}{https://stackoverflow.com/questions/49742377/}}
 
 \subsubsection{Exercise \label{subsec:Exercise-1-monads-8}\ref{subsec:Exercise-1-monads-8}}
 
@@ -6854,10 +6854,10 @@ and so
 Given a monad $M$, consider a function \lstinline!toUnit! (denoted
 $\text{tu}_{M}$) with type signature
 
-\begin{wrapfigure}{l}{0.58\columnwidth}%
+\begin{wrapfigure}{l}{0.61\columnwidth}%
 \vspace{-0.5\baselineskip}
 \begin{lstlisting}
-def toUnit[M: Monad, A]: M[A] => M[Unit] = _.map(_ => ())
+def toUnit[M[_]: Monad, A]: M[A] => M[Unit] = _.map(_ => ())
 \end{lstlisting}
 
 \vspace{-0.5\baselineskip}
@@ -7602,7 +7602,7 @@ Monad morphisms between arbitrary monads will be important in Chapters~\ref{chap
 and~\ref{chap:monad-transformers}. To build up more intuition, let
 us look at some examples of monad morphisms.
 
-\subsubsection{Example \label{subsec:Example-monad-morphism-either-option}\ref{subsec:Example-monad-morphism-either-option}}
+\subsubsection{Example \label{subsec:Example-monad-morphism-either-option}\ref{subsec:Example-monad-morphism-either-option}\index{solved examples}}
 
 We would like to define a function $\phi^{A}:Z+A\rightarrow\bbnum 1+A$
 as a monad morphism between the \lstinline!Either! and \lstinline!Option!
@@ -7895,7 +7895,7 @@ cannot be obtained through monad constructions. It is likely that
 $F^{A}\triangleq\bbnum 1+A\times A\times A$, $F^{A}\triangleq\bbnum 1+A\times A\times A\times A$,
 and all other similarly constructed functors are not monads.
 
-\subsection{Constructions of $M$-filterable functors and contrafunctors}
+\subsection{Constructions of $M$-filterable functors and contrafunctors\label{subsec:Constructions-of-M-filterables}}
 
 In Chapter~\ref{chap:Filterable-functors}, we have used the $\text{Opt}$-Kleisli
 category (that is, the $M$-Kleisli category with $M$ set to the

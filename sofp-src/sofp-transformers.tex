@@ -667,10 +667,15 @@ def runState[S, A](init: S)(p: State[S, A]): A = p.run(init)._1
 \theta_{\text{State}}(i^{:S})\triangleq p^{:S\rightarrow A\times S}\rightarrow i\triangleright p\triangleright\pi_{1}\quad.
 \]
  We cannot use $\theta_{\text{State}}$ directly with \lstinline!StateT!
-because that transformer is not a functor composition. Instead, we
-can implement a special \textsf{``}base runner\textsf{''} that converts $T_{\text{State}}^{M,A}$
-into $M^{A}$ by running the \lstinline!State! monad\textsf{'}s effects but
-keeping the effects of the foreign monad $M$:
+because that transformer is not a functor composition. There is no
+general \textsf{``}base runner\textsf{''} $\text{brun}\,(\theta_{\text{State}})$
+that would take an \emph{arbitrary} runner $\theta_{\text{State}}:\text{State}^{S,A}\rightarrow A$
+and convert it into a function of type $T_{\text{State}}^{M,A}\rightarrow M^{A}$
+by running the \lstinline!State! monad\textsf{'}s effects but keeping the
+effects of the foreign monad $M$. The type of $T_{\text{State}}^{M}$
+does not allow base runners parametric in $\theta_{\text{State}}$.
+Instead, we need to implement a specialized base runner that converts
+$T_{\text{State}}^{M,A}$ into $M^{A}$ directly:
 \begin{lstlisting}
 def brunStateT[M[_]: Functor, S, A](init: S)(t: StateT[M, S, A]): M[A] = t.run(init).map(_._1)
 \end{lstlisting}
@@ -1819,6 +1824,46 @@ composition law:
 \text{frun}_{L}(\phi^{:M\leadsto N})\bef\gunderline{\chi^{\uparrow T_{L}}}=\text{frun}_{L}(\phi)\bef\text{frun}_{L}(\chi)=\text{frun}_{L}(\phi\bef\chi)\quad.
 \]
 
+To summarize, we are considering a functor $T_{L}$ in the category
+of monads, such that a natural transformation $\text{flift}_{L}:\text{Id}^{M}\leadsto T_{L}^{M}$
+exists (in the sense of the category of monads, i.e., parametric in
+the monad $M$). 
+
+Ordinary functors $F^{A}$ having a natural transformation $\text{pu}_{F}:\text{Id}^{A}\rightarrow F^{A}$
+are \emph{pointed} functors; those with a natural transformation $\text{ex}_{F}:F^{A}\rightarrow\text{Id}^{A}$
+are co-pointed. Naturality forces the non-degeneracy law $\text{pu}_{F}\bef\text{ex}_{F}=\text{id}$.
+So, by analogy, we see that the functor $T_{L}$ is pointed in the
+category of monads. If the transformer $T_{L}$ has a base runner,
+the functor $T_{L}$ will be also co-pointed, with $\text{brun}_{L}:T_{L}^{\bullet}\leadsto\text{Id}^{\bullet}$
+being a natural transformation in the category of monads.
+
+It is remarkable that all the laws of monad transformers can be derived
+from a single (but more abstract) definition: a monad transformer
+$T$ is an \emph{arbitrary} pointed and (optionally) co-pointed functor
+in the category of monads. Such a functor $T$ maps monads $M$, $N$,
+etc., to $T^{M}$, $T^{N}$, etc. Given such a $T$, we first define
+the base monad as the image of the identity monad:
+\[
+L\triangleq T^{\text{Id}}\quad.
+\]
+The definition of $T$ already defines functions \lstinline!flift!,
+\lstinline!frun!, and \lstinline!brun! as the natural transformations
+\[
+\text{flift}_{T}^{M}:\text{Id}^{M}\leadsto T^{M}\quad,\quad\quad\text{brun}_{T}^{M}:T^{M}\leadsto\text{Id}^{M}\quad,\quad\quad\text{frun}_{T}^{M,N}:(M\leadsto N)\rightarrow T^{M}\leadsto T^{N}\quad.
+\]
+The functor laws and the monadic naturality laws will enforce all
+the laws of monad transformers. 
+
+In the category of monads, we have not shown that the non-degeneracy
+law is an automatic consequence of monadic naturality. So, we will
+impose this law separately, in case the functor $T_{L}$ is co-pointed
+(which is not the case for all base monads $L$):
+\[
+\text{flift}_{T}\bef\text{brun}_{T}=\text{id}\quad.
+\]
+
+While this formulation of monad transformers is short, it does not
+help {*}{*}{*}
 
 \subsection{Summary of the laws of monad transformers\label{subsec:Laws-of-monad-transformers}}
 
@@ -1885,33 +1930,33 @@ the monadic naturality law with respect to the monad parameter $M$:
 In total, we found 18 laws for monad transformers. Are all these laws
 necessary? 
 
-The main use of the laws is to verify that the code is written correctly.
-The next section shows some examples of incorrect implementations
-of monad transformers and indicates the laws that are violated.
+The main use of the laws is to verify correctness of the code. The
+next section shows some examples of incorrect implementations of monad
+transformers and indicates the laws that are violated.
 
-\subsection{Examples of incorrect monad transformers}
+\subsection{Examples of trivially incorrect monad transformers}
 
 The laws of monad transformers guarantee that the transformed monad
 is able to represent, without loss of information, the operations
 of the base monad as well as the operations of the foreign monad.
-If some of these laws are omitted, we may obtain a type constructor
-that does not work correctly even though it has the methods with the
+If some of these laws are omitted, we risk accepting a transformer
+that does not work correctly although it has the methods with the
 required type signatures.
 
 The simplest example of an incorrect monad transformer is obtained
 by defining the new monad to be the unit monad, $T_{L}^{M,A}\triangleq\bbnum 1$,
-for any monads $L$ and $M$. It is clear that this \textsf{``}transformer\textsf{''}
-is useless: it cannot possibly keep the information about the effects
-of $L$ and $M$, because the methods of the unit monad discard \emph{all}
-information and return $1$. However, the type constructor $T_{L}^{M,A}$
-has all the required methods $\text{pu}_{T}$, $\text{ftn}_{T}$,
-$\text{flift}_{T}$, $\text{frun}_{T}$, and $\text{brun}_{T}$ (they
-are constant functions returning $1$). All these functions are automatically
-monad morphisms, since a function from any monad to the unit monad
-is always a monad morphism. So, the fake \textsf{``}transformer\textsf{''} actually
-satisfies many of the monad transformer laws! However, the identity
-law $T_{L}^{\text{Id}}\cong L$ and the non-degeneracy law $\text{flift}\bef\text{brun}\left(\theta\right)=\text{id}$
-are violated since $T_{L}^{\text{Id}}=\bbnum 1\not\cong L$ and $\text{flift}\bef\text{brun}\left(\theta\right)=\left(\_\rightarrow1\right)\neq\text{id}$.
+for any monads $L$ and $M$. This \textsf{``}transformer\textsf{''} is clearly useless:
+it cannot possibly describe the effects of $L$ and $M$, because
+the methods of the unit monad discard \emph{all} information and return
+$1$. However, the type constructor $T_{L}^{M,A}$ has all the required
+methods $\text{pu}_{T}$, $\text{ftn}_{T}$, $\text{flift}_{L}$,
+$\text{frun}_{L}$, and $\text{brun}_{L}$ (they are constant functions
+returning $1$). All these functions are automatically monad morphisms,
+since a function from any monad to the unit monad is always a monad
+morphism. So, the fake \textsf{``}transformer\textsf{''} actually satisfies many of
+the monad transformer laws! However, the identity law $T_{L}^{\text{Id}}\cong L$
+and the non-degeneracy law ($\text{flift}\bef\text{brun}=\text{id}$)
+are violated since $T_{L}^{\text{Id}}=\bbnum 1\not\cong L$ and $\text{flift}\bef\text{brun}=\left(\_\rightarrow1\right)\neq\text{id}$.
 For this reason, the unit monad is not a lawful monad transformer.
 
 This simple example demonstrates the importance of the monad transformer
@@ -1923,8 +1968,8 @@ the fraud is to find that the identity law and the non-degeneracy
 law are violated.
 
 Other examples of incorrect \textsf{``}transformers\textsf{''} violating some of the
-laws are $T_{L}^{M}=L$ (no lifting law) and $T_{L}^{M}=M$ (no identity
-law).
+laws are $T_{L}^{M}\triangleq L$ (no lifting law) and $T_{L}^{M}\triangleq M$
+(no identity law).
 
 In these cases, it is intuitively clear that the transformer definitions
 are incorrect because the information about either $L$ or $M$ is
@@ -3319,9 +3364,9 @@ $\theta:M\leadsto\text{Id}$. An additional law, $\text{sw}_{\text{Id},M}=\text{i
 follows from the conditions of Statement~\ref{sec:Statement-swap-laws-to-monad-transformer-first-law}.
 
 Statement~\ref{subsec:Statement-outside-transformer-swap-laws}\textendash \ref{subsec:Statement-inside-transformer-swap-laws}
-enable us to check more easily whether a given base monad has a monad
-transformer of a \textsf{``}composed\textsf{''} kind. It is easier to check the 6
-laws for the \lstinline!swap! function than to verify the 18 monad
+enable us to check more easily whether a given base monad admits a
+monad transformer via functor composition. It is easier to check the
+6 laws for the \lstinline!swap! function than to verify the 18 monad
 transformer laws directly. Also, the laws of \lstinline!swap! use
 simpler types than the monad transformer laws.
 
@@ -3388,7 +3433,7 @@ q\times l\rightarrow\left(a\rightarrow q\times a\right)^{\uparrow L}l\quad.
  It remains to unite these two functions. In the matrix notation,
 we write
 \begin{equation}
-\text{sw}_{L,M}=\begin{array}{|c||c|}
+\text{sw}_{L,M}=\,\begin{array}{|c||c|}
 P & (x^{:P}\rightarrow x+\bbnum 0^{:Q\times A})\bef\text{pu}_{L}\\
 Q\times L^{A} & q\times l\rightarrow(a^{:A}\rightarrow\bbnum 0^{:P}+q\times a)^{\uparrow L}l
 \end{array}\quad.\label{eq:single-valued-monad-def-of-swap}
@@ -3421,16 +3466,16 @@ Now we will verify that the laws of \lstinline!swap! hold. We will
 need to use the code for the methods $\text{fmap}_{M}$, $\text{ftn}_{M}$,
 and $\text{pu}_{M}$ of the monad $M$:
 \begin{align*}
-\text{fmap}_{M}f^{:A\rightarrow B} & =f^{\uparrow M}=\begin{array}{|c||cc|}
+\text{fmap}_{M}f^{:A\rightarrow B} & =f^{\uparrow M}=\,\begin{array}{|c||cc|}
  & P & Q\times B\\
 \hline P & \text{id} & \bbnum 0\\
 Q\times A & \bbnum 0\enskip & q\times a\rightarrow q\times f(a)
 \end{array}\quad,\\
-\text{pu}_{M}a^{:A} & =0^{:P}+q_{0}\times a\quad,\quad\quad\text{pu}_{M}=\begin{array}{|c||cc|}
+\text{pu}_{M}a^{:A} & =0^{:P}+q_{0}\times a\quad,\quad\quad\text{pu}_{M}=\,\begin{array}{|c||cc|}
  & P & Q\times A\\
 \hline A & \bbnum 0\enskip & a\rightarrow q_{0}\times a
 \end{array}\quad,\\
-\text{ftn}_{M}^{:M^{M^{A}}\rightarrow M^{A}} & =\begin{array}{|c||cc|}
+\text{ftn}_{M}^{:M^{M^{A}}\rightarrow M^{A}} & =\,\begin{array}{|c||cc|}
  & P & Q\times A\\
 \hline P & \text{id} & \bbnum 0\\
 Q\times P & q\times p\rightarrow p & \bbnum 0\\
@@ -3448,18 +3493,18 @@ as a fully parametric function.
 
 We need to show that $\text{pu}_{L}^{\uparrow M}\bef\text{sw}=\text{pu}_{L}$:
 \begin{align*}
-\text{pu}_{L}^{\uparrow M}\bef\text{sw}= & \left\Vert \begin{array}{cc}
+\text{pu}_{L}^{\uparrow M}\bef\text{sw}= & \,\left\Vert \begin{array}{cc}
 \text{id} & \bbnum 0\\
 \bbnum 0 & q\times a\rightarrow q\times\text{pu}_{L}a
-\end{array}\right|\bef\left\Vert \begin{array}{c}
+\end{array}\right|\,\bef\,\left\Vert \begin{array}{c}
 (x^{:P}\rightarrow x+\bbnum 0^{:Q\times A})\bef\text{pu}_{L}\\
 q\times l\rightarrow(x^{:A}\rightarrow\bbnum 0^{:P}+q\times x)^{\uparrow L}l
 \end{array}\right|\\
-{\color{greenunder}\text{composition}:}\quad & =\left\Vert \begin{array}{c}
+{\color{greenunder}\text{composition}:}\quad & =\,\left\Vert \begin{array}{c}
 (x^{:P}\rightarrow x+\bbnum 0^{:Q\times A})\bef\text{pu}_{L}\\
 q\times a\rightarrow\gunderline{(a^{:A}\rightarrow\bbnum 0^{:P}+q\times a)^{\uparrow L}\left(\text{pu}_{L}a\right)}
 \end{array}\right|\\
-{\color{greenunder}\text{pu}_{L}\text{\textsf{'}s naturality}:}\quad & =\begin{array}{|c||c|}
+{\color{greenunder}\text{pu}_{L}\text{\textsf{'}s naturality}:}\quad & =\,\begin{array}{|c||c|}
 P & x^{:P}\rightarrow\text{pu}_{L}(x+\bbnum 0^{:Q\times A})\\
 Q\times A & q\times a\rightarrow\text{pu}_{L}(\bbnum 0^{:P}+q\times a)
 \end{array}\\
@@ -3471,8 +3516,8 @@ Q\times A & q\times a\rightarrow\text{pu}_{L}(\bbnum 0^{:P}+q\times a)
 
 We need to show that $\text{pu}_{M}\bef\text{sw}=\text{pu}_{M}^{\uparrow L}$:
 \begin{align*}
-\text{pu}_{M}\bef\text{sw} & =\left\Vert \begin{array}{cc}
-\bbnum 0 & l^{:L^{A}}\rightarrow q_{0}\times l\end{array}\right|\bef\left\Vert \begin{array}{c}
+\text{pu}_{M}\bef\text{sw} & =\,\left\Vert \begin{array}{cc}
+\bbnum 0 & l^{:L^{A}}\rightarrow q_{0}\times l\end{array}\right|\,\bef\,\left\Vert \begin{array}{c}
 (x^{:P}\rightarrow x+\bbnum 0^{:Q\times A})\bef\text{pu}_{L}\\
 q\times l\rightarrow(x^{:A}\rightarrow\bbnum 0^{:P}+q\times x)^{\uparrow L}l
 \end{array}\right|\\
@@ -3485,22 +3530,22 @@ q\times l\rightarrow(x^{:A}\rightarrow\bbnum 0^{:P}+q\times x)^{\uparrow L}l
 
 Show that $\text{ftn}_{L}^{\uparrow M}\bef\text{sw}=\text{sw}\bef\text{sw}^{\uparrow L}\bef\text{ftn}_{L}$:
 \begin{align}
-\text{ftn}_{L}^{\uparrow M}\bef\text{sw}= & \left\Vert \begin{array}{cc}
+\text{ftn}_{L}^{\uparrow M}\bef\text{sw}= & \,\left\Vert \begin{array}{cc}
 \text{id} & \bbnum 0\\
 \bbnum 0 & q\times l\rightarrow q\times\text{ftn}_{L}l
-\end{array}\right|\bef\left\Vert \begin{array}{c}
+\end{array}\right|\,\bef\,\left\Vert \begin{array}{c}
 (x^{:P}\rightarrow x+\bbnum 0^{:Q\times A})\bef\text{pu}_{L}\\
 q\times l\rightarrow(a\rightarrow\bbnum 0^{:P}+q\times a)^{\uparrow L}l
 \end{array}\right|\nonumber \\
- & =\left\Vert \begin{array}{c}
+ & =\,\left\Vert \begin{array}{c}
 (x^{:P}\rightarrow x+\bbnum 0^{:Q\times A})\bef\text{pu}_{L}\\
 q\times l\rightarrow(a\rightarrow\bbnum 0^{:P}+q\times a)^{\uparrow L}(\text{ftn}_{L}l)
 \end{array}\right|\quad,\label{eq:l-interchange-simplify-1}\\
-\text{sw}\bef\text{sw}^{\uparrow L}\bef\text{ftn}_{L}= & \left\Vert \begin{array}{c}
+\text{sw}\bef\text{sw}^{\uparrow L}\bef\text{ftn}_{L}= & \,\left\Vert \begin{array}{c}
 (x^{:P}\rightarrow x+\bbnum 0^{:Q\times A})\bef\text{pu}_{L}\\
 q\times l\rightarrow(a\rightarrow\bbnum 0^{:P}+q\times a)^{\uparrow L}l
-\end{array}\right|\bef\text{sw}^{\uparrow L}\bef\text{ftn}_{L}\nonumber \\
- & =\left\Vert \begin{array}{c}
+\end{array}\right|\,\bef\text{sw}^{\uparrow L}\bef\text{ftn}_{L}\nonumber \\
+ & =\,\left\Vert \begin{array}{c}
 (x^{:P}\rightarrow x+\bbnum 0^{:Q\times A})\bef\text{pu}_{L}\bef\text{sw}^{\uparrow L}\bef\text{ftn}_{L}\\
 \big(q\times l\rightarrow(a\rightarrow\bbnum 0^{:P}+q\times a)^{\uparrow L}l\big)\bef\text{sw}^{\uparrow L}\bef\text{ftn}_{L}
 \end{array}\right|\quad.\nonumber 
@@ -3545,15 +3590,15 @@ The left-hand side is written using the matrices for $\text{ftn}_{M}$
 and $\text{sw}$:
 \begin{align}
  & \text{ftn}_{M}\bef\text{sw}\nonumber \\
- & =\left\Vert \begin{array}{cc}
+ & =\,\left\Vert \begin{array}{cc}
 \text{id} & \bbnum 0\\
 q\times p\rightarrow p & \bbnum 0\\
 \bbnum 0 & q_{1}\times q_{2}\times a\rightarrow\left(q_{1}\oplus q_{2}\right)\times a
-\end{array}\right|\bef\left\Vert \begin{array}{c}
+\end{array}\right|\,\bef\,\left\Vert \begin{array}{c}
 (x^{:P}\rightarrow x+\bbnum 0)\bef\text{pu}_{L}\\
 q\times l\rightarrow(x\rightarrow\bbnum 0+q\times x)^{\uparrow L}l
 \end{array}\right|\nonumber \\
- & =\left\Vert \begin{array}{c}
+ & =\,\,\left\Vert \begin{array}{c}
 (x^{:P}\rightarrow x+\bbnum 0)\bef\text{pu}_{L}\\
 \left(q\times p\rightarrow p+\bbnum 0\right)\bef\text{pu}_{L}\\
 q_{1}\times q_{2}\times a\rightarrow(x\rightarrow\bbnum 0+\left(q_{1}\oplus q_{2}\right)\times x)^{\uparrow L}a
@@ -3569,7 +3614,7 @@ P & \text{id} & \bbnum 0\\
 Q\times P & \bbnum 0 & q\times p\rightarrow q\times\text{sw}\left(p+\bbnum 0\right)\\
 Q\times Q\times L^{A} & \bbnum 0 & q_{1}\times q_{2}\times l\rightarrow q_{1}\times\text{sw}\left(\bbnum 0+q_{2}\times l\right)
 \end{array}\\
- & =\begin{array}{|c||cc|}
+ & =\,\begin{array}{|c||cc|}
 P & \text{id} & \bbnum 0\\
 Q\times P & \bbnum 0 & q\times p\rightarrow q\times\text{pu}_{L}\left(p+\bbnum 0\right)\\
 Q\times Q\times L^{A} & \bbnum 0 & q_{1}\times q_{2}\times l\rightarrow q_{1}\times(x\rightarrow\bbnum 0+q_{2}\times x)^{\uparrow L}l
@@ -3579,20 +3624,20 @@ Then compute the composition $\text{sw}^{\uparrow M}\bef\text{sw}$
 as
 \begin{align*}
  & \text{sw}^{\uparrow M}\bef\text{sw}\\
- & =\left\Vert \begin{array}{cc}
+ & =\,\left\Vert \begin{array}{cc}
 \text{id} & \bbnum 0\\
 \bbnum 0 & q\times p\rightarrow q\times\text{pu}_{L}\left(p+\bbnum 0\right)\\
 \bbnum 0 & q_{1}\times q_{2}\times l\rightarrow q_{1}\times(x\rightarrow\bbnum 0+q_{2}\times x)^{\uparrow L}l
-\end{array}\right|\bef\left\Vert \begin{array}{c}
+\end{array}\right|\,\bef\,\left\Vert \begin{array}{c}
 (x^{:P}\rightarrow x+\bbnum 0)\bef\text{pu}_{L}\\
 q\times l\rightarrow(x\rightarrow\bbnum 0+q\times x)^{\uparrow L}l
 \end{array}\right|\\
- & =\left\Vert \begin{array}{c}
+ & =\,\,\left\Vert \begin{array}{c}
 (x^{:P}\rightarrow x+\bbnum 0)\bef\text{pu}_{L}\\
 q\times p\rightarrow(x^{:M^{A}}\rightarrow\bbnum 0^{:P}+q\times x)^{\uparrow L}\left(\text{pu}_{L}\left(p+\bbnum 0\right)\right)\\
 q_{1}\times q_{2}\times l\rightarrow(x^{:M^{A}}\rightarrow\bbnum 0^{:P}+q_{1}\times x)^{\uparrow L}(x\rightarrow\bbnum 0+q_{2}\times x)^{\uparrow L}l
 \end{array}\right|\\
- & =\left\Vert \begin{array}{c}
+ & =\,\left\Vert \begin{array}{c}
 (x^{:P}\rightarrow x+\bbnum 0)\bef\text{pu}_{L}\\
 q\times p\rightarrow\text{pu}_{L}(\bbnum 0^{:P}+q\times\left(p+\bbnum 0\right))\\
 q_{1}\times q_{2}\times l\rightarrow(x^{:M^{A}}\rightarrow\bbnum 0+q_{1}\times(\bbnum 0+q_{2}\times x))^{\uparrow L}l
@@ -3601,22 +3646,22 @@ q_{1}\times q_{2}\times l\rightarrow(x^{:M^{A}}\rightarrow\bbnum 0+q_{1}\times(\
 Now we need to post-compose $\text{ftn}_{M}^{\uparrow L}$ with this
 column:
 \begin{align*}
-\text{sw}^{\uparrow M}\bef\text{sw}\bef\text{ftn}_{M}^{\uparrow L} & =\left\Vert \begin{array}{c}
+\text{sw}^{\uparrow M}\bef\text{sw}\bef\text{ftn}_{M}^{\uparrow L} & =\,\left\Vert \begin{array}{c}
 (x^{:P}\rightarrow x+\bbnum 0)\bef\gunderline{\text{pu}_{L}\bef\text{ftn}_{M}^{\uparrow L}}\\
 (q\times p\rightarrow\bbnum 0^{:P}+q\times\left(p+\bbnum 0\right))\bef\gunderline{\text{pu}_{L}\bef\text{ftn}_{M}^{\uparrow L}}\\
 q_{1}\times q_{2}\times l\rightarrow l\triangleright(x^{:M^{A}}\rightarrow\bbnum 0+q_{1}\times(\bbnum 0+q_{2}\times x))^{\uparrow L}\bef\text{ftn}_{M}^{\uparrow L}
 \end{array}\right|\\
-{\color{greenunder}\text{pu}_{L}\text{\textsf{'}s naturality}:}\quad & =\left\Vert \begin{array}{c}
+{\color{greenunder}\text{pu}_{L}\text{\textsf{'}s naturality}:}\quad & =\,\,\left\Vert \begin{array}{c}
 (x^{:P}\rightarrow x+\bbnum 0)\bef\text{ftn}_{M}\bef\text{pu}_{L}\\
 (q\times p\rightarrow\bbnum 0^{:P}+q\times\left(p+\bbnum 0\right))\bef\text{ftn}_{M}\bef\text{pu}_{L}\\
 q_{1}\times q_{2}\times l\rightarrow l\triangleright(x^{:M^{A}}\rightarrow\gunderline{\text{ftn}_{M}\left(\bbnum 0+q_{1}\times(\bbnum 0+q_{2}\times x)\right)})^{\uparrow L}
 \end{array}\right|\\
-{\color{greenunder}\text{compute }\text{ftn}_{M}(...):}\quad & =\left\Vert \begin{array}{c}
+{\color{greenunder}\text{compute }\text{ftn}_{M}(...):}\quad & =\,\left\Vert \begin{array}{c}
 (x^{:P}\rightarrow\text{ftn}_{M}(x+\bbnum 0))\bef\text{pu}_{L}\\
 (q\times p\rightarrow\text{ftn}_{M}(\bbnum 0^{:P}+q\times\left(p+\bbnum 0\right)))\bef\text{pu}_{L}\\
 q_{1}\times q_{2}\times l\rightarrow l\triangleright(x^{:M^{A}}\rightarrow\bbnum 0+\left(q_{1}\oplus q_{2}\right)\times x)^{\uparrow L}
 \end{array}\right|\\
-{\color{greenunder}\text{compute }\text{ftn}_{M}(...):}\quad & =\left\Vert \begin{array}{c}
+{\color{greenunder}\text{compute }\text{ftn}_{M}(...):}\quad & =\,\,\left\Vert \begin{array}{c}
 (x^{:P}\rightarrow x+\bbnum 0)\bef\text{pu}_{L}\\
 (q\times p\rightarrow p+\bbnum 0)\bef\text{pu}_{L}\\
 q_{1}\times q_{2}\times l\rightarrow(x^{:M^{A}}\rightarrow\bbnum 0+\left(q_{1}\oplus q_{2}\right)\times x)^{\uparrow L}l
@@ -3635,11 +3680,11 @@ for arbitrary monad morphisms $\phi:L\leadsto N$ and $\theta:M\leadsto\text{Id}$
 The first law is the swap identity law, $\text{sw}_{\text{Id},M}=\text{id}$:
 \begin{align*}
  & \text{sw}_{\text{Id},M}\\
-{\color{greenunder}\text{Eq.~(\ref{eq:single-valued-monad-def-of-swap}) with }L=\text{Id}:}\quad & =\begin{array}{|c||c|}
+{\color{greenunder}\text{Eq.~(\ref{eq:single-valued-monad-def-of-swap}) with }L=\text{Id}:}\quad & =\,\begin{array}{|c||c|}
 P & (x^{:P}\rightarrow x+\bbnum 0^{:Q\times A})\bef\text{pu}_{\text{Id}}\\
 Q\times\text{Id}^{A} & q\times l\rightarrow(a^{:A}\rightarrow\bbnum 0^{:P}+q\times a)^{\uparrow\text{Id}}l
 \end{array}\\
-{\color{greenunder}\text{matrix notation}:}\quad & =\begin{array}{|c||c|}
+{\color{greenunder}\text{matrix notation}:}\quad & =\,\begin{array}{|c||c|}
 P & x^{:P}\rightarrow x+\bbnum 0^{:Q\times A}\\
 Q\times A & q\times a\rightarrow\bbnum 0^{:P}+q\times a
 \end{array}\\
@@ -3649,15 +3694,15 @@ Q\times A & q\times a\rightarrow\bbnum 0^{:P}+q\times a
 Begin with the left-hand side of the second law,
 \begin{align*}
  & \text{sw}_{L,M}\bef\phi\\
-{\color{greenunder}\text{definition of }\text{sw}_{L,M}:}\quad & =\left\Vert \begin{array}{c}
+{\color{greenunder}\text{definition of }\text{sw}_{L,M}:}\quad & =\,\left\Vert \begin{array}{c}
 (x^{:P}\rightarrow x+\bbnum 0^{:Q\times A})\bef\text{pu}_{L}\\
 q\times l\rightarrow(a\rightarrow\bbnum 0^{:P}+q\times a)^{\uparrow L}l
 \end{array}\right|\gunderline{\bef\phi}\\
-{\color{greenunder}\text{compose with }\phi:}\quad & =\left\Vert \begin{array}{c}
+{\color{greenunder}\text{compose with }\phi:}\quad & =\,\left\Vert \begin{array}{c}
 (x^{:P}\rightarrow x+\bbnum 0^{:Q\times A})\bef\text{pu}_{L}\bef\phi\\
 q\times l\rightarrow l\triangleright\gunderline{(a\rightarrow\bbnum 0^{:P}+q\times a)^{\uparrow L}\bef\phi}
 \end{array}\right|\\
-{\color{greenunder}\text{naturality of }\phi:}\quad & =\left\Vert \begin{array}{c}
+{\color{greenunder}\text{naturality of }\phi:}\quad & =\,\left\Vert \begin{array}{c}
 (x^{:P}\rightarrow x+\bbnum 0^{:Q\times A})\bef\text{pu}_{N}\\
 q\times l\rightarrow l\triangleright\phi\bef(a\rightarrow\bbnum 0^{:P}+q\times a)^{\uparrow N}
 \end{array}\right|\quad.
@@ -3665,14 +3710,14 @@ q\times l\rightarrow l\triangleright\phi\bef(a\rightarrow\bbnum 0^{:P}+q\times a
 The right-hand side is
 \begin{align*}
  & \phi^{\uparrow M}\bef\text{sw}_{N,M}\\
- & =\left\Vert \begin{array}{cc}
+ & =\,\left\Vert \begin{array}{cc}
 \text{id} & \bbnum 0\\
 \bbnum 0 & q\times l\rightarrow q\times\phi\left(l\right)
-\end{array}\right|\bef\left\Vert \begin{array}{c}
+\end{array}\right|\,\bef\,\left\Vert \begin{array}{c}
 (x^{:P}\rightarrow x+\bbnum 0^{:Q\times A})\bef\text{pu}_{N}\\
 q\times n\rightarrow n\triangleright(a\rightarrow\bbnum 0^{:P}+q\times a)^{\uparrow N}
 \end{array}\right|\\
-{\color{greenunder}\text{composition}:}\quad & =\left\Vert \begin{array}{c}
+{\color{greenunder}\text{composition}:}\quad & =\,\left\Vert \begin{array}{c}
 (x^{:P}\rightarrow x+\bbnum 0^{:Q\times A})\bef\text{pu}_{N}\\
 q\times l\rightarrow n\triangleright\phi\bef(a\rightarrow\bbnum 0^{:P}+q\times a)^{\uparrow N}
 \end{array}\right|\quad.
@@ -3682,11 +3727,11 @@ Both sides of the second law are now shown to be equal.
 The left-hand side of the third law is
 \begin{align}
  & \text{sw}_{L,M}\bef\theta^{\uparrow L}\nonumber \\
-{\color{greenunder}\text{compose with }\theta^{\uparrow L}:}\quad & =\left\Vert \begin{array}{c}
+{\color{greenunder}\text{compose with }\theta^{\uparrow L}:}\quad & =\,\left\Vert \begin{array}{c}
 (x^{:P}\rightarrow x+\bbnum 0^{:Q\times A})\bef\gunderline{\text{pu}_{L}\bef\theta^{\uparrow L}}\\
 q\times l\rightarrow l\triangleright(a\rightarrow\bbnum 0^{:P}+q\times a)^{\uparrow L}\bef\theta^{\uparrow L}
 \end{array}\right|\nonumber \\
-{\color{greenunder}\text{naturality of }\text{pu}_{L}:}\quad & =\left\Vert \begin{array}{c}
+{\color{greenunder}\text{naturality of }\text{pu}_{L}:}\quad & =\,\left\Vert \begin{array}{c}
 (x^{:P}\rightarrow x+\bbnum 0^{:Q\times A})\bef\theta\bef\text{pu}_{L}\\
 q\times l\rightarrow l\triangleright\big(a\rightarrow\theta(\bbnum 0^{:P}+q\times a)\big)^{\uparrow L}
 \end{array}\right|\quad.\label{eq:linear-monads-monadic-naturality-of-swap-2}
@@ -3694,7 +3739,7 @@ q\times l\rightarrow l\triangleright\big(a\rightarrow\theta(\bbnum 0^{:P}+q\time
 We expect this to equal the right-hand side, which we write as
 \begin{align}
  & m^{:M^{L^{A}}}\rightarrow\theta(m)\nonumber \\
-{\color{greenunder}\text{matrix notation}:}\quad & =\left\Vert \begin{array}{c}
+{\color{greenunder}\text{matrix notation}:}\quad & =\,\left\Vert \begin{array}{c}
 x^{:P}\rightarrow\theta(x+\bbnum 0^{:Q\times L^{A}})\\
 q\times l\rightarrow\theta(\bbnum 0^{:P}+q\times l)
 \end{array}\right|\quad.\label{eq:linear-monads-monadic-naturality-of-swap-1}
@@ -3705,10 +3750,10 @@ separately. The upper line can be transformed as
  & (x^{:P}\rightarrow x+\bbnum 0^{:Q\times A})\bef\gunderline{\theta\bef\text{pu}_{L}}\\
 {\color{greenunder}\text{naturality of }\theta:}\quad & =(x^{:P}\rightarrow x+\bbnum 0^{:Q\times A})\bef\gunderline{\text{pu}_{L}^{\uparrow M}}\bef\theta\\
 {\color{greenunder}\text{definition of }^{\uparrow M}:}\quad & =x^{:P}\rightarrow\left\Vert \begin{array}{cc}
-x\enskip & \bbnum 0\end{array}\right|\triangleright\left\Vert \begin{array}{cc}
+x\enskip & \bbnum 0\end{array}\right|\triangleright\,\left\Vert \begin{array}{cc}
 \text{id} & \bbnum 0\\
 \bbnum 0 & q\times l\rightarrow q\times\text{pu}_{L}l
-\end{array}\right|\bef\theta\\
+\end{array}\right|\,\bef\theta\\
 {\color{greenunder}\text{matrix notation}:}\quad & =x^{:P}\rightarrow(x+\bbnum 0^{:Q\times L^{A}})\triangleright\theta\quad.
 \end{align*}
 This is now equal to the upper line of Eq.~(\ref{eq:linear-monads-monadic-naturality-of-swap-1}).
@@ -3761,7 +3806,8 @@ The second line in Eq.~(\ref{eq:linear-monads-monadic-naturality-of-swap-1})
 is the same function, $q\times l\rightarrow l$.
 
 This concludes the proof of the swap laws for linear monads. It follows
-that linear monads have monad transformers of composed-inside kind.
+that linear monads have monad transformers that compose inside the
+foreign monad.
 
 \subsection{Composition of transformers for linear monads}
 
@@ -3793,7 +3839,7 @@ M_{1}\circ M_{2}=T_{M_{2}}^{M_{1}}\quad.
 What is the transformer for the monad $M_{1}\circ M_{2}$? For any
 foreign monad $N$, we have the transformer stack
 \[
-T_{M_{2}}^{T_{M_{1}}^{N}}=T_{M_{2}}^{N\circ M_{1}}=N\circ M_{1}\circ M_{2}\quad.
+T_{M_{2}}^{T_{M_{1}}^{N}}=T_{M_{2}}^{N\circ M_{1}}=N\circ\left(M_{1}\circ M_{2}\right)\quad.
 \]
 Since this is a transformer stack, it is a lawful monad transformer,
 as we have seen in Section~\ref{subsec:Stacking-two-monads}. So,
@@ -3803,13 +3849,13 @@ the composed-inside kind.
 \section{Composed-outside transformers: Rigid monads\label{sec:transformers-rigid-monads}}
 
 Section~\ref{sec:transformers-linear-monads} shows that the composed-inside
-monad transformers are available only for a limited subset of all
-monads, namely the monads\index{monads!linear} of the form $M^{A}=P+Q\times A$
-and $M^{A}=Q\times\left(P+A\right)$, called \textsf{``}linear\textsf{''}. It turns
-out that the composed-\emph{outside} transformers are available for
-a significantly wider range of monads. Those monads are called \textsf{``}rigid\textsf{''}
-because one of their general properties is having a single \textsf{``}shape\textsf{''}
-(Statement~\ref{subsec:Statement-rigid-functor-wrapped-unit-is-unit}
+monad transformers are available for a limited subset of monads, namely
+the monads\index{monads!linear} of the form $M^{A}=P+Q\times A$
+and $M^{A}=Q\times\left(P+A\right)$, called \textsf{``}linear\textsf{''}. No other
+examples of composed-inside transformers are known. It turns out that
+the composed-\emph{outside} transformers are available for a significantly
+wider range of monads. Those monads are called \textsf{``}rigid\textsf{''} because
+one of their general properties is having a single \textsf{``}shape\textsf{''} (Statement~\ref{subsec:Statement-rigid-functor-wrapped-unit-is-unit}
 in Section~\ref{subsec:Rigid-functors}).\index{monads!rigid} (There
 does not seem to be another already accepted name for monads of this
 kind.)
@@ -3820,38 +3866,44 @@ A monad $R$ is \textbf{rigid} if it has a lawful composed-outside
 monad transformer, $T_{R}^{M}=R\circ M$, where $M$ is a foreign
 monad. 
 
-This definition does not explain what monads are rigid or how to recognize
-a non-rigid monad. These questions will be answered below.
+This definition just states the required properties but does not explain
+what monads are rigid or how to recognize a non-rigid monad. We will
+answer these questions in the rest of this section.
 
-Two simplest examples of rigid monads are the \lstinline!Reader!
-monad and the \lstinline!Search! monad, 
+Two examples of rigid monads are the \lstinline!Reader! monad and
+the \lstinline!Sel! (selector)\index{monads!Sel (selector) monad@\texttt{Sel} (selector) monad}
+monad,\footnote{See \href{http://math.andrej.com/2008/11/21/}{http://math.andrej.com/2008/11/21/}}
 \begin{align*}
 \text{(the \texttt{Reader} monad)} & :\quad\quad R^{A}\triangleq Z\rightarrow A\quad,\\
-\text{(the \texttt{Search} monad)} & :\quad\quad S^{A}\triangleq\left(A\rightarrow Z\right)\rightarrow A\quad,
+\text{(the \texttt{Sel} monad)} & :\quad\quad S^{A}\triangleq\left(A\rightarrow Z\right)\rightarrow A\quad,
 \end{align*}
 where $Z$ is a fixed type. These monads have composed-outside transformers:
 \begin{align*}
 \text{(the \texttt{ReaderT} transformer)} & :\quad\quad T_{R}^{M,A}\triangleq Z\rightarrow M^{A}\quad,\\
-\text{(the \texttt{SearchT} transformer)} & :\quad\quad T_{S}^{M,A}\triangleq\left(M^{A}\rightarrow Z\right)\rightarrow M^{A}\quad.
+\text{(the \texttt{SelT} transformer)} & :\quad\quad T_{S}^{M,A}\triangleq\left(M^{A}\rightarrow Z\right)\rightarrow M^{A}\quad.
 \end{align*}
-To build intuition for rigid monads, we will look at some general
-constructions that create new rigid monads or combine existing rigid
-monads into new ones. In this section, we will prove that the following
-four constructions produce rigid monads:
+To build intuition for rigid monads, we will perform structural analysis
+looking for general constructions that create new rigid monads or
+combine existing rigid monads into new ones. In this section, we will
+prove that the following four constructions produce rigid monads:
 \begin{enumerate}
-\item Choice: $C^{A}\triangleq H^{A}\rightarrow A$ is a rigid monad if
-$H$ is any contrafunctor.
-\item Composition: $P\circ R$ is a rigid monad if $P$ and $R$ are rigid
-monads.
 \item Product: $P^{A}\times R^{A}$ is a rigid monad if $P$ and $R$ are
 rigid monads.
-\item Selector: $S^{A}\triangleq F^{A\rightarrow R^{Q}}\rightarrow R^{A}$
-is a rigid monad for any rigid monad $R$, any functor $F$, and any
-fixed type $Q$.
+\item Composition: $P\circ R$ is a rigid monad if $P$ and $R$ are rigid
+monads.
+\item Choice: $C^{A}\triangleq H^{A}\rightarrow A$ is a rigid monad if
+$H$ is any contrafunctor.
+\item Selector: $S^{A}\triangleq H^{A}\rightarrow R^{A}$ is a rigid monad
+for any rigid monad $R$ and any $R$-filterable contrafunctor $H$.
 \end{enumerate}
-I do not know whether these four constructions are the only possible
-ways of creating new rigid monads. Below I will also mention other
-open questions I have about rigid monads.
+Construction~3 is a special case of construction~4 because we can
+set $R=\text{Id}$ (the identity monad) in construction~4, and any
+contrafunctor $H$ is $\text{Id}$-filterable (see Section~\ref{subsec:Constructions-of-M-filterables}).
+So, we will prove only constructions~1, 2, and~4.
+
+It is not known whether these four constructions are the only possible
+ways of creating new rigid monads. Other open questions about rigid
+monads will be given below.
 
 \subsection{Rigid monad construction 1: choice\label{subsec:Rigid-monad-construction-1-choice}}
 
@@ -3868,27 +3920,46 @@ as $H^{A}\triangleq A\rightarrow Q$, or a more complicated contrafunctor.
 Different choices of the contrafunctor $H$ give specific examples
 of rigid monads, such as $R^{A}\triangleq\bbnum 1$ (the unit monad),
 $R^{A}\triangleq A$ (the identity monad), $R^{A}\triangleq Z\rightarrow A$
-(the reader monad), as well as the \textbf{selector}\footnote{See \href{http://math.andrej.com/2008/11/21/}{http://math.andrej.com/2008/11/21/}}\textbf{
-monad}\index{monads!Sel (selector monad)@\texttt{Sel} (selector monad)}\index{selector monad}
-$\text{Sel}^{Q,A}\triangleq\left(A\rightarrow Q\right)\rightarrow A$. 
+(the reader monad), as well as the selector monad, $\text{Sel}^{Q,A}\triangleq\left(A\rightarrow Q\right)\rightarrow A$. 
 
-The search monad represents the effect of searching for a value of
-type $A$ that satisfies a condition expressed through a function
-of type $A\rightarrow Q$. The simplest example of a search monad
-is found by setting $Q\triangleq\text{Boolean}$. One may implement
-a function of type $\left(A\rightarrow\text{Boolean}\right)\rightarrow A$
+The selector monad represents the effect of selecting a value of type
+$A$ that satisfies a condition expressed through a function of type
+$A\rightarrow Q$. The simplest example of a selector monad is found
+by setting $Q\triangleq\bbnum 2$ (the \lstinline!Boolean! type).
+One may implement a function of type $\left(A\rightarrow\bbnum 2\right)\rightarrow A$
 that \emph{somehow} finds a value of type $A$ that might satisfy
-the given predicate of type $A\rightarrow\text{Boolean}$. The intention
+the given predicate of type $A\rightarrow\bbnum 2$. The intention
 is to return a value that, if possible, satisfies the predicate. If
 no such value can be found, \emph{some} value of type $A$ is still
 returned.
 
-A closely related monad is the search-with-failure monad, $R^{A}\triangleq\left(A\rightarrow\text{Boolean}\right)\rightarrow\bbnum 1+A$.
-This (non-rigid) monad will return an empty value $1+\bbnum 0^{:A}$
-if no value satisfing the predicate was found. There is a natural
-transformation from the search monad to the search-with-failure monad,
-implemented by checking whether the value returned by the search monad
-does actually satisfies the predicate.
+A closely related monad is the \textbf{search} monad\index{monads!search monad},
+$R^{A}\triangleq\left(A\rightarrow\bbnum 2\right)\rightarrow\bbnum 1+A$.
+This (non-rigid) monad returns an empty value $1+\bbnum 0^{:A}$ if
+no value satisfing the predicate is found. There is a monad morphism
+from the selector monad to the search monad, implemented by checking
+whether the value returned by the selector monad does actually satisfies
+the predicate.
+
+\subsubsection{Statement \label{subsec:Statement-search-and-selector-monads}\ref{subsec:Statement-search-and-selector-monads}}
+
+Define the search monad as $\text{Search}^{A}\triangleq\left(A\rightarrow\bbnum 2\right)\rightarrow\bbnum 1+A$.
+The function defined by
+\begin{lstlisting}
+def finder[A](s: (A => Boolean) => A): (A => Boolean) => Option[A]
+\end{lstlisting}
+\[
+\text{finder}:\text{Sel}^{\bbnum 2,A}\rightarrow\text{Search}^{A}\quad,\quad\quad\text{finder}\,(s^{:\text{Sel}^{\bbnum 2,A}\rightarrow\text{Search}^{A}})\triangleq p^{:A\rightarrow\bbnum 2}\rightarrow p(s(p))\triangleright\,\begin{array}{|c||cc|}
+ & \bbnum 1 & A\\
+\hline \bbnum 1\text{ (false)} & \text{id} & \bbnum 0\\
+\bbnum 1\text{ (true)} & \bbnum 0 & s(p)
+\end{array}
+\]
+is a monad morphism $\text{Sel}^{\bbnum 2,\bullet}\leadsto\text{Search}^{\bullet}$.
+
+\subparagraph{Proof}
+
+{*}{*}{*}
 
 Assume that $H$ is a contrafunctor and $M$ is a monad, and denote
 for brevity 
@@ -4790,9 +4861,8 @@ rigid monad, that $R_{1}\circ R_{2}$ is a rigid monad.
 
 \subsubsection{Example \label{subsec:Example-rigid-composition-1}\ref{subsec:Example-rigid-composition-1}}
 
-Consider the functor composition of the \lstinline!Search! monad
-$R_{1}^{A}\triangleq\left(A\rightarrow Q\right)\rightarrow A$ and
-the \lstinline!Reader! monad $R_{2}^{A}\triangleq Z\rightarrow A$:
+Consider the functor composition of the \lstinline!Sel! monad $R_{1}^{A}\triangleq\left(A\rightarrow Q\right)\rightarrow A$
+and the \lstinline!Reader! monad $R_{2}^{A}\triangleq Z\rightarrow A$:
 \[
 P^{A}\triangleq((Z\rightarrow A)\rightarrow Q)\rightarrow Z\rightarrow A\quad.
 \]
@@ -4805,7 +4875,7 @@ T^{A}\triangleq((Z\rightarrow M^{A})\rightarrow Q)\rightarrow Z\rightarrow M^{A}
 \]
 To define the monad methods for $T$, we need to have the definitions
 of the transformers $T_{R_{1}}^{M}$ and $T_{R_{2}}^{M}$. Since both
-the \lstinline!Search! and the \lstinline!Reader! monads are special
+the \lstinline!Sel! and the \lstinline!Reader! monads are special
 cases of the \lstinline!Choice! monad construction (Section~\ref{subsec:Rigid-monad-construction-1-choice})
 where the contrafunctor $H$ is chosen to be $H^{A}\triangleq A\rightarrow Q$
 and $H^{A}\triangleq Z$ respectively, we can use Eq.~(\ref{eq:rigid-monad-flm-T-def})
@@ -4854,7 +4924,7 @@ satisfying all the required laws? If so, we may be able to find a
 simpler definition of \lstinline!flatten! for the monad stack $R\circ S\circ M$.
 Let us briefly investigate this question. However, keep in mind that
 the absence of a suitable \lstinline!swap! function will not invalidate
-the composition properties of rigid monad stacks, because those properties
+the composition properties of rigid monad stacks: those properties
 were established without assuming the existence of \lstinline!swap!
 for the composed monad.
 
@@ -5657,6 +5727,124 @@ a program $\tilde{p}(\tilde{f}^{:A\rightarrow R^{B}}):R^{C}$.
 
 The transformer for a product of two monads is the product of transformers.
 
+\subparagraph{Proof}
+
+Given two monads $G$ and $H$ whose transformers $T_{G}$ and $T_{H}$
+are known, we need to show that the transformer for the monad $L^{\bullet}\triangleq G^{\bullet}\times H^{\bullet}$
+is given by
+\[
+T_{L}^{M,A}\triangleq T_{G}^{M,A}\times T_{H}^{M,A}\quad.
+\]
+We may assume that all monad transformer laws hold for $T_{G}$ and
+$T_{H}$.
+
+\paragraph{Monad construction law}
+
+Since $T_{G}^{M}$ and $T_{H}^{M}$ are (by assumption) lawful monads,
+$T_{L}^{M}$ is a lawful monad by the product construction (Statement~\ref{subsec:Statement-monad-semimonad-product}).
+
+\paragraph{Identity law}
+
+With $M=\text{Id}$, we have $T_{L}^{\text{Id}}=T_{G}^{\text{Id}}\times T_{H}^{\text{Id}}\cong G\times H$
+by the pair product of the monad morphisms $T_{G}^{\text{Id}}\cong G$
+and $T_{H}^{\text{Id}}\cong H$. The pair product of two monad morphisms
+is again a monad morphism (Statement~\ref{subsec:Statement-pair-product-of-monadic-morphisms}).
+
+\paragraph{Lifting law}
+
+We need to define the foreign lift function (\lstinline!flift!) and
+show that it is a monad morphism:
+\[
+\text{flift}_{L}^{:M\leadsto T_{G}^{M}\times T_{H}^{M}}\triangleq\Delta\bef(\text{flift}_{G}\boxtimes\text{flift}_{H})\quad.
+\]
+To show that $\text{flift}_{L}$ is a monad morphism, we use the fact
+that $\Delta:M\leadsto M\times M$ is one (Statement~\ref{subsec:Statement-M-to-M-times-M-is-monadic-morphism}),
+that the pair product preserves monad morphisms (Statement~\ref{subsec:Statement-pair-product-of-monadic-morphisms}),
+and that the composition also preserves monad morphisms (Statement~\ref{subsec:Statement-monadic-morphism-composition}).
+
+\paragraph{Runner laws}
+
+We need to define the foreign runner (\lstinline!frun!) and verify
+its functor laws.
+\[
+\text{frun}_{L}(\phi^{:M\leadsto N}):T_{G}^{M,A}\times T_{H}^{M,A}\leadsto T_{G}^{N,A}\times T_{H}^{N,A}\quad,\quad\quad\text{frun}_{L}(\phi)\triangleq\text{frun}_{G}(\phi)\boxtimes\text{frun}_{H}(\phi)\quad.
+\]
+The result of applying $\text{frun}_{L}(\phi)$ is a monad morphism
+by Statement~\ref{subsec:Statement-pair-product-of-monadic-morphisms}.
+
+The functor laws hold due to the properties of the pair product:
+\begin{align*}
+{\color{greenunder}\text{expect to equal }\text{id}:}\quad & \text{frun}_{L}(\text{id})=\text{frun}_{G}(\text{id})\boxtimes\text{frun}_{H}(\text{id})=\text{id}\boxtimes\text{id}=\text{id}\quad,\\
+{\color{greenunder}\text{expect to equal }\text{frun}_{L}(\phi\bef\chi):}\quad & \text{frun}_{L}(\phi)\bef\text{frun}_{L}(\chi)=\big(\gunderline{\text{frun}_{G}(\phi)\bef\text{frun}_{G}(\chi)}\big)\boxtimes\big(\gunderline{\text{frun}_{H}(\phi)\bef\text{frun}_{H}(\chi)}\big)\\
+{\color{greenunder}\text{functor laws for }\text{frun}_{G},\,\text{frun}_{H}:}\quad & \quad=\text{frun}_{G}(\phi\bef\chi)\boxtimes\text{frun}_{H}(\phi\bef\chi)=\text{frun}_{L}(\phi\bef\chi)\quad.
+\end{align*}
+
+
+\paragraph{Base runner laws}
+
+We may define a base runner in two different ways, dropping either
+the first or the second part of the product. Both base runners are
+lawful. Consider the first one:
+\[
+\text{brun}_{L}:T_{G}^{M}\times T_{H}^{M}\leadsto M\quad,\quad\quad\text{brun}_{L}\triangleq\pi_{1}\bef\text{brun}_{G}\quad.
+\]
+It is a monad morphism because it is a composition (Statement~\ref{subsec:Statement-monadic-morphism-composition})
+of a projection (Statement~\ref{subsec:Statement-projection-is-monadic-morphism})
+and a monad morphism $\text{brun}_{G}$.
+
+The non-degeneracy law holds because it holds for $\text{brun}_{G}$:
+\[
+\text{flift}_{L}\bef\text{brun}_{L}=\Delta\bef\gunderline{(\text{flift}_{G}\boxtimes\text{flift}_{H})\bef\pi_{1}}\bef\text{brun}_{G}=\gunderline{\Delta\bef\pi_{1}}\bef\gunderline{\text{flift}_{G}\bef\text{brun}_{G}}=\text{id}\quad.
+\]
+Analogous proofs work for the other definition, $\text{brun}_{L}\triangleq\pi_{2}\bef\text{brun}_{H}$.
+
+A deficiency of these base runners is that the effects of one of the
+monads ($G$ or $H$) are being ignored, which loses information.
+If we would like to run the effects of both monads $G$ and $H$,
+we can instead implement a base runner into the monad $M\times M$.
+This corresponds to running the monad $G\times H$ into the double-valued
+monad $D^{A}\triangleq A\times A$, since $T_{D}^{M}=M\times M$.
+Define the base runner as:
+\[
+\text{brun}_{L}:T_{G}^{M}\times T_{H}^{M}\leadsto M\times M\quad,\quad\quad\text{brun}_{L}\triangleq\text{brun}_{G}\boxtimes\text{brun}_{H}\quad.
+\]
+This is a monad morphism due to Statement~\ref{subsec:Statement-pair-product-of-monadic-morphisms}.
+The non-degeneracy law has the form
+\[
+\text{flift}_{L}\bef\text{brun}_{L}=\Delta^{:M\leadsto M\times M}\quad,
+\]
+since the target monad is now $M\times M$. To verify the non-degeneracy
+law:
+\begin{align*}
+ & \text{flift}_{L}\bef\text{brun}_{L}=\Delta\bef(\text{flift}_{G}\boxtimes\text{flift}_{H})\bef(\text{brun}_{G}\boxtimes\text{brun}_{H})\\
+ & =\Delta\bef(\gunderline{\text{flift}_{G}\bef\text{brun}_{G}})\boxtimes(\gunderline{\text{flift}_{H}\bef\text{brun}_{H}})=\Delta\quad.
+\end{align*}
+
+
+\paragraph{Monadic naturality laws}
+
+To verify the monadic naturality of $\text{flift}_{L}$:
+\begin{align*}
+ & \text{flift}_{L}\bef\text{frun}_{L}(\phi)=\Delta\bef(\text{flift}_{G}\boxtimes\text{flift}_{H})\bef(\text{frun}_{G}(\phi)\boxtimes\text{frun}_{H}(\phi))\\
+ & =\Delta\bef(\gunderline{\text{flift}_{G}\bef\text{frun}_{G}}(\phi))\boxtimes(\gunderline{\text{flift}_{H}\bef\text{frun}_{H}(\phi)})=\Delta\bef(\gunderline{\phi}\bef\text{flift}_{G})\boxtimes(\gunderline{\phi}\bef\text{flift}_{H})\\
+ & =\gunderline{\Delta\bef(\phi\boxtimes\phi)}\bef(\text{flift}_{G}\boxtimes\text{flift}_{H})=\phi\bef\gunderline{\Delta\bef(\text{flift}_{G}\boxtimes\text{flift}_{H})}=\phi\bef\text{flift}_{L}\quad.
+\end{align*}
+
+To verify the monadic naturality of an information-losing definition
+of $\text{brun}_{L}$:
+\begin{align*}
+ & \text{frun}_{L}(\phi)\bef\text{brun}_{L}=\gunderline{(\text{frun}_{G}(\phi)\boxtimes\text{frun}_{H}(\phi))\bef\pi_{1}}\bef\text{brun}_{G}=\pi_{1}\bef\text{frun}_{G}(\phi)\bef\text{brun}_{G}\quad,\\
+ & \text{brun}_{L}\bef\phi=\pi_{1}\bef\gunderline{\text{brun}_{G}\bef\phi}=\pi_{1}\bef\text{frun}_{G}(\phi)\bef\text{brun}_{G}\quad.
+\end{align*}
+The runner into $M\times M$ also obeys a monadic naturality law involving
+$\phi\boxtimes\phi$ instead of $\phi$:
+\begin{align*}
+ & \text{frun}_{L}(\phi)\bef\text{brun}_{L}=(\text{frun}_{G}(\phi)\boxtimes\text{frun}_{H}(\phi))\bef(\text{brun}_{G}\boxtimes\text{brun}_{H})\\
+ & =(\gunderline{\text{frun}_{G}(\phi)\bef\text{brun}_{G}})\boxtimes(\gunderline{\text{frun}_{H}(\phi)\bef\text{brun}_{H}})=(\text{brun}_{G}\bef\phi)\boxtimes(\text{brun}_{H}\bef\phi)\\
+ & =(\text{brun}_{G}\boxtimes\text{brun}_{H})\bef(\phi\boxtimes\phi)\quad.
+\end{align*}
+
+
 \subsection{Free pointed monad transformer}
 
 \section{Irregular and incomplete monad transformers}
@@ -5736,7 +5924,7 @@ and compute:
 \end{align*}
 
 
-\subsubsection{Statement \label{subsec:Statement-product-of-monadic-morphisms}\ref{subsec:Statement-product-of-monadic-morphisms}}
+\subsubsection{Statement \label{subsec:Statement-pair-product-of-monadic-morphisms}\ref{subsec:Statement-pair-product-of-monadic-morphisms}}
 
 For any monads $K$, $L$, $M$, $N$ and monad morphisms $\phi:K\leadsto M$
 and $\chi:L\leadsto N$, the pair product $\phi\boxtimes\chi:K^{\bullet}\times L^{\bullet}\leadsto M^{\bullet}\times N^{\bullet}$
@@ -5825,7 +6013,7 @@ The code for $\sigma$ can be written as a combination of other functions
 as $\sigma=\Delta\bef\left(\pi_{2}\boxtimes\pi_{1}\right)$. The functions
 $\Delta$, $\pi_{1}$, and $\pi_{2}$ are monad morphisms by Statements~\ref{subsec:Statement-M-to-M-times-M-is-monadic-morphism}
 and~\ref{subsec:Statement-projection-is-monadic-morphism}. The function
-product $\pi_{1}\boxtimes\pi_{2}$ is a monad morphism by Statement~\ref{subsec:Statement-product-of-monadic-morphisms}.
+product $\pi_{1}\boxtimes\pi_{2}$ is a monad morphism by Statement~\ref{subsec:Statement-pair-product-of-monadic-morphisms}.
 So $\sigma$ is a composition of monad morphisms; by Statement~\ref{subsec:Statement-monadic-morphism-composition},
 $\sigma$ is a monad morphism.
 
@@ -5859,10 +6047,10 @@ There are no other monad morphisms.
 For an arbitrary fixed monad $M$, consider a function $\text{dbl}:M^{A}\rightarrow M^{A}$
 defined as
 
-\begin{wrapfigure}{l}{0.3\columnwidth}%
+\begin{wrapfigure}{l}{0.5\columnwidth}%
 \vspace{-1\baselineskip}
 \begin{lstlisting}
-def double[M: Monad, A](m: M[A]): M[A] = for {
+def double[M[_]: Monad, A](m: M[A]): M[A] = for {
   _ <- m
   x <- m
 } yield x
@@ -5871,10 +6059,11 @@ def double[M: Monad, A](m: M[A]): M[A] = for {
 \vspace{-1\baselineskip}
 \end{wrapfigure}%
 
-~\vspace{-1\baselineskip}
-\[
-m^{:M^{A}}\triangleright\text{dbl}\triangleq m\triangleright\text{flm}_{M}(\_^{:A}\rightarrow m)=m\triangleright(\_\rightarrow m)^{\uparrow M}\bef\text{ftn}_{M}\quad.
-\]
+~\vspace{-1.5\baselineskip}
+\begin{align*}
+m^{:M^{A}}\triangleright\text{dbl} & \triangleq m\triangleright\text{flm}_{M}(\_^{:A}\rightarrow m)\\
+ & =m\triangleright(\_\rightarrow m)^{\uparrow M}\bef\text{ftn}_{M}\quad.
+\end{align*}
 
 This function \textsf{``}doubles\textsf{''} the $M$-effect in a given monadic value
 $m$. Show that (at least for some monads $M$) the function \lstinline!double!
