@@ -6,6 +6,9 @@
 
 name="sofp"
 
+draft="$name-draft"
+srcbase="sofp-src"
+
 function git_commit_hash {
 	git rev-parse HEAD # Do not use --short here.
 }
@@ -31,7 +34,7 @@ function make_pdf_with_index {
 		makeindex "$base.idx"
 	fi
 	run_latex_many_times "$base"
-        (dvips "$base.dvi") 2>&1 >> $base.log
+        (dvips "$base.dvi" >& $base.log1; cat $base.log1 >> $base.log; rm $base.log1) >& /dev/null
         (ps2pdf -dPDFSETTINGS=/prepress -dEmbedAllFonts=true "$base.ps") 2>&1 >> $base.log
 }
 
@@ -79,6 +82,15 @@ function add_lulu {
         LC_ALL=C sed -i "" -e 's,^%\(.publishers{Published by \),\1,; s,^%\(Published by \),\1,; s,^%\(ISBN:\),\1,' "$base".tex
 }
 
+function assemble_sources {
+	rm -rf "$srcbase"
+	mkdir "$srcbase"
+	# Copy the required source files to "$srcbase"/.
+	cp ../README.md excluded_words $name*lyx $name*tex $name*dvi `fgrep includegraphics $name*tex | sed -e 's,[^{]*{\([^}]*\)}.*,\1.*,' |while read f; do ls $f ; done` *.sh "$srcbase"/
+	tar jcvf "$name-src.tar.bz2" "$srcbase"/
+	rm -rf "$srcbase"/
+}
+
 # This requires pdftk to be installed on the path. Edit the next line as needed.
 pdftk=`which pdftk`
 
@@ -86,9 +98,6 @@ pdftk=`which pdftk`
 lyx="/Applications/LyX.app/Contents/MacOS/lyx"
 
 echo "Info: Using pdftk from '$pdftk' and lyx from '$lyx'"
-
-draft="$name-draft"
-srcbase="sofp-src"
 
 rm -f $name*tex
 
@@ -104,20 +113,17 @@ LC_ALL=C sed -i "" -e " s|'s|\\\\textsf{'}s|g; "' s|``|\\textsf{``}|g; s|“|\\t
 # Add color to equation displays.
 for f in $name*tex; do add_color "$f"; done
 if add_source_hashes $name.tex; then
+        assemble_sources &
 	echo "Creating a full PDF file..."
 	make_pdf_with_index "$name" # Output is $name.pdf, main file is $name.tex, and other .tex files are \include'd.
-	rm -rf "$srcbase"
-	mkdir "$srcbase"
-	# Copy the required source files to "$srcbase"/.
-	cp ../README.md excluded_words $name*lyx $name*tex $name*dvi `fgrep includegraphics $name*tex | sed -e 's,[^{]*{\([^}]*\)}.*,\1.*,' |while read f; do ls $f ; done` *.sh "$srcbase"/
-	tar jcvf "$name-src.tar.bz2" "$srcbase"/
-	rm -rf "$srcbase"/
+	wait
 	# Do not attach sources to the main PDF file.
 	#"$pdftk" "$name.pdf" attach_files "$name-src.tar.bz2" output "1$name.pdf"
 	#mv "1$name.pdf" "$name.pdf"
 	# Cleanup.
-	tar jcvf "$name-logs.tar.bz2" $name*log $name*ilg $name*idx $name*toc
-	echo "Log files are found in $name-logs.tar.bz2"
+	( tar jcvf "$name-logs.tar.bz2" $name*log $name*ilg $name*idx $name*toc
+	  echo "Log files are found in $name-logs.tar.bz2"
+        ) &
 fi
 
 
