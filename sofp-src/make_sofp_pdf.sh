@@ -86,8 +86,8 @@ function assemble_sources {
 	rm -rf "$srcbase"
 	mkdir "$srcbase"
 	# Copy the required source files to "$srcbase"/.
-	cp ../README.md excluded_words $name*lyx $name*tex $name*dvi `fgrep includegraphics $name*tex | sed -e 's,[^{]*{\([^}]*\)}.*,\1.*,' |while read f; do ls $f ; done` *.sh "$srcbase"/
-	tar jcvf "$name-src.tar.bz2" "$srcbase"/
+	cp ../README.md excluded_words $name*lyx $name*tex $name*dvi `grep -o 'includegraphics[^}]*}' $name*tex | sed -e 's,[^{]*{\([^}]*\)}.*,\1.*,' |while read f; do ls $f ; done` *.sh "$srcbase"/
+	tar jcvf "$name-src.tar.bz2" "$srcbase"/*
 	rm -rf "$srcbase"/
 }
 
