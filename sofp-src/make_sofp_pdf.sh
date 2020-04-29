@@ -27,7 +27,8 @@ function run_latex_many_times {
         done # This used to be only pdflatex but now we are using ps2pdf because of pstricks.
 }
 
-function make_pdf_with_index {
+# Not used now.
+function make_pdf_with_index_via_ps2pdf {
 	local base="$1" fast="$2"
 	if [[ -z "$fast" ]]; then
 		run_latex_many_times "$base"
@@ -36,6 +37,11 @@ function make_pdf_with_index {
 	run_latex_many_times "$base"
         (dvips "$base.dvi" >& $base.log1; cat $base.log1 >> $base.log; rm $base.log1) >& /dev/null
         (ps2pdf -dPDFSETTINGS=/prepress -dEmbedAllFonts=true "$base.ps") 2>&1 >> $base.log
+}
+
+function make_pdf_with_index {
+	local base="$1"
+	pdflatex --interaction=batchmode "$base"
 }
 
 function add_color {
@@ -110,7 +116,7 @@ insert_examples_exercises_count $name $name.tex
 #LC_ALL=C sed -i "" -e 's/^.*usepackage.*mathpazo.*$//' sofp.tex
 # Replace ugly Palatino quote marks and apostrophes by sans-serif marks.
 LC_ALL=C sed -i "" -e " s|'s|\\\\textsf{'}s|g; "' s|``|\\textsf{``}|g; s|“|\\textsf{``}|g; '" s|''|\\\\textsf{''}|g; s|”|\\\\textsf{''}|g;  " sofp*.tex
-# Add color to equation displays.
+# Add color to equation displays. This is now disabled because it does not always produce visually good results.
 for f in $name*tex; do add_color "$f"; done
 if add_source_hashes $name.tex; then
         assemble_sources &
