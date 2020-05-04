@@ -38,7 +38,7 @@ The draft version is [available for purchase on leanpub](https://leanpub.com/sof
 
 # Printed version of the draft
 
-A printed version of the current draft can be purchased at lulu.com: [http://www.lulu.com/content/paperback-book/the-science-of-functional-programming/24915714](http://www.lulu.com/content/paperback-book/the-science-of-functional-programming/24915714).
+A printed version of the current draft [can be purchased at lulu.com](https://www.lulu.com/en/us/shop/sergei-winitzki/the-science-of-functional-programming-draft-version/paperback/product-1y5zzgje.html).
 
 This printed version contains only the chapters whose text has been edited and proofread. It corresponds to the PDF file
 [sofp-src/sofp-draft.pdf](sofp-src/sofp-draft.pdf).
