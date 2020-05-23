@@ -142,15 +142,50 @@ incorrect choices are marked with a strike-through line).
 It turns out that some monads do not compose in either order, while
 others have a \textsf{``}preferred\textsf{''} order (we will see proofs of these properties
 later in this chapter). For instance, the \lstinline!Reader! monad
-$Z\rightarrow A$ always composes on the outside (Statement~\ref{subsec:Statement-monad-construction-1})
-but not necessarily on the inside. On the other hand, pass/fail monads
-$M^{A}\triangleq Z+A$ composes when it is on the inside.
+($M^{A}\triangleq R\rightarrow A$) always composes on the outside
+(Statement~\ref{subsec:Statement-monad-construction-1}) but not
+necessarily on the inside. On the other hand, the \lstinline!Either!
+monad ($M^{A}\triangleq Z+A$) always composes on the inside (we will
+prove that in Section~\ref{sec:transformers-linear-monads}), but
+not necessarily on the outside.
+
+\subsubsection{Example \label{subsec:Example-either-reader-not-compose}\ref{subsec:Example-either-reader-not-compose}\index{solved examples}}
+
+Show that a \lstinline!Reader! monad does not compose inside of an
+\lstinline!Either! monad.
+
+\subparagraph{Solution}
+
+The \lstinline!flatMap! method\textsf{'}s type signature cannot be implemented
+for the type constructor $F^{A}\triangleq Z+\left(R\rightarrow A\right)$,
+where $R$ and $Z$ are fixed (but otherwise unknown) types. Begin
+writing the code:
+\begin{lstlisting}[numbers=left]
+def flatMap[A, B](fa: Either[Z, R => A])(f: A => Either[Z, R => B]): Either[Z, R => B] = fa match {
+  case Left(z)    => Left(z)     // No other choice here.
+  case Right(h)   => Right(r =>  // Cannot return a Left() here, since we have no values of type Z.
+                                 // Need to return a value of type B here, using only r, ra, and f.
+      val x: Either[Z, R => B] = f(ra(r))     // Can compute a value `x` of type Either[Z, R => B].
+      ???                 )
+}
+\end{lstlisting}
+In line~3, we must decide whether to return a \lstinline!Left(...)!
+or a \lstinline!Right(...)!, given only values $h^{:R\rightarrow A}$
+and $f^{:A\rightarrow Z+\left(R\rightarrow B\right)}$. The decision
+must be hard-coded since at that point we have no values of type $R$
+or $A$, so we cannot apply the functions $f$ and $h$ to any arguments.
+The only possible decision is to return a \lstinline!Right(...)!.
+But then we are not able to compute a value of type $B$ in the scope
+of lines~4\textendash 6 because we cannot guarantee that the value
+$x^{:Z+\left(R\rightarrow B\right)}$ contains a function $R\rightarrow B$
+rather than a value of type $Z$. So, the typed hole $\text{???}^{:B}$
+in line~6 cannot be filled. $\square$
 
 When the monad composition works both ways, the two resulting monads
 are usually not equivalent: the two effects are combined in quite
 different ways. 
 
-For example, the \lstinline!Writer! monad $W\times A$ (appending
+For instance, the \lstinline!Writer! monad $W\times A$ (appending
 an output message) and the pass/fail monads $Z+A$ (allowing failure)
 can be composed in two ways. The monad $M^{A}\triangleq W\times\left(Z+A\right)$
 describes a computation that may fail but always outputs a message;
@@ -197,7 +232,7 @@ meaning of the effects.
 When functor composition works, implementing the \lstinline!lift!
 methods is straightforward:
 
-\subsubsection{Example \label{subsec:Example-lift-for-List-Try-composition}\ref{subsec:Example-lift-for-List-Try-composition}\index{solved examples}}
+\subsubsection{Example \label{subsec:Example-lift-for-List-Try-composition}\ref{subsec:Example-lift-for-List-Try-composition}}
 
 Implement a composition of \lstinline!List! and \lstinline!Try!
 monads for use in functor blocks.
@@ -213,7 +248,7 @@ the two \lstinline!lift! functions as extension methods:
 final case class ListTry[A](value: List[Try[A]]) {
   def map[B](f: A => B): ListTry[B] = ListTry(value.map(_.map(f)))
   def flatMap[B](f: A => ListTry[B]): ListTry[B] = ListTry(
-    value.flatMap {         // Provide a function Try[A] => List[Try[B]] here.
+    value.flatMap {        // Need to provide a function Try[A] => List[Try[B]] here.
       case Failure(t)   => List(Failure(t))
       case Success(a)   => f(a).value
     }
@@ -232,23 +267,109 @@ scala> for {
 res0: ListTry[Int] = ListTry(List(Success(101), Success(102), Success(103)))
 \end{lstlisting}
 
+The following examples show that the functor composition does not
+always work. For instance, the \lstinline!State! monad does not always
+compose with other monads in either order.
+
+\subsubsection{Example \label{subsec:Example-state-monad-composition-1-1}\ref{subsec:Example-state-monad-composition-1-1}}
+
+Show that the \lstinline!State! monad fails to compose inside the
+\lstinline!Option! monad.
+
+\subparagraph{Solution}
+
+We will find that the type signature of \lstinline!flatMap! cannot
+be implemented for the type constructor \lstinline!OpSt[A] = Option[State[S, A]]!:
+\begin{lstlisting}
+type OpSt[A] = Option[S => (A, S)]                 // Here, the fixed type S must be already defined.
+def flatMap[A, B](fa: OpSt[A])(f: A => OpSt[B]): OpSt[B] = fa match {
+  case None      => None         // No other choice here.
+  case Some(sta) => Some( s =>   // If we return `None` here, we will violate the monad identity law.
+         // We need to return a value of type (S, B) in this scope, using given values f, sta, and s.
+    val (s1, a) = sta(s) // We can compute another value of type s. But can we get a value of type B?
+    val b: B = f(a) match {     // The only way of possibly getting `b: B` is to apply `f` to an `A`.
+        case Some(stb)   => stb(s2)._2                         // Here, we can get a value of type B.
+        case None        => ??? // We are stuck: there is no way of returning a value of type B here.
+    }
+    ???                 )
+}
+\end{lstlisting}
+
+
+\subsubsection{Example \label{subsec:Example-state-monad-composition-1}\ref{subsec:Example-state-monad-composition-1}}
+
+Show that the \lstinline!State! monad fails to compose outside the
+\lstinline!Reader! monad.
+
+\subparagraph{Solution}
+
+Denoting the type constructor \lstinline!StR[A] = State[S, R => A]!,
+we try implementing its \lstinline!pure! and \lstinline!flatMap!
+methods. We find that the required type signatures \emph{can} be implemented:
+\begin{lstlisting}
+type StR[A] = S => (R => A, S) // Here, the fixed types R and S must be already defined.
+def pure[A](a: A): StR[A] = { s => (_ => a, s) }
+def flatMap[A, B](fa: StR[A])(f: A => StR[B]): StR[B] = { s =>
+      // Here we must return a value of type (R => B, S). Other than s: S, we can compute s1: S via:
+  val (s1, ra): (S, R => A) = fa(s)
+  // We can also compute a value of type R => B, trying to preserve information as much as possible:
+  val rb: R => B = { r =>
+    val a: A = ra(r)
+    val (s2, rb): (S, R => B) = f(a)(s1)
+    rb(r)   // We must discard s2 here.
+  }
+  (rb, s1)  // We can only return (rb, s1) or (rb, s) here, since `s2` is not visible in this scope!
+}
+\end{lstlisting}
+We may recognize a problem with this implementation: The new state
+value $s_{1}$ is computed without using the function argument $f$,
+because the \textsf{``}correct\textsf{''} value ($s_{2}$) is hidden within the scope
+of the nameless function of type $R\rightarrow B$. So, even though
+we have tried to preserve information as much as possible, the implementation
+of \lstinline!flatMap! discards the second monad\textsf{'}s effect. This will
+violate the identity law \lstinline!pure(x).flatMap(f) == f(x)!.
+That law cannot possibly hold if the implementation of \lstinline!flatMap!
+ignores the function $f$ when computing the new state:
+
+\begin{wrapfigure}{l}{0.38\columnwidth}%
+\vspace{-1\baselineskip}
+\begin{lstlisting}
+pure(x).flatMap(f)
+  == flatMap { s => (_ => x, s) } (f)
+  == { s =>
+  val (ra, s) = (_ => x, s)
+  val rb = ...
+  (rb, s)
+}
+\end{lstlisting}
+
+\vspace{-1.5\baselineskip}
+\end{wrapfigure}%
+
+\noindent The result always has the initial unmodified \lstinline!s!
+as the second element of the pair. However, $f$ is an arbitrary function
+of type \lstinline!A => StR[B]!, so \lstinline!f(x): StR[B]! could
+equal the function \lstinline!{ s => (... , p(x, s)) }!, where the
+value \lstinline!p(x, s)! is not necessarily equal to \lstinline!s!.
+Therefore, \lstinline!pure(x).flatMap(f)! is not equal to \lstinline!f(x)!
+for arbitrary functions \lstinline!f!.
 
 \subsection{Combining monads via monad transformers}
 
 Not all monads combine with others via functor composition. But even
 for those that do, the method used in Example~\ref{subsec:Example-lift-for-List-Try-composition}
 requires writing custom wrapper classes for each\emph{ pair} of monads.
-The length of the required code would be quadratic in the number of
-supported monads. To avoid the code explosion, we will use a different
-approach to organizing the code that combines monads.
+The length of the required code is then quadratic in the number of
+supported monads. \textsf{``}Monad transformers\textsf{''} is a trick for organizing
+the monad-combining code while avoiding the quadratic code size.
 
-The main idea of that approach is to fix the first monad $L$ (the
-\textsf{``}base\textsf{''} monad) and to write code that combines $L$ with an arbitrary
+The main idea of that trick is to fix the first monad $L$ (the \textsf{``}base\textsf{''}
+monad) and to write code that combines $L$ with an \emph{arbitrary}
 second monad $M$ (the \textsf{``}foreign\textsf{''} monad). The result is a new,
 \textsf{``}transformed\textsf{''} monad, denoted by $T_{L}^{M}$. It turns out that
-the code of $T_{L}^{M}$ is fully parametric in $M$. In other words,
-the code of the \lstinline!pure! and \lstinline!flatMap! methods
-for $T_{L}^{M}$ uses only $M$\textsf{'}s monadic methods ($\text{pu}_{M}$
+the code of $T_{L}^{M}$ can be made fully parametric in the monad
+$M$. In other words, the code of the \lstinline!pure! and \lstinline!flatMap!
+methods for $T_{L}^{M}$ uses only $M$\textsf{'}s monad methods ($\text{pu}_{M}$
 and $\text{flm}_{M}$) and will work in the same way for all foreign
 monads $M$. The monad $T_{L}^{M}$ is called the \textsf{``}$L$-transformer
 applied to the monad $M$\textsf{''}. So, the \textbf{monad transformer} of\index{monad transformers}
@@ -279,9 +400,9 @@ It is now straightforward to generalize that code to an arbitrary
 foreign monad $M$:
 \begin{lstlisting}[mathescape=true]
 final case class TryT[M[_]: Monad : Functor, A](value: M[Try[A]]) {
-  def map[B](f: A => B): TryT[M, B] = TryT(value.map(_.map(f)))        // Using $M'$s `map` here.
+  def map[B](f: A => B): TryT[M, B] = TryT(value.map(_.map(f)))        // Using M$\color{dkgreen}\texttt{'}$s `map` here.
   def flatMap[B](f: A => TryT[M, B]): TryT[M, B] = TryT(
-    value.flatMap {                                                // Using $M'$s `flatMap` here.
+    value.flatMap {                                                // Using M$\color{dkgreen} \texttt{'}$s `flatMap` here.
       case Failure(t)   => Monad[M].pure(Failure(t)) // Use Monad[M].pure(x) instead of List(x).
       case Success(a)   => f(a).value
     }
@@ -388,12 +509,12 @@ transformer in the Haskell standard library. The type constructor
 for \lstinline!ListT! was chosen incorrectly in 2002 and remained
 in the library until it was corrected in 2007. See the discussion
 in \texttt{\href{https://wiki.haskell.org/index.php?title=ListT_done_right}{https://wiki.haskell.org/index.php?title=ListT\_done\_right}}} The only justification for those choices is that they work and obey
-the required laws, while no alternative transformers are known. We
-will derive and prove the required laws for these and other transformers
+the required laws, while no lawful alternative transformers are known.
+We will derive and prove the required laws for these and other transformers
 later in this chapter. For now, we accept the results of Table~\ref{tab:Known-monad-transformers}
 as correct and turn to other tasks regarding the practical use of
 monad transformers. The first task is to obtain the implementations
-of monad methods and lifts for the transformers from Table~\ref{tab:Known-monad-transformers}.
+of monad methods and lifts for the transformers in Table~\ref{tab:Known-monad-transformers}.
 
 The type constructors for monad transformers are conventionally named
 \lstinline!ReaderT!, \lstinline!EitherT!, etc. 
@@ -1047,7 +1168,7 @@ which we can rewrite as
 \[
 \left(K\varangle L\right)\varangle M\triangleq K\varangle\left(L\varangle M\right)\quad.
 \]
- A monad stack is then denoted unambiguously by, e.g., $K\varangle L\varangle M\varangle N$
+ A monad stack is then denoted unambiguously by, e.g., $K\varangle L\varangle M\varangle N$,
 without need for parentheses.
 
 Does the stacking operation ($\varangle$) have a unit element? We
@@ -1056,14 +1177,14 @@ $T_{L}^{M}$ somehow mixes the foreign monad $M$ with the type of
 the base monad $L$. In every example, if we choose $M$ as the identity
 monad $\text{Id}$ (defined by $\text{Id}^{A}\triangleq A$), the
 transformed type will become equivalent to the base monad $L$. Intuitively,
-the identity monad is a \textsf{``}trivial effect\textsf{''}; combining it with another
-monad should not change that monad\textsf{'}s effects. So, we may expect this
+the identity monad has a \textsf{``}trivial effect\textsf{''}; combining it with another
+monad should not change that monad\textsf{'}s effects. So, we may expect that
 property to hold for every transformer:
 \[
 T_{L}^{\text{Id}}\cong L\quad,\quad\quad L\varangle\text{Id}\cong L\quad.
 \]
-We also define the monad transformer for the identity monad as equal
-to the foreign monad:
+We also \emph{define} the monad transformer for the identity monad
+as equal to the foreign monad:
 \[
 T_{\text{Id}}^{M}\triangleq M\quad,\quad\quad\text{Id}\varangle M\triangleq M\quad.
 \]
@@ -1071,14 +1192,16 @@ T_{\text{Id}}^{M}\triangleq M\quad,\quad\quad\text{Id}\varangle M\triangleq M\qu
 Because of these properties of the identity monad, the base monad
 $L$ can be recovered as as $T_{L}^{\text{Id}}$ if we know the formula
 for the transformer $T_{L}^{M}$. So, if we already have the type
-and an implementation for a monad $L$\textsf{'}s transformer, we do not need
-to define the monad $L$\textsf{'}s type and methods separately. This saves
-time when implementing monad code in libraries (but may sometimes
-decrease performance).
+and an implementation for a monad $L$\textsf{'}s transformer $T_{L}$, we
+do not need to define the monad $L$\textsf{'}s type and methods separately.
+This saves time when implementing monad code in libraries (but may
+sometimes decrease performance).
 
 It is unknown\footnote{For a discussion, see \texttt{\href{https://stackoverflow.com/questions/24515876/}{https://stackoverflow.com/questions/24515876/}}}
 whether a transformer exists for every monad relevant to functional
-programming; say, for every monad defined by purely functional code.\footnote{Monad transformers may certainly fail to exist for monads defined
+programming; say, for every exponential-polynomial type constructor
+whose monad methods are lawful and are implemented by purely functional
+code.\footnote{Monad transformers may certainly fail to exist for monads defined
 using low-level, non-purely functional code with side effects. A lawful
 transformer must allow the foreign monad to cancel the effect of the
 base monad, as we have seen in an example with \lstinline!State!
@@ -5292,7 +5415,7 @@ the definition of rigid monads via the composed-outside monad transformer.
 
 \subsubsection{Statement \label{subsec:Statement-rigid-monads-are-rigid-functors}\ref{subsec:Statement-rigid-monads-are-rigid-functors}}
 
-A rigid monad $R$ is also a rigid functor.
+A rigid monad $R$ is always a rigid functor.
 
 \subparagraph{Proof}
 
@@ -5323,14 +5446,14 @@ The type signature of the function \lstinline!fuseOut!,
 resembles \textsf{``}running\textsf{''} the composed monad $R^{M^{B}}$ into $R^{B}$,
 given a value of the environment (of type $A$). Indeed, given a fixed
 value $a^{:A}$, we can \textsf{``}run\textsf{''} the \lstinline!Reader! monad into
-the identity monad. The corresponding \textsf{``}runner\textsf{''} $\phi_{a}^{:M\leadsto\text{Id}}$
+the identity monad. The corresponding runner $\phi_{a}^{:M\leadsto\text{Id}}$
 is
 \begin{equation}
 \phi_{a}^{:M^{X}\rightarrow X}=\big(m^{A\rightarrow X}\rightarrow m(a)\big)\quad.\label{eq:runner-phi-def}
 \end{equation}
 So we are inspired to use the runner law for the monad transformer
 $T_{R}^{M}$. That law (which holds since we assumed that $T_{R}^{M}$
-satisfies all laws) says that the lifted \textsf{``}runner\textsf{''} $\phi_{a}^{\uparrow R}$
+satisfies all laws) says that the lifted runner $\phi_{a}^{\uparrow R}$
 is a monad morphism $T_{R}^{M}\leadsto T_{R}^{\text{Id}}\cong T_{R}^{M}\leadsto R$.
 The monad morphism law for $\phi_{a}^{\uparrow R}$ is then written
 as
@@ -5339,13 +5462,12 @@ as
 \end{equation}
 How could we use this law to obtain Eq.~(\ref{eq:rigid-non-degeneracy-law})?
 Compare Eqs.~(\ref{eq:fuseOut-def}) and~(\ref{eq:runner-phi-def})
-and derive the connection between the \textsf{``}runner\textsf{''} $\phi_{a}$ and
-the \lstinline!fuseOut! function (which always exists for any functor
-$R$),
+and derive the connection between the runner $\phi_{a}$ and the \lstinline!fuseOut!
+function (which always exists for any functor $R$),
 \[
-\text{fo}_{R}=\big(r\rightarrow a\rightarrow r\triangleright\phi_{a}^{\uparrow R}\big)\quad,
+\text{fo}_{R}=\big(r\rightarrow a\rightarrow r\triangleright\phi_{a}^{\uparrow R}\big)\quad.
 \]
-and then rewrite the law~(\ref{eq:rigid-non-degeneracy-law}) as
+Then we can complete the derivation by rewriting the law~(\ref{eq:rigid-non-degeneracy-law}):
 \begin{align*}
 {\color{greenunder}\text{expect to equal }m:}\quad & m^{:M^{R^{B}}}\triangleright\text{fi}_{R}\bef\text{fo}_{R}=\left(m\triangleright\text{fi}_{R}\right)\triangleright\gunderline{\text{fo}_{R}}\\
 {\color{greenunder}\text{use Eq.~(\ref{eq:fuseOut-def})}:}\quad & =a\rightarrow m\triangleright\gunderline{\text{fi}_{R}}\triangleright\phi_{a}^{\uparrow R}\\
@@ -5353,10 +5475,10 @@ and then rewrite the law~(\ref{eq:rigid-non-degeneracy-law}) as
 {\color{greenunder}\text{use Eq.~(\ref{eq:rigid-monad-is-rigid-functor-derivation1})}:}\quad & =a\rightarrow m\triangleright\text{pu}_{M}^{\uparrow R\uparrow M}\bef\gunderline{\text{pu}_{R}\bef\phi_{a}^{\uparrow R\uparrow M\uparrow R}\bef\phi_{a}^{\uparrow R}}\bef\text{ftn}_{R}\\
 {\color{greenunder}\text{naturality of }\text{pu}_{R}:}\quad & =a\rightarrow m\triangleright\text{pu}_{M}^{\uparrow R\uparrow M}\bef\phi_{a}^{\uparrow R\uparrow M}\bef\phi_{a}\bef\gunderline{\text{pu}_{R}\bef\text{ftn}_{R}}\\
 {\color{greenunder}\text{left identity law of }R:}\quad & =a\rightarrow m\triangleright\gunderline{(\text{pu}_{M}\bef\phi_{a})}^{\uparrow R\uparrow M}\bef\phi_{a}\\
-{\color{greenunder}\text{identity law for }\phi_{a}:}\quad & =a\rightarrow m\triangleright\gunderline{\phi_{a}}\\
+{\color{greenunder}\text{monad morphism identity law for }\phi_{a}:}\quad & =a\rightarrow m\triangleright\gunderline{\phi_{a}}\\
 {\color{greenunder}\text{definition~(\ref{eq:runner-phi-def}) for }\phi_{a}:}\quad & =a\rightarrow m(a)=m\quad.
 \end{align*}
-Here we used the monad morphism identity law for $\phi_{a}$,
+Here we used the monad morphism identity law for $\phi_{a}$:
 \[
 \text{pu}_{M}\bef\phi_{a}=\big(x\rightarrow(\_\rightarrow x)\big)\bef(m\rightarrow a\triangleright m)=\left(x\rightarrow a\triangleright(\_\rightarrow x)\right)=\left(x\rightarrow x\right)=\text{id}\quad.
 \]
@@ -5455,9 +5577,8 @@ is not rigid. (Here $Z$ is a fixed type.)
 
 Since all rigid monads are rigid functors, we can reuse all the rigid
 monad constructions to obtain new rigid functors. The following statement
-demonstrates a construction of rigid functors that does not assume
-any monadic properties. It shows that the set of all rigid functors
-is larger than the set of all rigid monads.
+shows a construction of rigid functors that does not assume any monadic
+properties. 
 
 \subsubsection{Statement \label{subsec:Statement-rigid-functor-h-p}\ref{subsec:Statement-rigid-functor-h-p}}
 
@@ -5573,12 +5694,11 @@ value, we obtain the selected value $r_{1}$ of type $R^{\bbnum 1}$.
 
 The next statement shows that $r_{1}$ is the \emph{only} distinct
 value of the type $R^{\bbnum 1}$. This means, in particular, that
-a rigid functor cannot be a disjunctive type defined with several
-constructors, such as $\bbnum 1+A+A$ or $\text{List}^{A}$. A rigid
-functor\textsf{'}s type definition must have a single constructor. This is
-one motivation for the name \textsf{``}rigid\textsf{''}: the container $R^{A}$ has
-a fixed shape and bears no extra information other than holding some
-values of type $A$. 
+a rigid functor cannot be a disjunctive type defined with more than
+one constructor, such as $\bbnum 1+A$ or $\text{List}^{A}$. This
+is one motivation for the name \textsf{``}rigid\textsf{''}: the data structure $R^{A}$
+must have a fixed \textsf{``}shape\textsf{''} and cannot be a disjunction of several
+variants. 
 
 \subsubsection{Statement \label{subsec:Statement-rigid-functor-wrapped-unit-is-unit}\ref{subsec:Statement-rigid-functor-wrapped-unit-is-unit}}
 
@@ -5679,12 +5799,6 @@ It means that all values of type $R^{\bbnum 1}$ are equal to $r_{1}$.
 So the function $1\rightarrow r_{1}$ is indeed an isomorphism between
 the types $\bbnum 1$ and $R^{\bbnum 1}$.
 
-It follows from Statement~\ref{subsec:Statement-rigid-functor-wrapped-unit-is-unit}
-that a rigid functor cannot be a disjunctive type with more than one
-constructor. So, functors such as \lstinline!Option! or \lstinline!List!
-are not rigid. A rigid functor must have a fixed \textsf{``}shape\textsf{''} of data
-wrapped in it. This partially explains the choice of the name \textsf{``}rigid\textsf{''}.
-
 \subsubsection{Statement \label{subsec:Statement-rigid-functor-product}\ref{subsec:Statement-rigid-functor-product}}
 
 The product of rigid functors is a rigid functor.
@@ -5746,7 +5860,6 @@ To verify the non-degeneracy law for $R$:
 \[
 \text{fi}_{R}\bef\text{fo}_{R}=\text{fi}_{P}\bef\text{fi}_{Q}^{\uparrow P}\bef\text{fo}_{Q}^{\uparrow P}\bef\text{fo}_{P}=\text{fi}_{P}\bef(\gunderline{\text{fi}_{Q}\bef\text{fo}_{Q}})^{\uparrow P}\bef\text{fo}_{P}=\gunderline{\text{fi}_{P}\bef\text{fo}_{P}}=\text{id}\quad.
 \]
-
 \begin{comment}
 Flip the curried arguments of the function type $A\rightarrow T^{B}\triangleq A\rightarrow H^{M^{B}}\rightarrow M^{B}$,
 to obtain $H^{M^{B}}\rightarrow A\rightarrow M^{B}$, and note that
@@ -5774,10 +5887,10 @@ Therefore the non-degeneracy law $\tilde{\text{fi}}_{T}\bef\tilde{\text{fo}}_{T}
 holds. 
 \end{comment}
 
-Some more use cases for rigid functors are shown in the next statements.
-The \textsf{``}$R$-valued \lstinline!flatMap!\textsf{''} is a generalization of
-\lstinline!flatMap! that can handle multiple $M$-effects at once;
-the collection of $M$-effects is described by a functor $R$.
+The next statements show some use cases for rigid functors. The \textsf{``}$R$-valued
+\lstinline!flatMap!\textsf{''} is a generalization of \lstinline!flatMap!
+that can handle multiple $M$-effects at once; the collection of $M$-effects
+is described by a rigid functor $R$.
 
 \subsubsection{Statement \label{subsec:Statement-rigid-functor-multi-flatMap}\ref{subsec:Statement-rigid-functor-multi-flatMap}}
 
@@ -6326,7 +6439,7 @@ The \lstinline!flift! function for $T_{L}$ is defined as
 \]
 To show that \lstinline!flift! is a monad morphism, we refer to Statement~\ref{subsec:Statement-transformer-lifting-laws-from-swap},
 where we need to use \lstinline!blift! instead of \lstinline!flift!
-and consider $P$ as the base monad and $M$ as the foreign monad.
+and to consider $P$ as the base monad and $M$ as the foreign monad.
 
 \paragraph{Runner laws}
 
