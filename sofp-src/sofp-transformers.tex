@@ -1243,8 +1243,8 @@ using code that executes side effects. Examples of that kind are the
 side effects with parallel threads. A transformer must allow the foreign
 monad to cancel the effects of the base monad, as we have seen in
 Example~\ref{subsec:Example-either-state-transformed-cancels-effect}.
-However, side effects cannot be undone once they are executed: side
-effects may change the state of the external world irreversibly.\footnote{See \texttt{\href{https://stackoverflow.com/questions/11792275/}{https://stackoverflow.com/questions/11792275/}}
+However, side effects cannot be undone once they are executed, because
+side effects may change the state of the external world irreversibly.\footnote{See \texttt{\href{https://stackoverflow.com/questions/11792275/}{https://stackoverflow.com/questions/11792275/}}
 for a discussion.} 
 
 We will show later in this chapter that transformers exist for every
@@ -1268,7 +1268,76 @@ to define the lifts and the runners for the monad stack.
 
 \paragraph{Lifts}
 
-We need to be able to transform {*}{*}{*}
+We need to be able to transform values of types $K^{A}$, $L^{A}$,
+$M^{A}$, $N^{A}$, $(K\varangle L)^{A}$, $(L\varangle M)^{A}$,
+etc., to the stack type $(K\varangle L\varangle M\varangle N)^{A}$.
+Assume that we have the base lifts, foreign lifts, and the runners
+of the relevant transformers, such as:
+\[
+\text{flift}_{K}^{P}:P\leadsto(K\varangle P)\quad,\quad\text{blift}_{L}^{P}:L\leadsto(L\varangle P)\quad,\quad\text{frun}_{M}^{P,Q}(f^{:P\leadsto Q}):M\varangle P\leadsto M\varangle Q\quad,\quad\text{etc.,}
+\]
+for any monad $P$. Keep in mind that the transformer for $K\varangle L$
+is defined by stacking the transformers for $K$ and $L$. As an example,
+let us compute the monad morphisms $P\leadsto K\varangle L\varangle P$
+and $L\varangle M\leadsto L\varangle M\varangle P$: 
+\[
+\text{flift}_{K\varangle L}^{P}:P\leadsto K\varangle L\varangle P=\text{flift}_{L}^{P}\bef\text{flift}_{K}^{L\varangle P}\quad,\quad\text{blift}_{L\varangle M}^{P}:L\varangle M\leadsto L\varangle M\varangle P=\text{frun}_{L}^{M,M\varangle P}(\text{blift}_{M}^{P})\quad.
+\]
+We can handle all other combinations similarly. 
+
+Lifting a monad value from a given monad from the middle of the stack
+into the full monad stack can require composing several transformer
+lifts. For example, consider the task of lifting a value of type $M^{A}$
+to the stack $(K\varangle L\varangle M\varangle N)^{A}$. We may first
+lift $M^{A}$ to $(M\varangle N)^{A}$ using $\text{blift}_{M}^{N}$,
+then lift the result to $(L\varangle M\varangle N)^{A}$ using $\text{flift}_{L}^{M\varangle N}$,
+and finally lift the last result to $(K\varangle L\varangle M\varangle N)^{A}$
+via $\text{flift}_{K}^{L\varangle M\varangle N}$. So, we obtain the
+following function composition:
+\[
+\big(\text{blift}_{M}^{N}\bef\text{flift}_{L}^{M\varangle N}\bef\text{flift}_{K}^{L\varangle M\varangle N}\big):M^{A}\rightarrow(K\varangle L\varangle M\varangle N)^{A}\quad.
+\]
+Equivalently, we may first lift $M^{A}$ to $(L\varangle M)^{A}$
+via $\text{flift}_{L}^{M}$, then lift to $(K\varangle L\varangle M)^{A}$
+via $\text{flift}_{K}^{L\varangle M}$, and finally use $\text{blift}_{K\varangle L\varangle M}^{N}$,
+which is defined as
+\[
+\text{blift}_{K\varangle L\varangle M}^{N}:K\varangle L\varangle M\leadsto K\varangle L\varangle M\varangle N\triangleq\text{frun}_{K}^{L\varangle M,L\varangle M\varangle N}(\text{frun}_{L}^{M,M\varangle N}(\text{blift}_{M}^{N}))\quad.
+\]
+With these techniques, we can construct all required liftings in any
+monad stack, as long as every monad transformer in the stack has the
+methods \lstinline!flift! and \lstinline!frun!. 
+
+Transformers for certain monads (the continuation and the codensity
+monad, the task-like monads such as \lstinline!Future!, and the external
+effect monads such as \lstinline!IO!) have neither the \lstinline!frun!
+nor the \lstinline!blift! methods. So, values of these monads can
+be lifted to a monad stack only when the problematic monads are located
+at the deep end of the stack. For example, the monad $N$ at the end
+of the stack $K\varangle L\varangle M\varangle N$ can be lifted to
+the stack without using any \lstinline!blift! methods:
+\[
+\text{flift}_{K\varangle L\varangle M}^{N}\triangleq\big(\text{flift}_{M}^{N}\bef\text{flift}_{L}^{M\varangle N}\bef\text{flift}_{K}^{L\varangle M\varangle N}\big):N^{A}\rightarrow(K\varangle L\varangle M\varangle N)^{A}\quad.
+\]
+For this reason, it is necessary to put the \lstinline!IO! or \lstinline!Future!
+monad at the deep end of the stack.
+
+While we have solved the lifting problem in principle, it is impractical
+for the programmer to have to write manually a composition of several
+lifts for every monad value in a functor block. Even if we implement
+all the lifting functions as extension methods for brevity, the code
+would have to be written like this:
+\begin{lstlisting}
+for {
+  x <- valueM.blift.flift.flift
+  y <- valueK.blift
+  z <- valueL.blift.flift
+} yield ...
+\end{lstlisting}
+If a monad stack needs to be changed from, say, $K\varangle L\varangle M\varangle N$
+to $M\varangle L\varangle N\varangle K\varangle P$, all functor blocks
+will need to be revised. Productive practical use of a deep monad
+stack needs better techniques.{*}{*}{*}
 
 \paragraph{Runners}
 
