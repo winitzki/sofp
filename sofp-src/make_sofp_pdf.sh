@@ -27,7 +27,7 @@ function run_latex_many_times {
         done # This used to be only pdflatex but now we are using ps2pdf because of pstricks.
 }
 
-# Not used now.
+# Not used now, since we are using pdflatex.
 function make_pdf_with_index_via_ps2pdf {
 	local base="$1" fast="$2"
 	if [[ -z "$fast" ]]; then
@@ -49,7 +49,7 @@ function add_color {
 	# Insert color comments into displayed equation arrays. Also, in some places the green color was inserted; replace by `greenunder`.
 	# Example of inserted color: {\color{greenunder}\text{outer-interchange law for }M:}\quad &
 	LC_ALL=C sed -i "" -e 's|\\color{green}|\\color{greenunder}|; s|^\(.*\\text{[^}]*}.*:\)\( *\\quad \& \)|{\\color{greenunder}\1}\2|' "$texsrc"
-	# Insert color background into all displayed equations.
+	# Insert color background into all displayed equations. This is disabled because it does not always produce visually good results.
 	if false; then
 	LC_ALL=C sed -i "" -E -e ' s!\\begin\{(align.?|equation)\}!\\begin{empheq}[box=\\mymathbgbox]{\1}!; s!\\end\{(align.?|equation)\}!\\end{empheq}!; ' "$texsrc"
 	LC_ALL=C sed -i "" -E -e ' s!^\\\[$!\\begin{empheq}[box=\\mymathbgbox]{equation*}!; s!^\\\]$!\\end{empheq}!; ' "$texsrc"
@@ -113,12 +113,13 @@ echo "Exporting LyX files $name.lyx and its child documents into LaTeX..."
 echo "Post-processing LaTeX files..."
 # Insert the number of examples and exercises. This replacement is only for the root file.
 insert_examples_exercises_count $name $name.tex
-## Remove mathpazo. This is a mistake: should not remove it.
+## Remove mathpazo. This was a mistake: should not remove it.
 #LC_ALL=C sed -i "" -e 's/^.*usepackage.*mathpazo.*$//' sofp.tex
 # Replace ugly Palatino quote marks and apostrophes by sans-serif marks.
-LC_ALL=C sed -i "" -e " s|'s|\\\\textsf{'}s|g; "' s|``|\\textsf{``}|g; s|“|\\textsf{``}|g; '" s|''|\\\\textsf{''}|g; s|”|\\\\textsf{''}|g;  " sofp*.tex
-# Add color to equation displays. This is now disabled because it does not always produce visually good results.
+LC_ALL=C sed -i "" -e " s|'s|\\\\textsf{'}s|g; s|s'|s\\\\textsf{'}|g;  "' s|``|\\textsf{``}|g; s|“|\\textsf{``}|g; '" s|''|\\\\textsf{''}|g; s|”|\\\\textsf{''}|g;  " sofp*.tex
+# Add color to equation displays.
 for f in $name*tex; do add_color "$f"; done
+# Check whether the sources have changed. If so, create a new sources archive and a new PDF file.
 if add_source_hashes $name.tex; then
         assemble_sources &
 	echo "Creating a full PDF file..."
