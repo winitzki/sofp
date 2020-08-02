@@ -117,7 +117,7 @@ insert_examples_exercises_count $name $name.tex
 ## Remove mathpazo. This was a mistake: should not remove it.
 #LC_ALL=C sed -i "" -e 's/^.*usepackage.*mathpazo.*$//' sofp.tex
 # Replace ugly Palatino quote marks and apostrophes by sans-serif marks.
-LC_ALL=C sed -i "" -e " s|'s|\\\\textsf{'}s|g; s|s'|s\\\\textsf{'}|g;  "' s|``|\\textsf{``}|g; s|“|\\textsf{``}|g; '" s|''|\\\\textsf{''}|g; s|”|\\\\textsf{''}|g;  " sofp*.tex
+LC_ALL=C sed -i "" -e " s|'s|\\\\textsf{'}s|g; s|s'|s\\\\textsf{'}|g;  "' s|``|\\textsf{``}|g; s|“|\\textsf{``}|g; '" s|''|\\\\textsf{''}|g; s|”|\\\\textsf{''}|g;  s|\\\\textsf{'}'|\\\\textsf{''}|g; " sofp*.tex
 # Add color to equation displays.
 for f in $name*tex; do add_color "$f"; done
 # Check whether the sources have changed. If so, create a new sources archive and a new PDF file.
