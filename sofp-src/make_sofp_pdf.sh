@@ -151,6 +151,7 @@ echo Result is "$name.pdf", size `kbSize "$name.pdf"` bytes, with `pdfPages "$na
 # Create the lulu.com draft file by selecting the chapters that have been proofread.
 # Also, check page counts.
 bash check_and_make_draft.sh
+bash check-consistent-labels.sh
 
 # Attach sources to the draft file.
 if test -s $name-src.tar.bz2 && test -s $draft.pdf; then  "$pdftk" $draft.pdf attach_files "$name-src.tar.bz2" output $draft-src.pdf
