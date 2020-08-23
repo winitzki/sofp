@@ -501,7 +501,8 @@ in different ways: composing inside the foreign monad (\lstinline!Either!,
 \lstinline!Writer!); composing outside the foreign monad (\lstinline!Reader!,
 \lstinline!Sel!); moving the recursive definition inside the foreign
 monad (\lstinline!List!); and mixing the foreign monad in a special
-way with the original monad (\lstinline!State!, \lstinline!Cont!). 
+way with the original monad (\lstinline!State!, \lstinline!Cont!,
+\lstinline!Eval!). 
 
 The task of finding a lawful and working transformer type constructor
 is far from simple.\footnote{The difficulty of that task is illustrated by the history of the \lstinline!ListT!
@@ -671,13 +672,13 @@ of type $A$ in the list. To extract further values in the list, we
 need to run the nested effects.
 
 This understanding helps us implement the concatenation function for
-\lstinline!ListT!:
+\lstinline!ListT!, called \lstinline!comb!:
 \begin{lstlisting}
-def concat[M[_]: Monad : Functor, A](t1: ListT[M, A], t2: ListT[M, A]): ListT[M, A] = ListT(for {
+def comb[M[_]: Monad : Functor, A](t1: ListT[M, A], t2: ListT[M, A]): ListT[M, A] = ListT(for {
   first <- t1.value            // Run the first effect and get `first: Option[(A, ListT[M, A])]`.
   rest = first match {         // Compute `rest: M[Option[(A, ListT[M, A])]]`.
            case None => t2.value
-           case Some((a, tail)) => Monad[M].pure(Some((a, concat(tail, t2))))  // Recursive call.
+           case Some((a, tail)) => Monad[M].pure(Some((a, comb(tail, t2))))    // Recursive call.
   y <- rest
 } yield y)
 \end{lstlisting}
@@ -690,9 +691,9 @@ final case class ListT[M[_]: Monad : Functor, A](value: M[Option[(A, ListT[M, A]
     case (head, tail) => (f(head), tail.map(f))
   }))
   def flatMap[B](f: A => ListT[M, B]): ListT[M, B] = ListT(
-    t.flatMap { // Here we need a function of type Option[(A, ListT)] => M[Option[(A, ListT)]].
+    t.flatMap {    // Here we need a function of type Option[(A, ListT)] => M[Option[(A, ListT)]].
       case None => Monad[M].pure(None)
-      case Some((head, tail)) => concat(f(head), tail).value  // Type is M[Option[(A, ListT)]].
+      case Some((head, tail)) => comb(f(head), tail).value       // Type is M[Option[(A, ListT)]].
   })
 }
 \end{lstlisting}
@@ -707,13 +708,13 @@ def blift[A]: ((A, W)) => M[(A, W)] = { t => Monad[M].pure(t) }
 \end{align*}
 
 Finally, we consider the runners for \lstinline!ListT!. List-like
-monads do not usually need runners ($\theta_{\text{List}}:\text{List}^{A}\rightarrow A$)
-because the meaning of the monad\textsf{'}s value is usually the entire set
-or collection of useful results rather than a single value, and also
-because the collection may be empty, which is incompatible with having
-a fully parametric and lawful runner. However, the foreign monad $M$
-may come with its runner $\theta_{M}$. In that case, we will need
-to run the $M$\textsf{'}s effects if we are to extract values from a \lstinline!ListT!.
+monads do not usually have runners ($\theta_{\text{List}}:\text{List}^{A}\rightarrow A$)
+because the \lstinline!List! monad normally represents several useful
+results rather than a single result. Also, the list may be empty,
+which prevents having a fully parametric function of type $\text{List}^{A}\rightarrow A$.
+However, the foreign monad $M$ may come with its runner $\theta_{M}$.
+In that case, we will need to run the $M$\textsf{'}s effects if we are to
+extract values from a \lstinline!ListT!.
 
 Intuitively, we may expect to be able to apply $M$\textsf{'}s runner ($\theta_{M}$)
 to a value of type \lstinline!ListT[M, A]! and obtain a \lstinline!List[A]!.
@@ -730,11 +731,10 @@ step. So, extracting a value of type \lstinline!List[A]! from a value
 of type \lstinline!ListT[M, A]! involves applying $\theta_{M}$ once
 per list value. When $M$ has a function type, a value of type \lstinline!ListT[M, A]!
 is an \textsf{``}on-call\textsf{''}\index{on-call value} sequence whose elements
-are not available in advance but are evaluated on demand, by calling
-$\theta_{M}$. Because of this, the total number of elements in \lstinline!ListT!
-may not be known in advance, and may be even unlimited. An example
-of an \textsf{``}infinite\textsf{''} collection uses the \lstinline!Reader! monad
-as $M$:
+are not available in advance but will be evaluated on demand when
+$\theta_{M}$ is applied. So, the total number of elements in \lstinline!ListT!
+may not be known in advance (and may be infinite). An example of an
+\textsf{``}infinite\textsf{''} collection uses the \lstinline!Reader! monad as $M$:
 \begin{lstlisting}
 def ascend(a: Int): ListT[Reader[Int, *], Int] = ListT(Lazy(m => Some((a, ascend(a + m)))))
 \end{lstlisting}
@@ -881,10 +881,10 @@ The continuation monad also does not support foreign runners or base
 runners. The type signature of the method $\text{frun}:T_{\text{Cont}}^{M,A}\rightarrow T_{\text{Cont}}^{N,A}$
 cannot be implemented with arbitrary monads $M$, $N$ because the
 type $T_{\text{Cont}}^{M,A}\triangleq(A\rightarrow M^{R})\rightarrow M^{R}$
-is not covariant in the parameter $M$. The base runner, $\text{brun}:((A\rightarrow M^{R})\rightarrow M^{R})\rightarrow M^{A}$,
-cannot be implemented (even with non-purely functional code) because
-there is no non-trivial way of constructing a value of type $M^{A}$
-out of a value of type $M^{R}$.
+is not covariant in the parameter $M$. The base runner\textsf{'}s type signature,
+$\text{brun}:((A\rightarrow M^{R})\rightarrow M^{R})\rightarrow M^{A}$,
+cannot be implemented because there is no non-trivial way of constructing
+a value of type $M^{A}$ out of a value of type $M^{R}$.
 
 \paragraph{The \texttt{SelT} transformer}
 
@@ -2424,7 +2424,7 @@ This formula can be seen as a combination of the co-Yoneda identities
 \[
 L^{A}\cong\exists P.L^{P}\times\left(P\rightarrow A\right)\quad,\quad\quad M^{A}\cong\exists Q.M^{Q}\times\left(Q\rightarrow A\right)\quad.
 \]
-The functor product $L\times M$ is equivalent to
+The functor product $L\times M$ is equivalent to $\exists P.\exists Q.L^{P}\times M^{Q}\times\left(P+Q\rightarrow A\right)$:
 \begin{align}
  & L^{A}\times M^{A}\nonumber \\
 {\color{greenunder}\text{co-Yoneda identities for }L^{A}\text{ and }M^{A}:}\quad & \cong\exists P.L^{P}\times\gunderline{\left(P\rightarrow A\right)}\times\exists Q.M^{Q}\times\gunderline{\left(Q\rightarrow A\right)}\nonumber \\
@@ -2453,6 +2453,14 @@ monad:
 {\color{greenunder}\text{co-Yoneda identity with }\exists P:}\quad & \cong\bbnum 1+\left(R\rightarrow A\right)\quad.
 \end{align*}
 This functor is not a monad (see, e.g., Exercise~\ref{subsec:Exercise-1-monads-7}).
+
+The name \textsf{``}monoidal convolution\textsf{''} comes from the fact that the type
+operations $P+Q$ and $P\times Q$ are both monoidal, in a suitable
+sense. We could generalize the monoidal convolution to useanother
+monoidal operation, such as $P+Q+Z\times P\times Q$ (where $Z$ is
+a fixed type), instead of $P\times Q$. The result will be another
+version of a \textsf{``}monoidal convolution\textsf{''}, but it will also fail to
+combine monads.
 
 \paragraph{Using the codensity monad{*}{*}{*}}
 \begin{itemize}
@@ -3871,7 +3879,7 @@ Q\times Q\times A & \bbnum 0 & q_{1}\times q_{2}\times a\rightarrow\left(q_{1}\o
 
 \subsection{Laws of \texttt{swap}}
 
-We do not need to verify naturality since \lstinline!swap! is defined
+We do not have to verify naturality since \lstinline!swap! is defined
 as a fully parametric function.
 
 \paragraph{The inner-identity law}
@@ -3989,9 +3997,9 @@ q\times l\rightarrow(x\rightarrow\bbnum 0+q\times x)^{\uparrow L}l
 q_{1}\times q_{2}\times a\rightarrow(x\rightarrow\bbnum 0+\left(q_{1}\oplus q_{2}\right)\times x)^{\uparrow L}a
 \end{array}\right|\quad.\label{eq:m-interchange-law-of-swap-linear-monads-left-hand-side}
 \end{align}
-We cannot simplify this any more, so we hope to transform the right-hand
-side, $\text{sw}^{\uparrow M}\bef\text{sw}\bef\text{ftn}_{M}^{\uparrow L}$,
-to the same column expression. Begin by writing the matrix for $\text{sw}^{\uparrow M}$,
+We cannot simplify this matrix any further, so we hope to transform
+the right-hand side, $\text{sw}^{\uparrow M}\bef\text{sw}\bef\text{ftn}_{M}^{\uparrow L}$,
+to the same matrix. Begin by writing the matrix for $\text{sw}^{\uparrow M}$,
 expanding the rows for the input type $M^{M^{L^{A}}}$:
 \begin{align*}
 \text{sw}^{\uparrow M}=~ & \begin{array}{|c||cc|}
@@ -7142,7 +7150,7 @@ T_{K}^{M,A} & \gunderline{\text{frun}_{K}^{M,M^{\prime}}\!(\phi)\bef\text{brun}_
 \hline A & \gunderline{\text{pu}_{M^{\prime}}}\\
 T_{K}^{M,A} & \text{brun}_{K}\bef\phi
 \end{array}\\
- & =\,\begin{array}{|c||c|}
+ & =\,\,\begin{array}{|c||c|}
  & M^{\prime A}\\
 \hline A & \text{pu}_{M}\bef\phi\\
 T_{K}^{M,A} & \text{brun}_{K}\bef\phi
@@ -7520,7 +7528,9 @@ Since the transformer $T_{\text{Free}}=M\circ L$ is not purely compositional
 (the monad $L$ itself depends on $M$), mapping the monad $M$ to
 $M^{\prime}$ via a monad morphism $\phi:M\leadsto M^{\prime}$ requires
 us also to map $L$ to $L^{\prime}\triangleq\text{Free}^{F\circ M^{\prime}}$.
-Denote that map temporarily by $\psi$ and implement $\psi:L^{A}\rightarrow L^{\prime A}$
+Denote that map temporarily by $\psi$; it is a function of $\phi$,
+but we will write simply $\psi$ for brevity (since $\phi$ is fixed
+throughout the derivation). We can implement $\psi:L^{A}\rightarrow L^{\prime A}$
 by the following code matrix:
 \begin{equation}
 \psi:\text{Free}^{F\circ M,A}\rightarrow\text{Free}^{F\circ M^{\prime},A}\quad,\quad\quad\psi\triangleq\,\begin{array}{|c||cc|}
@@ -7529,17 +7539,18 @@ by the following code matrix:
 (F\circ M\circ L)^{A} & \bbnum 0 & \overline{\psi}^{\uparrow M\uparrow F}\bef\phi^{\uparrow F}
 \end{array}\quad.\label{eq:free-monad-definition-of-psi}
 \end{equation}
-Since the map $\phi^{\uparrow F}:F^{M^{A}}\leadsto F^{M^{\prime A}}$
-is a natural transformation, Statement~\ref{subsec:Statement-free-monad-monadic-naturality}
+Since $\phi$ is a natural transformation, Exercise~\ref{subsec:Exercise-reasoning-1-4-1}(a)
+indicates that the map $\phi^{\uparrow F}:F^{M^{A}}\leadsto F^{M^{\prime A}}$
+is also a natural transformation, and then Statement~\ref{subsec:Statement-free-monad-monadic-naturality}
 shows that $\psi:\text{Free}^{F\circ M}\leadsto\text{Free}^{F\circ M^{\prime}}$
 is a monad morphism. The foreign runner $\text{frun}^{M,M^{\prime}}(\phi):T_{\text{Free}}\leadsto T_{\text{Free}}^{\prime}$
 is then implemented by
 \[
-\text{frun}^{M,M^{\prime}}\!:(M\leadsto M^{\prime})\rightarrow M^{L^{A}}\rightarrow M^{\prime L^{\prime A}}\!\quad,\quad\text{frun}^{M,M^{\prime}}\!(\phi^{:M\leadsto M^{\prime}})\triangleq\,\psi^{\uparrow M}\bef\phi\quad,
+\text{frun}^{M,M^{\prime}}\!:(M\leadsto M^{\prime})\rightarrow M^{L^{A}}\rightarrow M^{\prime L^{\prime A}}\!\quad,\quad\text{frun}^{M,M^{\prime}}\!(\phi^{:M\leadsto M^{\prime}})\triangleq\psi^{\uparrow M}\bef\phi\quad.
 \]
 
-To implement the base runner, we use the similarity between the structure
-of the two disjunctive types, 
+To implement the base runner, we use the similarity between the two
+disjunctive types,
 \[
 L^{A}\triangleq\text{Free}^{F\circ M,A}=A+F^{M^{\text{Free}^{F\circ M,A}}}=A+(F\circ M\circ L)^{A}\quad\text{ and }\quad\text{Free}^{F,M^{A}}=M^{A}+F^{\text{Free}^{F,M^{A}}}\quad.
 \]
@@ -8052,7 +8063,9 @@ T_{\text{List}}^{M,A}\triangleq M^{\bbnum 1+A\times T_{\text{List}}^{M,A}}\quad,
 \]
 that wraps each partial tail of the list into a separate layer of
 an $M$-effect. The result is an \textsf{``}effectful list\textsf{''}: obtaining each
-next element of the list requires running an $M$-effect.
+next element of the list requires running an $M$-effect. The \lstinline!flatten!
+method ($\text{ftn}_{T}$) should sequence all $M$-effects of the
+nested lists in the order they occur in the outer list.
 
 Despite a superficial similarity between $T_{\text{List}}$ and the
 transformers for the free monad and the free pointed monad, proofs
@@ -8206,16 +8219,97 @@ So, the identity laws hold for $T$.
 
 The foreign lift function is implemented as
 \[
-\text{flift}:M^{A}\rightarrow L^{M^{A}}\quad,\quad\quad\text{flift}\triangleq\text{pu}_{L}\quad.
+\text{flift}:M^{A}\rightarrow M^{L^{A}}\quad,\quad\quad\text{flift}\triangleq\text{pu}_{L}^{\uparrow M}\quad.
 \]
 To show that \lstinline!flift! is a monad morphism, begin with the
 identity law:
 \begin{align*}
-{\color{greenunder}\text{expect to equal }\text{pu}_{T}:}\quad & \text{pu}_{M}\bef\text{flift}=***\\
+{\color{greenunder}\text{expect to equal }\text{pu}_{T}:}\quad & \text{pu}_{M}\bef\text{flift}=\gunderline{\text{pu}_{M}\bef\text{pu}_{L}^{\uparrow M}}=\text{pu}_{L}\bef\text{pu}_{M}\\
+{\color{greenunder}\text{by definition of }\text{pu}_{T}:}\quad & =\text{pu}_{T}\quad.
+\end{align*}
+To verify the composition law, write its two sides separately:
+\begin{align*}
+{\color{greenunder}\text{left-hand side}:}\quad & \text{ftn}_{M}\bef\text{flift}=\text{ftn}_{M}\bef\text{pu}_{L}^{\uparrow M}\quad,\\
+{\color{greenunder}\text{right-hand side}:}\quad & \text{flift}^{\uparrow M}\bef\text{flift}\bef\text{ftn}_{T}=\text{pu}_{L}^{\uparrow M\uparrow M}\bef\gunderline{\text{pu}_{L}^{\uparrow M}\bef\text{prod}^{\uparrow M}}\bef\text{ftn}_{M}\\
+{\color{greenunder}\text{identity law of }\text{prod}:}\quad & \quad=\gunderline{\text{pu}_{L}^{\uparrow M\uparrow M}\bef\text{ftn}_{M}}=\text{ftn}_{M}\bef\text{pu}_{L}^{\uparrow M}\quad.
 \end{align*}
 
 
+\paragraph{Implementation of runners}
+
+Since the transformer $T_{\text{List}}=M\circ L$ is not purely compositional
+($L$ itself depends on $M$), mapping the monad $M$ to $M^{\prime}$
+via a monad morphism $\phi:M\leadsto M^{\prime}$ requires us also
+to map $L$ to $L^{\prime}$, where we define 
+\[
+L^{\prime A}\triangleq\bbnum 1+A\times M^{\prime L^{\prime A}}\quad.
+\]
+We denote that map temporarily by $\psi$; it is a function of $\phi$,
+but we will write simply $\psi$ for brevity (since $\phi$ is fixed
+throughout the derivation). We can implement $\psi:L^{A}\rightarrow L^{\prime A}$
+by the following code matrix:
+\begin{equation}
+\psi:L^{A}\rightarrow L^{\prime A}\quad,\quad\quad\psi\triangleq\,\begin{array}{|c||cc|}
+ & \bbnum 1 & A\times M^{\prime L^{\prime A}}\\
+\hline \bbnum 1 & \text{id} & \bbnum 0\\
+A\times M^{L^{A}} & \bbnum 0 & \text{id}\boxtimes(\overline{\psi}^{\uparrow M}\bef\phi)
+\end{array}\quad.\label{eq:list-monad-definition-of-psi}
+\end{equation}
+The foreign runner $\text{frun}^{M,M^{\prime}}(\phi):T_{\text{List}}\leadsto T_{\text{List}}^{\prime}$
+is then implemented by
+\[
+\text{frun}^{M,M^{\prime}}\!:(M\leadsto M^{\prime})\rightarrow M^{L^{A}}\rightarrow M^{\prime L^{\prime A}}\!\quad,\quad\text{frun}^{M,M^{\prime}}\!(\phi^{:M\leadsto M^{\prime}})\triangleq\psi^{\uparrow M}\bef\phi\quad.
+\]
+
+The base runner for the \lstinline!List! transformer needs to be
+implemented in a special way. Since a list may be empty, one cannot
+implement a lawful runner of type $\text{List}^{A}\rightarrow A$
+with an arbitrary type $A$. This type signature \emph{can} be implemented
+with an additional assumption: if $R$ is a monoid type, the standard
+\textsf{``}reduce\textsf{''} operation for a list of type $\text{List}^{R}$ has the
+type signature $\text{List}^{R}\rightarrow R$:
+\[
+\text{reduce}:\text{List}^{R}\rightarrow R\quad,\quad\quad\text{reduce}\triangleq\,\begin{array}{|c||c|}
+ & R\\
+\hline \bbnum 1 & e_{R}\\
+R\times\text{List}^{R} & r\times t\rightarrow r\oplus_{R}\overline{\text{reduce}}\,(t)
+\end{array}\quad.
+\]
+ The base runner will then have the type signature $M^{L^{R}}\leadsto M^{R}$.
+Since both $M^{L^{R}}$ and $M^{R}$ are monoids (see Exercise~\ref{subsec:Exercise-1-monads}),
+we require that \lstinline!brun! should be a monoid morphism, for
+any monoid type $R$. This requirement replaces the monad morphism
+law of \lstinline!brun!. 
+
+The code for \lstinline!brun! uses the monoid operation $\oplus_{M}$
+of the monoid $M^{R}$:
+\[
+\text{brun}:M^{L^{R}}\rightarrow M^{R}\quad,\quad\quad\text{brun}\,(m^{:M^{L^{R}}})\triangleq m\triangleright\text{flm}_{M}\big(\,\begin{array}{|c||c|}
+ & M^{R}\\
+\hline \bbnum 1 & \text{pu}_{M}(e_{R})\\
+R\times M^{L^{R}} & r\times t\rightarrow\text{pu}_{M}(r)\oplus_{M}\overline{\text{brun}}\,(t)
+\end{array}\,\big)\quad.
+\]
+
+
+\paragraph{Monadic naturality of \texttt{prod}}
+
+When the monad $M$ is replaced by another monad $M^{\prime}$ via
+a monad morphism $\phi:M\leadsto M^{\prime}$, the \lstinline!prod!
+function with type signature $\text{prod}_{M,L}:L\circ M\circ L\leadsto M\circ L$
+is replaced by the corresponding function $\text{prod}_{M^{\prime},L^{\prime}}:L^{\prime}\circ M^{\prime}\circ L^{\prime}\leadsto M^{\prime}\circ L^{\prime}$.
+The function $\text{prod}_{M^{\prime},L^{\prime}}$ has the same code
+as $\text{prod}_{M,L}$ except for using the monad parameter $M^{\prime}$
+instead of $M$. This monadic naturality property is expressed by
+the law analogous to Eq.~(\ref{eq:monadic-naturality-free-pointed-swap}):
+\begin{equation}
+\text{prod}_{M,L}\bef\psi^{\uparrow M}\bef\phi=\psi^{\uparrow M\uparrow L}\bef\phi^{\uparrow L}\bef\psi\bef\text{prod}_{M^{\prime},L^{\prime}}\quad.\label{eq:monadic-naturality-law-of-prod-for-list-transformer}
+\end{equation}
+{*}{*}{*}
+
 \paragraph{Runner laws}
+
+To show that the foreign runner is a monad morphism, {*}{*}{*}
 
 \paragraph{Base runner laws}
 
@@ -8389,7 +8483,7 @@ the monad laws hold.\index{monads!List monad with truncation@\texttt{List} monad
 
 \textbf{(c)} Show that the functor $L$ \emph{cannot} serve as a monad
 transformer for the (non-standard) \lstinline!List! monad because
-a lawful \lstinline!lift! function with type $M\leadsto L$ cannot
+a lawful \lstinline!flift! function with type $M\leadsto L$ cannot
 be implemented.
 
  
