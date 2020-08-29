@@ -20,13 +20,15 @@ Many notations and explanations have been revised and improved when writing up t
 
 The book is published under the [GNU Free Documentation License](https://www.gnu.org/licenses/old-licenses/fdl-1.2.en.html).
 Permission is granted to _copy, distribute and/or modify_ this book under the terms of that license.
-This means the book is free (as in "freedom") and will stay free forever.
+For those unfamiliar with the GNU FDL: this means the book is free (as in "freedom")
+-- free to use, to copy, to modify, and to distribute -- and will stay free forever, because any modified copy must have full modified sources distributed under the same license.
 
-This repository contains the current PDF version (both the [full uncorrected draft](sofp-src/sofp.pdf) and the [finished part of the draft](sofp-src/sofp-draft.pdf))
-and also the full source code for the book (LyX and LaTeX / jpg / eps) and shell scripts for building a PDF version of the book.
-So, this is a "transparent" copy in the sense of the GNU license.
+This `git` repository contains the current PDF version (both the [full uncorrected draft](sofp-src/sofp.pdf) and the [finished part of the draft](sofp-src/sofp-draft.pdf))
+and also the full source code for the book (LyX / LaTeX / jpg / pdf) and shell scripts for building a PDF version of the book.
+So, this is a "transparent" copy in the sense of the GNU license; the source code of the book is in a format that is convenient to use and to modify.
 
-This repository also contains the slides for YouTube presentations that initiated the work on this book. The talk slides are not part of the book and may be partially obsolete both in content and in the notation used.
+This `git` repository also contains the slides for YouTube presentations that initiated the work on this book.
+The talk slides are not part of the book and are partially obsolete both in content and in the notation used.
 
 # Current status of the book
 
