@@ -42,6 +42,8 @@ function make_pdf_with_index_via_ps2pdf {
 function make_pdf_with_index {
 	local base="$1"
 	pdflatex --interaction=batchmode "$base"
+	makeindex "$base.idx"
+	pdflatex --interaction=batchmode "$base"
 }
 
 function add_color {
