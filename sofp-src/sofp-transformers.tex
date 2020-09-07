@@ -709,14 +709,13 @@ def blift[A]: ((A, W)) => M[(A, W)] = { t => Monad[M].pure(t) }
 
 Finally, we consider the runners for \lstinline!ListT!. List-like
 monads do not usually have runners ($\theta_{\text{List}}:\text{List}^{A}\rightarrow A$)
-because the \lstinline!List! monad normally represents several useful
-results rather than a single result. Also, the list may be empty,
-which prevents having a fully parametric function of type $\text{List}^{A}\rightarrow A$.
+because the \lstinline!List! monad normally represents \emph{several}
+useful results rather than a single result. Also, a list may be empty,
+which prevents having a fully parametric function of type $\forall A.\,\text{List}^{A}\rightarrow A$.
 However, the foreign monad $M$ may come with its runner $\theta_{M}$.
-In that case, we will need to run the $M$\textsf{'}s effects if we are to
-extract values from a \lstinline!ListT!.
-
-Intuitively, we may expect to be able to apply $M$\textsf{'}s runner ($\theta_{M}$)
+We can use $\theta_{M}$ to run the $M$\textsf{'}s effects and extract values
+from a \lstinline!ListT!. This is accomplished by a runner (call
+it \lstinline!runListT!) that applies $M$\textsf{'}s runner ($\theta_{M}$)
 to a value of type \lstinline!ListT[M, A]! and obtain a \lstinline!List[A]!.
 The code may be written as:
 \begin{lstlisting}
@@ -725,16 +724,16 @@ def runListT[A](runner: M[A] => A)(listT: ListT[M, A]): List[A] = runner(listT.v
   case Some((head, tailT)) => head :: run(runner)(tailT)
 }
 \end{lstlisting}
-However, this code will not always work as expected because the type
-of \lstinline!ListT! contains a layer of $M$ in every recursive
-step. So, extracting a value of type \lstinline!List[A]! from a value
-of type \lstinline!ListT[M, A]! involves applying $\theta_{M}$ once
-per list value. When $M$ has a function type, a value of type \lstinline!ListT[M, A]!
-is an \textsf{``}on-call\textsf{''}\index{on-call value} sequence whose elements
-are not available in advance but will be evaluated on demand when
-$\theta_{M}$ is applied. So, the total number of elements in \lstinline!ListT!
-may not be known in advance (and may be infinite). An example of an
-\textsf{``}infinite\textsf{''} collection uses the \lstinline!Reader! monad as $M$:
+However, this code will not always terminate because the type of \lstinline!ListT!
+contains a layer of $M$ in every recursive step. So, extracting a
+value of type \lstinline!List[A]! from a value of type \lstinline!ListT[M, A]!
+involves applying $\theta_{M}$ once per list value. When $M$ has
+a function type, a value of type \lstinline!ListT[M, A]! is an \textsf{``}on-call\textsf{''}\index{on-call value}
+sequence whose elements are not available in advance but will be evaluated
+on demand when $\theta_{M}$ is applied. So, the total number of elements
+in \lstinline!ListT! may not be known in advance and may be infinite.
+An example of an \textsf{``}infinite\textsf{''} collection uses the \lstinline!Reader!
+monad as $M$:
 \begin{lstlisting}
 def ascend(a: Int): ListT[Reader[Int, *], Int] = ListT(Lazy(m => Some((a, ascend(a + m)))))
 \end{lstlisting}
@@ -742,10 +741,13 @@ This is a well-defined value of type \lstinline!ListT! that represents
 integer sequences $\left[a,a+m,a+2*m,...\right]$. The parameter $m$
 is passed via the \lstinline!Reader! monad\textsf{'}s dependency injection.
 It is clear that \lstinline!runListT! will never terminate when applied
-to such a sequence.
+to such a sequence. 
 
 This example shows how to use \lstinline!ListT! for creating effectful
-\textsf{``}infinite\textsf{''} streams.
+streams of unbounded length. If we need to run the effects of $M$
+for an unbounded-length stream, the target should be a stream type
+(i.e., an on-call or a lazy list) rather than an eagerly evaluated
+\lstinline!List! type.
 
 \paragraph{The \texttt{StateT} transformer}
 
@@ -4335,7 +4337,7 @@ monad, implemented by checking whether the value returned by the selector
 monad does actually satisfy the predicate. However, that mapping is
 not a monad morphism:
 
-\subsubsection{Exercise \label{subsec:Statement-search-and-selector-monads}\ref{subsec:Statement-search-and-selector-monads}\index{exercise}}
+\subsubsection{Exercise \label{subsec:Statement-search-and-selector-monads}\ref{subsec:Statement-search-and-selector-monads}\index{exercises}}
 
 Define the \textsf{``}search monad\textsf{''} as $\text{Search}^{P,A}\triangleq\left(A\rightarrow\bbnum 1+P\right)\rightarrow\bbnum 1+A$.
 The function 
@@ -8300,45 +8302,10 @@ is then implemented by
 \text{frun}^{M,M^{\prime}}\!:(M\leadsto M^{\prime})\rightarrow M^{L^{A}}\rightarrow M^{\prime L^{\prime A}}\!\quad,\quad\text{frun}^{M,M^{\prime}}\!(\phi^{:M\leadsto M^{\prime}})\triangleq\psi^{\uparrow M}\bef\phi\quad.
 \]
 
-The base runner for the \lstinline!List! transformer needs to be
-implemented in a special way. Since a list may be empty, one cannot
-implement a lawful runner of type $\text{List}^{A}\rightarrow A$
-with an arbitrary type $A$. This type signature \emph{can} be implemented
-if we restrict types to monoids: if $R$ is a monoid type, the standard
-\textsf{``}reduce\textsf{''} operation for a list of type $\text{List}^{R}$ has the
-type signature $\text{List}^{R}\rightarrow R$:
-\[
-\text{reduce}:\text{List}^{R}\rightarrow R\quad,\quad\quad\text{reduce}\triangleq\,\begin{array}{|c||c|}
- & R\\
-\hline \bbnum 1 & 1\rightarrow e_{R}\\
-R\times\text{List}^{R} & r\times t\rightarrow r\oplus_{R}\overline{\text{reduce}}\,(t)
-\end{array}\quad.
-\]
-We can similarly implement a base runner (\lstinline!brun!) with
-the type signature $M^{L^{R}}\rightarrow M^{R}$. The code for \lstinline!brun!
-aggregates all elements of the effectful list into a single value
-of type $M^{R}$:
-\[
-\text{brun}:M^{L^{R}}\rightarrow M^{R}\quad,\quad\quad\text{brun}\triangleq\text{flm}_{M}\bigg(\,\begin{array}{|c||c|}
- & M^{R}\\
-\hline \bbnum 1 & 1\rightarrow\text{pu}_{M}(e_{R})\\
-R\times M^{L^{R}} & r\times t\rightarrow\text{pu}_{M}(r)\oplus_{M}\overline{\text{brun}}\,(t)
-\end{array}\,\bigg)\quad.
-\]
-Here, we use the binary operation $\oplus_{M}$ of the monoid $M^{R}$,
-defined by
-\begin{equation}
-p^{:M^{R}}\oplus_{M}q^{:M^{R}}\triangleq p\triangleright\text{flm}_{M}\big(u^{:R}\rightarrow q\triangleright(v^{:R}\rightarrow u\oplus_{R}v)^{\uparrow M}\big)\quad.\label{eq:definition-of-oplus-M-monad-monoid}
-\end{equation}
-
-We then require that the monad morphism laws of \lstinline!brun!
-hold when applied to any monoid type $R$:
-\begin{align*}
-{\color{greenunder}\text{for all monoid types }R:}\quad & r^{:R}\triangleright\text{pu}_{T}\bef\text{brun}=r^{:R}\triangleright\text{pu}_{M}\quad,\\
- & p^{:T^{T^{R}}}\triangleright\text{ftn}_{T}\bef\text{brun }=p^{:T^{T^{R}}}\triangleright\text{brun}\bef\text{brun}^{\uparrow M}\bef\text{ftn}_{M}\quad.
-\end{align*}
-(Exercise~\ref{subsec:Exercise-traversables-10-1} then shows that
-\lstinline!brun! is also a \emph{monoid} morphism $M^{L^{R}}\rightarrow M^{R}$.)
+The base runner for the \lstinline!List! transformer cannot be implemented
+as a function of type $T_{\text{List}}^{M,A}\rightarrow M^{A}$: Since
+a list may be empty, it is not always possible to extract a value
+of type $M^{A}$ out of a given value of type $T_{\text{List}}^{M,A}$.
 
 \paragraph{Monadic naturality of \texttt{prod}}
 
@@ -8460,124 +8427,8 @@ which we verify by writing
 
 \paragraph{Base runner laws}
 
-The base runner ($\text{brun}:T^{R}\rightarrow M^{R}$ where $R$
-is a monoid type) must satisfy the monad morphism laws and the non-degeneracy
-law. To verify the monad morphism identity law:
-\begin{align*}
-{\color{greenunder}\text{expect to equal }\text{pu}_{M}:}\quad & \text{pu}_{T}\bef\text{brun}=\text{pu}_{L}\bef\gunderline{\text{pu}_{M}\bef\text{flm}_{M}}\bigg(\,\begin{array}{||c|}
-1\rightarrow\text{pu}_{M}(e_{R})\\
-r\times t\rightarrow\text{pu}_{M}(r)\oplus_{M}\overline{\text{brun}}\,(t)
-\end{array}\,\bigg)\\
- & =\begin{array}{||cc|}
-\bbnum 0 & a^{:R}\rightarrow a\times(\text{Nil}\triangleright\text{pu}_{M})\end{array}\,\bef\,\begin{array}{||c|}
-1\rightarrow\text{pu}_{M}(e_{R})\\
-r\times t\rightarrow\text{pu}_{M}(r)\oplus_{M}\overline{\text{brun}}\,(t)
-\end{array}\\
- & =a^{:R}\rightarrow\text{pu}_{M}(a)\oplus_{M}\gunderline{\overline{\text{brun}}\,(\text{Nil}\triangleright\text{pu}_{M})}\\
- & =a\rightarrow\text{pu}_{M}(a)\gunderline{\oplus_{M}\text{pu}_{M}(e_{R})}=a\rightarrow\text{pu}_{M}(a)=\text{pu}_{M}\quad.
-\end{align*}
-Here, we used the property that $\text{pu}_{M}(e_{R})$ is the empty
-element for $\oplus_{M}$, and also computed
-\begin{equation}
-\text{brun}\,(\text{Nil}\triangleright\text{pu}_{M})=\text{Nil}\triangleright\gunderline{\text{pu}_{M}\bef\text{flm}_{M}}\bigg(\,\begin{array}{||c|}
-1\rightarrow\text{pu}_{M}(e_{R})\\
-r\times t\rightarrow\text{pu}_{M}(r)\oplus_{M}\overline{\text{brun}}\,(t)
-\end{array}\,\bigg)=\text{pu}_{M}(e_{R})\quad.\label{eq:listt-brun-derivation1}
-\end{equation}
-
-To verify the composition law, write its two sides separately:
-\begin{align*}
-{\color{greenunder}\text{left-hand side}:}\quad & \text{ftn}_{T}\bef\text{brun}=\text{flm}_{M}(\text{prod})\bef\text{flm}_{M}\bigg(\,\begin{array}{||c|}
-1\rightarrow\text{pu}_{M}(e_{R})\\
-r\times t\rightarrow\text{pu}_{M}(r)\oplus_{M}\overline{\text{brun}}\,(t)
-\end{array}\,\bigg)\\
-{\color{greenunder}\text{associativity of }\text{flm}_{M}:}\quad & \quad=\text{flm}_{M}\bigg(\text{prod}\bef\text{flm}_{M}\bigg(\,\begin{array}{||c|}
-1\rightarrow\text{pu}_{M}(e_{R})\\
-r\times t\rightarrow\text{pu}_{M}(r)\oplus_{M}\overline{\text{brun}}\,(t)
-\end{array}\,\bigg)\bigg)\quad,\\
-{\color{greenunder}\text{right-hand side}:}\quad & \text{brun}^{T^{R}}\bef\text{brun}^{\uparrow M}\bef\text{ftn}_{M}=\text{flm}_{M}\bigg(\,\begin{array}{||c|}
-1\rightarrow\text{pu}_{M}(e_{R})\\
-r\times t\rightarrow\text{pu}_{M}(r)\oplus_{M}\overline{\text{brun}}\,(t)
-\end{array}\,\bigg)\bef\text{flm}_{M}(\text{brun})\\
-{\color{greenunder}\text{associativity of }\text{flm}_{M}:}\quad & \quad=\text{flm}_{M}\bigg(\,\begin{array}{||c|}
-1\rightarrow\text{pu}_{M}(e_{T^{R}})\\
-r\times t\rightarrow\text{pu}_{M}(r)\oplus_{M}\overline{\text{brun}}\,(t)
-\end{array}\,\bef\text{flm}_{M}(\text{brun})\bigg)\quad.
-\end{align*}
-The remaining difference (under $\text{flm}_{M}$) is an equation
-between functions of type $L^{M^{L^{R}}}\rightarrow M^{R}$:
-\begin{align*}
- & \text{prod}\bef\text{flm}_{M}\bigg(\,\begin{array}{||c|}
-1\rightarrow\text{pu}_{M}(e_{R})\\
-r\times t\rightarrow\text{pu}_{M}(r)\oplus_{M}\overline{\text{brun}}\,(t)
-\end{array}\,\bigg)=\text{prod}\bef\text{brun}\\
- & \quad\overset{?}{=}\,\begin{array}{||c|}
-1\rightarrow\text{pu}_{M}(e_{T^{R}})\\
-r\times t\rightarrow\text{pu}_{M}(r)\oplus_{M}\overline{\text{brun}}\,(t)
-\end{array}\,\bef\text{flm}_{M}(\text{brun})\quad.
-\end{align*}
-It is inconvenient to use matrices at this step because the code of
-$\text{flm}_{M}$ is unknown. Instead, we will substitute into both
-sides an arbitrary value of type $L^{M^{L^{R}}}$, which can be one
-of two possibilities, $\text{Nil}$ or $\bbnum 0+h^{:T^{R}}\times t^{T^{T^{R}}}$.
-Substituting $\text{Nil}$, we get:
-\begin{align*}
-{\color{greenunder}\text{left-hand side}:}\quad & \gunderline{\text{Nil}\triangleright\text{prod}}\bef\text{brun}=\text{Nil}\triangleright\text{pu}_{M}\bef\text{brun}\\
-{\color{greenunder}\text{use Eq.~(\ref{eq:listt-brun-derivation1})}:}\quad & \quad=e_{R}\triangleright\text{pu}_{M}\quad.\\
-{\color{greenunder}\text{right-hand side}:}\quad & \text{Nil}\triangleright\,\begin{array}{||c|}
-1\rightarrow\text{pu}_{M}(e_{T^{R}})\\
-r\times t\rightarrow\text{pu}_{M}(r)\oplus_{M}\overline{\text{brun}}\,(t)
-\end{array}\,\bef\text{flm}_{M}(\text{brun})\\
- & \quad=e_{T^{R}}\triangleright\gunderline{\text{pu}_{M}\triangleright\text{flm}_{M}}(\text{brun})=e_{R}\triangleright\gunderline{\text{pu}_{T}\bef\text{brun}}\\
-{\color{greenunder}\text{identity law of }\text{brun}:}\quad & \quad=e_{R}\triangleright\text{pu}_{M}\quad.
-\end{align*}
-The two sides are now equal. It remains to substitute the second possibility:
-\begin{align*}
-{\color{greenunder}\text{left-hand side}:}\quad & (\bbnum 0+h\times t)\triangleright\text{prod}\bef\text{brun}=\\
- & \quad=(\bbnum 0+h\times t)\triangleright\,\begin{array}{||c|}
-1\rightarrow\text{Nil}\triangleright\text{pu}_{M}\\
-m\times p\rightarrow\text{comb}\,(m)(p\triangleright\text{flm}_{M}(\overline{\text{prod}})
-\end{array}\bef\text{brun}\\
- & \quad=\text{comb}\,(h)(t\triangleright\text{flm}_{M}(\overline{\text{prod}}))\bef\text{flm}_{M}\bigg(\,\begin{array}{||c|}
-1\rightarrow\text{pu}_{M}(e_{R})\\
-r\times t\rightarrow\text{pu}_{M}(r)\oplus_{M}\overline{\text{brun}}\,(t)
-\end{array}\,\bigg)\\
- & \quad=***\\
-{\color{greenunder}\text{right-hand side}:}\quad & (\bbnum 0+h\times t)\triangleright\,\begin{array}{||c|}
-1\rightarrow\text{pu}_{M}(e_{T^{R}})\\
-h\times t\rightarrow\text{pu}_{M}(h)\oplus_{M}\overline{\text{brun}}\,(t)
-\end{array}\,\bef\text{flm}_{M}(\text{brun})\\
- & \quad=(\text{pu}_{M}(h)\oplus_{M}\overline{\text{brun}}\,(t))\triangleright\text{flm}_{M}(\text{brun})***
-\end{align*}
-Note that
-\[
-\text{pu}_{M}(r^{:R})\oplus_{M}q^{:M^{R}}=r\triangleright\gunderline{\text{pu}_{M}\triangleright\text{flm}_{M}}(u\rightarrow q\triangleright(v\rightarrow u\oplus_{R}v)^{\uparrow M})=q\triangleright(v\rightarrow r\oplus_{R}v)^{\uparrow M}\quad.
-\]
-In particular,
-\[
-\text{pu}_{M}(p)\oplus_{M}\text{pu}_{M}(q)=q\triangleright\text{pu}_{M}\triangleright(v\rightarrow p\oplus_{R}v)^{\uparrow M}=q\triangleright(v\rightarrow p\oplus_{R}v)\triangleright\text{pu}_{M}=\text{pu}_{M}(p\oplus_{R}q)\quad.
-\]
-(finish the derivation of the composition law){*}{*}{*}
-
-To verify the non-degeneracy law of \lstinline!brun!:
-\begin{align*}
-{\color{greenunder}\text{expect to equal }\text{id}:}\quad & \text{flift}\bef\text{brun}=\text{pu}_{L}^{\uparrow M}\bef\text{flm}_{M}\bigg(\,\begin{array}{||c|}
-1\rightarrow\text{pu}_{M}(e_{R})\\
-r\times t\rightarrow\text{pu}_{M}(r)\oplus_{M}\overline{\text{brun}}\,(t)
-\end{array}\,\bigg)\\
-{\color{greenunder}\text{naturality of }\text{flm}_{M}:}\quad & =\text{flm}_{M}\bigg(\text{pu}_{L}\bef\,\begin{array}{||c|}
-1\rightarrow\text{pu}_{M}(e_{R})\\
-r\times t\rightarrow\text{pu}_{M}(r)\oplus_{M}\overline{\text{brun}}\,(t)
-\end{array}\,\bigg)\\
-{\color{greenunder}\text{definition of }\text{pu}_{L}:}\quad & =\text{flm}_{M}\bigg(\,\begin{array}{||cc|}
-\bbnum 0 & a\rightarrow a\times(\text{Nil}\triangleright\text{pu}_{M})\end{array}\,\bef\,\begin{array}{||c|}
-1\rightarrow\text{pu}_{M}(e_{R})\\
-r\times t\rightarrow\text{pu}_{M}(r)\oplus_{M}\overline{\text{brun}}\,(t)
-\end{array}\,\bigg)\\
- & =\text{flm}_{M}(a\rightarrow\text{pu}_{M}(a)\oplus_{M}\gunderline{\text{brun}(\text{Nil}\triangleright\text{pu}_{M})})=\text{flm}_{M}(a\rightarrow\gunderline{\text{pu}_{M}(a)\oplus\text{pu}_{M}(e_{R})})\\
- & =\text{flm}_{M}(a\rightarrow\text{pu}_{M}(\gunderline{a\oplus e_{R}}))=\text{flm}_{M}(\gunderline{a\rightarrow\text{pu}_{M}(a)})=\text{flm}_{M}(\text{pu}_{M})=\text{id}\quad.
-\end{align*}
-
+The base runner ($\text{brun}:T^{A}\rightarrow M^{A}$) cannot be
+implemented.
 
 \paragraph{Monadic naturality laws}
 
@@ -8651,14 +8502,14 @@ r\times t\rightarrow\text{pu}_{M^{\prime}}(r)\oplus_{M^{\prime}}\overline{\text{
 \end{array}\\
  & =\,\begin{array}{||cc|}
 \text{id} & \bbnum 0\\
-\bbnum 0 & \text{id}\boxtimes(\overline{\psi}^{\uparrow M}\bef\phi)
+\bbnum 0 & \text{id}\boxtimes\text{frun}\,(\phi)
 \end{array}\,\bef\,\begin{array}{||c|}
 1\rightarrow\text{pu}_{M^{\prime}}(e_{R})\\
 r\times t\rightarrow\text{pu}_{M^{\prime}}(r)\oplus_{M^{\prime}}\overline{\text{brun}}{}^{M^{\prime}}(t)
 \end{array}\\
  & =\,\,\begin{array}{||c|}
 1\rightarrow\text{pu}_{M^{\prime}}(e_{R})\\
-r\times t\rightarrow\text{pu}_{M^{\prime}}(r)\oplus_{M^{\prime}}\big(t\triangleright\gunderline{\overline{\psi}^{\uparrow M}\bef\phi\bef\overline{\text{brun}}{}^{M^{\prime}}}\big)
+r\times t\rightarrow\text{pu}_{M^{\prime}}(r)\oplus_{M^{\prime}}\big(t\triangleright\gunderline{\text{frun}\,(\phi)\bef\overline{\text{brun}}{}^{M^{\prime}}}\big)
 \end{array}\\
 {\color{greenunder}\text{inductive assumption}:}\quad & =\,\begin{array}{||c|}
 1\rightarrow\text{pu}_{M^{\prime}}(e_{R})\\
