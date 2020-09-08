@@ -456,16 +456,14 @@ in $M$ but not in $L$ (this is reflected in the notation: $L$ is
 a \emph{subscript} in $T_{L}^{M}$). Changing the base monad $L$
 to another monad requires a complete rewrite of $T_{L}^{M}$\textsf{'}s code.
 
-There seems to be no general recipe for implementing a monad transformer
-$T_{L}^{M}$ given a monad $L$, even when the code for $L$ is known
-and is fully parametric. On the other hand, monad transformers are
-available for every known example of an explicitly defined, fully
-parametric monad. For some monads, functor composition works straightforwardly;
-for other monads, transformers need to be defined by special tricks.
-Table~\ref{tab:Known-monad-transformers} shows the types of monad
-transformers that are known to work. 
+There is no general recipe for implementing a monad transformer $T_{L}^{M}$
+given the code for a monad $L$. Nevertheless, monad transformers
+are known for every monad defined by fully parametric code. Transformers
+for some monads are obtained via functor composition; for other monads,
+transformers need to be defined in special ways. Table~\ref{tab:Known-monad-transformers}
+shows some types of known monad transformers. 
 
-\begin{wraptable}{l}{0.57\columnwidth}%
+\begin{wraptable}{l}{0.59\columnwidth}%
 \begin{centering}
 \vspace{-0.1\baselineskip}
 \begin{tabular}{|c|c|c|}
@@ -496,27 +494,26 @@ some monads.}
 \vspace{-0.6\baselineskip}
 \end{wraptable}%
 
-\noindent We can see from this table that monad transformers are created
-in different ways: composing inside the foreign monad (\lstinline!Either!,
-\lstinline!Writer!); composing outside the foreign monad (\lstinline!Reader!,
-\lstinline!Sel!); moving the recursive definition inside the foreign
-monad (\lstinline!List!); and mixing the foreign monad in a special
-way with the original monad (\lstinline!State!, \lstinline!Cont!,
-\lstinline!Eval!). 
+\noindent As we can see, monad transformers are created in different
+ways: by composing inside the foreign monad (\lstinline!Either!,
+\lstinline!Writer!); by composing outside the foreign monad (\lstinline!Reader!,
+\lstinline!Sel!); by wrapping a recursive definition inside the foreign
+monad (\lstinline!List!); and by mixing the foreign monad in a special
+way with the base monad (\lstinline!State!, \lstinline!Cont!, \lstinline!Eval!). 
 
-The task of finding a lawful and working transformer type constructor
-is far from simple.\footnote{The difficulty of that task is illustrated by the history of the \lstinline!ListT!
+Finding type constructors that work as lawful monad transformers is
+not a simple task.\footnote{The difficulty of that task is illustrated by the history of the \lstinline!ListT!
 transformer in the Haskell standard library. The type constructor
 for \lstinline!ListT! was implemented incorrectly in 2002. The faulty
 transformer remained in the library until 2007. See the discussion
 in \texttt{\href{https://wiki.haskell.org/index.php?title=ListT_done_right}{https://wiki.haskell.org/index.php?title=ListT\_done\_right}}} A justification for the formulas in Table~\ref{tab:Known-monad-transformers}
-is that they work and obey the required laws, while no other lawful
-transformers are known. We will derive and prove the required laws
-for these and other transformers later in this chapter. For now, we
-accept the results of Table~\ref{tab:Known-monad-transformers} as
-correct and turn to other tasks regarding the practical use of monad
-transformers. The first task is to obtain the code of monad methods
-and lifts for the transformers in Table~\ref{tab:Known-monad-transformers}.
+is that they work and obey the required laws, while no simpler transformers
+are known. We will derive and prove the required laws for these and
+other transformers later in this chapter. For now, we accept the results
+of Table~\ref{tab:Known-monad-transformers} as correct and turn
+to other tasks regarding the practical use of monad transformers.
+The first task is to obtain the code of monad methods and lifts for
+the transformers in Table~\ref{tab:Known-monad-transformers}.
 
 The type constructors for monad transformers are conventionally named
 \lstinline!ReaderT!, \lstinline!EitherT!, etc. 
@@ -551,23 +548,23 @@ The lifts are written in the code notation as
 \end{align*}
 
 We have seen in Section~\ref{subsec:The-Reader-monad} that getting
-data out of the \lstinline!Reader! monad requires a runner $\theta_{\text{Reader}}$,
+data out of the \lstinline!Reader! monad requires a runner ($\theta_{\text{Reader}}$),
 which is a function that calls \lstinline!run! on some value of type
 $R$ (i.e., injects \lstinline!Reader!\textsf{'}s dependency value). In later
 sections~\ref{subsec:The-State-monad} and~\ref{subsec:The-continuation-monad},
 we have seen other monads that need runners. Generally, a runner for
 a monad $M$ is a function of type $M^{A}\rightarrow A$. So, we may
-expect that the foreign monad $M$ could have its own runner $\theta_{M}$.
+expect that the foreign monad $M$ could have its own runner ($\theta_{M}:M^{A}\rightarrow A$).
 How can we combine $M$\textsf{'}s runner ($\theta_{M}$) with \lstinline!Reader!\textsf{'}s
 runner? Since the type of $T_{\text{Reader}}^{M}$ is a functor composition
 of \lstinline!Reader! and $M$, the runners can be used independently
 of each other. We can first run the effect of $M$ and then run the
-effect of the \lstinline!Reader!:
+effect of \lstinline!Reader!:
 \[
 (\theta_{M}^{\uparrow\text{Reader}}\bef\theta_{\text{Reader}}):(R\rightarrow M^{A})\rightarrow A\quad.
 \]
-Alternatively, we can run \lstinline!Reader! first (injecting the
-dependency) and then run $M$\textsf{'}s effect:
+Alternatively, we can run \lstinline!Reader!\textsf{'}s effect first (injecting
+the dependency) and then run $M$\textsf{'}s effect:
 \[
 (\theta_{\text{Reader}}\bef\theta_{M}):(R\rightarrow M^{A})\rightarrow A\quad.
 \]
@@ -674,12 +671,12 @@ need to run the nested effects.
 This understanding helps us implement the concatenation function for
 \lstinline!ListT!, called \lstinline!comb!:
 \begin{lstlisting}
-def comb[M[_]: Monad : Functor, A](t1: ListT[M, A], t2: ListT[M, A]): ListT[M, A] = ListT(for {
-  first <- t1.value            // Run the first effect and get `first: Option[(A, ListT[M, A])]`.
-  rest = first match {         // Compute `rest: M[Option[(A, ListT[M, A])]]`.
+def comb[M[_]: Monad : Functor, A](t1: ListT[M, A], t2: ListT[M, A]): ListT[M, A] = ListT( for {
+  first <- t1.value           // Run the first effect and get `first: Option[(A, ListT[M, A])]`.
+  rest  = first match {       // Compute `rest: M[Option[(A, ListT[M, A])]]`.
            case None => t2.value
-           case Some((a, tail)) => Monad[M].pure(Some((a, comb(tail, t2))))    // Recursive call.
-  y <- rest
+           case Some((a, tail)) => Monad[M].pure(Some((a, comb(tail, t2))))   // Recursive call.
+  y     <- rest
 } yield y)
 \end{lstlisting}
 
@@ -724,23 +721,23 @@ def runListT[A](runner: M[A] => A)(listT: ListT[M, A]): List[A] = runner(listT.v
   case Some((head, tail))  => head :: run(runner)(tail)
 }
 \end{lstlisting}
-However, this code will not always terminate because the type of \lstinline!ListT!
-contains a layer of $M$ in every recursive step. So, extracting a
-value of type \lstinline!List[A]! from a value of type \lstinline!ListT[M, A]!
-involves applying $\theta_{M}$ once per list value. When $M$ has
-a function type, a value of type \lstinline!ListT[M, A]! is an \textsf{``}on-call\textsf{''}\index{on-call value}
-sequence whose elements are not available in advance but will be evaluated
-on demand when $\theta_{M}$ is applied. So, the total number of elements
-in \lstinline!ListT! may not be known in advance and may be infinite.
-An example of an \textsf{``}infinite\textsf{''} collection uses the \lstinline!Reader!
-monad as $M$:
+However, this code will not always terminate. The reason is that the
+type of \lstinline!ListT! contains a layer of $M$ in every recursive
+step. So, extracting a value of type \lstinline!List[A]! from a value
+of type \lstinline!ListT[M, A]! involves applying $\theta_{M}$ once
+per list value. When $M$ has a function type, a value of type \lstinline!ListT[M, A]!
+is an \textsf{``}on-call\textsf{''}\index{on-call value} sequence whose elements
+are not available in advance but will be evaluated on demand when
+$\theta_{M}$ is applied. So, the total number of elements in \lstinline!ListT!
+may not be known in advance and may be infinite. An example of an
+\textsf{``}infinite\textsf{''} collection uses the \lstinline!Reader! monad as $M$:
 \begin{lstlisting}
 def ascend(a: Int): ListT[Reader[Int, *], Int] = ListT(Lazy(m => Some((a, ascend(a + m)))))
 \end{lstlisting}
 This is a well-defined value of type \lstinline!ListT! that represents
 integer sequences $\left[a,a+m,a+2*m,...\right]$. The parameter $m$
 is passed via the \lstinline!Reader! monad\textsf{'}s dependency injection.
-It is clear that \lstinline!runListT! will never terminate when applied
+It is clear that \lstinline!runListT! will not terminate when applied
 to such a sequence. 
 
 This example shows how to use \lstinline!ListT! for creating effectful
@@ -759,8 +756,8 @@ def reduce[A: Monoid]: List[A] => A = {
   case head :: tail   => head |+| reduce(tail)
 }
 \end{lstlisting}
-We can then implement a special runner \lstinline!brun! that transforms
-\lstinline!ListT[M, A]! into \lstinline!M[A]! for monoid types \lstinline!A!:
+Similar code gives a runner \lstinline!brun! that transforms \lstinline!ListT[M, A]!
+into \lstinline!M[A]! for monoid types \lstinline!A!:
 \begin{lstlisting}
 def brun[M[_]: Monad, A: Monoid](listT: ListT[M, A]): M[A] = listT.value.flatMap {
   case None                  => Monad[M].pure(Monoid[A].empty)
@@ -822,11 +819,11 @@ because that transformer is not a functor composition. There is no
 general \textsf{``}base runner\textsf{''} $\text{brun}\,(\theta_{\text{State}})$
 that would convert an \emph{arbitrary} runner $\theta_{\text{State}}:\text{State}^{S,A}\rightarrow A$
 into a function of type $T_{\text{State}}^{M,A}\rightarrow M^{A}$
-by running the \lstinline!State! monad\textsf{'}s effects but keeping the
-effects of the foreign monad $M$. The type of $T_{\text{State}}^{M}$
-does not allow base runners parametric in $\theta_{\text{State}}$.
-Instead, we need to implement a specialized base runner that converts
-$T_{\text{State}}^{M,A}$ into $M^{A}$ directly:
+that runs the \lstinline!State! monad\textsf{'}s effects but keeps the effects
+of the foreign monad $M$. The type of $T_{\text{State}}^{M}$ does
+not allow base runners parametric in $\theta_{\text{State}}$. Instead,
+we need to implement a specialized base runner that converts $T_{\text{State}}^{M,A}$
+into $M^{A}$ directly:
 \begin{lstlisting}
 def brunStateT[M[_]: Functor, S, A](init: S)(t: StateT[M, S, A]): M[A] = t.run(init).map(_._1)
 \end{lstlisting}
@@ -903,9 +900,9 @@ of type \lstinline!Cont! (for instance, a value produced by a third-party
 library that cannot be modified) into the transformed monad \lstinline!ContT!.
 This is a serious deficiency of the continuation monad that makes
 it unsuitable for certain applications. Concrete values of type \lstinline!Cont[R, A]!
-are often interfaces to system libraries implemented in non-fully
-parametric code. It may be impossible to rewrite that code to return
-\lstinline!ContT[M, R, A]! with an arbitrary monad \lstinline!M!.
+may be interfaces to system libraries implemented in non-fully parametric
+code. It may be impossible to rewrite that code to return \lstinline!ContT[M, R, A]!
+with an arbitrary monad \lstinline!M!.
 
 The continuation monad also does not support foreign runners or base
 runners. The type signature of the method $\text{frun}:T_{\text{Cont}}^{M,A}\rightarrow T_{\text{Cont}}^{N,A}$
@@ -918,11 +915,11 @@ a value of type $M^{A}$ out of a value of type $M^{R}$.
 
 \paragraph{The \texttt{SelT} transformer}
 
-Although the selector monad $\text{Sel}^{Z,A}\triangleq\left(A\rightarrow Z\right)\rightarrow A$
+Although the selector monad, $\text{Sel}^{Z,A}\triangleq\left(A\rightarrow Z\right)\rightarrow A$,
 resembles the continuation monad, its transformer is simpler because
 it consists of composing outside the foreign monad $M$ (i.e., we
 replace $A$ by $M^{A}$ in the type of \lstinline!Sel!). Only one
-implementation fits the type:
+implementation fits the type signatures:
 \begin{lstlisting}
 final case class SelT[M[_]: Monad : Functor, Z, A](run: (M[A] => Z) => M[A]) {
   def map[B](f: A => B): SelT[M, Z, B] = SelT { (mbz: M[B] => Z) => run(ma => mbz(ma.map(f))).map(f) }
@@ -934,7 +931,7 @@ final case class SelT[M[_]: Monad : Functor, Z, A](run: (M[A] => Z) => M[A]) {
 }
 \end{lstlisting}
 Since $T_{\text{Sel}}^{M}=\text{Sel}\circ M$ is a functor composition,
-the lifts and the runners work as in the \lstinline!Reader! monad.
+the lifts and the runners work as in the \lstinline!Reader! monad:
 \begin{lstlisting}
 def flift[A](m: M[A]): SelT[M, Z, A] = SelT(_ => m)   // This is the `pure` method of the Sel monad.
 def blift[A](sel: Sel[Z, A]): SelT[M, Z, A] = SelT { (k: M[A] => Z) =>
@@ -957,9 +954,9 @@ commute:
 \paragraph{The \texttt{EvalT} transformer}
 
 The evaluation monad $\text{Eval}^{A}\triangleq A+\left(\bbnum 1\rightarrow A\right)$
-(Section~\ref{subsec:The-eager-lazy-evaluation-monad}) describes
-a choice between eager and lazy evaluation. The corresponding transformer
-is defined by
+described in Section~\ref{subsec:The-eager-lazy-evaluation-monad}
+represents a choice between eager and lazy evaluation. The corresponding
+transformer is defined by
 \[
 T_{\text{Eval}}^{M,A}\triangleq M^{A+(\bbnum 1\rightarrow M^{A})}\quad.
 \]
@@ -971,8 +968,10 @@ function that we called \lstinline!get!:
 \text{get}:\text{Eval}^{A}\rightarrow A\quad.
 \]
 We see now that \lstinline!get! is \lstinline!Eval!\textsf{'}s runner. A
-similar function for \lstinline!EvalT! plays the role of the \textsf{``}base
-runner\textsf{''} and helps us implement \lstinline!flatMap!:
+similar function (\lstinline!brun!) plays the role of the \textsf{``}base
+runner\textsf{''} for \lstinline!EvalT!: it runs \lstinline!Eval!\textsf{'}s effect
+(converting lazy values into eager ones) but keeps $M$\textsf{'}s effects
+intact. We use \lstinline!brun! to implement \lstinline!flatMap!:
 \begin{lstlisting}
 final case class EvalT[M[_]: Monad : Functor, A](value: M[Either[A, Unit => M[A]]]) {
   def map[B](f: A => B): EvalT[M, B] = EvalT(value.map {
@@ -1013,15 +1012,6 @@ def runEvalT[A](runner: M[A] => A)(t: EvalT[M, A]): Eval[A] = runner(t) match {
 }
 \end{lstlisting}
 
-To run \lstinline!Eval!\textsf{'}s effects but keep $M$\textsf{'}s effects intact,
-we define a base runner:
-\begin{lstlisting}
-def brunEvalT[A](t: EvalT[M, A]): M[A] = t.value.flatMap {
-  case Left(a)    => Monad[M].pure(a)
-  case Right(g)   => g(())
-}
-\end{lstlisting}
-
 
 \subsection{Combining more than two monads: monad stacks\label{subsec:Combining-more-than-monad-stacks}}
 
@@ -1050,7 +1040,7 @@ $T_{L}^{M}$ that can describe the effects of both $L$ and $M$.
 If we need to combine monad $T_{L}^{M}$ with a third monad (say,
 $K$), we could use $K$\textsf{'}s transformer and obtain the monad $T_{K}^{T_{L}^{M}}$
 that can describe the effects of $K$, $L$, and $M$. This technique
-is called making a \index{monads!stack of}\textbf{stack} of monads.
+is known as making a \index{monads!stack of}\textbf{stack} of monads.
 
 As an example, let us build a stack of \lstinline!Reader!, \lstinline!Writer!,
 and \lstinline!State! monads. We set $K^{\bullet}=\text{Reader}^{R,\bullet}$,
@@ -1089,7 +1079,7 @@ e.g., $T_{L}^{T_{M}^{K}}$ or $T_{M}^{T_{K}^{L}}$. In general, different
 orders will produce inequivalent monads that combine effects in different
 ways, although in certain cases the results are independent of the
 stacking order. Table~\ref{tab:Examples-of-monad-stacks} shows some
-examples of stacking two monads in different orders.
+examples of stacking  monads in different orders.
 
 \begin{table}
 
@@ -4381,6 +4371,7 @@ def finder[A, P](s: (A => Option[P]) => A): (A => Option[P]) => Option[A] = { p:
 P & \bbnum 0 & s(p)
 \end{array}\quad,
 \]
+transforms the selector monad into the search monad. Show that \lstinline!finder!
 is \emph{not} a monad morphism $\text{Sel}^{\bbnum 1+P,\bullet}\leadsto\text{Search}^{P,\bullet}$.%
 \begin{comment}
 Solution
@@ -4402,8 +4393,8 @@ and there is a monad morphism in one direction:
 
 \subsubsection{Exercise \label{subsec:Exercise-selector-and-continuation-monads}\ref{subsec:Exercise-selector-and-continuation-monads}{*}}
 
-The function $q:\text{Sel}^{P\{,\bullet}\leadsto\text{Cont}^{P,\bullet}$
-defined below is a monad morphism.
+Show that the function $q:\text{Sel}^{P\{,\bullet}\leadsto\text{Cont}^{P,\bullet}$
+defined below is a monad morphism:
 \begin{lstlisting}
 def q[P, A](s: (A => P) => A): (A => P) => P = { f: (A => P) => f(s(f)) }
 \end{lstlisting}
@@ -5643,554 +5634,6 @@ transformer for the monad $R_{1}^{A}\times R_{2}^{A}$.
 The \index{selector monad}\textbf{selector monad} $S^{A}\triangleq F^{A\rightarrow R^{Q}}\rightarrow R^{A}$
 is rigid if $R^{\bullet}$ is a rigid monad, $F^{\bullet}$ is any
 functor, and $Q$ is any fixed type.
-
-\subsection{Rigid functors\label{subsec:Rigid-functors}}
-
-The properties of rigid monads can be extended to a (possibly) larger
-class of rigid functors. We begin with a definition of a rigid functor
-that, unlike the definition of rigid monads (Section~\ref{sec:transformers-rigid-monads}),
-does not refer to any monad transformers.
-
-\paragraph{Definition }
-
-$R$ is a \textbf{rigid functor\index{rigid functor}} if there exists
-a natural transformation \lstinline!fuseIn! (denoted by $\text{fi}_{R}$)
-with the type signature
-\[
-\text{fi}_{R}:\forall(A,B).\,(A\rightarrow R^{B})\rightarrow R^{A\rightarrow B}
-\]
-satisfying the non-degeneracy law~(\ref{eq:rigid-non-degeneracy-law})
-shown below.
-
-Not all functors admit a natural transformation with the type signature
-of \lstinline!fuseIn!. For example, the functor $F^{A}\triangleq Z+A$
-is not rigid because the required type signature 
-\[
-\text{fi}^{A,B}:\left(A\rightarrow Z+B\right)\rightarrow Z+\left(A\rightarrow B\right)
-\]
-cannot be implemented. However, any functor $R$ admits the opposite
-natural transformation \lstinline!fuseOut! (denoted by $\text{fo}_{R}$):
-\begin{equation}
-\text{fo}^{A,B}:R^{A\rightarrow B}\rightarrow A\rightarrow R^{B}\quad,\quad\quad\text{fo}\left(r\right)\triangleq a\rightarrow r\triangleright\big(f^{:A\rightarrow B}\rightarrow f\left(a\right)\big)^{\uparrow R}\quad.\label{eq:fuseOut-def}
-\end{equation}
-The method \lstinline!fuseIn! must satisfy the nondegeneracy law
-\begin{equation}
-\text{fi}_{R}\bef\text{fo}_{R}=\text{id}^{:(A\rightarrow R^{B})\rightarrow(A\rightarrow R^{B})}\quad.\label{eq:rigid-non-degeneracy-law}
-\end{equation}
-The opposite relation does not hold in general: $\text{fo}_{R}\bef\text{fi}_{R}\neq\text{id}$
-(see Example~\ref{subsec:Example-fo-fi-not-id}).
-
-Note that the type signature of $\text{fi}_{R}$ is the same as the
-type signature of \lstinline!swap! with respect to the \lstinline!Reader!
-monad,
-\[
-\text{sw}_{R,M}:M^{R^{A}}\rightarrow R^{M^{A}}\cong(Z\rightarrow R^{A})\rightarrow R^{Z\rightarrow A}\text{ if we set }M^{A}\triangleq Z\rightarrow A\quad.
-\]
-So we are prompted to ask whether any rigid monad having a \lstinline!swap!
-method might also admit \lstinline!fuseIn!. It turns out that all
-rigid monads (regardless of the existence of \lstinline!swap!) are
-also rigid functors. While proving that statement, we will not assume
-that \lstinline!swap! exists for the monad $R$, but will use directly
-the definition of rigid monads via the composed-outside monad transformer.
-
-\subsubsection{Statement \label{subsec:Statement-rigid-monads-are-rigid-functors}\ref{subsec:Statement-rigid-monads-are-rigid-functors}}
-
-A rigid monad $R$ is always a rigid functor.
-
-\subparagraph{Proof}
-
-By assumption, the monad $R$ has the composed-outside monad transformer
-$T_{R}^{M}=R\circ M$ and the corresponding monad method $\text{ftn}_{T}$.
-We can define the transformation $\text{fi}_{R}$ in the same way
-as Eq.~(\ref{eq:define-swap-via-flatten}) defined the \lstinline!swap!
-method via $\text{ftn}_{T}$. To use that formula, we need to set
-the foreign monad $M$ to be the \lstinline!Reader! monad, $M^{B}\triangleq A\rightarrow B$,
-with the fixed environment type $A$:
-\begin{equation}
-\text{fi}_{R}(f^{:A\rightarrow R^{B}})=\text{pu}_{M}^{\uparrow R\uparrow M}\bef\text{pu}_{R}\bef\text{ftn}_{T}\quad.\label{eq:rigid-monad-fuseIn-def}
-\end{equation}
-\[
-\xymatrix{\xyScaleY{2pc}\xyScaleX{4pc}A\rightarrow R^{B}\ar[r]\sp(0.5){\text{pu}_{M}^{\uparrow R\uparrow M}}\ar[rrd]\sb(0.5){\text{fi}_{R}\triangleq} & A\rightarrow R^{A\rightarrow B}\ar[r]\sp(0.5){\text{pu}_{R}} & R^{A\rightarrow R^{A\rightarrow B}}\ar[d]\sp(0.45){\text{ftn}_{T}}\\
- &  & R^{A\rightarrow B}
-}
-\]
-Since $M$ is the \lstinline!Reader! monad with the environment type
-$A$, we have
-\[
-\text{pu}_{M}(x)=(\_^{:A}\rightarrow x)\quad,\quad\quad(f^{:X\rightarrow Y})^{\uparrow M}(r^{:A\rightarrow X})=r\bef f\quad.
-\]
-The type signature of the function \lstinline!fuseOut!,
-\[
-\text{fo}:R^{A\rightarrow B}\rightarrow A\rightarrow R^{B}\quad,
-\]
-resembles \textsf{``}running\textsf{''} the composed monad $R^{M^{B}}$ into $R^{B}$,
-given a value of the environment (of type $A$). Indeed, given a fixed
-value $a^{:A}$, we can \textsf{``}run\textsf{''} the \lstinline!Reader! monad into
-the identity monad. The corresponding runner $\phi_{a}^{:M\leadsto\text{Id}}$
-is
-\begin{equation}
-\phi_{a}^{:M^{X}\rightarrow X}=\big(m^{A\rightarrow X}\rightarrow m(a)\big)\quad.\label{eq:runner-phi-def}
-\end{equation}
-So we are inspired to use the runner law for the monad transformer
-$T_{R}^{M}$. That law (which holds since we assumed that $T_{R}^{M}$
-satisfies all laws) says that the lifted runner $\phi_{a}^{\uparrow R}$
-is a monad morphism $T_{R}^{M}\leadsto T_{R}^{\text{Id}}\cong T_{R}^{M}\leadsto R$.
-The monad morphism law for $\phi_{a}^{\uparrow R}$ is then written
-as
-\begin{equation}
-\text{ftn}_{T}\bef\phi_{a}^{\uparrow R}=\phi_{a}^{\uparrow R\uparrow M\uparrow R}\bef\phi_{a}^{\uparrow R}\bef\text{ftn}_{R}\quad.\label{eq:rigid-monad-is-rigid-functor-derivation1}
-\end{equation}
-How could we use this law to obtain Eq.~(\ref{eq:rigid-non-degeneracy-law})?
-Compare Eqs.~(\ref{eq:fuseOut-def}) and~(\ref{eq:runner-phi-def})
-and derive the connection between the runner $\phi_{a}$ and the \lstinline!fuseOut!
-function (which always exists for any functor $R$),
-\[
-\text{fo}_{R}=\big(r\rightarrow a\rightarrow r\triangleright\phi_{a}^{\uparrow R}\big)\quad.
-\]
-Then we can complete the derivation by rewriting the law~(\ref{eq:rigid-non-degeneracy-law}):
-\begin{align*}
-{\color{greenunder}\text{expect to equal }m:}\quad & m^{:M^{R^{B}}}\triangleright\text{fi}_{R}\bef\text{fo}_{R}=\left(m\triangleright\text{fi}_{R}\right)\triangleright\gunderline{\text{fo}_{R}}\\
-{\color{greenunder}\text{use Eq.~(\ref{eq:fuseOut-def})}:}\quad & =a\rightarrow m\triangleright\gunderline{\text{fi}_{R}}\triangleright\phi_{a}^{\uparrow R}\\
-{\color{greenunder}\text{use Eq.~(\ref{eq:rigid-monad-fuseIn-def})}:}\quad & =a\rightarrow m\triangleright\text{pu}_{M}^{\uparrow R\uparrow M}\bef\text{pu}_{R}\bef\gunderline{\text{ftn}_{T}\bef\phi_{a}^{\uparrow R}}\\
-{\color{greenunder}\text{use Eq.~(\ref{eq:rigid-monad-is-rigid-functor-derivation1})}:}\quad & =a\rightarrow m\triangleright\text{pu}_{M}^{\uparrow R\uparrow M}\bef\gunderline{\text{pu}_{R}\bef\phi_{a}^{\uparrow R\uparrow M\uparrow R}\bef\phi_{a}^{\uparrow R}}\bef\text{ftn}_{R}\\
-{\color{greenunder}\text{naturality of }\text{pu}_{R}:}\quad & =a\rightarrow m\triangleright\text{pu}_{M}^{\uparrow R\uparrow M}\bef\phi_{a}^{\uparrow R\uparrow M}\bef\phi_{a}\bef\gunderline{\text{pu}_{R}\bef\text{ftn}_{R}}\\
-{\color{greenunder}\text{left identity law of }R:}\quad & =a\rightarrow m\triangleright\gunderline{(\text{pu}_{M}\bef\phi_{a})}^{\uparrow R\uparrow M}\bef\phi_{a}\\
-{\color{greenunder}\text{monad morphism identity law for }\phi_{a}:}\quad & =a\rightarrow m\triangleright\gunderline{\phi_{a}}\\
-{\color{greenunder}\text{definition~(\ref{eq:runner-phi-def}) for }\phi_{a}:}\quad & =a\rightarrow m(a)=m\quad.
-\end{align*}
-Here we used the monad morphism identity law for $\phi_{a}$:
-\[
-\text{pu}_{M}\bef\phi_{a}=\big(x\rightarrow(\_\rightarrow x)\big)\bef(m\rightarrow a\triangleright m)=\left(x\rightarrow a\triangleright(\_\rightarrow x)\right)=\left(x\rightarrow x\right)=\text{id}\quad.
-\]
-
-
-\subsubsection{Example \label{subsec:Example-fo-fi-not-id}\ref{subsec:Example-fo-fi-not-id}\index{solved examples}}
-
-Show that the functions \lstinline!fuseIn! and \lstinline!fuseOut!
-are not always inverses: for some $R$,
-\[
-\text{fo}_{R}\bef\text{fi}_{R}\neq\text{id}\quad.
-\]
-
-
-\subparagraph{Solution}
-
-Consider the rigid monads $P^{A}\triangleq Z\rightarrow A$ and $R^{A}\triangleq\left(A\rightarrow Q\right)\rightarrow A$,
-where $Q$ and $Z$ are fixed types. Since all rigid monads are rigid
-functors, it follows that the monads $P$ and $R$ have methods $\text{fi}_{P}$,
-$\text{fo}_{P}$, $\text{fi}_{R}$, $\text{fo}_{R}$ satisfying the
-non-degeneracy law~(\ref{eq:rigid-non-degeneracy-law}). It turns
-out that additionally $\text{fo}_{P}\bef\text{fi}_{P}=\text{id}$,
-i.e.~the methods $\text{fo}_{P}$ and $\text{fi}_{P}$ are inverses
-of each other, but $\text{fo}_{R}\bef\text{fi}_{R}\neq\text{id}$.
-
-To show that $\text{fo}_{P}\bef\text{fi}_{P}=\text{id}$, consider
-the type signatures of $\text{fo}_{P}$ and $\text{fi}_{P}$:
-\begin{align*}
-\text{fo}_{P} & :P^{A\rightarrow B}\rightarrow A\rightarrow P^{B}\cong\left(Z\rightarrow A\rightarrow B\right)\rightarrow\left(A\rightarrow Z\rightarrow B\right)\quad,\\
-\text{fi}_{P} & :\big(A\rightarrow P^{B}\big)\rightarrow P^{A\rightarrow B}\cong\left(A\rightarrow Z\rightarrow B\right)\rightarrow\left(Z\rightarrow A\rightarrow B\right)\quad.
-\end{align*}
-The implementations of these functions are derived uniquely from type
-signatures, as long as we require that these implementations are natural
-transformations. The functions $\text{fo}_{P}$ and $\text{fi}_{P}$
-switch the curried arguments of types $A$ and $Z$ of a function
-that returns values of type $B$. It is clear that these two functions
-are inverses of each other. To show this directly, consider the type
-signature of $\text{fo}_{P}\bef\text{fi}_{P}$,
-\[
-\big(\text{fo}_{P}\bef\text{fi}_{P}\big):P^{A\rightarrow B}\rightarrow P^{A\rightarrow B}\cong\left(Z\rightarrow A\rightarrow B\right)\rightarrow\left(Z\rightarrow A\rightarrow B\right)\quad.
-\]
-There is only one implementation for this type signature as a natural
-transformation, namely the identity function $\text{id}^{Z\rightarrow A\rightarrow B}$.
-
-For the monad $R$, the type signatures of $\text{fi}_{R}$ and $\text{fo}_{R}$
-are
-\begin{align*}
-\text{fi}_{R} & :\left(A\rightarrow\left(B\rightarrow Q\right)\rightarrow B\right)\rightarrow\left(\left(A\rightarrow B\right)\rightarrow Q\right)\rightarrow A\rightarrow B\quad,\\
-\text{fo}_{R} & :\left(\left(\left(A\rightarrow B\right)\rightarrow Q\right)\rightarrow A\rightarrow B\right)\rightarrow A\rightarrow\left(B\rightarrow Q\right)\rightarrow B\quad,
-\end{align*}
-and the implementations are again derived uniquely from type signatures,
-\begin{align*}
-f^{:A\rightarrow\left(B\rightarrow Q\right)\rightarrow B} & \triangleright\text{fi}_{R}=x^{:\left(A\rightarrow B\right)\rightarrow Q}\rightarrow a^{:A}\rightarrow f(a)(b^{:B}\rightarrow x(\_\rightarrow b))\quad,\\
-g^{:\left(\left(A\rightarrow B\right)\rightarrow Q\right)\rightarrow A\rightarrow B} & \triangleright\text{fo}_{R}=a^{:A}\rightarrow y^{:B\rightarrow Q}\rightarrow g(h^{:A\rightarrow B}\rightarrow y(h(a)))(a)\quad.
-\end{align*}
-We notice that the implementation of $\text{fi}_{R}$ uses a constant
-function, $\left(\_\rightarrow b\right)$, which is likely to lose
-information. Indeed, while $\text{fi}_{R}\bef\text{fo}_{R}=\text{id}$
-as it must be due to the rigid non-degeneracy law, we find:
-\begin{align*}
-{\color{greenunder}\text{expect \emph{not} to equal }g:}\quad & g\triangleright\text{fo}_{R}\bef\text{fi}_{R}=\left(g\triangleright\text{fo}_{R}\right)\triangleright\gunderline{\text{fi}_{R}}\\
-{\color{greenunder}\text{definition of }\text{fi}_{R}:}\quad & =x\rightarrow a\rightarrow\gunderline{\text{fo}_{R}}(g)(a)(b\rightarrow x(\_\rightarrow b))\\
-{\color{greenunder}\text{definition of }\text{fo}_{R}:}\quad & =x\rightarrow a\rightarrow g\big(h^{:A\rightarrow B}\rightarrow h(a)\triangleright\gunderline{(b\rightarrow}x(\_\rightarrow b))\big)(a)\\
-{\color{greenunder}\text{apply to argument }b:}\quad & =x\rightarrow a\rightarrow g\big(h\rightarrow x(\_\rightarrow h(a))\big)(a)\quad.
-\end{align*}
-We cannot simplify the last line any further: the functions $g$,
-$h$, and $x$ are unknown, and we cannot calculate symbolically,
-say, the value of $x(\_\rightarrow h(a))$. If the last line were
-equal to $g$, we would expect it to be $x\rightarrow a\rightarrow g(x)(a)$.
-The difference is in the first argument of $g$, namely we have $h\rightarrow x(\_\rightarrow h(a))$
-instead of $x$. The two last expressions are not always equal; they
-would be equal if we had 
-\[
-\left(h\rightarrow x(h)\right)=\left(h\rightarrow x(k\rightarrow h(k))\right)
-\]
-instead of $h\rightarrow x(\_\rightarrow h(a))$. Consider again the
-argument of $x$ in the two last expressions: $k\rightarrow h(a)$
-instead of $k\rightarrow h(k)$. Since $h$ is not always a constant
-function ($h$ is an arbitrary function of type $A\rightarrow B$),
-the two expressions $k\rightarrow h(a)$ and $k\rightarrow h(k)$
-are generally not equal. So, we must conclude that $\text{fo}_{R}\bef\text{fi}_{R}\neq\text{id}$.
-
-\subsubsection{Exercise \label{subsec:Exercise-pair-functor-is-rigid}\ref{subsec:Exercise-pair-functor-is-rigid}\index{exercises}}
-
-Show that the functor $F^{A}\triangleq A\times A\times A$ is rigid.
-
-\subsubsection{Exercise \label{subsec:Exercise-option-not-rigid}\ref{subsec:Exercise-option-not-rigid}}
-
-Show that the functor $F^{A}\triangleq\bbnum 1+A\times A$ is not
-rigid.
-
-\subsubsection{Exercise \label{subsec:Exercise-continuation-not-rigid-1}\ref{subsec:Exercise-continuation-not-rigid-1}}
-
-Show that the functor $F^{A}\triangleq\left(A\rightarrow Z\right)\rightarrow Z$
-is not rigid. (Here $Z$ is a fixed type.)
-
-Since all rigid monads are rigid functors, we can reuse all the rigid
-monad constructions to obtain new rigid functors. The following statement
-shows a construction of rigid functors that does not assume any monadic
-properties. 
-
-\subsubsection{Statement \label{subsec:Statement-rigid-functor-h-p}\ref{subsec:Statement-rigid-functor-h-p}}
-
-The functor $S^{\bullet}\triangleq H^{\bullet}\rightarrow P^{\bullet}$
-is rigid when $H$ is any contrafunctor and $P$ is any rigid functor.
-(Note that $P$ does not need to be a monad.)
-
-\subparagraph{Proof}
-
-We assume that $\text{fi}_{P}$ and $\text{fo}_{P}$ are known and
-satisfy the non-degeneracy law~(\ref{eq:rigid-non-degeneracy-law}).
-The function $\text{fi}_{S}$ is then defined by
-\begin{align*}
-\text{fi}_{S} & :\big(A\rightarrow H^{B}\rightarrow P^{B}\big)\rightarrow H^{A\rightarrow B}\rightarrow P^{A\rightarrow B}\quad,\\
-\text{fi}_{S} & =f^{:A\rightarrow H^{B}\rightarrow P^{B}}\rightarrow h^{:H^{A\rightarrow B}}\rightarrow\text{fi}_{P}\big(a\rightarrow f(a)\big(\left(b\rightarrow\_\rightarrow b\right)^{\downarrow H}h\big)\big)\quad,
-\end{align*}
-or, using the forwarding notation,
-\[
-h\triangleright\text{fi}_{S}(f)=\big(a\rightarrow h\triangleright\left(b\rightarrow\_\rightarrow b\right)^{\downarrow H}\triangleright f(a)\big)\triangleright\text{fi}_{P}\quad.
-\]
-Let us write the definition of $\text{fo}_{S}$ as well,
-\begin{align*}
-\text{fo}_{S} & :\big(H^{A\rightarrow B}\rightarrow P^{A\rightarrow B}\big)\rightarrow A\rightarrow H^{B}\rightarrow P^{B}\quad,\\
-\text{fo}_{S} & =g^{:H^{A\rightarrow B}\rightarrow P^{A\rightarrow B}}\rightarrow a^{:A}\rightarrow h^{:H^{B}}\rightarrow\text{fo}_{P}\bigg(g\big(\left(p^{:A\rightarrow B}\rightarrow p(a)\right)^{\downarrow H}h\big)\bigg)(a)\quad,
-\end{align*}
-or, using the forwarding notation,
-\[
-\text{fo}_{S}(g)=a\triangleright\big(h\triangleright\left(p\rightarrow p(a)\right)^{\downarrow H}\bef g\bef\text{fo}_{P}\big)\quad.
-\]
-To verify the non-degeneracy law for $S$, apply both sides to some
-arguments; we expect $f\triangleright(\text{fi}_{S}\bef\text{fo}_{S})$
-to equal $f$ for an arbitrary $f:A\rightarrow H^{B}\rightarrow P^{B}$.
-To compare values, we need to apply both sides further to some arguments
-$a:A$ and $h:H^{B}$. So we expect the following expression to equal
-$f(a)(h)$:
-\begin{align*}
-\quad & \left(f\triangleright\text{fi}_{S}\bef\text{fo}_{S}\right)(a)(h)=(f\triangleright\text{fi}_{S}\triangleright\gunderline{\text{fo}_{S}})(a)(h)\\
-{\color{greenunder}\text{expand }\text{fo}_{S}:}\quad & =a\triangleright\big(h\triangleright\left(p\rightarrow a\triangleright p\right)^{\downarrow H}\triangleright\gunderline{\text{fi}_{S}(f)}\triangleright\text{fo}_{P}\big)\\
-{\color{greenunder}\text{expand }\text{fi}_{S}:}\quad & =a\triangleright\big(\big(a\rightarrow h\triangleright\gunderline{\left(p\rightarrow p(a)\right)^{\downarrow H}\bef\left(b\rightarrow\_\rightarrow b\right)^{\downarrow H}}\bef f(a)\big)\triangleright\text{fi}_{P}\triangleright\text{fo}_{P}\big)\\
-{\color{greenunder}\text{compose }^{\downarrow H}:}\quad & =a\triangleright\big(\big(a\rightarrow h\triangleright\gunderline{\left((b\rightarrow\_\rightarrow b)\bef(p\rightarrow p(a))\right)^{\downarrow H}}\bef f(a)\big)\triangleright\text{fi}_{P}\gunderline{\triangleright}\text{fo}_{P}\big)\quad.
-\end{align*}
-Computing the function composition
-\[
-(b\rightarrow\_\rightarrow b)\bef(p\rightarrow p(a))=(b\rightarrow(\_\rightarrow b)(a))=(b\rightarrow b)=\text{id}\quad,
-\]
-and using the non-degeneracy law $\text{fi}_{P}\bef\text{fo}_{P}=\text{id}$,
-we can simplify further:
-\begin{align*}
- & a\triangleright\big(\big(a\rightarrow h\triangleright\gunderline{\left((b\rightarrow\_\rightarrow b)\bef(p\rightarrow p(a))\right)^{\downarrow H}}\bef f(a)\big)\triangleright\text{fi}_{P}\gunderline{\triangleright}\text{fo}_{P}\big)\\
-{\color{greenunder}\text{identity law for }H:}\quad & =a\triangleright\big(\big(a\rightarrow h\triangleright f(a)\big)\triangleright\gunderline{\text{fi}_{P}\bef\text{fo}_{P}}\big)\\
-{\color{greenunder}\text{non-degeneracy}:}\quad & =\gunderline{a\triangleright\big(a\rightarrow}h\triangleright f(a)\big)=h\triangleright f(a)\quad.
-\end{align*}
-This equals $f(a)(h)$, as required.%
-\begin{comment}
-Trying the triangle notation: It seems that $\left(a\triangleright\right)$
-is not so useful, we could just write $\left(f\rightarrow f(a)\right)$
-instead.
-\begin{align*}
-\tilde{\text{fi}}\left(f\right) & =f\triangleright\tilde{\text{fi}}=\left(b\rightarrow\_\rightarrow b\right)^{\downarrow H}\bef f\quad,\\
-\tilde{\text{fo}}\left(g\right) & =g\triangleright\tilde{\text{fo}}=h\rightarrow a\rightarrow g((a\triangleright)^{\downarrow H}h)a=h\rightarrow a\rightarrow h\triangleright(a\triangleright)^{\downarrow H}\bef g\bef\left(a\triangleright\right)\quad.
-\end{align*}
-Then
-\begin{align*}
- & f\triangleright\tilde{\text{fi}}\triangleright\tilde{\text{fo}}\\
- & =h\rightarrow a\rightarrow h\triangleright(a\triangleright)^{\downarrow H}\bef\left(f\triangleright\tilde{\text{fi}}\right)\bef\left(a\triangleright\right)\\
- & =h\rightarrow a\rightarrow h\triangleright(a\triangleright)^{\downarrow H}\bef\left(b\rightarrow\_\rightarrow b\right)^{\downarrow H}\bef f\bef\left(a\triangleright\right)\\
- & =h\rightarrow a\rightarrow h\triangleright\left(b\rightarrow\_\rightarrow b\bef\left(a\triangleright\right)\right)^{\downarrow H}\bef f\bef\left(a\triangleright\right)\\
- & =h\rightarrow a\rightarrow h\triangleright f\bef\left(a\triangleright\right)=h\rightarrow a\rightarrow h\triangleright f\triangleright\left(a\triangleright\right)\\
- & =h\rightarrow a\rightarrow f(h)(a)=f
-\end{align*}
-What are the simplification rules?
-\begin{align*}
- & a\rightarrow x\triangleright\left(a\triangleright\right)=x\quad,\\
- & a\rightarrow a\triangleright f=f\quad,\\
- & x\triangleright\left(a\triangleright\right)=x(a)=a\triangleright x\quad,\\
- & x\triangleright y\triangleright\left(a\triangleright\right)=a\triangleright\left(x\triangleright y\right)\quad.
-\end{align*}
-\end{comment}
-
-
-\subsubsection{Statement \label{subsec:Statement-rigid-functor-is-pointed}\ref{subsec:Statement-rigid-functor-is-pointed}}
-
-A rigid functor $R$ is pointed; the method \lstinline!pure! can
-be defined as
-\[
-\text{pu}_{R}(x^{:A})\triangleq\text{id}^{:R^{A}\rightarrow R^{A}}\triangleright\text{fi}_{R}\triangleright(\_\rightarrow x)^{\uparrow R}\quad.
-\]
-In particular, there is a selected value $r_{1}$ of type $R^{\bbnum 1}$
-(\textsf{``}wrapped unit\textsf{''}), computed as 
-\begin{equation}
-r_{1}\triangleq\text{pu}_{R}(1)=\text{id}\triangleright\text{fi}_{R}\triangleright(\_\rightarrow1)^{\uparrow R}\quad.\label{eq:rigid-functor-def-of-wrapped-unit}
-\end{equation}
-
-
-\paragraph{Proof}
-
-The method $\text{fi}_{R}:(X\rightarrow R^{Y})\rightarrow R^{X\rightarrow Y}$
-with type parameters $X=R^{A}$ and $Y=A$ is applied to the identity
-function $\text{id}:R^{A}=R^{A}$, considered as a value of type $X\rightarrow R^{Y}$.
-The result is a value
-\[
-\text{fi}_{R}(\text{id}):R^{R^{A}\rightarrow A}\quad.
-\]
-The result is transformed via the lifted constant function $\left(\_\rightarrow x\right)^{\uparrow R}$,
-which takes $R^{R^{A}\rightarrow A}$ and returns $R^{A}$. The resulting
-code can be written as
-\[
-\text{pu}_{R}(x)\triangleq(\_\rightarrow x)^{\uparrow R}(\text{fi}_{R}(\text{id}))=\text{id}\triangleright\text{fi}_{R}\triangleright(\_\rightarrow x)^{\uparrow R}\quad.
-\]
-The function $\text{pu}_{R}$ defined in this way is a natural transformation
-since $\text{fi}_{R}$ is one. Applying $\text{pu}_{R}$ to a unit
-value, we obtain the selected value $r_{1}$ of type $R^{\bbnum 1}$.
-
-The next statement shows that $r_{1}$ is the \emph{only} distinct
-value of the type $R^{\bbnum 1}$. This means, in particular, that
-a rigid functor cannot be a disjunctive type defined with more than
-one constructor, such as $\bbnum 1+A$ or $\text{List}^{A}$. This
-is one motivation for the name \textsf{``}rigid\textsf{''}: the data structure $R^{A}$
-must have a fixed \textsf{``}shape\textsf{''} and cannot be a disjunction of several
-variants. 
-
-\subsubsection{Statement \label{subsec:Statement-rigid-functor-wrapped-unit-is-unit}\ref{subsec:Statement-rigid-functor-wrapped-unit-is-unit}}
-
-If a functor $R$ has a method $\text{fi}_{R}$ satisfying the non-degeneracy
-law~(\ref{eq:rigid-non-degeneracy-law}) then the type $R^{\bbnum 1}$
-is equivalent to the unit type: $R^{\bbnum 1}\cong\bbnum 1$. The
-value $r_{1}$ defined by Eq.~(\ref{eq:rigid-functor-def-of-wrapped-unit})
-is the only available distinct value of type $R^{\bbnum 1}$. The
-isomorphism between $\bbnum 1$ and $R^{\bbnum 1}$ is the function
-$\left(1\rightarrow r_{1}\right)$.
-
-\paragraph{Proof}
-
-The trick is to apply both sides of the non-degeneracy law $\text{fi}_{R}\bef\text{fo}_{R}=\text{id}$
-to the identity function of type $R^{\bbnum 1}\rightarrow R^{\bbnum 1}$.
-To adapt the type parameters, consider the type signature of $\text{fi}_{R}\bef\text{fo}_{R}$,
-\[
-\big(\text{fi}_{R}\bef\text{fo}_{R}\big):(A\rightarrow R^{B})\rightarrow(A\rightarrow R^{B})\quad,
-\]
-and set $A=R^{\bbnum 1}$ and $B=\bbnum 1$. The left-hand side of
-the law can be now applied to the identity function $\text{id}:R^{\bbnum 1}\rightarrow R^{\bbnum 1}$,
-which yields a value of type $R^{\bbnum 1}\rightarrow R^{\bbnum 1}$,
-i.e.~a function 
-\[
-f_{1}:R^{\bbnum 1}\rightarrow R^{\bbnum 1}\quad,\quad\quad f_{1}\triangleq\text{fo}_{R}(\text{fi}_{R}(\text{id}))\quad.
-\]
-We will show that $f_{1}$ is a constant function, $f_{1}=(\_\rightarrow r_{1})$,
-always returning the same value $r_{1}$ defined in Statement~\ref{subsec:Statement-rigid-functor-is-pointed}.
-However, the right-hand side of the non-degeneracy law applied to
-$\text{id}$ is the identity function of type $R^{\bbnum 1}\rightarrow R^{\bbnum 1}$.
-So, the non-degeneracy law means that $f_{1}=\text{id}$. If the identity
-function of type $R^{\bbnum 1}\rightarrow R^{\bbnum 1}$ always returns
-the same value ($r_{1}$), it means that $r_{1}$ is the only distinct
-value of the type $R^{\bbnum 1}$.
-
-We note that for any fixed type $A$, the function type $A\rightarrow\bbnum 1$
-is equivalent to the unit type ($\bbnum 1$). This is because there
-exists only one fully parametric function of type $A\rightarrow\bbnum 1$,
-namely $(\_\rightarrow1)$. The code of that function is uniquely
-determined by its type signature. In other words, there exists only
-one distinct value of the type $A\rightarrow\bbnum 1$, and that value
-is $\left(\_\rightarrow1\right)$. 
-
-The isomorphism between the types $A\rightarrow\bbnum 1$ and $\bbnum 1$
-is realized by the functions $u:\bbnum 1\rightarrow A\rightarrow\bbnum 1$
-and $v:\left(A\rightarrow\bbnum 1\right)\rightarrow\bbnum 1$. The
-code of these functions is also uniquely determined by their type
-signatures:
-\[
-u=\big(1\rightarrow\_^{:A}\rightarrow1\big)\quad,\quad\quad v=\big(\_^{:A\rightarrow\bbnum 1}\rightarrow1\big)\quad.
-\]
-
-Applying $\text{fi}_{R}$ to the identity function of type $R^{\bbnum 1}\rightarrow R^{\bbnum 1}$,
-we obtain a value $g$, 
-\[
-g:R^{R^{\bbnum 1}\rightarrow\bbnum 1}\quad,\quad\quad g\triangleq\text{id}\triangleright\text{fi}_{R}\quad.
-\]
-Since the type $R^{\bbnum 1}\rightarrow\bbnum 1$ is equivalent to
-$\bbnum 1$, the type $R^{R^{\bbnum 1}\rightarrow\bbnum 1}$ is equivalent
-to $R^{\bbnum 1}$. To use this equivalence explicitly, we need to
-lift the isomorphisms $u$ and $v$ into the functor $R$. The isomorphism
-will then map $g:R^{R^{\bbnum 1}\rightarrow\bbnum 1}$ to some $g_{1}:R^{\bbnum 1}$
-by
-\[
-g_{1}\triangleq v^{\uparrow R}(g)\quad.
-\]
-Substituting the definitions of $g$, $v$, and $r_{1}$, we find
-that actually $g_{1}=r_{1}$:
-\[
-g_{1}=\text{id}\triangleright\text{fi}_{R}\triangleright v^{\uparrow R}=\text{id}\triangleright\text{fi}_{R}\triangleright(\_\rightarrow1)^{\uparrow R}=r_{1}\quad.
-\]
-We can now map $g_{1}$ back to $g$ via the lifted isomorphism $u$:
-\begin{align}
-g & =g_{1}\triangleright u^{\uparrow R}=r_{1}\triangleright u^{\uparrow R}\nonumber \\
-{\color{greenunder}\text{definition of }u:}\quad & =r_{1}\triangleright\big(1\rightarrow\_\rightarrow1\big)^{\uparrow R}\quad.\label{eq:rigid-functor-derivation1}
-\end{align}
-Compute $\text{fo}_{R}(g)$ as
-\begin{align*}
- & \text{fo}_{R}(g)=g\triangleright\text{fo}_{R}\\
-{\color{greenunder}\text{use Eq.~(\ref{eq:fuseOut-def})}:}\quad & =a^{:R^{\bbnum 1}}\rightarrow g\triangleright\big(f^{:A\rightarrow\bbnum 1}\rightarrow f\left(a\right)\big)^{\uparrow R}\\
-{\color{greenunder}\text{use Eq.~(\ref{eq:rigid-functor-derivation1})}:}\quad & =a\rightarrow r_{1}\triangleright(1\rightarrow\_^{:A}\rightarrow1)^{\uparrow R}\triangleright\big(f^{:A\rightarrow\bbnum 1}\rightarrow f\left(a\right)\big)^{\uparrow R}\\
-{\color{greenunder}\text{composition under }^{\uparrow R}:}\quad & =a\rightarrow r_{1}\triangleright\big(1\rightarrow(\_^{:A}\rightarrow1)(a)\big)^{\uparrow R}=a\rightarrow r_{1}\triangleright(\gunderline{1\rightarrow1})^{\uparrow R}\\
-{\color{greenunder}(1\rightarrow1)\text{ is identity}:}\quad & =(a\rightarrow r_{1}\triangleright\text{id})=(a^{:R^{\bbnum 1}}\rightarrow r_{1})=(\_^{:R^{\bbnum 1}}\rightarrow r_{1})\quad.
-\end{align*}
-So, $\text{fo}_{R}(g)=\text{fo}_{R}(\text{fi}_{R}(\text{id}))$ is
-a function of type $R^{\bbnum 1}\rightarrow R^{\bbnum 1}$ that ignores
-its argument and always returns the same value $r_{1}$.
-
-By virtue of the non-degeneracy law, $\text{fo}_{R}(g)=\text{id}$.
-We see that the identity function $\text{id}:R^{\bbnum 1}\rightarrow R^{\bbnum 1}$
-always returns the same value $r_{1}$. Applying this function to
-an arbitrary value $x:R^{\bbnum 1}$, we get
-\[
-x=x\triangleright\text{id}=x\triangleright\text{fo}_{R}(g)=x\triangleright(\_\rightarrow r_{1})=r_{1}\quad.
-\]
-It means that all values of type $R^{\bbnum 1}$ are equal to $r_{1}$.
-So the function $1\rightarrow r_{1}$ is indeed an isomorphism between
-the types $\bbnum 1$ and $R^{\bbnum 1}$.
-
-\subsubsection{Statement \label{subsec:Statement-rigid-functor-product}\ref{subsec:Statement-rigid-functor-product}}
-
-The product of rigid functors is a rigid functor.
-
-\subparagraph{Proof}
-
-We assume that two rigid functors $P$ and $Q$ are given, with their
-methods $\text{fi}_{P}$ and $\text{fi}_{Q}$ satisfying the non-degeneracy
-law. The functor product $R\triangleq P\times Q$ needs its own $\text{fi}_{R}$
-method, with the type signature
-\[
-\text{fi}_{R}:(A\rightarrow P^{B}\times Q^{B})\rightarrow P^{A\rightarrow B}\times Q^{A\rightarrow B}\quad.
-\]
-To implement that method, first note that the function type $A\rightarrow P\times Q$
-is isomorphic to $\left(A\rightarrow P\right)\times\left(A\rightarrow Q\right)$.
-The isomorphism is given by a \textsf{``}split\textsf{''} function,
-\[
-\text{split}:\left(A\rightarrow B\times C\right)\rightarrow\left(A\rightarrow B\right)\times\left(A\rightarrow C\right)\quad,\quad\quad\text{split}\triangleq f^{:A\rightarrow B\times C}\rightarrow(f\bef\pi_{1})\times(f\bef\pi_{2})\quad.
-\]
-Then the method $\text{fi}_{R}$ is implemented concisely:
-
-\[
-\text{fi}_{R}\triangleq\text{split}\bef(\text{fi}_{P}\boxtimes\text{fi}_{Q})\quad.
-\]
-To check the non-degeneracy law ($\text{fi}_{R}\bef\text{fo}_{R}=\text{id}$),
-we need the code of $\text{fo}_{R}$. It is convenient to define $\text{fo}_{R}$
-via a \textsf{``}merge\textsf{''} function:
-\[
-\text{merge}:\left(A\rightarrow B\right)\times\left(A\rightarrow C\right)\rightarrow A\rightarrow B\times C\quad,\quad\quad\text{merge}\triangleq f^{:A\rightarrow B}\times g^{:A\rightarrow C}\rightarrow a^{:A}\rightarrow f(a)\times g(a)\quad.
-\]
-The code of $\text{fo}_{R}$ is then written as:
-\[
-\text{fo}_{R}:P^{A\rightarrow B}\times Q^{A\rightarrow B}\rightarrow A\rightarrow P^{B}\times Q^{B}\quad,\quad\quad\text{fo}_{R}\triangleq(\text{fo}_{P}\boxtimes\text{fo}_{Q})\bef\text{merge}\quad.
-\]
-The functions \lstinline!split! and \lstinline!merge! are mutual
-inverses. Now we can verify the non-degeneracy law:
-\begin{align*}
- & \text{fi}_{R}\bef\text{fo}_{R}=\text{split}\bef\gunderline{(\text{fi}_{P}\boxtimes\text{fi}_{Q})\bef(\text{fo}_{P}\boxtimes\text{fo}_{Q})}\bef\text{merge}\\
- & =\text{split}\bef\big((\gunderline{\text{fi}_{P}\bef\text{fo}_{P}})\boxtimes(\gunderline{\text{fi}_{Q}\bef\text{fo}_{Q}})\big)\bef\text{merge}=\text{split}\bef\gunderline{(\text{id}\boxtimes\text{id})}\bef\text{merge}=\text{split}\bef\text{merge}=\text{id}\quad.
-\end{align*}
-
-
-\subsubsection{Statement \label{subsec:Statement-rigid-functor-composition}\ref{subsec:Statement-rigid-functor-composition}}
-
-The composition of rigid functors is a rigid functor.
-
-\subparagraph{Proof}
-
-We will show that the non-degeneracy law ($\text{fi}_{R}\bef\text{fo}_{R}=\text{id}$)
-holds for the functor $R^{\bullet}\triangleq P^{Q^{\bullet}}$ as
-long as $P$, $Q$ are rigid. Begin by defining the methods $\text{fi}_{R}$
-and $\text{fo}_{R}$, assuming that the corresponding methods of $P$,
-$Q$ are known and satisfy the non-degeneracy law. We write:
-\begin{align*}
- & \text{fi}_{R}:(A\rightarrow P^{Q^{B}})\rightarrow P^{Q^{A\rightarrow B}}\quad,\quad\quad\text{fi}_{R}\triangleq\text{fi}_{P}\bef\text{fi}_{Q}^{\uparrow P}\quad,\\
- & \text{fo}_{R}:P^{Q^{A\rightarrow B}}\rightarrow A\rightarrow P^{Q^{B}}\quad,\quad\quad\text{fo}_{R}\triangleq\text{fo}_{Q}^{\uparrow P}\bef\text{fo}_{P}\quad.
-\end{align*}
-To verify the non-degeneracy law for $R$:
-\[
-\text{fi}_{R}\bef\text{fo}_{R}=\text{fi}_{P}\bef\text{fi}_{Q}^{\uparrow P}\bef\text{fo}_{Q}^{\uparrow P}\bef\text{fo}_{P}=\text{fi}_{P}\bef(\gunderline{\text{fi}_{Q}\bef\text{fo}_{Q}})^{\uparrow P}\bef\text{fo}_{P}=\gunderline{\text{fi}_{P}\bef\text{fo}_{P}}=\text{id}\quad.
-\]
-\begin{comment}
-Flip the curried arguments of the function type $A\rightarrow T^{B}\triangleq A\rightarrow H^{M^{B}}\rightarrow M^{B}$,
-to obtain $H^{M^{B}}\rightarrow A\rightarrow M^{B}$, and note that
-$A\rightarrow M^{B}$ can be mapped to $M^{A\rightarrow B}$ using
-$\text{fi}_{M}$. So we can implement $\tilde{\text{fi}}_{T}$ using
-$\text{fi}_{M}$:
-\begin{align*}
-\tilde{\text{fi}}_{T} & :\big(H^{M^{B}}\rightarrow A\rightarrow M^{B}\big)\rightarrow H^{M^{A\rightarrow B}}\rightarrow M^{A\rightarrow B}\\
-\tilde{\text{fi}}_{T} & =f\rightarrow h\rightarrow\text{fi}_{M}\left(f\big(\left(b\rightarrow\_\rightarrow b\right)^{\uparrow M\downarrow H}h\big)\right)\\
-\tilde{\text{fo}}_{T} & :\left(H^{M^{A\rightarrow B}}\rightarrow M^{A\rightarrow B}\right)\rightarrow H^{M^{B}}\rightarrow A\rightarrow M^{B}\\
-\tilde{\text{fo}}_{T} & =g\rightarrow h\rightarrow a\rightarrow\text{fo}_{M}\left(g\big(\left(p^{:A\rightarrow B}\rightarrow p\,a\right)^{\uparrow M\downarrow H}h\big)\right)a
-\end{align*}
-To show the non-degeneracy law for $T$, compute
-\begin{align*}
- & \tilde{\text{fo}}_{T}\left(\tilde{\text{fi}}_{T}f\right)h^{:H^{M^{B}}}a^{:A}\\
-\text{insert the definition of }\tilde{\text{fo}}_{T}\text{: }\quad & =\text{fo}_{M}\left(\left(\tilde{\text{fi}}_{T}f\right)\big(\left(p\rightarrow p\,a\right)^{\uparrow M\downarrow H}h\big)\right)a\\
-\text{insert the definition of }\tilde{\text{fi}}_{T}\text{: }\quad & =\text{fo}_{M}\left(\text{fi}_{M}\left(f\big(\left(b\rightarrow\_\rightarrow b\right)^{\uparrow M\downarrow H}\left(p\rightarrow p\,a\right)^{\uparrow M\downarrow H}h\big)\right)\right)a\\
-\text{non-degeneracy law for }\text{fi}_{M}\text{: }\quad & =f\big(\left(b\rightarrow\_\rightarrow b\right)^{\uparrow M\downarrow H}\left(p\rightarrow p\,a\right)^{\uparrow M\downarrow H}h\big)a\\
-\text{composition laws for }M,H\text{: }\quad & =f\big(\left(b\rightarrow\_\rightarrow b\bef p\rightarrow p\,a\right)^{\uparrow M\downarrow H}h\big)a\\
-\text{simplify }\text{: }\quad & =f\left(\left(b\rightarrow b\right)^{\uparrow M\downarrow H}h\right)a\\
-\text{identity laws for }M,H\text{: }\quad & =f\,h\,a\quad.
-\end{align*}
-We obtained $\tilde{\text{fo}}_{T}\left(\tilde{\text{fi}}_{T}\,f\right)h\,a=f\,h\,a$.
-Therefore the non-degeneracy law $\tilde{\text{fi}}_{T}\bef\tilde{\text{fo}}_{T}=\text{id}$
-holds. 
-\end{comment}
-
-The next statements show some use cases for rigid functors. The \textsf{``}$R$-valued
-\lstinline!flatMap!\textsf{''} is a generalization of \lstinline!flatMap!
-that can handle multiple $M$-effects at once; the collection of $M$-effects
-is described by a rigid functor $R$.
-
-\subsubsection{Statement \label{subsec:Statement-rigid-functor-multi-flatMap}\ref{subsec:Statement-rigid-functor-multi-flatMap}}
-
-{*}{*}{*}For a rigid functor $R$ and a monad $M$, an \textsf{``}$R$-valued
-\lstinline!flatMap!\textsf{''} can be defined,
-\[
-\text{rflm}_{M,R}:(A\rightarrow R^{M^{B}})\rightarrow M^{A}\rightarrow R^{M^{B}}\quad.
-\]
-
-A \textsf{``}refactoring\textsf{''} is a program transformation that does not significantly
-change the functionality. {*}{*}{*}
-
-\subsubsection{Statement \label{subsec:Statement-rigid-functor-monadic-refactor}\ref{subsec:Statement-rigid-functor-monadic-refactor}}
-
-{*}{*}{*}Given a rigid functor $R$, a refactoring function can be
-implemented,
-\[
-\text{refactor}:((A\rightarrow B)\rightarrow C)\rightarrow(A\rightarrow R^{B})\rightarrow R^{C}\quad.
-\]
-This function transforms a program $p(f^{:A\rightarrow B}):C$ into
-a program $\tilde{p}(\tilde{f}^{:A\rightarrow R^{B}}):R^{C}$.
 
 \section{Transformers for monad constructions}
 
@@ -8456,7 +7899,86 @@ which we verify by writing
 \paragraph{Base runner laws}
 
 The base runner ($\text{brun}:T^{A}\rightarrow M^{A}$) cannot be
-implemented.
+implemented for arbitrary types $A$, similarly to the unimplementable
+runner $\text{List}^{A}\rightarrow A$. However, for a monoid type
+$R$ with binary operation $\oplus_{R}$ and empty element $e_{R}$,
+the type signature $\text{List}^{R}\rightarrow R$ is implemented
+by the standard \lstinline!reduce! operation: 
+\[
+\text{reduce}:\text{List}^{R}\rightarrow R\quad,\quad\quad\text{reduce}\triangleq\,\begin{array}{|c||c|}
+ & R\\
+\hline \bbnum 1 & 1\rightarrow e_{R}\\
+R\times\text{List}^{R} & h\times t\rightarrow h\oplus_{R}\overline{\text{reduce}}\,(t)
+\end{array}\quad.
+\]
+We can similarly implement a base runner (\lstinline!brun!) for the
+transformer $T_{\text{List}}$ if we restrict its usage to \emph{monoid}
+types $R$. The function \lstinline!brun! with the type signature
+$M^{L^{R}}\rightarrow M^{R}$ aggregates all elements of the effectful
+list into a single value of type $M^{R}$ (which is also a monoid
+type):
+\[
+\text{brun}:M^{L^{R}}\rightarrow M^{R}\quad,\quad\quad\text{brun}\triangleq\text{flm}_{M}\bigg(\,\begin{array}{|c||c|}
+ & M^{R}\\
+\hline \bbnum 1 & 1\rightarrow\text{pu}_{M}(e_{R})\\
+R\times M^{L^{R}} & h\times t\rightarrow\text{pu}_{M}(h)\oplus_{M}\overline{\text{brun}}\,(t)
+\end{array}\,\bigg)\quad.
+\]
+Here, we use the binary operation $\oplus_{M}$ of the monoid $M^{R}$,
+defined by
+\begin{equation}
+p^{:M^{R}}\oplus_{M}q^{:M^{R}}\triangleq p\triangleright\text{flm}_{M}\big(u^{:R}\rightarrow q\triangleright(v^{:R}\rightarrow u\oplus_{R}v)^{\uparrow M}\big)\quad.\label{eq:definition-of-oplus-M-monad-monoid-1}
+\end{equation}
+
+It can be shown that \lstinline!brun! satisfies the non-degeneracy
+law:
+\begin{align*}
+{\color{greenunder}\text{expect to equal }\text{id}:}\quad & \text{flift}\bef\text{brun}=\text{pu}_{L}^{\uparrow M}\bef\text{flm}_{M}\bigg(\,\begin{array}{||c|}
+1\rightarrow\text{pu}_{M}(e_{R})\\
+r\times t\rightarrow\text{pu}_{M}(r)\oplus_{M}\overline{\text{brun}}\,(t)
+\end{array}\,\bigg)\\
+{\color{greenunder}\text{naturality of }\text{flm}_{M}:}\quad & =\text{flm}_{M}\bigg(\text{pu}_{L}\bef\,\begin{array}{||c|}
+1\rightarrow\text{pu}_{M}(e_{R})\\
+r\times t\rightarrow\text{pu}_{M}(r)\oplus_{M}\overline{\text{brun}}\,(t)
+\end{array}\,\bigg)\\
+{\color{greenunder}\text{definition of }\text{pu}_{L}:}\quad & =\text{flm}_{M}\bigg(\,\begin{array}{||cc|}
+\bbnum 0 & a\rightarrow a\times(\text{Nil}\triangleright\text{pu}_{M})\end{array}\,\bef\,\begin{array}{||c|}
+1\rightarrow\text{pu}_{M}(e_{R})\\
+r\times t\rightarrow\text{pu}_{M}(r)\oplus_{M}\overline{\text{brun}}\,(t)
+\end{array}\,\bigg)\\
+ & =\text{flm}_{M}(a\rightarrow\text{pu}_{M}(a)\oplus_{M}\gunderline{\text{brun}(\text{Nil}\triangleright\text{pu}_{M})})=\text{flm}_{M}(a\rightarrow\gunderline{\text{pu}_{M}(a)\oplus\text{pu}_{M}(e_{R})})\\
+ & =\text{flm}_{M}(a\rightarrow\text{pu}_{M}(\gunderline{a\oplus e_{R}}))=\text{flm}_{M}(\gunderline{a\rightarrow\text{pu}_{M}(a)})=\text{flm}_{M}(\text{pu}_{M})=\text{id}\quad.
+\end{align*}
+Here, we used the property that $\text{pu}_{M}(e_{R})$ is the empty
+element for $\oplus_{M}$, and also computed
+\begin{equation}
+\text{brun}\,(\text{Nil}\triangleright\text{pu}_{M})=\text{Nil}\triangleright\gunderline{\text{pu}_{M}\bef\text{flm}_{M}}\bigg(\,\begin{array}{||c|}
+1\rightarrow\text{pu}_{M}(e_{R})\\
+r\times t\rightarrow\text{pu}_{M}(r)\oplus_{M}\overline{\text{brun}}\,(t)
+\end{array}\,\bigg)=\text{pu}_{M}(e_{R})\quad.\label{eq:listt-brun-derivation1}
+\end{equation}
+
+The monad morphism identity law holds for \lstinline!brun!:
+\begin{align*}
+{\color{greenunder}\text{expect to equal }\text{pu}_{M}:}\quad & \text{pu}_{T}\bef\text{brun}=\text{pu}_{L}\bef\gunderline{\text{pu}_{M}\bef\text{flm}_{M}}\bigg(\,\begin{array}{||c|}
+1\rightarrow\text{pu}_{M}(e_{R})\\
+r\times t\rightarrow\text{pu}_{M}(r)\oplus_{M}\overline{\text{brun}}\,(t)
+\end{array}\,\bigg)\\
+ & =\begin{array}{||cc|}
+\bbnum 0 & a^{:R}\rightarrow a\times(\text{Nil}\triangleright\text{pu}_{M})\end{array}\,\bef\,\begin{array}{||c|}
+1\rightarrow\text{pu}_{M}(e_{R})\\
+r\times t\rightarrow\text{pu}_{M}(r)\oplus_{M}\overline{\text{brun}}\,(t)
+\end{array}\\
+ & =a^{:R}\rightarrow\text{pu}_{M}(a)\oplus_{M}\gunderline{\overline{\text{brun}}\,(\text{Nil}\triangleright\text{pu}_{M})}\\
+{\color{greenunder}\text{use Eq.~(\ref{eq:listt-brun-derivation1})}:}\quad & =a\rightarrow\text{pu}_{M}(a)\gunderline{\oplus_{M}\text{pu}_{M}(e_{R})}=a\rightarrow\text{pu}_{M}(a)=\text{pu}_{M}\quad.
+\end{align*}
+
+However, the monad morphism composition law of \lstinline!brun! may
+or may not hold (see Problem~\ref{par:Problem-monads-5-2-1}). If
+the composition law does not hold, the base runner \lstinline!brun!
+must be applied to an entire monadic program. Running several parts
+of a program separately and composing the results as values of type
+$M^{A}$ will not give the same value as running the entire program.
 
 \paragraph{Monadic naturality laws}
 
@@ -9529,10 +9051,10 @@ and the associativity of $\diamond_{_{M}}$:
 
 \subsection{The co-density monad transformer (\texttt{CodT})}
 
-The \textbf{\index{co-density monad}co-density monad} over a functor
-$F$ is defined as 
+The \textbf{\index{co-density monad}co-density monad} on a functor
+$F$ is defined by 
 \[
-\text{Cod}^{F,A}\triangleq\forall B.\,(A\rightarrow F^{B})\rightarrow F^{B}
+\text{Cod}^{F,A}\triangleq\forall R.\,(A\rightarrow F^{R})\rightarrow F^{R}\quad.
 \]
 
 Properties:{*}{*}{*}
@@ -9570,7 +9092,7 @@ and $\text{brun}$, (is that so???)
 \end{align*}
 \end{itemize}
 
-\section{Summary and discussion}
+\section{Further developments}
 
 \subsection{Some properties of monad morphisms}
 
@@ -9702,6 +9224,554 @@ and~\ref{subsec:Statement-projection-is-monadic-morphism}. The function
 product $\pi_{1}\boxtimes\pi_{2}$ is a monad morphism by Statement~\ref{subsec:Statement-pair-product-of-monadic-morphisms}.
 So $\sigma$ is a composition of monad morphisms; by Statement~\ref{subsec:Statement-monadic-morphism-composition},
 $\sigma$ is a monad morphism.
+
+\subsection{Rigid functors\label{subsec:Rigid-functors}}
+
+The properties of rigid monads can be extended to a (possibly) larger
+class of rigid functors. We begin with a definition of a rigid functor
+that, unlike the definition of rigid monads (Section~\ref{sec:transformers-rigid-monads}),
+does not refer to any monad transformers.
+
+\paragraph{Definition }
+
+$R$ is a \textbf{rigid functor\index{rigid functor}} if there exists
+a natural transformation \lstinline!fuseIn! (denoted by $\text{fi}_{R}$)
+with the type signature
+\[
+\text{fi}_{R}:\forall(A,B).\,(A\rightarrow R^{B})\rightarrow R^{A\rightarrow B}
+\]
+satisfying the non-degeneracy law~(\ref{eq:rigid-non-degeneracy-law})
+shown below.
+
+Not all functors admit a natural transformation with the type signature
+of \lstinline!fuseIn!. For example, the functor $F^{A}\triangleq Z+A$
+is not rigid because the required type signature 
+\[
+\text{fi}^{A,B}:\left(A\rightarrow Z+B\right)\rightarrow Z+\left(A\rightarrow B\right)
+\]
+cannot be implemented. However, any functor $R$ admits the opposite
+natural transformation \lstinline!fuseOut! (denoted by $\text{fo}_{R}$):
+\begin{equation}
+\text{fo}^{A,B}:R^{A\rightarrow B}\rightarrow A\rightarrow R^{B}\quad,\quad\quad\text{fo}\left(r\right)\triangleq a\rightarrow r\triangleright\big(f^{:A\rightarrow B}\rightarrow f\left(a\right)\big)^{\uparrow R}\quad.\label{eq:fuseOut-def}
+\end{equation}
+The method \lstinline!fuseIn! must satisfy the nondegeneracy law
+\begin{equation}
+\text{fi}_{R}\bef\text{fo}_{R}=\text{id}^{:(A\rightarrow R^{B})\rightarrow(A\rightarrow R^{B})}\quad.\label{eq:rigid-non-degeneracy-law}
+\end{equation}
+The opposite relation does not hold in general: $\text{fo}_{R}\bef\text{fi}_{R}\neq\text{id}$
+(see Example~\ref{subsec:Example-fo-fi-not-id}).
+
+Note that the type signature of $\text{fi}_{R}$ is the same as the
+type signature of \lstinline!swap! with respect to the \lstinline!Reader!
+monad,
+\[
+\text{sw}_{R,M}:M^{R^{A}}\rightarrow R^{M^{A}}\cong(Z\rightarrow R^{A})\rightarrow R^{Z\rightarrow A}\text{ if we set }M^{A}\triangleq Z\rightarrow A\quad.
+\]
+So we are prompted to ask whether any rigid monad having a \lstinline!swap!
+method might also admit \lstinline!fuseIn!. It turns out that all
+rigid monads (regardless of the existence of \lstinline!swap!) are
+also rigid functors. While proving that statement, we will not assume
+that \lstinline!swap! exists for the monad $R$, but will use directly
+the definition of rigid monads via the composed-outside monad transformer.
+
+\subsubsection{Statement \label{subsec:Statement-rigid-monads-are-rigid-functors}\ref{subsec:Statement-rigid-monads-are-rigid-functors}}
+
+A rigid monad $R$ is always a rigid functor.
+
+\subparagraph{Proof}
+
+By assumption, the monad $R$ has the composed-outside monad transformer
+$T_{R}^{M}=R\circ M$ and the corresponding monad method $\text{ftn}_{T}$.
+We can define the transformation $\text{fi}_{R}$ in the same way
+as Eq.~(\ref{eq:define-swap-via-flatten}) defined the \lstinline!swap!
+method via $\text{ftn}_{T}$. To use that formula, we need to set
+the foreign monad $M$ to be the \lstinline!Reader! monad, $M^{B}\triangleq A\rightarrow B$,
+with the fixed environment type $A$:
+\begin{equation}
+\text{fi}_{R}(f^{:A\rightarrow R^{B}})=\text{pu}_{M}^{\uparrow R\uparrow M}\bef\text{pu}_{R}\bef\text{ftn}_{T}\quad.\label{eq:rigid-monad-fuseIn-def}
+\end{equation}
+\[
+\xymatrix{\xyScaleY{2pc}\xyScaleX{4pc}A\rightarrow R^{B}\ar[r]\sp(0.5){\text{pu}_{M}^{\uparrow R\uparrow M}}\ar[rrd]\sb(0.5){\text{fi}_{R}\triangleq} & A\rightarrow R^{A\rightarrow B}\ar[r]\sp(0.5){\text{pu}_{R}} & R^{A\rightarrow R^{A\rightarrow B}}\ar[d]\sp(0.45){\text{ftn}_{T}}\\
+ &  & R^{A\rightarrow B}
+}
+\]
+Since $M$ is the \lstinline!Reader! monad with the environment type
+$A$, we have
+\[
+\text{pu}_{M}(x)=(\_^{:A}\rightarrow x)\quad,\quad\quad(f^{:X\rightarrow Y})^{\uparrow M}(r^{:A\rightarrow X})=r\bef f\quad.
+\]
+The type signature of the function \lstinline!fuseOut!,
+\[
+\text{fo}:R^{A\rightarrow B}\rightarrow A\rightarrow R^{B}\quad,
+\]
+resembles \textsf{``}running\textsf{''} the composed monad $R^{M^{B}}$ into $R^{B}$,
+given a value of the environment (of type $A$). Indeed, given a fixed
+value $a^{:A}$, we can \textsf{``}run\textsf{''} the \lstinline!Reader! monad into
+the identity monad. The corresponding runner $\phi_{a}^{:M\leadsto\text{Id}}$
+is
+\begin{equation}
+\phi_{a}^{:M^{X}\rightarrow X}=\big(m^{A\rightarrow X}\rightarrow m(a)\big)\quad.\label{eq:runner-phi-def}
+\end{equation}
+So we are inspired to use the runner law for the monad transformer
+$T_{R}^{M}$. That law (which holds since we assumed that $T_{R}^{M}$
+satisfies all laws) says that the lifted runner $\phi_{a}^{\uparrow R}$
+is a monad morphism $T_{R}^{M}\leadsto T_{R}^{\text{Id}}\cong T_{R}^{M}\leadsto R$.
+The monad morphism law for $\phi_{a}^{\uparrow R}$ is then written
+as
+\begin{equation}
+\text{ftn}_{T}\bef\phi_{a}^{\uparrow R}=\phi_{a}^{\uparrow R\uparrow M\uparrow R}\bef\phi_{a}^{\uparrow R}\bef\text{ftn}_{R}\quad.\label{eq:rigid-monad-is-rigid-functor-derivation1}
+\end{equation}
+How could we use this law to obtain Eq.~(\ref{eq:rigid-non-degeneracy-law})?
+Compare Eqs.~(\ref{eq:fuseOut-def}) and~(\ref{eq:runner-phi-def})
+and derive the connection between the runner $\phi_{a}$ and the \lstinline!fuseOut!
+function (which always exists for any functor $R$),
+\[
+\text{fo}_{R}=\big(r\rightarrow a\rightarrow r\triangleright\phi_{a}^{\uparrow R}\big)\quad.
+\]
+Then we can complete the derivation by rewriting the law~(\ref{eq:rigid-non-degeneracy-law}):
+\begin{align*}
+{\color{greenunder}\text{expect to equal }m:}\quad & m^{:M^{R^{B}}}\triangleright\text{fi}_{R}\bef\text{fo}_{R}=\left(m\triangleright\text{fi}_{R}\right)\triangleright\gunderline{\text{fo}_{R}}\\
+{\color{greenunder}\text{use Eq.~(\ref{eq:fuseOut-def})}:}\quad & =a\rightarrow m\triangleright\gunderline{\text{fi}_{R}}\triangleright\phi_{a}^{\uparrow R}\\
+{\color{greenunder}\text{use Eq.~(\ref{eq:rigid-monad-fuseIn-def})}:}\quad & =a\rightarrow m\triangleright\text{pu}_{M}^{\uparrow R\uparrow M}\bef\text{pu}_{R}\bef\gunderline{\text{ftn}_{T}\bef\phi_{a}^{\uparrow R}}\\
+{\color{greenunder}\text{use Eq.~(\ref{eq:rigid-monad-is-rigid-functor-derivation1})}:}\quad & =a\rightarrow m\triangleright\text{pu}_{M}^{\uparrow R\uparrow M}\bef\gunderline{\text{pu}_{R}\bef\phi_{a}^{\uparrow R\uparrow M\uparrow R}\bef\phi_{a}^{\uparrow R}}\bef\text{ftn}_{R}\\
+{\color{greenunder}\text{naturality of }\text{pu}_{R}:}\quad & =a\rightarrow m\triangleright\text{pu}_{M}^{\uparrow R\uparrow M}\bef\phi_{a}^{\uparrow R\uparrow M}\bef\phi_{a}\bef\gunderline{\text{pu}_{R}\bef\text{ftn}_{R}}\\
+{\color{greenunder}\text{left identity law of }R:}\quad & =a\rightarrow m\triangleright\gunderline{(\text{pu}_{M}\bef\phi_{a})}^{\uparrow R\uparrow M}\bef\phi_{a}\\
+{\color{greenunder}\text{monad morphism identity law for }\phi_{a}:}\quad & =a\rightarrow m\triangleright\gunderline{\phi_{a}}\\
+{\color{greenunder}\text{definition~(\ref{eq:runner-phi-def}) for }\phi_{a}:}\quad & =a\rightarrow m(a)=m\quad.
+\end{align*}
+Here we used the monad morphism identity law for $\phi_{a}$:
+\[
+\text{pu}_{M}\bef\phi_{a}=\big(x\rightarrow(\_\rightarrow x)\big)\bef(m\rightarrow a\triangleright m)=\left(x\rightarrow a\triangleright(\_\rightarrow x)\right)=\left(x\rightarrow x\right)=\text{id}\quad.
+\]
+
+
+\subsubsection{Example \label{subsec:Example-fo-fi-not-id}\ref{subsec:Example-fo-fi-not-id}\index{solved examples}}
+
+Show that the functions \lstinline!fuseIn! and \lstinline!fuseOut!
+are not always inverses: for some $R$,
+\[
+\text{fo}_{R}\bef\text{fi}_{R}\neq\text{id}\quad.
+\]
+
+
+\subparagraph{Solution}
+
+Consider the rigid monads $P^{A}\triangleq Z\rightarrow A$ and $R^{A}\triangleq\left(A\rightarrow Q\right)\rightarrow A$,
+where $Q$ and $Z$ are fixed types. Since all rigid monads are rigid
+functors, it follows that the monads $P$ and $R$ have methods $\text{fi}_{P}$,
+$\text{fo}_{P}$, $\text{fi}_{R}$, $\text{fo}_{R}$ satisfying the
+non-degeneracy law~(\ref{eq:rigid-non-degeneracy-law}). It turns
+out that additionally $\text{fo}_{P}\bef\text{fi}_{P}=\text{id}$,
+i.e.~the methods $\text{fo}_{P}$ and $\text{fi}_{P}$ are inverses
+of each other, but $\text{fo}_{R}\bef\text{fi}_{R}\neq\text{id}$.
+
+To show that $\text{fo}_{P}\bef\text{fi}_{P}=\text{id}$, consider
+the type signatures of $\text{fo}_{P}$ and $\text{fi}_{P}$:
+\begin{align*}
+\text{fo}_{P} & :P^{A\rightarrow B}\rightarrow A\rightarrow P^{B}\cong\left(Z\rightarrow A\rightarrow B\right)\rightarrow\left(A\rightarrow Z\rightarrow B\right)\quad,\\
+\text{fi}_{P} & :\big(A\rightarrow P^{B}\big)\rightarrow P^{A\rightarrow B}\cong\left(A\rightarrow Z\rightarrow B\right)\rightarrow\left(Z\rightarrow A\rightarrow B\right)\quad.
+\end{align*}
+The implementations of these functions are derived uniquely from type
+signatures, as long as we require that these implementations are natural
+transformations. The functions $\text{fo}_{P}$ and $\text{fi}_{P}$
+switch the curried arguments of types $A$ and $Z$ of a function
+that returns values of type $B$. It is clear that these two functions
+are inverses of each other. To show this directly, consider the type
+signature of $\text{fo}_{P}\bef\text{fi}_{P}$,
+\[
+\big(\text{fo}_{P}\bef\text{fi}_{P}\big):P^{A\rightarrow B}\rightarrow P^{A\rightarrow B}\cong\left(Z\rightarrow A\rightarrow B\right)\rightarrow\left(Z\rightarrow A\rightarrow B\right)\quad.
+\]
+There is only one implementation for this type signature as a natural
+transformation, namely the identity function $\text{id}^{Z\rightarrow A\rightarrow B}$.
+
+For the monad $R$, the type signatures of $\text{fi}_{R}$ and $\text{fo}_{R}$
+are
+\begin{align*}
+\text{fi}_{R} & :\left(A\rightarrow\left(B\rightarrow Q\right)\rightarrow B\right)\rightarrow\left(\left(A\rightarrow B\right)\rightarrow Q\right)\rightarrow A\rightarrow B\quad,\\
+\text{fo}_{R} & :\left(\left(\left(A\rightarrow B\right)\rightarrow Q\right)\rightarrow A\rightarrow B\right)\rightarrow A\rightarrow\left(B\rightarrow Q\right)\rightarrow B\quad,
+\end{align*}
+and the implementations are again derived uniquely from type signatures,
+\begin{align*}
+f^{:A\rightarrow\left(B\rightarrow Q\right)\rightarrow B} & \triangleright\text{fi}_{R}=x^{:\left(A\rightarrow B\right)\rightarrow Q}\rightarrow a^{:A}\rightarrow f(a)(b^{:B}\rightarrow x(\_\rightarrow b))\quad,\\
+g^{:\left(\left(A\rightarrow B\right)\rightarrow Q\right)\rightarrow A\rightarrow B} & \triangleright\text{fo}_{R}=a^{:A}\rightarrow y^{:B\rightarrow Q}\rightarrow g(h^{:A\rightarrow B}\rightarrow y(h(a)))(a)\quad.
+\end{align*}
+We notice that the implementation of $\text{fi}_{R}$ uses a constant
+function, $\left(\_\rightarrow b\right)$, which is likely to lose
+information. Indeed, while $\text{fi}_{R}\bef\text{fo}_{R}=\text{id}$
+as it must be due to the rigid non-degeneracy law, we find:
+\begin{align*}
+{\color{greenunder}\text{expect \emph{not} to equal }g:}\quad & g\triangleright\text{fo}_{R}\bef\text{fi}_{R}=\left(g\triangleright\text{fo}_{R}\right)\triangleright\gunderline{\text{fi}_{R}}\\
+{\color{greenunder}\text{definition of }\text{fi}_{R}:}\quad & =x\rightarrow a\rightarrow\gunderline{\text{fo}_{R}}(g)(a)(b\rightarrow x(\_\rightarrow b))\\
+{\color{greenunder}\text{definition of }\text{fo}_{R}:}\quad & =x\rightarrow a\rightarrow g\big(h^{:A\rightarrow B}\rightarrow h(a)\triangleright\gunderline{(b\rightarrow}x(\_\rightarrow b))\big)(a)\\
+{\color{greenunder}\text{apply to argument }b:}\quad & =x\rightarrow a\rightarrow g\big(h\rightarrow x(\_\rightarrow h(a))\big)(a)\quad.
+\end{align*}
+We cannot simplify the last line any further: the functions $g$,
+$h$, and $x$ are unknown, and we cannot calculate symbolically,
+say, the value of $x(\_\rightarrow h(a))$. If the last line were
+equal to $g$, we would expect it to be $x\rightarrow a\rightarrow g(x)(a)$.
+The difference is in the first argument of $g$, namely we have $h\rightarrow x(\_\rightarrow h(a))$
+instead of $x$. The two last expressions are not always equal; they
+would be equal if we had 
+\[
+\left(h\rightarrow x(h)\right)=\left(h\rightarrow x(k\rightarrow h(k))\right)
+\]
+instead of $h\rightarrow x(\_\rightarrow h(a))$. Consider again the
+argument of $x$ in the two last expressions: $k\rightarrow h(a)$
+instead of $k\rightarrow h(k)$. Since $h$ is not always a constant
+function ($h$ is an arbitrary function of type $A\rightarrow B$),
+the two expressions $k\rightarrow h(a)$ and $k\rightarrow h(k)$
+are generally not equal. So, we must conclude that $\text{fo}_{R}\bef\text{fi}_{R}\neq\text{id}$.
+
+\subsubsection{Exercise \label{subsec:Exercise-pair-functor-is-rigid}\ref{subsec:Exercise-pair-functor-is-rigid}\index{exercises}}
+
+Show that the functor $F^{A}\triangleq A\times A\times A$ is rigid.
+
+\subsubsection{Exercise \label{subsec:Exercise-option-not-rigid}\ref{subsec:Exercise-option-not-rigid}}
+
+Show that the functor $F^{A}\triangleq\bbnum 1+A\times A$ is not
+rigid.
+
+\subsubsection{Exercise \label{subsec:Exercise-continuation-not-rigid-1}\ref{subsec:Exercise-continuation-not-rigid-1}}
+
+Show that the functor $F^{A}\triangleq\left(A\rightarrow Z\right)\rightarrow Z$
+is not rigid. (Here $Z$ is a fixed type.)
+
+Since all rigid monads are rigid functors, we can reuse all the rigid
+monad constructions to obtain new rigid functors. The following statement
+shows a construction of rigid functors that does not assume any monadic
+properties. 
+
+\subsubsection{Statement \label{subsec:Statement-rigid-functor-h-p}\ref{subsec:Statement-rigid-functor-h-p}}
+
+The functor $S^{\bullet}\triangleq H^{\bullet}\rightarrow P^{\bullet}$
+is rigid when $H$ is any contrafunctor and $P$ is any rigid functor.
+(Note that $P$ does not need to be a monad.)
+
+\subparagraph{Proof}
+
+We assume that $\text{fi}_{P}$ and $\text{fo}_{P}$ are known and
+satisfy the non-degeneracy law~(\ref{eq:rigid-non-degeneracy-law}).
+The function $\text{fi}_{S}$ is then defined by
+\begin{align*}
+\text{fi}_{S} & :\big(A\rightarrow H^{B}\rightarrow P^{B}\big)\rightarrow H^{A\rightarrow B}\rightarrow P^{A\rightarrow B}\quad,\\
+\text{fi}_{S} & =f^{:A\rightarrow H^{B}\rightarrow P^{B}}\rightarrow h^{:H^{A\rightarrow B}}\rightarrow\text{fi}_{P}\big(a\rightarrow f(a)\big(\left(b\rightarrow\_\rightarrow b\right)^{\downarrow H}h\big)\big)\quad,
+\end{align*}
+or, using the forwarding notation,
+\[
+h\triangleright\text{fi}_{S}(f)=\big(a\rightarrow h\triangleright\left(b\rightarrow\_\rightarrow b\right)^{\downarrow H}\triangleright f(a)\big)\triangleright\text{fi}_{P}\quad.
+\]
+Let us write the definition of $\text{fo}_{S}$ as well,
+\begin{align*}
+\text{fo}_{S} & :\big(H^{A\rightarrow B}\rightarrow P^{A\rightarrow B}\big)\rightarrow A\rightarrow H^{B}\rightarrow P^{B}\quad,\\
+\text{fo}_{S} & =g^{:H^{A\rightarrow B}\rightarrow P^{A\rightarrow B}}\rightarrow a^{:A}\rightarrow h^{:H^{B}}\rightarrow\text{fo}_{P}\bigg(g\big(\left(p^{:A\rightarrow B}\rightarrow p(a)\right)^{\downarrow H}h\big)\bigg)(a)\quad,
+\end{align*}
+or, using the forwarding notation,
+\[
+\text{fo}_{S}(g)=a\triangleright\big(h\triangleright\left(p\rightarrow p(a)\right)^{\downarrow H}\bef g\bef\text{fo}_{P}\big)\quad.
+\]
+To verify the non-degeneracy law for $S$, apply both sides to some
+arguments; we expect $f\triangleright(\text{fi}_{S}\bef\text{fo}_{S})$
+to equal $f$ for an arbitrary $f:A\rightarrow H^{B}\rightarrow P^{B}$.
+To compare values, we need to apply both sides further to some arguments
+$a:A$ and $h:H^{B}$. So we expect the following expression to equal
+$f(a)(h)$:
+\begin{align*}
+\quad & \left(f\triangleright\text{fi}_{S}\bef\text{fo}_{S}\right)(a)(h)=(f\triangleright\text{fi}_{S}\triangleright\gunderline{\text{fo}_{S}})(a)(h)\\
+{\color{greenunder}\text{expand }\text{fo}_{S}:}\quad & =a\triangleright\big(h\triangleright\left(p\rightarrow a\triangleright p\right)^{\downarrow H}\triangleright\gunderline{\text{fi}_{S}(f)}\triangleright\text{fo}_{P}\big)\\
+{\color{greenunder}\text{expand }\text{fi}_{S}:}\quad & =a\triangleright\big(\big(a\rightarrow h\triangleright\gunderline{\left(p\rightarrow p(a)\right)^{\downarrow H}\bef\left(b\rightarrow\_\rightarrow b\right)^{\downarrow H}}\bef f(a)\big)\triangleright\text{fi}_{P}\triangleright\text{fo}_{P}\big)\\
+{\color{greenunder}\text{compose }^{\downarrow H}:}\quad & =a\triangleright\big(\big(a\rightarrow h\triangleright\gunderline{\left((b\rightarrow\_\rightarrow b)\bef(p\rightarrow p(a))\right)^{\downarrow H}}\bef f(a)\big)\triangleright\text{fi}_{P}\gunderline{\triangleright}\text{fo}_{P}\big)\quad.
+\end{align*}
+Computing the function composition
+\[
+(b\rightarrow\_\rightarrow b)\bef(p\rightarrow p(a))=(b\rightarrow(\_\rightarrow b)(a))=(b\rightarrow b)=\text{id}\quad,
+\]
+and using the non-degeneracy law $\text{fi}_{P}\bef\text{fo}_{P}=\text{id}$,
+we can simplify further:
+\begin{align*}
+ & a\triangleright\big(\big(a\rightarrow h\triangleright\gunderline{\left((b\rightarrow\_\rightarrow b)\bef(p\rightarrow p(a))\right)^{\downarrow H}}\bef f(a)\big)\triangleright\text{fi}_{P}\gunderline{\triangleright}\text{fo}_{P}\big)\\
+{\color{greenunder}\text{identity law for }H:}\quad & =a\triangleright\big(\big(a\rightarrow h\triangleright f(a)\big)\triangleright\gunderline{\text{fi}_{P}\bef\text{fo}_{P}}\big)\\
+{\color{greenunder}\text{non-degeneracy}:}\quad & =\gunderline{a\triangleright\big(a\rightarrow}h\triangleright f(a)\big)=h\triangleright f(a)\quad.
+\end{align*}
+This equals $f(a)(h)$, as required.%
+\begin{comment}
+Trying the triangle notation: It seems that $\left(a\triangleright\right)$
+is not so useful, we could just write $\left(f\rightarrow f(a)\right)$
+instead.
+\begin{align*}
+\tilde{\text{fi}}\left(f\right) & =f\triangleright\tilde{\text{fi}}=\left(b\rightarrow\_\rightarrow b\right)^{\downarrow H}\bef f\quad,\\
+\tilde{\text{fo}}\left(g\right) & =g\triangleright\tilde{\text{fo}}=h\rightarrow a\rightarrow g((a\triangleright)^{\downarrow H}h)a=h\rightarrow a\rightarrow h\triangleright(a\triangleright)^{\downarrow H}\bef g\bef\left(a\triangleright\right)\quad.
+\end{align*}
+Then
+\begin{align*}
+ & f\triangleright\tilde{\text{fi}}\triangleright\tilde{\text{fo}}\\
+ & =h\rightarrow a\rightarrow h\triangleright(a\triangleright)^{\downarrow H}\bef\left(f\triangleright\tilde{\text{fi}}\right)\bef\left(a\triangleright\right)\\
+ & =h\rightarrow a\rightarrow h\triangleright(a\triangleright)^{\downarrow H}\bef\left(b\rightarrow\_\rightarrow b\right)^{\downarrow H}\bef f\bef\left(a\triangleright\right)\\
+ & =h\rightarrow a\rightarrow h\triangleright\left(b\rightarrow\_\rightarrow b\bef\left(a\triangleright\right)\right)^{\downarrow H}\bef f\bef\left(a\triangleright\right)\\
+ & =h\rightarrow a\rightarrow h\triangleright f\bef\left(a\triangleright\right)=h\rightarrow a\rightarrow h\triangleright f\triangleright\left(a\triangleright\right)\\
+ & =h\rightarrow a\rightarrow f(h)(a)=f
+\end{align*}
+What are the simplification rules?
+\begin{align*}
+ & a\rightarrow x\triangleright\left(a\triangleright\right)=x\quad,\\
+ & a\rightarrow a\triangleright f=f\quad,\\
+ & x\triangleright\left(a\triangleright\right)=x(a)=a\triangleright x\quad,\\
+ & x\triangleright y\triangleright\left(a\triangleright\right)=a\triangleright\left(x\triangleright y\right)\quad.
+\end{align*}
+\end{comment}
+
+
+\subsubsection{Statement \label{subsec:Statement-rigid-functor-is-pointed}\ref{subsec:Statement-rigid-functor-is-pointed}}
+
+A rigid functor $R$ is pointed; the method \lstinline!pure! can
+be defined as
+\[
+\text{pu}_{R}(x^{:A})\triangleq\text{id}^{:R^{A}\rightarrow R^{A}}\triangleright\text{fi}_{R}\triangleright(\_\rightarrow x)^{\uparrow R}\quad.
+\]
+In particular, there is a selected value $r_{1}$ of type $R^{\bbnum 1}$
+(\textsf{``}wrapped unit\textsf{''}), computed as 
+\begin{equation}
+r_{1}\triangleq\text{pu}_{R}(1)=\text{id}\triangleright\text{fi}_{R}\triangleright(\_\rightarrow1)^{\uparrow R}\quad.\label{eq:rigid-functor-def-of-wrapped-unit}
+\end{equation}
+
+
+\paragraph{Proof}
+
+The method $\text{fi}_{R}:(X\rightarrow R^{Y})\rightarrow R^{X\rightarrow Y}$
+with type parameters $X=R^{A}$ and $Y=A$ is applied to the identity
+function $\text{id}:R^{A}=R^{A}$, considered as a value of type $X\rightarrow R^{Y}$.
+The result is a value
+\[
+\text{fi}_{R}(\text{id}):R^{R^{A}\rightarrow A}\quad.
+\]
+The result is transformed via the lifted constant function $\left(\_\rightarrow x\right)^{\uparrow R}$,
+which takes $R^{R^{A}\rightarrow A}$ and returns $R^{A}$. The resulting
+code can be written as
+\[
+\text{pu}_{R}(x)\triangleq(\_\rightarrow x)^{\uparrow R}(\text{fi}_{R}(\text{id}))=\text{id}\triangleright\text{fi}_{R}\triangleright(\_\rightarrow x)^{\uparrow R}\quad.
+\]
+The function $\text{pu}_{R}$ defined in this way is a natural transformation
+since $\text{fi}_{R}$ is one. Applying $\text{pu}_{R}$ to a unit
+value, we obtain the selected value $r_{1}$ of type $R^{\bbnum 1}$.
+
+The next statement shows that $r_{1}$ is the \emph{only} distinct
+value of the type $R^{\bbnum 1}$. This means, in particular, that
+a rigid functor cannot be a disjunctive type defined with more than
+one constructor, such as $\bbnum 1+A$ or $\text{List}^{A}$. This
+is one motivation for the name \textsf{``}rigid\textsf{''}: the data structure $R^{A}$
+must have a fixed \textsf{``}shape\textsf{''} and cannot be a disjunction of several
+variants. 
+
+\subsubsection{Statement \label{subsec:Statement-rigid-functor-wrapped-unit-is-unit}\ref{subsec:Statement-rigid-functor-wrapped-unit-is-unit}}
+
+If a functor $R$ has a method $\text{fi}_{R}$ satisfying the non-degeneracy
+law~(\ref{eq:rigid-non-degeneracy-law}) then the type $R^{\bbnum 1}$
+is equivalent to the unit type: $R^{\bbnum 1}\cong\bbnum 1$. The
+value $r_{1}$ defined by Eq.~(\ref{eq:rigid-functor-def-of-wrapped-unit})
+is the only available distinct value of type $R^{\bbnum 1}$. The
+isomorphism between $\bbnum 1$ and $R^{\bbnum 1}$ is the function
+$\left(1\rightarrow r_{1}\right)$.
+
+\paragraph{Proof}
+
+The trick is to apply both sides of the non-degeneracy law $\text{fi}_{R}\bef\text{fo}_{R}=\text{id}$
+to the identity function of type $R^{\bbnum 1}\rightarrow R^{\bbnum 1}$.
+To adapt the type parameters, consider the type signature of $\text{fi}_{R}\bef\text{fo}_{R}$,
+\[
+\big(\text{fi}_{R}\bef\text{fo}_{R}\big):(A\rightarrow R^{B})\rightarrow(A\rightarrow R^{B})\quad,
+\]
+and set $A=R^{\bbnum 1}$ and $B=\bbnum 1$. The left-hand side of
+the law can be now applied to the identity function $\text{id}:R^{\bbnum 1}\rightarrow R^{\bbnum 1}$,
+which yields a value of type $R^{\bbnum 1}\rightarrow R^{\bbnum 1}$,
+i.e.~a function 
+\[
+f_{1}:R^{\bbnum 1}\rightarrow R^{\bbnum 1}\quad,\quad\quad f_{1}\triangleq\text{fo}_{R}(\text{fi}_{R}(\text{id}))\quad.
+\]
+We will show that $f_{1}$ is a constant function, $f_{1}=(\_\rightarrow r_{1})$,
+always returning the same value $r_{1}$ defined in Statement~\ref{subsec:Statement-rigid-functor-is-pointed}.
+However, the right-hand side of the non-degeneracy law applied to
+$\text{id}$ is the identity function of type $R^{\bbnum 1}\rightarrow R^{\bbnum 1}$.
+So, the non-degeneracy law means that $f_{1}=\text{id}$. If the identity
+function of type $R^{\bbnum 1}\rightarrow R^{\bbnum 1}$ always returns
+the same value ($r_{1}$), it means that $r_{1}$ is the only distinct
+value of the type $R^{\bbnum 1}$.
+
+We note that for any fixed type $A$, the function type $A\rightarrow\bbnum 1$
+is equivalent to the unit type ($\bbnum 1$). This is because there
+exists only one fully parametric function of type $A\rightarrow\bbnum 1$,
+namely $(\_\rightarrow1)$. The code of that function is uniquely
+determined by its type signature. In other words, there exists only
+one distinct value of the type $A\rightarrow\bbnum 1$, and that value
+is $\left(\_\rightarrow1\right)$. 
+
+The isomorphism between the types $A\rightarrow\bbnum 1$ and $\bbnum 1$
+is realized by the functions $u:\bbnum 1\rightarrow A\rightarrow\bbnum 1$
+and $v:\left(A\rightarrow\bbnum 1\right)\rightarrow\bbnum 1$. The
+code of these functions is also uniquely determined by their type
+signatures:
+\[
+u=\big(1\rightarrow\_^{:A}\rightarrow1\big)\quad,\quad\quad v=\big(\_^{:A\rightarrow\bbnum 1}\rightarrow1\big)\quad.
+\]
+
+Applying $\text{fi}_{R}$ to the identity function of type $R^{\bbnum 1}\rightarrow R^{\bbnum 1}$,
+we obtain a value $g$, 
+\[
+g:R^{R^{\bbnum 1}\rightarrow\bbnum 1}\quad,\quad\quad g\triangleq\text{id}\triangleright\text{fi}_{R}\quad.
+\]
+Since the type $R^{\bbnum 1}\rightarrow\bbnum 1$ is equivalent to
+$\bbnum 1$, the type $R^{R^{\bbnum 1}\rightarrow\bbnum 1}$ is equivalent
+to $R^{\bbnum 1}$. To use this equivalence explicitly, we need to
+lift the isomorphisms $u$ and $v$ into the functor $R$. The isomorphism
+will then map $g:R^{R^{\bbnum 1}\rightarrow\bbnum 1}$ to some $g_{1}:R^{\bbnum 1}$
+by
+\[
+g_{1}\triangleq v^{\uparrow R}(g)\quad.
+\]
+Substituting the definitions of $g$, $v$, and $r_{1}$, we find
+that actually $g_{1}=r_{1}$:
+\[
+g_{1}=\text{id}\triangleright\text{fi}_{R}\triangleright v^{\uparrow R}=\text{id}\triangleright\text{fi}_{R}\triangleright(\_\rightarrow1)^{\uparrow R}=r_{1}\quad.
+\]
+We can now map $g_{1}$ back to $g$ via the lifted isomorphism $u$:
+\begin{align}
+g & =g_{1}\triangleright u^{\uparrow R}=r_{1}\triangleright u^{\uparrow R}\nonumber \\
+{\color{greenunder}\text{definition of }u:}\quad & =r_{1}\triangleright\big(1\rightarrow\_\rightarrow1\big)^{\uparrow R}\quad.\label{eq:rigid-functor-derivation1}
+\end{align}
+Compute $\text{fo}_{R}(g)$ as
+\begin{align*}
+ & \text{fo}_{R}(g)=g\triangleright\text{fo}_{R}\\
+{\color{greenunder}\text{use Eq.~(\ref{eq:fuseOut-def})}:}\quad & =a^{:R^{\bbnum 1}}\rightarrow g\triangleright\big(f^{:A\rightarrow\bbnum 1}\rightarrow f\left(a\right)\big)^{\uparrow R}\\
+{\color{greenunder}\text{use Eq.~(\ref{eq:rigid-functor-derivation1})}:}\quad & =a\rightarrow r_{1}\triangleright(1\rightarrow\_^{:A}\rightarrow1)^{\uparrow R}\triangleright\big(f^{:A\rightarrow\bbnum 1}\rightarrow f\left(a\right)\big)^{\uparrow R}\\
+{\color{greenunder}\text{composition under }^{\uparrow R}:}\quad & =a\rightarrow r_{1}\triangleright\big(1\rightarrow(\_^{:A}\rightarrow1)(a)\big)^{\uparrow R}=a\rightarrow r_{1}\triangleright(\gunderline{1\rightarrow1})^{\uparrow R}\\
+{\color{greenunder}(1\rightarrow1)\text{ is identity}:}\quad & =(a\rightarrow r_{1}\triangleright\text{id})=(a^{:R^{\bbnum 1}}\rightarrow r_{1})=(\_^{:R^{\bbnum 1}}\rightarrow r_{1})\quad.
+\end{align*}
+So, $\text{fo}_{R}(g)=\text{fo}_{R}(\text{fi}_{R}(\text{id}))$ is
+a function of type $R^{\bbnum 1}\rightarrow R^{\bbnum 1}$ that ignores
+its argument and always returns the same value $r_{1}$.
+
+By virtue of the non-degeneracy law, $\text{fo}_{R}(g)=\text{id}$.
+We see that the identity function $\text{id}:R^{\bbnum 1}\rightarrow R^{\bbnum 1}$
+always returns the same value $r_{1}$. Applying this function to
+an arbitrary value $x:R^{\bbnum 1}$, we get
+\[
+x=x\triangleright\text{id}=x\triangleright\text{fo}_{R}(g)=x\triangleright(\_\rightarrow r_{1})=r_{1}\quad.
+\]
+It means that all values of type $R^{\bbnum 1}$ are equal to $r_{1}$.
+So the function $1\rightarrow r_{1}$ is indeed an isomorphism between
+the types $\bbnum 1$ and $R^{\bbnum 1}$.
+
+\subsubsection{Statement \label{subsec:Statement-rigid-functor-product}\ref{subsec:Statement-rigid-functor-product}}
+
+The product of rigid functors is a rigid functor.
+
+\subparagraph{Proof}
+
+We assume that two rigid functors $P$ and $Q$ are given, with their
+methods $\text{fi}_{P}$ and $\text{fi}_{Q}$ satisfying the non-degeneracy
+law. The functor product $R\triangleq P\times Q$ needs its own $\text{fi}_{R}$
+method, with the type signature
+\[
+\text{fi}_{R}:(A\rightarrow P^{B}\times Q^{B})\rightarrow P^{A\rightarrow B}\times Q^{A\rightarrow B}\quad.
+\]
+To implement that method, first note that the function type $A\rightarrow P\times Q$
+is isomorphic to $\left(A\rightarrow P\right)\times\left(A\rightarrow Q\right)$.
+The isomorphism is given by a \textsf{``}split\textsf{''} function,
+\[
+\text{split}:\left(A\rightarrow B\times C\right)\rightarrow\left(A\rightarrow B\right)\times\left(A\rightarrow C\right)\quad,\quad\quad\text{split}\triangleq f^{:A\rightarrow B\times C}\rightarrow(f\bef\pi_{1})\times(f\bef\pi_{2})\quad.
+\]
+Then the method $\text{fi}_{R}$ is written more concisely:
+
+\[
+\text{fi}_{R}\triangleq\text{split}\bef(\text{fi}_{P}\boxtimes\text{fi}_{Q})\quad.
+\]
+To check the non-degeneracy law ($\text{fi}_{R}\bef\text{fo}_{R}=\text{id}$),
+we need the code of $\text{fo}_{R}$. It is convenient to define $\text{fo}_{R}$
+via a \textsf{``}merge\textsf{''} function:
+\[
+\text{merge}:\left(A\rightarrow B\right)\times\left(A\rightarrow C\right)\rightarrow A\rightarrow B\times C\quad,\quad\quad\text{merge}\triangleq f^{:A\rightarrow B}\times g^{:A\rightarrow C}\rightarrow a^{:A}\rightarrow f(a)\times g(a)\quad.
+\]
+The code of $\text{fo}_{R}$ is then written as:
+\[
+\text{fo}_{R}:P^{A\rightarrow B}\times Q^{A\rightarrow B}\rightarrow A\rightarrow P^{B}\times Q^{B}\quad,\quad\quad\text{fo}_{R}\triangleq(\text{fo}_{P}\boxtimes\text{fo}_{Q})\bef\text{merge}\quad.
+\]
+The functions \lstinline!split! and \lstinline!merge! are mutual
+inverses. Now we can verify the non-degeneracy law:
+\begin{align*}
+ & \text{fi}_{R}\bef\text{fo}_{R}=\text{split}\bef\gunderline{(\text{fi}_{P}\boxtimes\text{fi}_{Q})\bef(\text{fo}_{P}\boxtimes\text{fo}_{Q})}\bef\text{merge}\\
+ & =\text{split}\bef\big((\gunderline{\text{fi}_{P}\bef\text{fo}_{P}})\boxtimes(\gunderline{\text{fi}_{Q}\bef\text{fo}_{Q}})\big)\bef\text{merge}=\text{split}\bef\gunderline{(\text{id}\boxtimes\text{id})}\bef\text{merge}=\text{split}\bef\text{merge}=\text{id}\quad.
+\end{align*}
+
+
+\subsubsection{Statement \label{subsec:Statement-rigid-functor-composition}\ref{subsec:Statement-rigid-functor-composition}}
+
+The composition of rigid functors is a rigid functor.
+
+\subparagraph{Proof}
+
+We will show that the non-degeneracy law ($\text{fi}_{R}\bef\text{fo}_{R}=\text{id}$)
+holds for the functor $R^{\bullet}\triangleq P^{Q^{\bullet}}$ as
+long as $P$, $Q$ are rigid. Begin by defining the methods $\text{fi}_{R}$
+and $\text{fo}_{R}$, assuming that the corresponding methods of $P$,
+$Q$ are known and satisfy the non-degeneracy law. We write:
+\begin{align*}
+ & \text{fi}_{R}:(A\rightarrow P^{Q^{B}})\rightarrow P^{Q^{A\rightarrow B}}\quad,\quad\quad\text{fi}_{R}\triangleq\text{fi}_{P}\bef\text{fi}_{Q}^{\uparrow P}\quad,\\
+ & \text{fo}_{R}:P^{Q^{A\rightarrow B}}\rightarrow A\rightarrow P^{Q^{B}}\quad,\quad\quad\text{fo}_{R}\triangleq\text{fo}_{Q}^{\uparrow P}\bef\text{fo}_{P}\quad.
+\end{align*}
+To verify the non-degeneracy law for $R$:
+\[
+\text{fi}_{R}\bef\text{fo}_{R}=\text{fi}_{P}\bef\text{fi}_{Q}^{\uparrow P}\bef\text{fo}_{Q}^{\uparrow P}\bef\text{fo}_{P}=\text{fi}_{P}\bef(\gunderline{\text{fi}_{Q}\bef\text{fo}_{Q}})^{\uparrow P}\bef\text{fo}_{P}=\gunderline{\text{fi}_{P}\bef\text{fo}_{P}}=\text{id}\quad.
+\]
+\begin{comment}
+Flip the curried arguments of the function type $A\rightarrow T^{B}\triangleq A\rightarrow H^{M^{B}}\rightarrow M^{B}$,
+to obtain $H^{M^{B}}\rightarrow A\rightarrow M^{B}$, and note that
+$A\rightarrow M^{B}$ can be mapped to $M^{A\rightarrow B}$ using
+$\text{fi}_{M}$. So we can implement $\tilde{\text{fi}}_{T}$ using
+$\text{fi}_{M}$:
+\begin{align*}
+\tilde{\text{fi}}_{T} & :\big(H^{M^{B}}\rightarrow A\rightarrow M^{B}\big)\rightarrow H^{M^{A\rightarrow B}}\rightarrow M^{A\rightarrow B}\\
+\tilde{\text{fi}}_{T} & =f\rightarrow h\rightarrow\text{fi}_{M}\left(f\big(\left(b\rightarrow\_\rightarrow b\right)^{\uparrow M\downarrow H}h\big)\right)\\
+\tilde{\text{fo}}_{T} & :\left(H^{M^{A\rightarrow B}}\rightarrow M^{A\rightarrow B}\right)\rightarrow H^{M^{B}}\rightarrow A\rightarrow M^{B}\\
+\tilde{\text{fo}}_{T} & =g\rightarrow h\rightarrow a\rightarrow\text{fo}_{M}\left(g\big(\left(p^{:A\rightarrow B}\rightarrow p\,a\right)^{\uparrow M\downarrow H}h\big)\right)a
+\end{align*}
+To show the non-degeneracy law for $T$, compute
+\begin{align*}
+ & \tilde{\text{fo}}_{T}\left(\tilde{\text{fi}}_{T}f\right)h^{:H^{M^{B}}}a^{:A}\\
+\text{insert the definition of }\tilde{\text{fo}}_{T}\text{: }\quad & =\text{fo}_{M}\left(\left(\tilde{\text{fi}}_{T}f\right)\big(\left(p\rightarrow p\,a\right)^{\uparrow M\downarrow H}h\big)\right)a\\
+\text{insert the definition of }\tilde{\text{fi}}_{T}\text{: }\quad & =\text{fo}_{M}\left(\text{fi}_{M}\left(f\big(\left(b\rightarrow\_\rightarrow b\right)^{\uparrow M\downarrow H}\left(p\rightarrow p\,a\right)^{\uparrow M\downarrow H}h\big)\right)\right)a\\
+\text{non-degeneracy law for }\text{fi}_{M}\text{: }\quad & =f\big(\left(b\rightarrow\_\rightarrow b\right)^{\uparrow M\downarrow H}\left(p\rightarrow p\,a\right)^{\uparrow M\downarrow H}h\big)a\\
+\text{composition laws for }M,H\text{: }\quad & =f\big(\left(b\rightarrow\_\rightarrow b\bef p\rightarrow p\,a\right)^{\uparrow M\downarrow H}h\big)a\\
+\text{simplify }\text{: }\quad & =f\left(\left(b\rightarrow b\right)^{\uparrow M\downarrow H}h\right)a\\
+\text{identity laws for }M,H\text{: }\quad & =f\,h\,a\quad.
+\end{align*}
+We obtained $\tilde{\text{fo}}_{T}\left(\tilde{\text{fi}}_{T}\,f\right)h\,a=f\,h\,a$.
+Therefore the non-degeneracy law $\tilde{\text{fi}}_{T}\bef\tilde{\text{fo}}_{T}=\text{id}$
+holds.
+\end{comment}
+
+The next statements show some use cases for rigid functors. The \textsf{``}$R$-valued
+\lstinline!flatMap!\textsf{''} is a generalization of \lstinline!flatMap!
+that can handle multiple $M$-effects at once; the collection of $M$-effects
+is described by a rigid functor $R$.
+
+\subsubsection{Statement \label{subsec:Statement-rigid-functor-multi-flatMap}\ref{subsec:Statement-rigid-functor-multi-flatMap}}
+
+{*}{*}{*}For a rigid functor $R$ and a monad $M$, an \textsf{``}$R$-valued
+\lstinline!flatMap!\textsf{''} can be defined,
+\[
+\text{rflm}_{M,R}:(A\rightarrow R^{M^{B}})\rightarrow M^{A}\rightarrow R^{M^{B}}\quad.
+\]
+
+A \textsf{``}refactoring\textsf{''} is a program transformation that does not significantly
+change the functionality. {*}{*}{*}
+
+\subsubsection{Statement \label{subsec:Statement-rigid-functor-monadic-refactor}\ref{subsec:Statement-rigid-functor-monadic-refactor}}
+
+{*}{*}{*}Given a rigid functor $R$, a refactoring function can be
+implemented,
+\[
+\text{refactor}:((A\rightarrow B)\rightarrow C)\rightarrow(A\rightarrow R^{B})\rightarrow R^{C}\quad.
+\]
+This function transforms a program $p(f^{:A\rightarrow B}):C$ into
+a program $\tilde{p}(\tilde{f}^{:A\rightarrow R^{B}}):R^{C}$.
 
 \subsection{Exercises\index{exercises}}
 
