@@ -721,7 +721,7 @@ The code may be written as:
 \begin{lstlisting}
 def runListT[A](runner: M[A] => A)(listT: ListT[M, A]): List[A] = runner(listT.value) match {
   case None                => List()
-  case Some((head, tailT)) => head :: run(runner)(tailT)
+  case Some((head, tail))  => head :: run(runner)(tail)
 }
 \end{lstlisting}
 However, this code will not always terminate because the type of \lstinline!ListT!
@@ -748,6 +748,34 @@ streams of unbounded length. If we need to run the effects of $M$
 for an unbounded-length stream, the target should be a stream type
 (i.e., an on-call or a lazy list) rather than an eagerly evaluated
 \lstinline!List! type.
+
+Another way of running the effects of a \lstinline!ListT[M, A]! is
+to assume that \lstinline!A! is a monoid type. For monoid types \lstinline!A!,
+we can implement the type signature $\text{List}^{A}\rightarrow A$
+as a standard \lstinline!reduce! operation:
+\begin{lstlisting}
+def reduce[A: Monoid]: List[A] => A = {
+  case Nil            => Monoid[A].empty
+  case head :: tail   => head |+| reduce(tail)
+}
+\end{lstlisting}
+We can then implement a special runner \lstinline!brun! that transforms
+\lstinline!ListT[M, A]! into \lstinline!M[A]! for monoid types \lstinline!A!:
+\begin{lstlisting}
+def brun[M[_]: Monad, A: Monoid](listT: ListT[M, A]): M[A] = listT.value.flatMap {
+  case None                  => Monad[M].pure(Monoid[A].empty)
+  case Some((head, tail))    => Monad[M].pure(head) |+| brun(tail) // Monoid M[A].
+}
+\end{lstlisting}
+For this code to work, we need a monoid instance for $M^{A}$ (see
+Exercise~\ref{subsec:Exercise-monad-of-monoid-is-monoid}):
+\begin{lstlisting}
+implicit def monoidMA[M[_]: Functor : Monad, A: Monoid]: Monoid[M[A]] = ...
+\end{lstlisting}
+However, it remains unknown\footnote{This book does not have a proof. See Problem~\ref{par:Problem-monads-5-2-1}
+for more details.} whether this special version of \lstinline!brun! is a lawful monad
+morphism $T_{\text{List}}^{M}\leadsto M$ or even just a monoid morphism
+$T_{\text{List}}^{M,A}\rightarrow M^{A}$.
 
 \paragraph{The \texttt{StateT} transformer}
 
