@@ -26,7 +26,7 @@ draft_title_4="D Parametricity theorem"
 # A unique fragment of the title of each chapter:
 chapters=("Preface" "Mathematical formulas as code. I." \
  "Mathematical formulas as code. II." "The logic of types. I." "The logic of types. II." \
- "The logic of types. III." "Functors, contrafunctors, and profunctors"  \
+ "The logic of types. III." "Functors and contrafunctors"  \
  "Reasoning about code." "Typeclasses and functions of types" "Computations in functor blocks. I." \
  "Computations in functor blocks. II." "Applicative functors, contrafunctors, and profunctors" \
  "Traversable functors and profunctors" "\`\`Free'' type constructions" "Computations in functor blocks. III." \
