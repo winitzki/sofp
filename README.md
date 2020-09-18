@@ -68,5 +68,7 @@ If you want to build from source, currently you need `LyX` 2.3.x and `pdftk` ins
 If you do not have `LyX`, you can simply build from the provided LaTeX sources using commands such as
 
 ```bash
-pdflatex sofp.tex
+pdflatex --interaction=batchmode sofp.tex
+makeindex sofp.idx
+pdflatex --interaction=batchmode sofp.tex
 ```
