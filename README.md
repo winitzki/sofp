@@ -13,8 +13,8 @@ The book is a tutorial exposition of the theoretical knowledge that functional p
 ["Parametricity properties of purely functional code"](https://youtu.be/vTWLtBTEmAY)
 
 [Functional programming tutorials playlist](https://www.youtube.com/playlist?list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
-Audio recordings with slides, showing an earlier version of the material in this book.
-Many notations and explanations have been revised and improved when writing up the book.
+contains audio recordings with slides. The tutorials show an early version of the material in this book.
+Many notations and explanations have been revised and improved when writing up the text of the book.
 
 # Source code
 
