@@ -13,9 +13,9 @@ RUN DEBIAN_FRONTEND=noninteractive apt install -q -y \
   pdftk \
   hunspell
 
-RUN chmod +x entrypoint.sh
-
 COPY entrypoint.sh /entrypoint.sh
+
+RUN chmod +x entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
 
