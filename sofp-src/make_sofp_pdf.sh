@@ -105,7 +105,7 @@ function assemble_sources {
 pdftk=`which pdftk`
 
 # LyX needs to be installed for this to work. Edit the next line as needed.
-lyx="/Applications/LyX.app/Contents/MacOS/lyx"
+lyx=`which lyx`
 
 echo "Info: Using pdftk from '$pdftk' and lyx from '$lyx'"
 
