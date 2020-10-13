@@ -14,9 +14,8 @@ Monads describe effects that depend on previously computed values.
 It is often necessary to combine effects of several monads in one
 value. For example, a value of type \lstinline!Future! can be computed
 concurrently, while \lstinline!Option! represents a possibly missing
-value. To describe a possibly missing value that is also computed
-concurrently, we need somehow to combine \lstinline!Future! with
-\lstinline!Option!.
+value. To describe a possibly missing value that is computed concurrently,
+we need somehow to combine \lstinline!Future! with \lstinline!Option!.
 
 The type constructors \lstinline!Future! and \lstinline!Option!
 are not equivalent, so we cannot simply use them together in one functor
@@ -76,8 +75,8 @@ val result: Future[Option[Int]] = for { // This will not compile!
 To be able to write code in this way, we need to implement the \lstinline!flatMap!
 operation directly on the type \lstinline!Future[Option[A]]! with
 respect to the type parameter \lstinline!A!. Let us wrap the type
-\lstinline!Future[Option[A]]! into a class and implement \lstinline!map!
-and \lstinline!flatMap! as methods:
+\lstinline!Future[Option[A]]! into a class and implement the \lstinline!map!
+and \lstinline!flatMap! methods:
 \begin{lstlisting}
 final case class FutOpt[A](nested: Future[Option[A]]) {
   def map[B](f: A => B)(implicit ec: ExecutionContext): FutOpt[B] = FutOpt(nested.map(_.map(f)))
@@ -99,29 +98,28 @@ To improve usability, we may define conversions from \lstinline!Future!
 to \lstinline!FutOpt! and from \lstinline!Option! to \lstinline!FutOpt!:
 \begin{lstlisting}
 implicit class FutOptLift1[A](fut: Future[A])(implicit ec: ExecutionContext) {
-  def lift: FutOpt[A] = FutOpt(fut.map(x => Some(x)))
+  def up: FutOpt[A] = FutOpt(fut.map(x => Some(x)))
 }
 implicit class FutOptLift2[A](opt: Option[A]) {
-  def lift: FutOpt[A] = FutOpt(Future.successful(opt))
+  def up: FutOpt[A] = FutOpt(Future.successful(opt))
 }
 \end{lstlisting}
-After defining the \textsf{``}lifts\textsf{''}, we may rewrite the previous code in
-a more readable form:
+We can now rewrite the previous code in a more readable form:
 \begin{lstlisting}
 val result: FutOpt[Int] = for {
-  x <- Option(1).lift     // x: Int
-  y <- Future(x + 1).lift // y: Int
-  z <- Option(y + 3).lift // z: Int
-} yield z  // After some time, this evaluates to `FutOpt(Future(Success(Some(5))))`.
+  x <- Option(1).up     // x: Int
+  y <- Future(x + 1).up // y: Int
+  z <- Option(y + 3).up // z: Int
+} yield z  // This eventually evaluates to `FutOpt(Future.Successful(Some(5)))`.
 \end{lstlisting}
 
 We may hope to apply the same technique when mixing effects from arbitrary
 monads, such as:
 \begin{lstlisting}
-val result: SomeBigMonad[Int] = for {  // After some definitions, this code will work:
-  x <- (1 to n).lift                   // x: Int
-  y <- Future { computation(x) }.lift  // y: Int
-  z <- Try { maybeError(y) }.lift      // z: Int
+val result: SomeBigMonad[Int] = for {  // After some definitions, this code should work:
+  x <- (1 to n).up                     // x: Int
+  y <- Future { computation(x) }.up    // y: Int
+  z <- Try { maybeError(y) }.up        // z: Int
 } yield z
 \end{lstlisting}
 This code will work if we somehow create a new monad that \textsf{``}unifies\textsf{''}
@@ -327,8 +325,8 @@ value $s_{1}$ is computed without using the function argument $f$,
 because the \textsf{``}correct\textsf{''} value ($s_{2}$) is hidden within the scope
 of the nameless function of type $R\rightarrow B$. So, even though
 we have tried to preserve information as much as possible, the implementation
-of \lstinline!flatMap! discards the second monad\textsf{'}s effect. This will
-violate the identity law \lstinline!pure(x).flatMap(f) == f(x)!.
+of \lstinline!flatMap! must discard the second monad\textsf{'}s effect. This
+will violate the identity law: \lstinline!pure(x).flatMap(f) == f(x)!.
 That law cannot possibly hold if the implementation of \lstinline!flatMap!
 ignores the function $f$ when computing the new state:
 
@@ -449,13 +447,14 @@ monads $L$, $M$.
 
 While the code of \lstinline!TryT! works, it leaves us with further
 questions. The code of \lstinline!TryT! is specific to the \lstinline!Try!
-monad and uses its internal structure such as the \lstinline!Failure!
-and \lstinline!Success! subtypes. It is not obvious how to define
-the type of a monad transformer $T_{L}^{M}$ for an arbitrary given
-base monad $L$. The code for $T_{L}^{M}$\textsf{'}s methods is parametric
+monad and uses its internal structure (the \lstinline!Failure! and
+\lstinline!Success! subtypes). It is not obvious how to define the
+type of a monad transformer $T_{L}^{M}$ for an arbitrary given base
+monad $L$. We expect the code for $T_{L}^{M}$\textsf{'}s methods to be parametric
 in $M$ but not in $L$ (this is reflected in the notation: $L$ is
-a \emph{subscript} in $T_{L}^{M}$). Changing the base monad $L$
-to another monad requires a complete rewrite of $T_{L}^{M}$\textsf{'}s code.
+a \emph{subscript} in $T_{L}^{M}$). So, changing the base monad $L$
+to another monad may require a complete rewrite of $T_{L}^{M}$\textsf{'}s
+code.
 
 There is no general recipe for implementing a monad transformer $T_{L}^{M}$
 given the code for a monad $L$. Nevertheless, monad transformers
