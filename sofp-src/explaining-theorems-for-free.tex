@@ -6,8 +6,6 @@
 \setcounter{secnumdepth}{3}
 \setcounter{tocdepth}{3}
 \usepackage{babel}
-\usepackage{amsmath}
-\usepackage{stmaryrd}
 \usepackage[all]{xy}
 \ifx\hypersetup\undefined
   \AtBeginDocument{%
@@ -255,6 +253,20 @@ To be useful for programming, the methods must satisfy certain laws
 \item \lstinline!pure!: naturality
 \end{itemize}
 We need to check the laws when implementing new typeclass instances
+
+If naturality holds for \lstinline!flatMap!, \lstinline!filter!,
+and \lstinline!pure! then:
+\begin{itemize}
+\item The methods \lstinline!flatMap! and \lstinline!flatten: F[F[A]] => F[A]!
+are equivalent 
+\item The methods \lstinline!filter! and \lstinline!deflate: F[Option[A]] => F[A]!
+are equivalent 
+\item The methods \lstinline!pure: A => F[A]! and \lstinline!unit: F[Unit]!
+are equivalent 
+\begin{itemize}
+\item Can simplify the definitions of some typeclasses 
+\end{itemize}
+\end{itemize}
 \end{frame}
 
 \begin{frame}{Naturality laws and ``theorems for free''}
@@ -275,14 +287,25 @@ a (di)naturality law
 \item Usually, typeclass instances are written in fully parametric code
 \begin{itemize}
 \item Then it is not necessary to verify the naturality laws
-\item This saves us time
+\item Can simplify some typeclass definitions
+\item Naturality laws save us time and simplifies code
 \end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}{What did ``theorems for free'' ever do for us programmers?}
+
+\begin{itemize}
+\item ``Theorems for free'' guarantee naturality laws for fully parametric
+code
 \item To use ``theorems for free'' in practice, programmers need to:
 \begin{itemize}
-\item Recognize fully parametric code
+\item Recognize and write fully parametric code
 \item Be able to write the refactoring that follows from naturality laws
 \item Be able to implement \lstinline!_.map! for any covariant functor
+(as well as \lstinline!_.contramap! for any contravariant functor)
 \item Recognize that the refactoring is guaranteed by parametricity
+\item Recognize simplifications in typeclasses
 \end{itemize}
 \end{itemize}
 \end{frame}
@@ -325,6 +348,10 @@ def headOptBad[A]: List[A] => Option[A] = {
 
 \begin{itemize}
 \item The code uses explicit run-time type detection
+\begin{itemize}
+\item But the code is still purely functional and referentially transparent
+\item ``Full parametricity'' is a stronger restriction on code
+\end{itemize}
 \end{itemize}
 The function \lstinline!headOptBad! fails the naturality law:
 \begin{lstlisting}
@@ -359,6 +386,7 @@ only \lstinline!Unit! type or type parameters
 \end{itemize}
 \end{frame}
 \vspace{2\baselineskip}
+~
 
 Fully parametric programs are written using the 9 code constructions:
 \begin{lstlisting}
@@ -380,8 +408,9 @@ e.g.~\lstinline!()!, \lstinline!Nil!, or \lstinline!None!
 \item Create tuple: \lstinline!(a, b)!
 \item Use tuple: \lstinline!p._1!
 \item Create disjunctive value: \lstinline!Left[A, B](x)!
-\item Use disjunctive value: \lstinline!{ case ... }! (pattern-matching)
-\item Use recursive call: \lstinline!fmap(f)(tail)!\vspace{0.2\baselineskip}
+\item Use disjunctive value: \lstinline!{ case ... => ... }! (pattern-matching)
+\item Use recursive calls: e.g., \lstinline!fmap(f)(tail)! within the code
+of \lstinline!fmap!\medskip{}
 \end{enumerate}
 
 \begin{frame}{Approaches to using and proving the parametricity theorem}
@@ -441,7 +470,7 @@ The naturality law requires that for any function \lstinline!f: A => B!,
 \\
 ~
 
-\vspace{-0.25cm}\lstinline!_.contramapP1(f).pipe(t).mapQ2(f) == _.mapP2(f).pipe(t).contramapQ1(f)!\\
+\vspace{-0.25cm}\lstinline!p.contramapPX(f).pipe(t).mapQY(f) == p.mapPY(f).pipe(t).contramapQX(f)!\\
 ~
 
 \vspace{-0.25cm}Both sides must give the same result when applied
@@ -453,9 +482,9 @@ are derived in this way
 and fully parametric
 \end{itemize}
 \[
-\xymatrix{\xyScaleY{1.8pc}\xyScaleX{2.5pc} & \mathtt{P[A,A]}\ar[r]\sp(0.5){\mathtt{t[A]}} & \mathtt{Q[A,A]}\ar[rd]\sb(0.4){\mathtt{\_.mapQ2(f)}\negthickspace\negthickspace}\\
-\mathtt{P[B,A]}\ar[rd]\sp(0.55){~\mathtt{\_.mapP2(f)}}\ar[ru]\sb(0.65){\negthickspace\negthickspace\negthickspace\mathtt{\_.contramapP1(f)}} &  &  & \mathtt{Q[A,B]}\\
- & \mathtt{P[B,B]}\ar[r]\sp(0.5){\mathtt{t[B]}} & \mathtt{Q[B,B]}\ar[ru]\sp(0.45){\mathtt{\_.contramapQ1(f)~}}
+\xymatrix{\xyScaleY{1.8pc}\xyScaleX{5.5pc} & \mathtt{P[A,A]}\ar[r]\sp(0.5){\mathtt{t[A]}} & \mathtt{Q[A,A]}\ar[rd]\sb(0.45){\mathtt{\_.mapQY(f)}~~~}\\
+\mathtt{P[B,A]}\ar[rd]\sp(0.55){~~~\mathtt{\_.mapPY(f)}}\ar[ru]\sb(0.55){~~~\mathtt{\_.contramapPX(f)}} &  &  & \mathtt{Q[A,B]}\\
+ & \mathtt{P[B,B]}\ar[r]\sp(0.5){\mathtt{t[B]}} & \mathtt{Q[B,B]}\ar[ru]\sp(0.5){\mathtt{\_.contramapQX(f)}~~~}
 }
 \]
 
@@ -465,33 +494,45 @@ and \lstinline!Q! are functors or contrafunctors
 \end{itemize}
 \end{frame}
 
-\begin{frame}{Example: writing the naturality law for \lstinline!filter!}
+\begin{frame}{Example: deriving the naturality law for \lstinline!filter!}
 
-\lstinline!def filter[A]: (A => Boolean) => F[A] => F[A]! for a filterable
-functor \lstinline!F!
+\vspace{-0.15cm}Use a curried version of \lstinline!_.filter! for
+convenience:
 
-Rewrite as a dinatural transformation, \lstinline!filter[A]: P[A, A] => Q[A, A]!
-with \lstinline!P[X, Y] = X => Boolean! and \lstinline!Q[X, Y] = F[X] => F[Y]!
+\lstinline!def filt[A]: (A => Boolean) => F[A] => F[A]! for a filterable
+functor \lstinline!F!\\
+~
 
-Write the code for \lstinline!map! and \lstinline!contramap! using
-the specific types of \lstinline!P! and \lstinline!Q!:
-\begin{align*}
-(f^{:A\rightarrow B})^{\downarrow P^{\bullet,A}}=p^{:B\rightarrow\bbnum 2}\rightarrow f\bef p\quad, & \quad\quad f^{\uparrow P^{B,\bullet}}=\text{id}\quad,\\
-(f^{:A\rightarrow B})^{\downarrow Q^{\bullet,B}}=q^{:F^{B}\rightarrow F^{B}}\rightarrow f^{\uparrow F}\bef q\quad, & \quad\quad f^{\uparrow Q^{A,\bullet}}=q^{:F^{A}\rightarrow F^{A}}\rightarrow q\bef f^{\uparrow F}\quad.
-\end{align*}
-Rewrite the naturality law $f^{\downarrow P^{\bullet,A}}\bef\text{filt}^{A}\bef f^{\uparrow Q^{A,\bullet}}\overset{!}{=}f^{\uparrow P^{B,\bullet}}\bef\text{filt}^{B}\bef f^{\downarrow Q^{\bullet,B}}$
-as
-\[
-(p\rightarrow f\bef p)\bef\text{filt}\bef(q\rightarrow q\bef f^{\uparrow F})\overset{!}{=}\text{id}\bef\text{filt}\bef(q\rightarrow f^{\uparrow F}\bef q)\quad.
-\]
-To simplify this equation, apply both sides to an arbitrary value
-$p^{:P^{B,A}}$
+\vspace{-0.15cm}Rewrite as a dinatural transformation, \lstinline!filter[A]: P[A, A] => Q[A, A]!
+with \lstinline!type P[X, Y] = X => Boolean! and \lstinline!type Q[X, Y] = F[X] => F[Y]!\\
+~
 
-Evaluate the results and obtain the naturality law of \lstinline!filter!:
-\[
-\text{filt}\,(f\bef p)\bef f^{\uparrow F}\overset{!}{=}f^{\uparrow F}\bef\text{filt}\,(p)
-\]
+\vspace{-0.15cm}Write the code for \lstinline!map! and \lstinline!contramap!
+using the specific types of \lstinline!P! and \lstinline!Q!:
+\begin{center}
+\lstinline!p.contramapPX(f) == f andThen p! 
+\par\end{center}
 
+\begin{center}
+\lstinline!p.mapPY(f) == p!
+\par\end{center}
+
+\begin{center}
+\lstinline!q.contramapQX(f) == _.map(f) andThen q!
+\par\end{center}
+
+\begin{center}
+\lstinline!q.mapQY(f) = q andThen _.map(f)!\\
+~
+\par\end{center}
+
+\vspace{-0.15cm}Now write the dinaturality law and simplify: \lstinline!(f andThen p).pipe(filt) andThen _.map(f)) == _.map(f) andThen p.pipe(filt)!\\
+~
+
+\vspace{-0.15cm}Rewriting in terms of \lstinline!_.filter!, we obtain
+the naturality law of \lstinline!filter!:
+
+\lstinline!_.filter(f andThen p).map(f) = _.map(f).filter(p)!
 \end{frame}
 
 \begin{frame}{Other parametricity properties}
@@ -499,8 +540,20 @@ Evaluate the results and obtain the naturality law of \lstinline!filter!:
 \begin{itemize}
 \item Bifunctor \lstinline!map! commutes w.r.t.~different type parameters
 
-For \lstinline!b: B[X, Y]!, have \lstinline!b.mapX(f).mapY(g) == b.mapY(g).mapX(f)!
-\item Any functor's \lstinline!map! is unique if lawful and fully parametric 
+For any value \lstinline!b: B[X, Y]!, and any functions \lstinline!f: X => P!,
+\lstinline!g: Y => Q!, 
+
+the commutativity law is: \lstinline!b.mapX(f).mapY(g) == b.mapY(g).mapX(f)!
+\end{itemize}
+\[
+\xymatrix{\xyScaleY{2.8pc}\xyScaleX{5.5pc}\mathtt{B[X,Y]}\ar[d]\sb(0.5){~\mathtt{\_.mapY(g)}}\ar[r]\sp(0.5){\mathtt{\_.mapX(f)}} & \mathtt{B[P,Y]}\ar[d]\sp(0.5){\mathtt{\_.mapY(g)}}\\
+\mathtt{B[X,Q]}\ar[r]\sp(0.5){\mathtt{\_.mapX(f)}} & \mathtt{B[P,Q]}
+}
+\]
+
+\begin{itemize}
+\item A given functor's lawful and fully parametric method \lstinline!map!
+is unique 
 \begin{itemize}
 \item Note: many typeclasses may admit several lawful, fully parametric,
 but non-equivalent implementations of a typeclass instance for the
@@ -509,7 +562,8 @@ same type constructor \lstinline!F[A]!. For example, \lstinline!Filterable!,
 unique. But instances are unique for the functor and contrafunctor
 type classes.
 \end{itemize}
-\item Similar results for \lstinline!contramap! and contrafunctors
+\item Analogous results for \lstinline!contramap!, contrafunctors, and
+profunctors
 \end{itemize}
 \end{frame}
 
@@ -523,7 +577,7 @@ type classes.
 \item Functor, contrafunctor, and profunctor typeclass instances are unique
 \item Bifunctors and profunctors obey the commutativity law
 \end{itemize}
-\item Full details and proofs are in the free upcoming book (Appendix D)
+\item Full details and proofs are in the Appendix D of the upcoming book
 \begin{itemize}
 \item Draft of the book: \texttt{\href{https://github.com/winitzki/sofp}{https://github.com/winitzki/sofp}}
 \end{itemize}
