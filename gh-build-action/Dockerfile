@@ -11,7 +11,8 @@ RUN DEBIAN_FRONTEND=noninteractive apt install -q -y \
   git \
   texlive-humanities \
   pdftk \
-  hunspell
+  hunspell \
+  bzip2
 
 COPY entrypoint.sh /entrypoint.sh
 
