@@ -9,6 +9,8 @@ name="sofp"
 draft="$name-draft"
 srcbase="sofp-src"
 
+test -d $srcbase && cd $srcbase
+
 function git_commit_hash {
 	git rev-parse HEAD # Do not use --short here.
 }

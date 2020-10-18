@@ -914,9 +914,8 @@ language for database queries on .NET, implemented in C\# and F\#
 through a special built-in syntax supported by Microsoft\textsf{'}s compilers.
 Analogous functionality is provided in Scala as a \emph{library},
 without need to modify the Scala compiler, by several open-source
-projects such as Slick, Squeryl, or Quill. Similar libraries exist
-for Haskell \textemdash{} but not in languages with less powerful
-type systems.
+projects such as Slick and Quill. Similar libraries exist for Haskell
+\textemdash{} but not in languages with less powerful type systems.
 
 \section{Summary}
 
@@ -929,4 +928,216 @@ types.
 \item Seamless compatibility with a mature software ecosystem (JVM).
 \end{enumerate}
 Based on this assessment, we may be confident in Scala\textsf{'}s future as
-a main implementation language for big data engineering. 
+a main implementation language for big data engineering.
+
+\chapter{Essay: Why category theory is useful in computer programming}
+
+This essay is for readers who are already somewhat familiar with category
+theory.
+
+\section{A \textsf{``}types/functions\textsf{''} category for a programming language}
+
+We consider programming languages that support various data types,
+such as integers (\lstinline!Int!), floating-point numbers (\lstinline!Float!),
+strings (\lstinline!String!), arrays of strings (\lstinline!Array[String]!),
+and so on. The language must allow programmers to define functions
+and to specify the types of arguments and return values of those functions.
+The compiler must then verify that all functions are always applied
+to arguments of correct types and return values of expected types. 
+
+To each programming language of that kind, there corresponds a \textsf{``}types/functions\textsf{''}
+category:
+\begin{itemize}
+\item The objects of the category are all the data types supported by the
+language (including user-defined data types). As an example, for Scala
+there will be an object \lstinline!Int!, an object \lstinline!Float!,
+an object \lstinline!String!, an object \lstinline!Array[String]!,
+and so on.
+\item The morphisms of the category are all functions of a single argument
+that can be implemented in the language. A morphism between objects
+\lstinline!A! and \lstinline!B! is any function that takes a single
+argument of type \lstinline!A! and returns a value of type \lstinline!B!.
+\end{itemize}
+The category defined in this way will typically have a large number
+of morphisms between most objects. For example, morphisms between
+objects \lstinline!Boolean! and \lstinline!Int! are functions that
+take a single argument of type \lstinline!Boolean! and return a value
+of type \lstinline!Int!. There are as many such functions as pairs
+of integers. Scala code for one of those morphisms looks like this:
+\begin{lstlisting}
+def morphismBooleanToInt: Boolean => Int = { b => if (b) 123 else 456 }
+\end{lstlisting}
+
+Why do the category laws hold? The composition of morphisms corresponds
+to composition of functions, which we can implement by writing code
+that applies the first function and then applies the second function.
+In Scala:
+\begin{lstlisting}
+def composeMorphisms[A, B, C](f: A => B, g: B => C): A => C   =   { a => g(f(a)) }
+\end{lstlisting}
+Equivalent functionality can be implemented in most programming languages.
+
+The category\textsf{'}s identity law says that there must be a morphism between
+objects \lstinline!A! and \lstinline!A!. This can be implemented
+in most programming languages as a function that returns its argument
+unchanged:
+\begin{lstlisting}
+def identity[A]: A => A = { x => x }
+\end{lstlisting}
+One can check that morphism composition is associative and agrees
+with the identity morphism.
+
+We have thus defined a category (the \textsf{``}types/functions category\textsf{''}
+for a given programming language). Most of the time, we will be working
+with this category, or with the category of its endofunctors, or with
+a subcategory of these categories.
+
+Different programming languages will give rise to different \textsf{``}types/functions\textsf{''}
+categories, but these categories have many common features that are
+especially important in languages designed for functional programming.
+
+\section{The meaning of endofunctors}
+
+An endofunctor in the \textsf{``}types/functions\textsf{''} category is a mapping
+of types together with a mapping of functions. A good example is the
+\lstinline!Array! data type. In some programming languages, the type
+of an array\textsf{'}s elements can be specified and enforced throughout the
+code. For example, in Scala one can use the type \lstinline!Array[Int]!
+for an array of integers, \lstinline!Array[String]! for an array
+of strings, \lstinline!Array[Array[Int]]! for an array containing
+nested arrays of integers, etc. So, \lstinline!Array! can be seen
+as a mapping from types to types: it maps the type \lstinline!Int!
+to the type \lstinline!Array[Int]!, the type \lstinline!String!
+to the type \lstinline!Array[String]!, etc. For any type \lstinline!X!,
+we have also the type \lstinline!Array[X]!. This is the object-to-object
+map of an endofunctor.
+
+An endofunctor also needs a map from morphisms to morphisms. Given
+a function \lstinline!f: X => Y!, we need to implement a function
+of type \lstinline!Array[X] => Array[Y]!. This can be done by writing
+a loop over the array and applying the function \lstinline!f! to
+each element (of type \lstinline!X!). The resulting values (of type
+\lstinline!Y!) are then collected in a new array, of type \lstinline!Array[Y]!.
+
+This code can be written in many programming languages in a generic
+manner, using type parameters such as \lstinline!X! and \lstinline!Y!.
+The same code will then work for arrays and functions of any given
+type. In Scala, the code could be written as the following function
+(usually called \lstinline!fmap! in functional programming libraries):
+\begin{lstlisting}
+def fmap[X, Y: ClassTag](f: X => Y): Array[X] => Array[Y] = { arrayX: Array[X] =>
+  val arrayY = new Array[Y](arrayX.size)
+  for { i <- arrayX.indices } arrayY(i) = f(arrayX(i))
+  arrayY  // Return this array of type Array[Y].
+}
+\end{lstlisting}
+One can then check that the code of \lstinline!fmap! satisfies the
+identity and composition laws of endofunctors. This completes the
+implementation of the \lstinline!Array! endofunctor.
+
+Why does \lstinline!fmap! satisfy the laws of endofunctors? The properties
+of function composition are preserved if we apply functions element
+by element in an array and collect the results \emph{in the same order}.
+So, for instance, an identity function applied to every element will
+not modify the array.
+
+The same construction can be applied to several data structures other
+than arrays. It turns out that many programs can be reformulated using
+the operation of applying a function to every value in a data structure
+(i.e., the function \lstinline!fmap!). This reformulation leads to
+code that avoids loops: all loops are replaced by \lstinline!fmap!
+functions of some endofunctors, and all those \lstinline!fmap! functions
+are implemented in a standard library. The programmer\textsf{'}s intuition
+about \textsf{``}applying functions to every value held within a data structure\textsf{''}
+is then directly represented by the formal laws of endofunctors. Once
+these laws are verified, the programmer is assured that the code written
+via \lstinline!fmap! will work according to the programmer\textsf{'}s intuitive
+expectations.
+
+\section{The meaning of natural transformations between endofunctors}
+
+What is a natural transformation between endofunctors in the \textsf{``}types/functions\textsf{''}
+category? For two given endofunctors \lstinline!F! and \lstinline!G!,
+a natural transformation \lstinline!t: F ~> G! is defined by its
+components. The component at object \lstinline!X! is a function of
+type \lstinline!F[X] => G[X]!; this must be defined for all \lstinline!X!.
+Some programming languages support functions with type parameters.
+In Scala, the syntax is
+\begin{lstlisting}
+def t[X]: F[X] => G[X] = ...
+\end{lstlisting}
+The code of such a function is written once and will work in the same
+way for all types \lstinline!X!.
+
+An example is a function that reverses the order of elements in an
+array:
+\begin{lstlisting}
+def reverse[X]: Array[X] => Array[X] = ...
+\end{lstlisting}
+The algorithm is \textsf{``}fully parametric\textsf{''}: it is written in the same
+way for all type parameters \lstinline!X!.
+
+It turns out that, by the Reynolds-Wadler parametricity theorem, any
+code written in a fully parametric manner will satisfy the law of
+a natural transformation (the naturality law). The naturality law
+states that applying the endofunctor \lstinline!F!\textsf{'}s morphism map
+before a natural transformation \lstinline!t! must be equal to applying
+the endofunctor \lstinline!G!\textsf{'}s map after \lstinline!t!. In Scala
+syntax, the law is written as
+\begin{lstlisting}
+t(fmap_F(f)(x)) == fmap_G(f)(t(x))
+\end{lstlisting}
+This law can be verified directly for a given code of \lstinline!t!
+and with known code for \lstinline!fmap_F! and \lstinline!fmap_G!.
+
+Generally, naturality laws are satisfied for transformations that
+may rearrange data items in a data structure but do not examine any
+values or any specific types. In this way, programmer\textsf{'}s intuitions
+about \textsf{``}code that works in the same way for all types\textsf{''} are directly
+represented by the formal laws of natural transformations.
+
+As we have just seen, the notions of endofunctors and natural transformations
+are useful in programming languages that support types with type parameters
+(such as \lstinline!Array[X]!) and functions with type parameters
+(such as \lstinline!reverse[X]!). Programming languages that do not
+support those features cannot benefit from the powerful reasoning
+tools of category theory.
+
+\section{Other properties of the \textsf{``}types/functions\textsf{''} category}
+
+Morphisms in the \textsf{``}types/functions\textsf{''} category are always functions
+of a single argument. However, programming languages usually support
+functions with many arguments. There are two ways to imitate such
+functions: tupling and currying.
+
+Tupling means that we put all arguments into a compound structure
+(a pair, a triple, etc.). The function is still viewed as having a
+single argument, but the type of that argument is the type of a pair,
+or a triple, or a longer tuple type. This works when the programming
+language supports tuple types. A tupled function\textsf{'}s type is written
+(in Scala) as, e.g., \lstinline!((A, B, C)) => D!.
+
+Tuple types correspond to finite products of objects in the \textsf{``}types/functions\textsf{''}
+category. So, it is useful if the category has (finite) products. 
+
+Currying means that we create a function that takes the first argument
+and returns a curried function that handles the rest of the arguments
+in the same way (takes the second argument and again returns a function,
+etc.). A curried function\textsf{'}s type is written in Scala as, e.g., \lstinline!A => B => C => D!.
+To support this method, the programming language should have function
+types. The corresponding categorical construction is the \textsf{``}exponential\textsf{''}
+objects. 
+
+In the practice of functional programming, it has been found useful
+to have the type \lstinline!Unit!, which has exactly one value, and
+the type \lstinline!Nothing!, which has no values. In the \textsf{``}types/functions\textsf{''}
+category, these types correspond to the terminal and the initial objects.
+
+Finally, disjunctive types in the programming language correspond
+to co-products in the \textsf{``}types/functions\textsf{''} category.
+
+In this way, we find that various useful properties of the programming
+language\textsf{'}s type system correspond to certain well-known properties
+of the \textsf{``}types/functions\textsf{''} category. Most modern FP languages correspond
+to categories that support initial and terminal objects, finite products
+and co-products, and exponentials.
