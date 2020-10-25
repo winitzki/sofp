@@ -1,0 +1,82 @@
+# This is a basic workflow to help you get started with Actions
+
+name: Build PDF
+
+# Controls when the action will run. Triggers the workflow on push
+# events but only for the master branch
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - 'v*'
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # This workflow contains a single job called "build"
+  build:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+    container: feastingmonk/sofp-builder:latest
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v2
+
+      - name: Build PDF using the basic commands
+        id: simple-pdf
+        uses: docker://feastingmonk/sofp-builder:latest
+        with:
+          args: ". sofp-src/make_sofp_pdf_simple.sh"
+
+      - name: Build PDF using make_sofp_pdf.sh
+        id: full-pdf
+        uses: docker://feastingmonk/sofp-builder:latest
+        with:
+          args: ". sofp-src/make_sofp_pdf.sh"
+        
+      - name: Upload built PDF
+        id: upload-simple-pdf
+        uses: actions/upload-artifact@v2
+        with:
+          name: PDF files
+          path: ./sofp-src/sofp*.pdf
+          if-no-files-found: error
+        
+      - name: Create new release
+        if: contains(github.ref, 'refs/tags/v')
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: true
+          prerelease: true
+
+      - name: Upload sofp.pdf
+        if: contains(github.ref, 'refs/tags/v')
+        id: upload-sofp
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./sofp-src/sofp.pdf
+          asset_name: sofp.pdf
+          asset_content_type: application/pdf
+
+      - name: Upload sofp-draft.pdf
+        if: contains(github.ref, 'refs/tags/v')
+        id: upload-sofp-draft
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./sofp-src/sofp-draft.pdf
+          asset_name: sofp-draft.pdf
+          asset_content_type: application/pdf
+
