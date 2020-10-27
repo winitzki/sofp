@@ -111,7 +111,7 @@ lyx=`which lyx`
 
 echo "Info: Using pdftk from '$pdftk' and lyx from '$lyx'"
 
-rm -f $name*tex
+rm -f $name*tex $name*log $name*ilg $name*idx $name*toc
 
 echo "Exporting LyX files $name.lyx and its child documents into LaTeX..."
 "$lyx" --export pdflatex $name.lyx # Exports LaTeX for all child documents as well.
