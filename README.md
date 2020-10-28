@@ -8,13 +8,19 @@ The book is a tutorial exposition of the theoretical knowledge that functional p
 
 ## Related video presentations
 
-["Reasoning about types and code"](https://www.youtube.com/watch?v=tgr_dV7_53s) illustrates some of the topics and methods of this book.
+[Explaining "theorems for free" and parametricity](https://youtu.be/nSyG5USX3-c)
 
-["What did category theory ever did for us (functional programmers)](https://www.youtube.com/watch?v=Zau8CxsfxOo).
+[Explaining Curry-Howard correspondence](https://youtu.be/XYs1Xg1JbVY)
 
-["Parametricity properties of purely functional code"](https://youtu.be/vTWLtBTEmAY)
+[What did functional programming ever do for us](https://youtu.be/glDudJ3fqLk)
 
-[Functional programming tutorials playlist](https://www.youtube.com/playlist?list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
+[Reasoning about types and code](https://www.youtube.com/watch?v=tgr_dV7_53s) illustrates some of the topics and methods of this book.
+
+[What did category theory ever do for us (functional programmers)](https://www.youtube.com/watch?v=Zau8CxsfxOo)
+
+[Parametricity properties of purely functional code](https://youtu.be/vTWLtBTEmAY)
+
+[Playlist: Functional programming tutorials](https://www.youtube.com/playlist?list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV)
 contains audio recordings with slides. The tutorials show an early version of the material in this book.
 Many notations and explanations have been revised and improved when writing up the text of the book.
 

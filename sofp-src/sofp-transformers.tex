@@ -461,7 +461,7 @@ given the code for a monad $L$. Nevertheless, monad transformers
 are known for every monad defined by fully parametric code. Transformers
 for some monads are obtained via functor composition; for other monads,
 transformers need to be defined in special ways. Table~\ref{tab:Known-monad-transformers}
-shows some types of known monad transformers. 
+lists the types of some known monad transformers. 
 
 \begin{wraptable}{l}{0.59\columnwidth}%
 \begin{centering}
@@ -479,13 +479,13 @@ shows some types of known monad transformers.
 \hline 
 {\small{}}\lstinline!List! & {\small{}$L^{A}\triangleq\bbnum 1+A\times L^{A}$} & {\small{}$T_{L}^{M,A}\triangleq M^{\bbnum 1+A\times T_{L}^{M,A}}$}\tabularnewline
 \hline 
+{\small{}}\lstinline!Eval! & {\small{}$L^{A}\triangleq A+\left(\bbnum 1\rightarrow A\right)$} & {\small{}$T_{L}^{M,A}\triangleq M^{A+(\bbnum 1\rightarrow M^{A})}$}\tabularnewline
+\hline 
 {\small{}}\lstinline!State! & {\small{}$L^{A}\triangleq S\rightarrow A\times S$} & {\small{}$T_{L}^{M,A}\triangleq S\rightarrow M^{A\times S}$}\tabularnewline
 \hline 
 {\small{}}\lstinline!Cont! & {\small{}$L^{A}\triangleq\left(A\rightarrow R\right)\rightarrow R$} & {\small{}$T_{L}^{M,A}\triangleq(A\rightarrow M^{R})\rightarrow M^{R}$}\tabularnewline
 \hline 
 {\small{}}\lstinline!Sel! & {\small{}$L^{A}\triangleq\left(A\rightarrow R\right)\rightarrow A$} & {\small{}$T_{L}^{M,A}\triangleq(M^{A}\rightarrow R)\rightarrow M^{A}$}\tabularnewline
-\hline 
-{\small{}}\lstinline!Eval! & {\small{}$L^{A}\triangleq A+\left(\bbnum 1\rightarrow A\right)$} & {\small{}$T_{L}^{M,A}\triangleq M^{A+(\bbnum 1\rightarrow M^{A})}$}\tabularnewline
 \hline 
 \end{tabular}
 \par\end{centering}
@@ -494,24 +494,23 @@ some monads.}
 \vspace{-0.6\baselineskip}
 \end{wraptable}%
 
-\noindent As we can see, monad transformers are created in different
-ways: by composing inside the foreign monad (\lstinline!Either!,
+\noindent Depending on the monad, the corresponding transformer is
+defined by composing inside the foreign monad (\lstinline!Either!,
 \lstinline!Writer!); by composing outside the foreign monad (\lstinline!Reader!,
 \lstinline!Sel!); by wrapping a recursive definition inside the foreign
 monad (\lstinline!List!); and by mixing the foreign monad in a special
-way with the base monad (\lstinline!State!, \lstinline!Cont!, \lstinline!Eval!). 
+way with the base monad (\lstinline!Eval!, \lstinline!State!, \lstinline!Cont!). 
 
-Finding type constructors that work as lawful monad transformers is
-not a simple task.\footnote{The difficulty of that task is illustrated by the history of the \lstinline!ListT!
+It is not easy to guess the type of a monad transformer.\footnote{The difficulty of that task is illustrated by the history of the \lstinline!ListT!
 transformer in the Haskell standard library. The type constructor
 for \lstinline!ListT! was implemented incorrectly in 2002. The faulty
 transformer remained in the library until 2007. See the discussion
-in \texttt{\href{https://wiki.haskell.org/index.php?title=ListT_done_right}{https://wiki.haskell.org/index.php?title=ListT\_done\_right}}} A justification for the formulas in Table~\ref{tab:Known-monad-transformers}
+in \texttt{\href{https://wiki.haskell.org/index.php?title=ListT_done_right}{https://wiki.haskell.org/index.php?title=ListT\_done\_right}}} A justification for the types in Table~\ref{tab:Known-monad-transformers}
 is that they work and obey the required laws, while no simpler transformers
-are known. We will derive and prove the required laws for these and
-other transformers later in this chapter. For now, we accept the results
-of Table~\ref{tab:Known-monad-transformers} as correct and turn
-to other tasks regarding the practical use of monad transformers.
+are known. We will prove the required laws for these and other transformers
+later in this chapter. For now, we accept the results of Table~\ref{tab:Known-monad-transformers}
+and turn to the practical use of monad transformers. 
+
 The first task is to obtain the code of monad methods and lifts for
 the transformers in Table~\ref{tab:Known-monad-transformers}.
 
@@ -1348,12 +1347,11 @@ are type constructors that depend on an arbitrary foreign monad $M$
 and have the methods \lstinline!flift!, \lstinline!blift!, and \lstinline!frun!
 with known type signatures. We may specify these properties via a
 typeclass \lstinline!MTrans[T]! that describes what is requred for
-$T$ to be a monad transformer. A definition of the monad transformer
+$T$ to be a monad transformer. A simple definition of the monad transformer
 typeclass can look like this:
 \begin{lstlisting}
 type Id[A] = A        // The identity monad\textsf{'}s typeclass instance must be defined elsewhere.
 trait MTrans[T[_[_], _]] {
-  type Base[A] = T[Id, A]                // The type constructor describing the base monad.
   def monadT[M[_]: Monad]: Monad[T[M, *]]       // A monad instance must exist for T[M, *].
   def flift[M[_]: Monad, A]: M[A] => T[M, A]
   def blift[M[_]: Monad, A]: Base[A] => T[M, A] = frun[Id, M, A] // Default implementation.
@@ -1368,16 +1366,18 @@ typeclass.
 
 Here is a schematic example of defining a typeclass instance for \lstinline!ReaderT!:
 \begin{lstlisting}
-type ReaderT[M[_], A] = R => M[A]     // The fixed type R must be already defined.
+final case class Reader[A](run: R => A)     // The fixed type R must be already defined.
+final case class ReaderT[M[_], A](run: Reader[M[A]])
 implicit val mTransReaderT = new MTrans[ReaderT] {
-  def monadT[M[_]: Monad]: Monad[T[M, *]] = new Monad[T[M, *]] { ... }
-  def flift[M[_]: Monad, A]: M[A] => R => M[A] = { ma => _ => ma }
-  def frun[M[_]: Monad, N[_]: Monad, A](phi: M ~> N): (R => M[A]) => R => N[A] = t => r => phi(t(r))
+  def monadT[M[_] : Monad]: Monad[ReaderT[M, *]] = ...
+  def flift[M[_] : Monad, A]: M[A] => ReaderT[M, A] = { ma => ReaderT(Reader(_ => ma)) }
+  def frun[M[_] : Monad, N[_] : Monad, A](phi: M ~> N): ReaderT[M, A] => ReaderT[N, A] =
+    t => ReaderT(Reader(r => phi.apply(t.run.run(r))))
 }
 \end{lstlisting}
 
 
-\subsection{Lifts and runners for monad stacks}
+\subsection{Lifts and runners for monad stacks via type relations}
 
 Working with a monad stack, such as $K\varangle L\varangle M\varangle N$,
 requires using the effects of all the monads $K$, $L$, $M$, $N$.
@@ -1456,12 +1456,12 @@ include special methods for running parallel computations on new threads,
 which avoids the need to use a \lstinline!Future! monad in the same
 monad stack.
 
-While we have solved the lifting problem for most monad stacks, it
-is impractical for the programmer to have to write manually a composition
-of several lifts for every source line in a functor block. Even if
-we implement all the lift functions as extension methods and abbreviate
-the type annotations as much as possible, the code would have to be
-written similarly to this fragment:
+While this solves the lifting problem in principle for most monad
+stacks, it is impractical for the programmer to have to write manually
+a composition of several lifts for every source line in a functor
+block. Even if we implement all the lift functions as extension methods
+and abbreviate the type annotations as much as possible, the code
+would have to be written similarly to this fragment:
 
 \begin{wrapfigure}{l}{0.4\columnwidth}%
 \vspace{0.25\baselineskip}
@@ -1479,199 +1479,126 @@ for { // Using a stack of monads K, L, M, N.
 to be extended to $M\varangle L\varangle N\varangle K\varangle P$
 because of a change in program requirements, all source lines in all
 functor blocks will have to be modified to accommodate the required
-changes in the lifts. Clearly, productive practical use of a deep
-monad stack needs better techniques. We will now describe one such
-technique, the \textsf{``}lift relation\textsf{''}. Another technique is the \textsf{``}MTL-style\textsf{''}
-monad stack (see Section~\ref{subsec:Combining-monads-via-mtl-style}
-below). Both techniques are based on creating special typeclasses
-that produce the required lifts automatically.
+changes in the lifts. Clearly, productive practical use of deep monad
+stacks needs better techniques. One such technique, the \textsf{``}lift relation\textsf{''},
+is described next. Another technique is an \textsf{``}MTL-style\textsf{''} monad stack
+(see Section~\ref{subsec:Combining-monads-via-mtl-style} below).
+Both techniques are based on creating special typeclasses that produce
+the required lifts automatically.
 
 The \index{monad transformers!lift@\textsf{``}lift relation\textsf{''} technique}\textsf{``}lift
-relation\textsf{''} technique creates a type relation that describes all possible
-liftings within a given monad stack. Two monads $P$ and $Q$ are
-\textbf{in a lift relation} if we can define a monad morphism $P\leadsto Q$
-via the known monad transformers of the given stack. For instance,
-within the stack $K\varangle L\varangle M\varangle N$, the monads
-$L$ and $K\varangle L\varangle M$ will be in a lift relation because
-we can construct a monad morphism $L\leadsto K\varangle L\varangle M$
-as
+relation\textsf{''} technique creates a type relation that describes all the
+possible liftings within a given monad stack. Two monads $P$ and
+$Q$ are \textbf{in a lift relation} if there exists a monad morphism
+$P\leadsto Q$. If $Q$ is itself a monad stack containing the monad
+$P$, we can implement the lift relation $P\leadsto Q$ by using the
+monad transformers from that stack. For instance, within the stack
+$K\varangle L\varangle M\varangle N$, the monads $L$ and $K\varangle L\varangle M$
+will be in a lift relation because we can construct a monad morphism
+$L\leadsto K\varangle L\varangle M$ as
 \[
 \big(\text{blift}_{L}^{M}\bef\text{flift}_{K}^{L\varangle M}\big):L\leadsto K\varangle L\varangle M\quad.
 \]
 At the same time, the monads $M$ and $K\varangle L$ will \emph{not}
 be in a lift relation since, in general, we have no way of lifting
-the effects of the monad $M$ into the monad $K\varangle L$.
+the effects of the monad $M$ into the monad $K\varangle L$ (assuming
+that we have no monad morphisms $M\leadsto K$ or $M\leadsto L$).
 
 The lift relation is implemented as a type relation for the monads\textsf{'}
 type constructors. The data carried by the type relation will be the
 code for the required monad morphism:
 \begin{lstlisting}
-trait Liftable[P[_], Q[_]] { def up[A]: P[A] => Q[A] } // This function must be a monad morphism.
+trait MM[P[_], Q[_]] { def up[A]: P[A] => Q[A] } // This function must be a monad morphism.
 \end{lstlisting}
 We define the lift relation recursively. Any monad is always in a
 lift relation with itself:
 \begin{lstlisting}
-implicit def liftableId[P[_]]: Liftable[P, P] = new Liftable[P, P] { def up[A] = identity }
+implicit def liftableId[P[_]]: MM[P, P] = new MM[P, P] { def up[A] = identity }
 \end{lstlisting}
 A stack $L\varangle M$ has two lifts, $L\leadsto L\varangle M$ and
-$M\leadsto L\varangle M$, and the corresponding relation instances
-are:
+$M\leadsto L\varangle M$. A relation instance for the foreign lift
+is
 \begin{lstlisting}
-implicit def base[KT[_[_],_], M[_]: Monad](implicit kt: MTrans[KT]): Liftable[kt.Base, KT[M, *]] =
-  Lambda[](kt.blift)
+implicit def foreignMonadToTransformer[KT[_[_], _], M[_] : Monad]
+  (implicit kt: MTrans[KT]): MM[M, KT[M, *]] = new MM[M, KT[M, *]] {
+    override def apply[A]: M[A] => KT[M, A] = kt.flift[M, A]
+}
+\end{lstlisting}
+It requires more work to define a relation instance for the base lift,
+because the type constructor for the base monad cannot be automatically
+derived from the transformer\textsf{'}s type. To make the base monad known
+to the Scala compiler, we define another type relation that designates
+base monads of monad transformers:
+\begin{lstlisting}
+final case class BaseMonad[L[_], KT[_[_], _]](iso: MM[L, KT[Id, *]])
+\end{lstlisting}
+It is assumed that the function \lstinline!iso! should be a monad
+isomorphism. Declaring a relation instance of \lstinline!BaseMonad!
+looks like this example:
+\begin{lstlisting}
+implicit val readerBase: BaseMonad[Reader, ReaderT] = BaseMonad(
+  new MM[Reader, ReaderT[Id, *]] {
+    def apply[A]: Reader[A] => ReaderT[Id, A] = ReaderT[Id, A](_)
+})
+\end{lstlisting}
+Now we can implement a relation instance for the base lift:
+\begin{lstlisting}
+implicit def baseMonadToTransformer[KT[_[_], _], M[_] : Monad, L[_] : Monad]
+  (implicit kt: MTrans[KT], isBase: BaseMonad[L, KT]): MM[L, KT[M, *]] = new MM[L, KT[M, *]] {
+    override def apply[A]: L[A] => KT[M, A] = isBase.iso.apply andThen kt.blift[M, A]
+  }
+\end{lstlisting}
+The typeclass constraint \lstinline!BaseMonad[L, KT]! permits the
+Scala compiler to direct the search for implicits towards finding
+the base monad of a given transformer.
+
+Finally, we define a recursive relation instance: given a stack $K\varangle M$
+and a monad $L$, we may lift $L\leadsto K\varangle M$ if there is
+a monad morphism $L\leadsto K$ that comes from another lift relation:
+\begin{lstlisting}
+implicit def monadToTransformer[KT[_[_], _], L[_] : Monad, M[_] : Monad]
+  (implicit kt: MTrans[KT], lm: MM[L, M]): MM[L, KT[M, *]] = new MM[L, KT[M, *]] {
+    override def apply[A]: L[A] => KT[M, A] = lm.apply andThen kt.flift
+  }
 \end{lstlisting}
 
-{*}{*}{*}
+With appropriate syntax definitions and typeclass instances, we may
+now write code like this:
+\begin{lstlisting}
+type Stack1[A] = EitherT[ReaderT[Option, *], A]
+implicit val MTrEitherT: MTrans[EitherT] = ...
+implicit val baseEither: BaseMonad[Either[E, *], EitherT] = ...
+implicit val MTrReaderT: MTrans[ReaderT] = ...
+implicit val readerBase: BaseMonad[Reader, ReaderT] = ...
+
+val resultStack: Stack1[Int] = for {
+  x <- Option(5).up[Stack1]
+  r <- Reader(identity).up[Stack1]
+  t <- toEither(x, r).up[Stack1] // toEither() returns Either[E, Int]
+} yield t
+\end{lstlisting}
+
 
 \paragraph{Runners}
+
+Having computed a value of type, say, $(K\varangle L\varangle M\varangle N)^{A}$,
+we may want to run the effects of a selected monad, say $L$, using
+a known runner $\theta_{L}:L^{A}\rightarrow A$, but keep the effects
+of other monads in the stack. If all the monad transformers in the
+stack support the foreign and the base runners, we can always run
+the effects of any given monad:
+\[
+\text{frun}_{K}(\text{brun}_{L}^{M\varangle N}(\theta)):(K\varangle L\varangle M\varangle N\leadsto K\varangle M\varangle N\quad.
+\]
+However, this implementation depends on the order of monads in the
+stack and will need to be changed if the stack changes. It is convenient
+if the programmer could merely indicate which monad to run. Given
+the code shown above, we would like to write simply \lstinline!resultStack.run[Reader](123)!
+and obtain a value of type \lstinline!EitherT[Option, Int]!.
 
 {*}{*}{*}
 
 \subsection{Constructing lifts via typeclasses for monad operations (\textsf{``}MTL-style\textsf{''})\label{subsec:Combining-monads-via-mtl-style}}
-
-\begin{comment}
-Monad transformers II: The requirements
-
-A \textbf{monad transformer} for a \textbf{base} monad $L^{\bullet}$
-is a type constructor $T_{L}^{M,\bullet}$ parameterized by a monad
-$M^{\bullet}$, such that for all monads $M^{\bullet}$:
-
-$T_{L}^{M,\bullet}$ is a monad (the monad $M$ \textbf{transformed
-with} $T_{L}$)
-
-\textsf{``}Lifting\textsf{''} \textendash{} a monad morphism $\text{lift}_{L}^{M}:M^{A}\leadsto T_{L}^{M,A}$
-
-\textsf{``}Base lifting\textsf{''} \textendash{} a monad morphism $\text{blift}:L^{A}\leadsto T_{L}^{M,A}$
-
-The \textsf{``}base lifting\textsf{''} could not possibly be natural in $L^{\bullet}$
-
-Transformed identity monad ($\text{Id}$) must become $L$, i.e.~$T_{L}^{\text{Id},\bullet}\cong L^{\bullet}$
-
-$T_{L}^{M,\bullet}$ is \textbf{monadically natural} in $M^{\bullet}$
-(but not in $L^{\bullet}$)
-
-$T_{L}^{M,\bullet}$ is natural w.r.t.~a monadic functor $M^{\bullet}$
-as a type parameter
-
-For any monad $N^{\bullet}$ and a monad morphism $f:M^{\bullet}\leadsto N^{\bullet}$
-we need to have a monad morphism $T_{L}^{M,\bullet}\leadsto T_{L}^{N,\bullet}$
-for the transformed monads: $\text{frun}_{L}^{M}:\left(M^{\bullet}\leadsto N^{\bullet}\right)\rightarrow T_{L}^{M,\bullet}\leadsto T_{L}^{N,\bullet}$
-with the \textsf{``}lifting\textsf{''} laws
-
-If we implement $T_{L}^{M,\bullet}$ only via $M$\textsf{'}s monad methods,
-naturality will hold 
-
-Cf.~\texttt{\textcolor{blue}{\footnotesize{}traverse}}{\small{}$:L^{A}\rightarrow(A\rightarrow F^{B})\rightarrow F^{L^{B}}$
-\textendash{} natural w.r.t.~applicative $F^{\bullet}$}{\small\par}
-
-This can be used for lifting a \textsf{``}runner\textsf{''} $M^{A}\leadsto A$ to
-$T_{L}^{M,\bullet}\leadsto T_{L}^{\text{Id},\bullet}=L^{\bullet}$
-
-\textsf{``}Base runner\textsf{''}: lifts $L^{A}\leadsto A$ into a monad morphism
-$T_{L}^{M,\bullet}\leadsto M^{\bullet}$; so $\text{brun}_{L}^{M}:\left(L^{\bullet}\leadsto\bullet\right)\rightarrow T_{L}^{M,\bullet}\leadsto M^{\bullet}$,
-must commute with \texttt{\textcolor{blue}{\footnotesize{}lift}} and
-\texttt{\textcolor{blue}{\footnotesize{}blift}} 
-
-Monad transformers III: First examples
-
-Recall these monad constructions:
-
-If $M^{A}$ is a monad then $R\rightarrow M^{A}$ is also a monad
-(for a fixed type $R$)
-
-If $M^{A}$ is a monad then $M^{Z+A\times W}$ is also a monad (for
-fixed $W,$ $Z$)
-
-This gives the monad transformers for base monads \texttt{\textcolor{blue}{\footnotesize{}Reader}},
-\texttt{\textcolor{blue}{\footnotesize{}Writer}}, \texttt{\textcolor{blue}{\footnotesize{}Either}}:
-
-\texttt{\textcolor{blue}{\footnotesize{}type ReaderT{[}R, M{[}\_{]},
-A{]} = R $\rightarrow$ M{[}A{]}}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}type EitherT{[}Z, M{[}\_{]},
-A{]} = M{[}Either{[}Z, A{]}{]}}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}type WriterT{[}W, M{[}\_{]},
-A{]} = M{[}(W, A){]}}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}ReaderT}} composes with the
-foreign monad from the \emph{outside}
-
-\texttt{\textcolor{blue}{\footnotesize{}EitherT}} and \texttt{\textcolor{blue}{\footnotesize{}WriterT}}
-must be composed \emph{inside} the foreign monad
-
-Remaining questions:
-
-What are transformers for other standard monads (\texttt{\textcolor{blue}{\footnotesize{}List}},
-\texttt{\textcolor{blue}{\footnotesize{}State}}, \texttt{\textcolor{blue}{\footnotesize{}Cont}})?
-
-These monads do not compose (neither \textsf{``}inside\textsf{''} nor \textsf{``}outside\textsf{''}
-works)!
-
-How to derive a monad transformer for an arbitrary given monad?
-
-For monads obtained via known monad constructions?
-
-For monads constructed via other monad transformers? (Stack them.)
-
-Is it always possible? (No known counterexamples.)
-
-Is a given monad\textsf{'}s transformer unique? (No.)
-
-How to avoid the boilerplate around \texttt{\textcolor{blue}{\footnotesize{}lift}}?
-(\texttt{\textcolor{blue}{\footnotesize{}mtl}}-style transformers)
-
-Monad transformers IV: The zoology of \emph{ad hoc} methods
-
-Need to choose the correct monad transformer construction, per monad:
-
-\textsf{``}Composed-inside\textsf{''}, base monad is inside foreign monad: $T_{L}^{M,A}=M^{L^{A}}$
-
-Examples: the \textbf{linear} monads \texttt{\textcolor{blue}{\footnotesize{}OptionT}},
-\texttt{\textcolor{blue}{\footnotesize{}WriterT}}, \texttt{\textcolor{blue}{\footnotesize{}EitherT}} 
-
-\textsf{``}Composed-outside\textsf{''} \textendash{} the base monad is outside: $T_{L}^{M,A}=L^{M^{A}}$
-
-Examples: \texttt{\textcolor{blue}{\footnotesize{}ReaderT}}; \texttt{\textcolor{blue}{\footnotesize{}SearchT}}
-for search monad \texttt{\textcolor{blue}{\footnotesize{}S{[}A{]}
-= (A $\rightarrow$ Z) $\rightarrow$ A}} 
-
-More generally: all \textbf{rigid} monads have \textsf{``}outside\textsf{''} transformers
-
-\textsf{``}Recursive\textsf{''}: interleaves the base monad and the foreign monad
-
-Examples: \texttt{\textcolor{blue}{\footnotesize{}ListT}}, \texttt{\textcolor{blue}{\footnotesize{}NonEmptyListT}},
-\texttt{\textcolor{blue}{\footnotesize{}FreeMonadT}} 
-
-Monad constructions: defining a transformer for new monads
-
-Product monads $L_{1}^{A}\times L_{2}^{A}$ \textendash{} product
-transformer $T_{L_{1}}^{M,A}\times T_{L_{2}}^{M,A}$
-
-\textsf{``}Contrafunctor-choice\textsf{''} $H^{A}\rightarrow A$ \textendash{} composed-outside
-transformer
-
-Free pointed monads $A+L^{A}$ \textendash{} transformer $M^{A+T_{L}^{M,A}}$
-
-\textsf{``}Irregular\textsf{''}: none of the above constructions work, need something
-else
-
-{\footnotesize{}$T_{\text{State}}^{M,A}=S\rightarrow M^{S\times A}$};
-{\footnotesize{}$T_{\text{Cont}}^{M,A}=\left(A\rightarrow M^{R}\right)\rightarrow M^{R}$};
-\textsf{``}selector\textsf{''} {\footnotesize{}$F^{A\rightarrow P^{Q}}\rightarrow P^{A}$}
-\textendash{} transformer $F^{A\rightarrow T_{P}^{M,Q}}\rightarrow T_{P}^{M,A}$;
-codensity {\footnotesize{}$\forall R.\left(A\rightarrow M^{R}\right)\rightarrow M^{R}$}{\footnotesize\par}
-
-Examples of monads $K^{A}$ for which no transformers exist? (not
-known)
-
-$T_{\text{Cod}}$, $T_{\text{Sel}}$, and $T_{\text{Cont}}$ transformers
-have no \texttt{\textcolor{blue}{\footnotesize{}blift}}, \texttt{\textcolor{blue}{\footnotesize{}brun}},
-or \texttt{\textcolor{blue}{\footnotesize{}frun}} 
-
-Are there monad morphisms between Cod, Sel, and Cont?
-\end{comment}
-
 
 \section{Laws of monad transformers}
 
@@ -8734,15 +8661,16 @@ monads:
 
 Assume a monad $K^{R,\bullet}$ with an extra type parameter $R$;
 in other words, $K^{R,A}$ is a lawful monad with respect to the type
-parameter $A$ with a fixed $R$. Then $L^{A}\triangleq\forall R.\,K^{R,A}$
-is also a lawful monad.
+parameter $A$ with a fixed $R$. Then \textbf{(a)} $L^{A}\triangleq\forall R.\,K^{R,A}$
+is also a lawful monad, and \textbf{(b)} for any fixed $R$, there
+is a monad morphism $L^{\bullet}\leadsto K^{R,\bullet}$.
 
 \subparagraph{Proof}
 
-We need to define the monad $L$\textsf{'}s methods and verify the laws. The
-idea is to add the quantifier ($\forall R$) to monad $K$\textsf{'}s methods.
-(For brevity, we will sometimes write $K$ to mean $K^{R,\bullet}$.)
-Begin with the method \lstinline!pure!:
+\textbf{(a)} We need to define the monad $L$\textsf{'}s methods and verify
+the laws. The idea is to add the quantifier ($\forall R$) to monad
+$K$\textsf{'}s methods. (For brevity, we will sometimes write $K$ to mean
+$K^{R,\bullet}$.) Begin with the method \lstinline!pure!:
 \[
 \text{pu}_{L}\triangleq\forall R.\,\text{pu}_{K^{R,\bullet}}=\forall R.\,a^{:A}\rightarrow\text{pu}_{K^{R,\bullet}}(a)=a^{:A}\rightarrow\forall R.\,\text{pu}_{K^{R,\bullet}}(a)\quad.
 \]
@@ -8788,6 +8716,21 @@ To verify the associativity law:
 \end{align*}
 The two sides are equal due to the associativity of the Kleisli composition
 ($\diamond_{_{K}}$) of the monad $K$.
+
+\textbf{(b)} The monad morphism $\phi:L^{A}\rightarrow K^{R,A}$ is
+defined by setting the quantified type parameter $T$ in $L^{A}\triangleq\forall T.K^{T,A}$
+as $T=R$. The action of $\phi$ on a Kleisli function $f^{:\forall T.\,A\rightarrow K^{T,B}}$
+can be written as $f\bef\phi=f^{R}$. To verify that $\phi$ is monad
+morphism, begin with the identity law:
+\begin{align*}
+{\color{greenunder}\text{expect to equal }\text{pu}_{K}:}\quad & \text{pu}_{L}\bef\phi=(\forall T.\,\text{pu}_{K^{T,\bullet}})\bef\phi=(\forall T.\,\text{pu}_{K^{T,\bullet}})^{R}=\text{pu}_{K^{R,\bullet}}=\text{pu}_{K}\quad.
+\end{align*}
+To verify the composition law, we show that its two sides are equal:
+\begin{align*}
+{\color{greenunder}\text{left-hand side}:}\quad & \big(f^{:\forall R.\,A\rightarrow K^{R,B}}\diamond_{_{L}}g^{:\forall S.\,B\rightarrow K^{S,C}}\big)\bef\phi=(\forall T.\,f^{T}\diamond_{_{K}}g^{T})^{R}=f^{R}\diamond_{_{K}}g^{R}\quad,\\
+{\color{greenunder}\text{right-hand side}:}\quad & (f\bef\phi)\diamond_{_{K}}(g\bef\phi)=f^{R}\diamond_{_{K}}g^{R}\quad.
+\end{align*}
+
 
 \subsubsection{Statement \label{subsec:Statement-codensity-monad-lawful}\ref{subsec:Statement-codensity-monad-lawful}}
 
