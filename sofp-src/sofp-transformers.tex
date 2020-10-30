@@ -1377,7 +1377,7 @@ implicit val mTransReaderT = new MTrans[ReaderT] {
 \end{lstlisting}
 
 
-\subsection{Lifts and runners for monad stacks via type relations}
+\subsection{Using type relations to derive lifts for monad stacks}
 
 Working with a monad stack, such as $K\varangle L\varangle M\varangle N$,
 requires using the effects of all the monads $K$, $L$, $M$, $N$.
@@ -1554,27 +1554,31 @@ the base monad of a given transformer.
 
 Finally, we define a recursive relation instance: given a stack $K\varangle M$
 and a monad $L$, we may lift $L\leadsto K\varangle M$ if there is
-a monad morphism $L\leadsto K$ that comes from another lift relation:
+already a lift relation $L\leadsto K$: 
 \begin{lstlisting}
 implicit def monadToTransformer[KT[_[_], _], L[_] : Monad, M[_] : Monad]
   (implicit kt: MTrans[KT], lm: MM[L, M]): MM[L, KT[M, *]] = new MM[L, KT[M, *]] {
     override def apply[A]: L[A] => KT[M, A] = lm.apply andThen kt.flift
   }
 \end{lstlisting}
+This relation instance needs to have lower priority than the foreign
+and base liftings: the Scala compiler should look for simpler liftings
+before trying to find a relation instance recursively.
 
 With appropriate syntax definitions and typeclass instances, we may
 now write code like this:
 \begin{lstlisting}
-type Stack1[A] = EitherT[ReaderT[Option, *], A]
-implicit val MTrEitherT: MTrans[EitherT] = ...
+type Stack3[A] = EitherT[ReaderT[Option, *], A] // A stack with 3 monads.
+implicit val mTrEitherT: MTrans[EitherT] = ...
 implicit val baseEither: BaseMonad[Either[E, *], EitherT] = ...
-implicit val MTrReaderT: MTrans[ReaderT] = ...
-implicit val readerBase: BaseMonad[Reader, ReaderT] = ...
+implicit val mTrReaderT: MTrans[ReaderT] = ...
+implicit val baseReader: BaseMonad[Reader, ReaderT] = ...
+def toEither(x: Int, r: Int): Either[E, Int] = ...
 
-val resultStack: Stack1[Int] = for {
-  x <- Option(5).up[Stack1]
-  r <- Reader(identity).up[Stack1]
-  t <- toEither(x, r).up[Stack1] // toEither() returns Either[E, Int]
+val resultStack3: Stack3[Int] = for { // Lift each value to Stack3 with a single `up`. 
+  x <- Option(5).up[Stack3]
+  r <- Reader(identity).up[Stack3]
+  t <- toEither(x, r).up[Stack3]
 } yield t
 \end{lstlisting}
 
@@ -1582,20 +1586,39 @@ val resultStack: Stack1[Int] = for {
 \paragraph{Runners}
 
 Having computed a value of type, say, $(K\varangle L\varangle M\varangle N)^{A}$,
-we may want to run the effects of a selected monad, say $L$, using
-a known runner $\theta_{L}:L^{A}\rightarrow A$, but keep the effects
+we may want to run the effects of a chosen monad (say $M$) using
+a known runner $\theta_{M}:M^{A}\rightarrow A$ but keep the effects
 of other monads in the stack. If all the monad transformers in the
-stack support the foreign and the base runners, we can always run
-the effects of any given monad:
+stack support the foreign and base runners, we can run the effects
+of the chosen monad like this:
 \[
-\text{frun}_{K}(\text{brun}_{L}^{M\varangle N}(\theta)):(K\varangle L\varangle M\varangle N\leadsto K\varangle M\varangle N\quad.
+\text{frun}_{K}^{L\varangle M\varangle N}(\text{frun}_{L}^{M\varangle N}(\text{brun}_{M}^{N}(\theta_{M}))):K\varangle L\varangle M\varangle N\leadsto K\varangle L\varangle N\quad.
 \]
-However, this implementation depends on the order of monads in the
-stack and will need to be changed if the stack changes. It is convenient
-if the programmer could merely indicate which monad to run. Given
-the code shown above, we would like to write simply \lstinline!resultStack.run[Reader](123)!
-and obtain a value of type \lstinline!EitherT[Option, Int]!.
+However, the implementation of the runner depends on the order of
+monads in the stack and will have to be changed if the stack changes.
+It would be convenient if the programmer could merely indicate which
+monad\textsf{'}s effects to run, without writing the code of the runner by
+hand. For instance, given the value \lstinline!resultStack3! computed
+by the code shown above, we would like to write simply \lstinline!resultStack3.run[Reader](...)!
+and obtain a value of type \lstinline!EitherT[Option, Int]!. However,
+the 
 
+To create the runners automatically, we need to define a single \lstinline!run!
+method parameterized by the types of the stack and the monad whose
+effects we need to run. It is convenient to implement \lstinline!run!
+as an extension method on a monad stack:
+\begin{lstlisting}
+implicit class RunMethod[S[_]: Monad, A](s: S[A]) { // `S[_]` is a monad stack\textsf{'}s constructor.
+  def run[M[_]: Monad](r: M ~> Id) = ???  // This should work as resultStack3.run[Reader](...)
+}
+\end{lstlisting}
+So far it is not clear what the return type of \lstinline!run! should
+be. The result of \lstinline!run! is a value of a monad stack \lstinline!S!
+without the monad \lstinline!M!. will depend on :
+\begin{lstlisting}
+def run[S[_]: Monad, M[_]: Monad, A](s: S[A])(t: M[A] => A)
+  (implicit r: Runner[S, M]): Result[S, M, A] = ???
+\end{lstlisting}
 {*}{*}{*}
 
 \subsection{Constructing lifts via typeclasses for monad operations (\textsf{``}MTL-style\textsf{''})\label{subsec:Combining-monads-via-mtl-style}}
@@ -2314,7 +2337,7 @@ monads have a general base runner, $\text{brun}\,(\theta_{L})$, parameterized
 by an arbitrary runner $\theta_{L}:L\leadsto\text{Id}$. If so, the
 function $\text{brun}\,(\theta_{L})$ must obey the base runner laws
 for any fixed $\theta_{L}$.
-\item \textbf{Monadic naturality laws}: \index{monad transformers!monadic naturality laws}
+\item \textbf{Monadic naturality laws}: \index{monadic naturality law}
 The functions \lstinline!flift! and \lstinline!brun! must satisfy
 the monadic naturality law with respect to the monad parameter $M$.
 For an arbitrary monad morphism $\phi:M\leadsto N$,

@@ -10330,7 +10330,7 @@ implicit val mTransReaderT = new MTrans[ReaderT] {
 \end_layout
 
 \begin_layout Subsection
-Lifts and runners for monad stacks via type relations
+Using type relations to derive lifts for monad stacks
 \end_layout
 
 \begin_layout Standard
@@ -11238,12 +11238,12 @@ status open
 
 \begin_layout Plain Layout
 
-type Stack1[A] = EitherT[ReaderT[Option, *], A]
+type Stack3[A] = EitherT[ReaderT[Option, *], A] // A stack with 3 monads.
 \end_layout
 
 \begin_layout Plain Layout
 
-implicit val MTrEitherT: MTrans[EitherT] = ...
+implicit val mTrEitherT: MTrans[EitherT] = ...
 \end_layout
 
 \begin_layout Plain Layout
@@ -11253,12 +11253,17 @@ implicit val baseEither: BaseMonad[Either[E, *], EitherT] = ...
 
 \begin_layout Plain Layout
 
-implicit val MTrReaderT: MTrans[ReaderT] = ...
+implicit val mTrReaderT: MTrans[ReaderT] = ...
 \end_layout
 
 \begin_layout Plain Layout
 
-implicit val readerBase: BaseMonad[Reader, ReaderT] = ...
+implicit val baseReader: BaseMonad[Reader, ReaderT] = ...
+\end_layout
+
+\begin_layout Plain Layout
+
+def toEither(x: Int, r: Int): Either[E, Int] = ...
 \end_layout
 
 \begin_layout Plain Layout
@@ -11267,22 +11272,24 @@ implicit val readerBase: BaseMonad[Reader, ReaderT] = ...
 
 \begin_layout Plain Layout
 
-val resultStack: Stack1[Int] = for {
+val resultStack3: Stack3[Int] = for { // Lift each value to Stack3 with
+ a single `up`.
+ 
 \end_layout
 
 \begin_layout Plain Layout
 
-  x <- Option(5).up[Stack1]
+  x <- Option(5).up[Stack3]
 \end_layout
 
 \begin_layout Plain Layout
 
-  r <- Reader(identity).up[Stack1]
+  r <- Reader(identity).up[Stack3]
 \end_layout
 
 \begin_layout Plain Layout
 
-  t <- toEither(x, r).up[Stack1] // toEither() returns Either[E, Int]
+  t <- toEither(x, r).up[Stack3]
 \end_layout
 
 \begin_layout Plain Layout
@@ -11304,36 +11311,48 @@ Having computed a value of type, say,
 \begin_inset Formula $(K\varangle L\varangle M\varangle N)^{A}$
 \end_inset
 
-, we may want to run the effects of a selected monad, say 
-\begin_inset Formula $L$
+, we may want to run the effects of a chosen monad (say 
+\begin_inset Formula $M$
 \end_inset
 
-, using a known runner 
-\begin_inset Formula $\theta_{L}:L^{A}\rightarrow A$
+) using a known runner 
+\begin_inset Formula $\theta_{M}:M^{A}\rightarrow A$
 \end_inset
 
-, but keep the effects of other monads in the stack.
- If all the monad transformers in the stack support the foreign and the
- base runners, we can always run the effects of any given monad:
+ but keep the effects of other monads in the stack.
+ If all the monad transformers in the stack support the foreign and base
+ runners, we can run the effects of the chosen monad like this:
 \begin_inset Formula 
 \[
-\text{frun}_{K}(\text{brun}_{L}^{M\varangle N}(\theta)):(K\varangle L\varangle M\varangle N\leadsto K\varangle M\varangle N\quad.
+\text{frun}_{K}^{L\varangle M\varangle N}(\text{frun}_{L}^{M\varangle N}(\text{brun}_{M}^{N}(\theta_{M}))):K\varangle L\varangle M\varangle N\leadsto K\varangle L\varangle N\quad.
 \]
 
 \end_inset
 
-However, this implementation depends on the order of monads in the stack
- and will need to be changed if the stack changes.
- It is convenient if the programmer could merely indicate which monad to
- run.
- Given the code shown above, we would like to write simply 
+However, the implementation of the runner depends on the order of monads
+ in the stack and will have to be changed if the stack changes.
+ It would be convenient if the programmer could merely indicate which monad's
+ effects to run, without writing the code of the runner by hand.
+ For instance, given the value 
 \begin_inset listings
 inline true
 status open
 
 \begin_layout Plain Layout
 
-resultStack.run[Reader](123)
+resultStack3
+\end_layout
+
+\end_inset
+
+ computed by the code shown above, we would like to write simply 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+resultStack3.run[Reader](...)
 \end_layout
 
 \end_inset
@@ -11351,9 +11370,127 @@ EitherT[Option, Int]
 \end_inset
 
 .
+ However, the 
 \end_layout
 
 \begin_layout Standard
+To create the runners automatically, we need to define a single 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+run
+\end_layout
+
+\end_inset
+
+ method parameterized by the types of the stack and the monad whose effects
+ we need to run.
+ It is convenient to implement 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+run
+\end_layout
+
+\end_inset
+
+ as an extension method on a monad stack:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+implicit class RunMethod[S[_]: Monad, A](s: S[A]) { // `S[_]` is a monad
+ stack's constructor.
+\end_layout
+
+\begin_layout Plain Layout
+
+  def run[M[_]: Monad](r: M ~> Id) = ???  // This should work as resultStack3.run
+[Reader](...)
+\end_layout
+
+\begin_layout Plain Layout
+
+}
+\end_layout
+
+\end_inset
+
+So far it is not clear what the return type of 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+run
+\end_layout
+
+\end_inset
+
+ should be.
+ The result of 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+run
+\end_layout
+
+\end_inset
+
+ is a value of a monad stack 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+S
+\end_layout
+
+\end_inset
+
+ without the monad 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+M
+\end_layout
+
+\end_inset
+
+.
+ will depend on :
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+def run[S[_]: Monad, M[_]: Monad, A](s: S[A])(t: M[A] => A)
+\end_layout
+
+\begin_layout Plain Layout
+
+  (implicit r: Runner[S, M]): Result[S, M, A] = ???
+\end_layout
+
+\end_inset
+
 ***
 \end_layout
 
@@ -15511,7 +15648,7 @@ Monadic naturality laws
 status open
 
 \begin_layout Plain Layout
-monad transformers!monadic naturality laws
+monadic naturality law
 \end_layout
 
 \end_inset
