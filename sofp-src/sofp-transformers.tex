@@ -1351,7 +1351,7 @@ $T$ to be a monad transformer. A simple definition of the monad transformer
 typeclass can look like this:
 \begin{lstlisting}
 type Id[A] = A        // The identity monad\textsf{'}s typeclass instance must be defined elsewhere.
-trait MTrans[T[_[_], _]] {
+trait MTrans[T[_[_], _]] { // The type parameter T is a type constructor with 2 parameters.
   def monadT[M[_]: Monad]: Monad[T[M, *]]       // A monad instance must exist for T[M, *].
   def flift[M[_]: Monad, A]: M[A] => T[M, A]
   def blift[M[_]: Monad, A]: Base[A] => T[M, A] = frun[Id, M, A] // Default implementation.
@@ -1377,7 +1377,7 @@ implicit val mTransReaderT = new MTrans[ReaderT] {
 \end{lstlisting}
 
 
-\subsection{Using type relations to derive lifts for monad stacks}
+\subsection{Lifts and runners for monad stacks}
 
 Working with a monad stack, such as $K\varangle L\varangle M\varangle N$,
 requires using the effects of all the monads $K$, $L$, $M$, $N$.
@@ -1481,10 +1481,42 @@ because of a change in program requirements, all source lines in all
 functor blocks will have to be modified to accommodate the required
 changes in the lifts. Clearly, productive practical use of deep monad
 stacks needs better techniques. One such technique, the \textsf{``}lift relation\textsf{''},
-is described next. Another technique is an \textsf{``}MTL-style\textsf{''} monad stack
-(see Section~\ref{subsec:Combining-monads-via-mtl-style} below).
+is described in Section~\ref{subsec:Constructing-lifts-via-type-relations}.
+Another technique is an \textsf{``}MTL-style\textsf{''} monad stack (Section~\ref{subsec:Combining-monads-via-mtl-style}).
 Both techniques are based on creating special typeclasses that produce
 the required lifts automatically.
+
+\paragraph{Runners}
+
+Having computed a value of type, say, $(K\varangle L\varangle M\varangle N)^{A}$,
+we may want to run the effects of a chosen monad (say $M$) using
+a known runner $\theta_{M}:M^{A}\rightarrow A$ but keep the effects
+of other monads in the stack. If all the monad transformers in the
+stack support the foreign and base runners, we can run the effects
+of the chosen monad like this:
+\[
+\text{frun}_{K}^{L\varangle M\varangle N}(\text{frun}_{L}^{M\varangle N}(\text{brun}_{M}^{N}(\theta_{M}))):K\varangle L\varangle M\varangle N\leadsto K\varangle L\varangle N\quad.
+\]
+As in the case of lifts, the implementations of the runners depend
+on the order of monads in the stack and will have to be changed if
+the stack changes. It would be convenient if the programmer could
+merely indicate which monad\textsf{'}s effects to run, without writing the
+code of the runner by hand.  However, it does not seem possible to
+define a \textsf{``}universal runner\textsf{''} that is fully parametric in the chosen
+monad. 
+
+As an example, consider a monad stack of type \lstinline!EitherT[E, ReaderT[R, Option, *], A]!.
+If we wish to run the effects of the \lstinline!Reader! monad alone,
+the result type must be \lstinline!EitherT[E, Option, A]!. But there
+is no simple way of obtaining that result type from the type of the
+stack: the type \lstinline!EitherT[E, Option, A]! cannot be expressed
+as a type constructor \lstinline!Q[Reader, ...]! where \lstinline!Reader!
+is just one of the type parameters. This complication is due to the
+fact that the type of the stack is not parametric in the type of the
+base monad.
+
+
+\subsection{Constructing lifts via type relations\label{subsec:Constructing-lifts-via-type-relations}}
 
 The \index{monad transformers!lift@\textsf{``}lift relation\textsf{''} technique}\textsf{``}lift
 relation\textsf{''} technique creates a type relation that describes all the
@@ -1505,8 +1537,9 @@ the effects of the monad $M$ into the monad $K\varangle L$ (assuming
 that we have no monad morphisms $M\leadsto K$ or $M\leadsto L$).
 
 The lift relation is implemented as a type relation for the monads\textsf{'}
-type constructors. The data carried by the type relation will be the
-code for the required monad morphism:
+type constructors. The data carried by the type relation \lstinline!MM[P, Q]!
+will be the code for the required monad morphism between \lstinline!P!
+and \lstinline!Q!:
 \begin{lstlisting}
 trait MM[P[_], Q[_]] { def up[A]: P[A] => Q[A] } // This function must be a monad morphism.
 \end{lstlisting}
@@ -1552,9 +1585,8 @@ The typeclass constraint \lstinline!BaseMonad[L, KT]! permits the
 Scala compiler to direct the search for implicits towards finding
 the base monad of a given transformer.
 
-Finally, we define a recursive relation instance: given a stack $K\varangle M$
-and a monad $L$, we may lift $L\leadsto K\varangle M$ if there is
-already a lift relation $L\leadsto K$: 
+Finally, given a stack $K\varangle M$ and a monad $L$, we may lift
+$L\leadsto K\varangle M$ if there is already a lift relation $L\leadsto K$:
 \begin{lstlisting}
 implicit def monadToTransformer[KT[_[_], _], L[_] : Monad, M[_] : Monad]
   (implicit kt: MTrans[KT], lm: MM[L, M]): MM[L, KT[M, *]] = new MM[L, KT[M, *]] {
@@ -1568,7 +1600,7 @@ before trying to find a relation instance recursively.
 With appropriate syntax definitions and typeclass instances, we may
 now write code like this:
 \begin{lstlisting}
-type Stack3[A] = EitherT[ReaderT[Option, *], A] // A stack with 3 monads.
+type Stack3[A] = EitherT[ReaderT[Option, *], A]            // A stack having 3 monads.
 implicit val mTrEitherT: MTrans[EitherT] = ...
 implicit val baseEither: BaseMonad[Either[E, *], EitherT] = ...
 implicit val mTrReaderT: MTrans[ReaderT] = ...
@@ -1582,44 +1614,13 @@ val resultStack3: Stack3[Int] = for { // Lift each value to Stack3 with a single
 } yield t
 \end{lstlisting}
 
-
-\paragraph{Runners}
-
-Having computed a value of type, say, $(K\varangle L\varangle M\varangle N)^{A}$,
-we may want to run the effects of a chosen monad (say $M$) using
-a known runner $\theta_{M}:M^{A}\rightarrow A$ but keep the effects
-of other monads in the stack. If all the monad transformers in the
-stack support the foreign and base runners, we can run the effects
-of the chosen monad like this:
-\[
-\text{frun}_{K}^{L\varangle M\varangle N}(\text{frun}_{L}^{M\varangle N}(\text{brun}_{M}^{N}(\theta_{M}))):K\varangle L\varangle M\varangle N\leadsto K\varangle L\varangle N\quad.
-\]
-However, the implementation of the runner depends on the order of
-monads in the stack and will have to be changed if the stack changes.
-It would be convenient if the programmer could merely indicate which
-monad\textsf{'}s effects to run, without writing the code of the runner by
-hand. For instance, given the value \lstinline!resultStack3! computed
-by the code shown above, we would like to write simply \lstinline!resultStack3.run[Reader](...)!
-and obtain a value of type \lstinline!EitherT[Option, Int]!. However,
-the 
-
-To create the runners automatically, we need to define a single \lstinline!run!
-method parameterized by the types of the stack and the monad whose
-effects we need to run. It is convenient to implement \lstinline!run!
-as an extension method on a monad stack:
-\begin{lstlisting}
-implicit class RunMethod[S[_]: Monad, A](s: S[A]) { // `S[_]` is a monad stack\textsf{'}s constructor.
-  def run[M[_]: Monad](r: M ~> Id) = ???  // This should work as resultStack3.run[Reader](...)
-}
-\end{lstlisting}
-So far it is not clear what the return type of \lstinline!run! should
-be. The result of \lstinline!run! is a value of a monad stack \lstinline!S!
-without the monad \lstinline!M!. will depend on :
-\begin{lstlisting}
-def run[S[_]: Monad, M[_]: Monad, A](s: S[A])(t: M[A] => A)
-  (implicit r: Runner[S, M]): Result[S, M, A] = ???
-\end{lstlisting}
-{*}{*}{*}
+To implement the automatic lifts in this way, the programmer needs
+to create three implicit values for each monad: a \lstinline!Monad!
+typeclass instance, a monad transformer (\lstinline!MTrans!) typeclass
+instance, and a relation instance for the \lstinline!BaseMonad! type
+relation. Those instances can be defined as implicit values in a monad
+transformer library. Then the user may declare an arbitrary monad
+stack and use automatic lifts between any levels in a stack.
 
 \subsection{Constructing lifts via typeclasses for monad operations (\textsf{``}MTL-style\textsf{''})\label{subsec:Combining-monads-via-mtl-style}}
 
@@ -2215,7 +2216,8 @@ So, the monadic naturality of \lstinline!brun! covers two of the
 previously formulated laws.
 
 The monadic naturality of \lstinline!frun! is equivalent to \lstinline!frun!\textsf{'}s
-composition law:
+composition law:\footnote{This is similar to the fact that the naturality law and the composition
+law are the same for \lstinline!fmap!.}
 \[
 \text{frun}_{L}(\phi^{:M\leadsto N})\bef\gunderline{\chi^{\uparrow T_{L}}}=\text{frun}_{L}(\phi)\bef\text{frun}_{L}(\chi)=\text{frun}_{L}(\phi\bef\chi)\quad.
 \]
@@ -2235,11 +2237,10 @@ being a natural transformation in the category of monads.
 
 It is remarkable that all the laws of monad transformers can be derived
 from a single (but more abstract) definition: a monad transformer
-$T$ is an arbitrary pointed and optionally co-pointed functor in
-the category of monads. Such a functor $T$ maps monads $M$, $N$,
-etc., to monads $T^{M}$, $T^{N}$, etc. Given such a functor $T$,
-we \emph{define} the base monad $L$ as the image of the identity
-monad:
+$T$ is an arbitrary pointed and co-pointed functor in the category
+of monads. Such a functor $T$ maps monads $M$, $N$, etc., to monads
+$T^{M}$, $T^{N}$, etc. Given such a functor $T$, we \emph{define}
+the base monad $L$ as the image of the identity monad:
 \[
 L\triangleq T^{\text{Id}}\quad.
 \]
@@ -2399,10 +2400,11 @@ the monad transformer laws, as the next subsection shows.
 
 \subsection{Examples of failure to define a generic monad transformer}
 
-It appears to be impossible to define $T_{L}^{M}$ as a generic construction
-that works in the same way for all monads $L$ and $M$. We will now
-consider a few general ways of combining the type constructors $L$
-and $M$. In all cases, we will find that some of the monad transformer
+One would hope to discover a type construction that works in the same
+way for all monads $L$ and $M$ and faithfully represents the effects
+of both monads at once (i.e., satisfies the laws of monad transformers).
+We will now consider a few different ways of combining the type constructors
+$L$ and $M$. In all cases, we will find that some monad transformer
 laws are violated.
 
 Simple ways of combining two type constructors $L^{\bullet}$ and
@@ -2416,12 +2418,11 @@ and only in a certain order; so it cannot serve as a generic monad
 transformer. A simple counterexample is $L^{A}\triangleq\bbnum 1+A$
 and $M^{A}\triangleq A\times A$ where $M^{L^{A}}=\left(\bbnum 1+A\right)\times\left(\bbnum 1+A\right)$
 is a monad but $L^{M^{A}}=\bbnum 1+A\times A$ is not (see Exercise~\ref{subsec:Exercise-1-monads-7}).
-Another counterexample is the \lstinline!State! monad, $\text{State}_{S}^{A}\triangleq S\rightarrow S\times A$,
-for which we have shown that $\bbnum 1+\text{State}_{S}^{A}$ and
-$\text{State}_{S}^{Z\rightarrow A}$ are not monads (Examples~\ref{subsec:Example-state-monad-composition-fails-with-option}
-and~\ref{subsec:Example-state-monad-composition-fails-with-reader}).
+Another counterexample is the \lstinline!State! monad, $\text{State}_{S}^{A}\triangleq S\rightarrow S\times A$.
 The \lstinline!State! monad does not compose with arbitrary monads
-$M$ in either order.
+$M$ in either order; for instance, $\bbnum 1+\text{State}_{S}^{A}$
+and $\text{State}_{S}^{Z\rightarrow A}$ are not monads (Examples~\ref{subsec:Example-state-monad-composition-fails-with-option}
+and~\ref{subsec:Example-state-monad-composition-fails-with-reader}). 
 
 \paragraph{Functor product}
 
@@ -2432,14 +2433,14 @@ describes two separate computations with two separate effects. Instead,
 we need a single computation with a combined effect. Formally, we
 find that there is no naturally defined $\text{flift}:M^{\bullet}\leadsto L^{\bullet}\times M^{\bullet}$
 because we cannot create values of type $L^{A}$ out of values of
-type $M^{A}$ for arbitrary monads $L$ and $M$.
+type $M^{A}$ when monads $L$ and $M$ are arbitrary.
 
 \paragraph{Functor co-product}
 
 The functor co-product $L^{\bullet}+M^{\bullet}$ is in general not
-a monad when $L$ and $M$ are arbitrary monads. An immediate counterexample
+a monad when $L$ and $M$ are arbitrary monads. A simple counterexample
 is found by using two \lstinline!Reader! monads, $L^{A}\triangleq P\rightarrow A$
-and $M^{A}\triangleq Q\rightarrow A$. The disjunction $\left(P\rightarrow A\right)+\left(Q\rightarrow A\right)$
+and $M^{A}\triangleq Q\rightarrow A$. The co-product $\left(P\rightarrow A\right)+\left(Q\rightarrow A\right)$
 is not a monad (Exercise~\ref{subsec:Exercise-1-monads-6}). But
 even if $L^{\bullet}+M^{\bullet}$ were a monad, the result would
 be a \emph{choice} between two different effectful computations, not
@@ -2449,38 +2450,39 @@ a single computation with a combined effect.
 
 The functor composition $L^{M^{\bullet}}$ and the co-product $L^{\bullet}+M^{\bullet}$
 may not always be monads, but they are always functors. We can make
-monads out of them by using the free monad construction. So, we obtain
-$\text{Free}^{L^{M^{\bullet}}}$, the free monad over $L^{M^{\bullet}}$,
-and $\text{Free}^{L^{\bullet}+M^{\bullet}}$, the free monad over
-$L^{\bullet}+M^{\bullet}$. Many laws of the monad transformers are
-satisfied by these constructions. However, the identity laws fail
-because
+monads out of those functors by using the free monad construction.
+So, we obtain $\text{Free}^{L^{M^{\bullet}}}$, the free monad over
+$L^{M^{\bullet}}$, and $\text{Free}^{L^{\bullet}+M^{\bullet}}$,
+the free monad over $L^{\bullet}+M^{\bullet}$. Many laws of the monad
+transformers are satisfied by these constructions. However, the identity
+laws fail because
 \[
-\text{Free}^{L^{\text{Id}^{\bullet}}}\cong\text{Free}^{L^{\bullet}}\not\cong L\quad,\quad\quad\text{Free}^{L^{\bullet}+\text{Id}^{\bullet}}\not\cong L\quad,
+\text{Free}^{L^{\text{Id}^{\bullet}}}\cong\text{Free}^{L^{\bullet}}\not\cong L\quad,\quad\quad\text{Free}^{L^{\bullet}+\text{Id}^{\bullet}}\not\cong L\quad.
 \]
-and the lifting laws are also violated because $\text{flift}:M^{A}\rightarrow\text{Free}^{L^{\bullet}+M^{\bullet},A}$
+The lifting laws are also violated because $\text{flift}:M^{A}\rightarrow\text{Free}^{L^{\bullet}+M^{\bullet},A}$
 is not a monad morphism: it maps $\text{pu}_{M}$ into a non-pure
 value of the free monad. Nevertheless, these constructions are not
 useless. Once we run the free monad into a concrete (non-free) monad,
 we could arrange to hide the violations of these laws, so that the
 monad laws hold for the resulting (non-free) monad.
 
-\paragraph{\textsf{``}Monoidal convolution\textsf{''}}
+\paragraph{\textsf{``}Day convolution\textsf{''}}
 
-The construction called \textsf{``}\textbf{monoidal convolution\index{monoidal convolution}}\textsf{''}
+The construction called \textsf{``}\textbf{Day convolution\index{Day convolution}}\textsf{''}
 defines a new functor $L\star M$ via 
 \begin{equation}
-\left(L\star M\right)^{A}\triangleq\exists P\exists Q.\left(P\times Q\rightarrow A\right)\times L^{P}\times M^{Q}\quad.\label{eq:definition-of-monoidal-convolution}
+\left(L\star M\right)^{A}\triangleq\exists P.\:\exists Q.\,\left(P\times Q\rightarrow A\right)\times L^{P}\times M^{Q}\quad.\label{eq:definition-of-monoidal-convolution}
 \end{equation}
-This formula can be seen as a combination of the co-Yoneda identities
+This formula can be seen as a modified application of the co-Yoneda
+identities
 \[
-L^{A}\cong\exists P.L^{P}\times\left(P\rightarrow A\right)\quad,\quad\quad M^{A}\cong\exists Q.M^{Q}\times\left(Q\rightarrow A\right)\quad.
+L^{A}\cong\exists P.\,L^{P}\times\left(P\rightarrow A\right)\quad,\quad\quad M^{A}\cong\exists Q.M^{Q}\times\left(Q\rightarrow A\right)\quad.
 \]
-The functor product $L\times M$ is equivalent to $\exists P.\exists Q.L^{P}\times M^{Q}\times\left(P+Q\rightarrow A\right)$:
+The functor product $L\times M$ is equivalent to $\exists P.\,\exists Q.\,L^{P}\times M^{Q}\times\left(P+Q\rightarrow A\right)$:
 \begin{align}
  & L^{A}\times M^{A}\nonumber \\
-{\color{greenunder}\text{co-Yoneda identities for }L^{A}\text{ and }M^{A}:}\quad & \cong\exists P.L^{P}\times\gunderline{\left(P\rightarrow A\right)}\times\exists Q.M^{Q}\times\gunderline{\left(Q\rightarrow A\right)}\nonumber \\
-{\color{greenunder}\text{equivalence in Eq.~(\ref{eq:equivalence-pq-a-for-monoidal-convolution})}:}\quad & \cong\exists P.\exists Q.L^{P}\times M^{Q}\times\left(P+Q\rightarrow A\right)\label{eq:product-l-m-for-monoidal-convolution}
+{\color{greenunder}\text{co-Yoneda identities for }L^{A}\text{ and }M^{A}:}\quad & \cong\exists P.L^{P}\times\gunderline{\left(P\rightarrow A\right)}\times\exists Q.\,M^{Q}\times\gunderline{\left(Q\rightarrow A\right)}\nonumber \\
+{\color{greenunder}\text{equivalence in Eq.~(\ref{eq:equivalence-pq-a-for-monoidal-convolution})}:}\quad & \cong\exists P.\,\exists Q.\,L^{P}\times M^{Q}\times\left(P+Q\rightarrow A\right)\label{eq:product-l-m-for-monoidal-convolution}
 \end{align}
 where we used the type equivalence 
 \begin{equation}
@@ -2490,10 +2492,10 @@ If we (arbitrarily) replace $P+Q\rightarrow A$ by $P\times Q\rightarrow A$
 in Eq.~(\ref{eq:product-l-m-for-monoidal-convolution}), we will
 obtain Eq.~(\ref{eq:definition-of-monoidal-convolution}).
 
-The monoidal convolution $L\star M$ always produces a functor since
-Eq.~(\ref{eq:definition-of-monoidal-convolution}) is covariant in
-$A$. An example where the monoidal convolution fails to produce a
-monad transformer is $L^{A}\triangleq1+A$ and $M^{A}\triangleq R\rightarrow A$.
+The Day convolution $L\star M$ is associative\footnote{\texttt{\href{https://en.wikipedia.org/wiki/Day_convolution}{https://en.wikipedia.org/wiki/Day\_convolution}}}
+and always produces a functor since Eq.~(\ref{eq:definition-of-monoidal-convolution})
+is covariant in $A$. A simple example where the Day convolution fails
+to produce a monad transformer is $L^{A}\triangleq1+A$ and $M^{A}\triangleq R\rightarrow A$.
 We compute the functor $L\star M$ and establish that it is not a
 monad:
 \begin{align*}
@@ -2506,29 +2508,74 @@ monad:
 \end{align*}
 This functor is not a monad (see Exercise~\ref{subsec:Exercise-1-monads-7}).
 
-The name \textsf{``}monoidal convolution\textsf{''} comes from the fact that the type
-operations $P+Q$ and $P\times Q$ are both monoidal, in a suitable
-sense. We could generalize the monoidal convolution to use another
-monoidal operation, such as $P+Q+Z\times P\times Q$ (where $Z$ is
-a fixed type), instead of $P\times Q$. The result will be another
-version of a \textsf{``}monoidal convolution\textsf{''}, but it will also fail to
-combine monads.
+The Day convolution is based on the fact that the type operations
+$P+Q$ and $P\times Q$ are both monoidal, in a suitable sense. We
+could generalize the Day convolution to use another monoidal operation,
+such as $P+Q+Z\times P\times Q$ (where $Z$ is a fixed type), instead
+of $P\times Q$. The result will be a different \textsf{``}monoidal convolution\textsf{''},
+but it will also fail to combine monads.
 
-\paragraph{Using the codensity monad{*}{*}{*}}
-\begin{itemize}
-\item codensity monad over $L^{M^{\bullet}}$: $F^{A}\triangleq\forall B.\,\big(A\rightarrow L^{M^{B}}\big)\rightarrow L^{M^{B}}$
-\textendash{} no lift 
-\item Codensity-$L$ transformer: $\text{Cod}_{L}^{M,A}\triangleq\forall B.\left(A\rightarrow L^{B}\right)\rightarrow L^{M^{B}}$
-\textendash{} no lift 
-\begin{itemize}
-\item applies the continuation transformer to $M^{A}\cong\forall B.\left(A\rightarrow B\right)\rightarrow M^{B}$
-\end{itemize}
-\item Codensity composition: $F^{A}\triangleq\forall B.\left(M^{A}\rightarrow L^{B}\right)\rightarrow L^{B}$
-\textendash{} not a monad
-\begin{itemize}
-\item Counterexample: $M^{A}\triangleq R\rightarrow A$ and $L^{A}\triangleq S\rightarrow A$
-\end{itemize}
-\end{itemize}
+\paragraph{Using a codensity monad}
+
+The type constructor 
+\[
+\text{Cod}^{F,A}\triangleq\forall B.\,(A\rightarrow F^{B})\rightarrow F^{B}
+\]
+is called the \index{codensity monad}\textbf{codensity monad} on
+a functor $F$. The codensity monad provides yet another way of making
+a monad out of any functor. Can we then combine arbitrary monads $L$,
+$M$ into a new monad? It turns out that the codensity construction
+does not provide enough properties to create a usable monad transformer.
+Here are some attempts:
+
+\textbf{(1)} The codensity monad on $L\circ M$,
+\[
+F^{A}\triangleq\forall B.\,\big(A\rightarrow L^{M^{B}}\big)\rightarrow L^{M^{B}}\quad,
+\]
+does not support a lift $M^{A}\rightarrow F^{A}$. Intuitively, the
+reason is that we can use values of types $M^{A}$ and $A\rightarrow L^{M^{B}}$
+only in one way: using \lstinline!map! to transform $M^{A}$ into
+$M^{L^{M^{B}}}$. There is no way of exchanging the layers of $M$
+and $L$ when those monads are arbitrary, so we cannot obtain a value
+of type $L^{M^{B}}$. A simple formal counterexample is found with
+$L^{A}\triangleq\bbnum 1+A$ and $M^{A}\triangleq Z\rightarrow A$
+for a fixed type $Z$: the type signature
+\[
+(Z\rightarrow A)\rightarrow(A\rightarrow\bbnum 1+(Z\rightarrow B))\rightarrow\bbnum 1+(Z\rightarrow B)
+\]
+can be implemented only as a function that returns a constant unit
+value ($1+\bbnum 0^{:Z\rightarrow B}$), which loses information.
+Formally, a constant function would violate the identity law of monad
+morphisms.
+
+\textbf{(2)} The composition of $\text{Cod}^{L,\bullet}$ and $M^{\bullet}$
+yields the following type constructor:
+\[
+F^{A}\triangleq\forall B.\,(M^{A}\rightarrow L^{B})\rightarrow L^{B}\quad.
+\]
+However, this $F^{A}$ fails to be a monad for all $L$ and $M$.
+A counterexample is $L^{A}\triangleq S\rightarrow A$ and $M^{A}\triangleq R\rightarrow A$,
+for which the Yoneda identity gives:
+\begin{align*}
+ & F^{A}=\forall B.\,(\gunderline{(R\rightarrow A)\rightarrow S}\rightarrow B)\rightarrow S\rightarrow B\cong\forall B.\,(\gunderline{(R\rightarrow A)\times S}\rightarrow B)\rightarrow L^{B}\\
+ & \cong L^{(R\rightarrow A)\times S}=S\rightarrow S\times\left(R\rightarrow A\right)\quad.
+\end{align*}
+The last type constructor is not a monad: it is a composition of the
+\lstinline!Reader! and \lstinline!State! monads in the wrong order
+(see Statement~\ref{subsec:Example-state-monad-composition-fails-with-reader}).
+
+\textbf{(3)} Consider the specially modified codensity monad:
+\[
+\text{Cod}_{L}^{M,A}\triangleq\forall X.\,(A\rightarrow L^{X})\rightarrow L^{M^{X}}\quad.
+\]
+This type constructor can be viewed as the continuation monad transformer
+for the base monad $\forall X.\,(A\rightarrow X)\rightarrow M^{X}\cong M^{A}$
+(this equivalence is due to the Yoneda identity). Although $\text{Cod}_{L}^{M,A}$
+is a monad (Statement~), it cannot serve as a monad transformer because
+the lift $M^{A}\rightarrow\text{Cod}_{L}^{M,A}$ does not exist for
+some $L$ and $M$. A simple counterexample is found with $M^{A}\triangleq R\rightarrow A$
+and $L^{A}\triangleq\bbnum 1+A$ similarly to the counterexample shown
+in (1).
 
 \subsection{Functor composition with transformed monads}
 
@@ -2536,7 +2583,7 @@ Suppose we are working with a base monad $L$ and a foreign monad
 $M$, and we have constructed the transformed monad $T_{L}^{M}$.
 In this section, let us denote the transformed monad simply by $T$. 
 
-A useful property of monad transformers is that the monad $T$ adequately
+The main feature of a monad transformer is that the monad $T$ adequately
 describes the effects of both monads $L$ and $M$ at the same time.
 Suppose we are working with a deeply nested type constructor involving
 many functor layers of monads $L$, $M$, and $T$ such as
@@ -2544,8 +2591,8 @@ many functor layers of monads $L$, $M$, and $T$ such as
 T^{M^{T^{L^{M^{L^{A}}}}}}=\left(T\circ M\circ T\circ L\circ M\circ L\right)^{A}\quad.
 \]
 The properties of the transformer allow us to convert this type to
-a single layer of the transformed monad $T$. In this example, we
-will have a natural transformation
+a single layer of the monad $T$. In this example, we will have a
+natural transformation
 \[
 \left(T\circ M\circ T\circ L\circ M\circ L\right)^{A}\rightarrow T^{A}\quad.
 \]
@@ -2554,7 +2601,10 @@ to convert each layer of $L$ or $M$ to a layer of $T$, lifting
 into functors as necessary. The result will be a number of nested
 layers of $T$. Second, we use $\text{ftn}_{T}$ as many times as
 necessary to flatten all nested layers of $T$ into a single layer.
-The result will be a value of type $T^{A}$, as required.
+The result will be a value of type $T^{A}$, as required. Due to the
+laws of \lstinline!blift! and \lstinline!flift!, the result does
+not depend on the order in which the different layers are converted
+and flattened.
 
 \subsection{Stacking two monads: Proofs\label{subsec:Stacking-two-monads}}
 
@@ -8065,7 +8115,7 @@ type $M^{A}\rightarrow L^{A}$ cannot be implemented.
 
  
 
-\section{Incomplete monad transformers}
+\section{Incomplete transformers}
 
 A \textbf{complete}\index{monad transformers!completeness} monad
 transformer must fully conform to the laws of a pointed and co-pointed
@@ -8937,7 +8987,7 @@ $M^{F^{\bullet}}$.
 \paragraph{The identity laws}
 
 When $M=\text{Id}$, the type $T_{\text{Cod}}^{\text{Id},A}$ is the
-same as $\text{Cod}^{F,A}$, so the isomorphism is given by the identity
+same as $\text{Cod}^{F,A}$, so the isomorphism is given by identity
 functions. Laws always hold for identity functions.
 
 \paragraph{The lifting laws}
@@ -10616,6 +10666,37 @@ an extra type parameter $R$. All methods of the typeclass are then
 contained in a value of type $P^{R,A}\rightarrow A$, where the type
 $R$ is fixed. Show that $\forall R.\,P^{R,A}\rightarrow A$ is again
 an inductive typeclass.
+
+\subsubsection{Exercise \label{par:Exercise-combined-codensity-monad}\ref{par:Exercise-combined-codensity-monad}{*}}
+
+\textbf{(a)} The \textbf{combined} \index{codensity monad!combined}\textbf{codensity
+monad} $\text{Cod}_{L}^{M,A}$ is defined by
+\[
+\text{Cod}_{F}^{M,A}\triangleq\forall X.\,(A\rightarrow F^{X})\rightarrow F^{M^{X}}\quad,
+\]
+where $M$ is a monad and $F$ is any functor. One may define the
+monad instance for $\text{Cod}_{F}^{M,A}$ via the flipped Kleisli
+composition:
+\[
+f^{:\forall X.\,(B\rightarrow F^{X})\rightarrow A\rightarrow F^{M^{X}}}\tilde{\diamond}g^{:\forall Y.\,(C\rightarrow F^{Y})\rightarrow B\rightarrow F^{M^{Y}}}\triangleq\forall Z.\,k^{:C\rightarrow F^{Z}}\rightarrow\big(k\triangleright g^{Z}\triangleright f^{M^{Z}}\big)\bef\text{ftn}_{M}^{\uparrow F}\quad.
+\]
+Prove that the type constructor $\text{Cod}_{L}^{M,A}$ is a lawful
+monad.
+
+\textbf{(b)} Show that $L^{A}\triangleq(A\rightarrow X)\rightarrow M^{X}$
+is \emph{not} a monad (here $X$ is a fixed type).
+
+\begin{comment}
+Solution
+
+\textbf{(a)} Denote for brevity $\text{Cod}_{F}^{M,A}\triangleq C^{A}$
+and dfine the flipped Kleisli method $\tilde{\text{pu}}_{C}$ by
+\[
+\tilde{\text{pu}}_{C}\triangleq\forall X.\,k^{:A\rightarrow F^{X}}\rightarrow k\bef\text{pu}_{M}^{\uparrow F}\quad.
+\]
+
+\textbf{(b)} Choose $M^{A}\triangleq\bbnum 1+A$. {*}{*}{*}
+\end{comment}
 
 \begin{comment}
 Chapter eleven of the functional programming tutorial computations
