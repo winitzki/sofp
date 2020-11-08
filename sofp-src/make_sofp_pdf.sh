@@ -52,11 +52,11 @@ function add_color {
 	local texsrc="$1"
 	# Insert color comments into displayed equation arrays. Also, in some places the green color was inserted; replace by `greenunder`.
 	# Example of inserted color: {\color{greenunder}\text{outer-interchange law for }M:}\quad &
-	LC_ALL=C sed -i "" -e 's|\\color{green}|\\color{greenunder}|; s|^\(.*\\text{[^}]*}.*:\)\( *\\quad \& \)|{\\color{greenunder}\1}\2|' "$texsrc"
+	LC_ALL=C sed -i bak -e 's|\\color{green}|\\color{greenunder}|; s|^\(.*\\text{[^}]*}.*:\)\( *\\quad \& \)|{\\color{greenunder}\1}\2|' "$texsrc"
 	# Insert color background into all displayed equations. This is disabled because it does not always produce visually good results.
 	if false; then
-	LC_ALL=C sed -i "" -E -e ' s!\\begin\{(align.?|equation)\}!\\begin{empheq}[box=\\mymathbgbox]{\1}!; s!\\end\{(align.?|equation)\}!\\end{empheq}!; ' "$texsrc"
-	LC_ALL=C sed -i "" -E -e ' s!^\\\[$!\\begin{empheq}[box=\\mymathbgbox]{equation*}!; s!^\\\]$!\\end{empheq}!; ' "$texsrc"
+	LC_ALL=C sed -i bak -E -e ' s!\\begin\{(align.?|equation)\}!\\begin{empheq}[box=\\mymathbgbox]{\1}!; s!\\end\{(align.?|equation)\}!\\end{empheq}!; ' "$texsrc"
+	LC_ALL=C sed -i bak -E -e ' s!^\\\[$!\\begin{empheq}[box=\\mymathbgbox]{equation*}!; s!^\\\]$!\\end{empheq}!; ' "$texsrc"
 	fi
 }
 
@@ -64,7 +64,7 @@ function add_source_hashes {
 	gitcommit=`git_commit_hash`
 	sourcehash=`source_hash`
 	echo $sourcehash > $name.source_hash1
-	LC_ALL=C sed -i "" -E -e "s/INSERTSOURCEHASH/$sourcehash/; s/INSERTGITCOMMIT/$gitcommit/" $name.tex
+	LC_ALL=C sed -i bak -E -e "s/INSERTSOURCEHASH/$sourcehash/; s/INSERTGITCOMMIT/$gitcommit/" $name.tex
 	if diff -q $name.source_hash $name.source_hash1 > /dev/null; then
 		mv $name.source_hash1 $name.source_hash
 		false
@@ -81,17 +81,17 @@ function insert_examples_exercises_count { # This is replaced in the root file o
 	local codesnippets=`cat "$base"-*.tex | LC_ALL=C fgrep -c '\begin{lstlisting}'`
 	local stmts=`cat "$base"-*.tex | LC_ALL=C fgrep -c '\subsubsection{Statement '`
 	local diagrams=`cat "$base"-*.tex | LC_ALL=C fgrep -c '\xymatrix{'`
-	LC_ALL=C sed -i "" -e "s,NUMBEROFEXAMPLES,$examples,g; s,NUMBEROFEXERCISES,$exercises,g; s,NUMBEROFDIAGRAMS,$diagrams,g; s,NUMBEROFSTATEMENTS,$stmts,g; s,NUMBEROFCODESNIPPETS,$codesnippets,g;" "$target"
+	LC_ALL=C sed -i bak -e "s,NUMBEROFEXAMPLES,$examples,g; s,NUMBEROFEXERCISES,$exercises,g; s,NUMBEROFDIAGRAMS,$diagrams,g; s,NUMBEROFSTATEMENTS,$stmts,g; s,NUMBEROFCODESNIPPETS,$codesnippets,g;" "$target"
 }
 
 function remove_lulu {
 	local base="$1"
-        LC_ALL=C sed -i "" -e 's,^\(.publishers{Published by\),%\1,; s,^\(Published by\),%\1,; s,^\(ISBN:\),%\1,' "$base".tex
+        LC_ALL=C sed -i bak -e 's,^\(.publishers{Published by\),%\1,; s,^\(Published by\),%\1,; s,^\(ISBN:\),%\1,' "$base".tex
 }
 
 function add_lulu {
 	local base="$1"
-        LC_ALL=C sed -i "" -e 's,^%\(.publishers{Published by \),\1,; s,^%\(Published by \),\1,; s,^%\(ISBN:\),\1,' "$base".tex
+        LC_ALL=C sed -i bak -e 's,^%\(.publishers{Published by \),\1,; s,^%\(Published by \),\1,; s,^%\(ISBN:\),\1,' "$base".tex
 }
 
 function assemble_sources {
@@ -119,9 +119,9 @@ echo "Post-processing LaTeX files..."
 # Insert the number of examples and exercises. This replacement is only for the root file.
 insert_examples_exercises_count $name $name.tex
 ## Remove mathpazo. This was a mistake: should not remove it.
-#LC_ALL=C sed -i "" -e 's/^.*usepackage.*mathpazo.*$//' sofp.tex
+#LC_ALL=C sed -i bak -e 's/^.*usepackage.*mathpazo.*$//' sofp.tex
 # Replace ugly Palatino quote marks and apostrophes by sans-serif marks.
-LC_ALL=C sed -i "" -e " s|'s|\\\\textsf{'}s|g; s|s'|s\\\\textsf{'}|g;  "' s|``|\\textsf{``}|g; s|“|\\textsf{``}|g; '" s|''|\\\\textsf{''}|g; s|”|\\\\textsf{''}|g;  s|\\\\textsf{'}'|\\\\textsf{''}|g; " sofp*.tex
+LC_ALL=C sed -i bak -e " s|'s|\\\\textsf{'}s|g; s|s'|s\\\\textsf{'}|g;  "' s|``|\\textsf{``}|g; s|“|\\textsf{``}|g; '" s|''|\\\\textsf{''}|g; s|”|\\\\textsf{''}|g;  s|\\\\textsf{'}'|\\\\textsf{''}|g; " sofp*.tex
 # Add color to equation displays.
 for f in $name*tex; do add_color "$f"; done
 # Check whether the sources have changed. If so, create a new sources archive and a new PDF file.
