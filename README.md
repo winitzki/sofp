@@ -80,3 +80,9 @@ pdflatex --interaction=batchmode sofp.tex
 makeindex sofp.idx
 pdflatex --interaction=batchmode sofp.tex
 ```
+
+# Docker image for builds
+
+A Docker image is built by the repository https://hub.docker.com/repository/docker/winitzki/sofp-docker-build/builds
+
+This image is referenced by the file [build-pdf.yml](.github/workflows/build-pdf.yml) 
