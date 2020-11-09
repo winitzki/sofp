@@ -9,6 +9,13 @@ name="sofp"
 draft="$name-draft"
 srcbase="sofp-src"
 
+# Set custom lyx directory if needed.
+if [ x"$LYXDIR" == x ]; then
+	lyxdir=""
+else
+	lyxdir="-userdir $LYXDIR"
+fi
+
 test -d $srcbase && cd $srcbase
 
 function git_commit_hash {
@@ -109,12 +116,12 @@ pdftk=`which pdftk`
 # LyX needs to be installed for this to work. Edit the next line as needed.
 lyx=`which lyx`
 
-echo "Info: Using pdftk from '$pdftk' and lyx from '$lyx'"
+echo "Info: Using pdftk from '$pdftk' and lyx from '$lyx', lyx directory $lyxdir"
 
 rm -f $name*tex $name*log $name*ilg $name*idx $name*toc
 
 echo "Exporting LyX files $name.lyx and its child documents into LaTeX..."
-"$lyx" --export pdflatex $name.lyx # Exports LaTeX for all child documents as well.
+"$lyx" $lyxdir --export pdflatex $name.lyx # Exports LaTeX for all child documents as well.
 echo "Post-processing LaTeX files..."
 # Insert the number of examples and exercises. This replacement is only for the root file.
 insert_examples_exercises_count $name $name.tex
