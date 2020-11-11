@@ -1351,7 +1351,7 @@ $T$ to be a monad transformer. A simple definition of the monad transformer
 typeclass can look like this:
 \begin{lstlisting}
 type Id[A] = A        // The identity monad\textsf{'}s typeclass instance must be defined elsewhere.
-trait MTrans[T[_[_], _]] { // The type parameter T is a type constructor with 2 parameters.
+trait MTrans[T[_[_]]] { // The type parameter T is a type constructor with 2 parameters.
   def monadT[M[_]: Monad]: Monad[T[M, *]]       // A monad instance must exist for T[M, *].
   def flift[M[_]: Monad, A]: M[A] => T[M, A]
   def blift[M[_]: Monad, A]: Base[A] => T[M, A] = frun[Id, M, A] // Default implementation.
@@ -1623,6 +1623,274 @@ transformer library. Then the user may declare an arbitrary monad
 stack and use automatic lifts between any levels in a stack.
 
 \subsection{Constructing lifts via typeclasses for monad operations (\textsf{``}MTL-style\textsf{''})\label{subsec:Combining-monads-via-mtl-style}}
+
+The MTL-style\footnote{The name MTL stands for \textsf{``}monad transformer library\textsf{''}; see \texttt{\href{http://book.realworldhaskell.org/read/monad-transformers.html}{http://book.realworldhaskell.org/read/monad-transformers.html}}}
+monadic\index{monadic program!MTL-style} programming is another way
+of achieving automatic lifting of monadic programs to arbitrary monad
+stacks. The MTL approach has two main ingredients:
+\begin{itemize}
+\item For a chosen set of \textsf{``}standard\textsf{''} monads (such as the \lstinline!Reader!
+monad having the type $\text{Reader}^{R,A}\triangleq R\rightarrow A$,
+the \lstinline!State! monad having the type $\text{State}^{S,A}\triangleq S\rightarrow A\times S$,
+and so on), define some typeclasses (\lstinline!ReaderMonadOps!,
+\lstinline!StateMonadOps!, etc.) that encapsulate all the \textsf{``}effectful
+operations\textsf{''} specific to each monad. Refactor all monadic code to
+use only the operations from the provided typeclasses. 
+\item Provide appropriate typeclass instances for all monad transformers
+and all their combinations. For instance, all monad stacks that contain
+the \lstinline!State! monad will need to have a \lstinline!StateMonadOps!
+typeclass instance. After that, all code written using \lstinline!StateMonadOps!\textsf{'}s
+methods will automatically work under any monad stack that contains
+the \lstinline!State! monad. 
+\end{itemize}
+First, we need to define the \textsf{``}effectful operations\textsf{''} corresponding
+to each monad. As an example, consider the \lstinline!State! monad
+($\text{State}^{S,A}$). Its effect allows programs to manipulate
+an internal state value (of type $S$): the state can be read, updated,
+and automatically passed on to the next computation. We may now define
+the functions \lstinline!get! and \lstinline!set! that work with
+the internal state:
+\begin{align*}
+ & \text{get}:\text{State}^{S,S}\quad,\quad\quad\text{get}\triangleq s^{:S}\rightarrow s\times s\quad,\\
+ & \text{set}:S\rightarrow\text{State}^{S,\bbnum 1}\quad,\quad\quad\text{set}\triangleq s^{:S}\rightarrow\_^{:S}\rightarrow1\times s\quad.
+\end{align*}
+A functor block using the \lstinline!State! monad can then be written
+without referring to the type signature $S\rightarrow A\times S$:
+\begin{lstlisting}
+val program: State[S, A] = for {
+  s1 <- get    // Get the initial state.
+  s2  = f(s1)  // Do some computations.
+  _ <- set(s2) // Assign the new state.
+} yield g(s2)  // Compute a result value.
+\end{lstlisting}
+The two functions \lstinline!get! and \lstinline!set! are sufficient
+to manipulate the internal state in an arbitrary way. So, these two
+functions are the \textsf{``}effectful operations\index{monad!effectful operations}\textsf{''}
+of the \lstinline!State! monad. Any \lstinline!State!-monadic program
+may be expressed via these two operations (together with the standard
+monad methods \lstinline!map!, \lstinline!flatMap!, and \lstinline!pure!).
+To see this formally, consider an arbitrary monadic program $q:\text{State}^{S,A}$
+and define two functions:
+\[
+f_{1}:S\rightarrow A\triangleq q\bef\pi_{1}\quad,\quad\quad f_{2}:S\rightarrow S\triangleq q\bef\pi_{2}\quad.
+\]
+These two functions show how the result value is computed and how
+the state is updated. Now we can express $q$ equivalently as a monadic
+program involving only \lstinline!map!, \lstinline!flatMap!, and
+the operations \lstinline!get! and \lstinline!set!:
+\begin{lstlisting}
+q == for {
+  s1 <- get
+  s2 = f2(s1)
+  _ <- set(s2)
+} yield f1(s1)
+\end{lstlisting}
+\[
+q=\text{get}\triangleright\text{flm}_{\text{State}}\big(s_{1}\rightarrow f_{2}(s_{1})\triangleright\text{set}\triangleright(\_\rightarrow f_{1}(s_{1}))^{\uparrow\text{State}}\big)\quad.
+\]
+We may refactor any \lstinline!State!-monadic code so that it does
+not directly refer to the type $S\rightarrow A\times S$ of the \lstinline!State!
+monad but instead only uses the operations \lstinline!get! and \lstinline!set!.
+For instance, the refactored code will not apply a monadic value to
+an argument of type $S$.
+
+Another example is the \lstinline!Either! monad, for which we define
+an operation called \lstinline!raise!:
+\[
+\text{raise}:E\rightarrow\forall A.\,E+A\quad,\quad\quad\text{raise}\triangleq e^{:E}\rightarrow e+\bbnum 0^{:A}\quad.
+\]
+Any \lstinline!Either!-monadic program is a value of type $E+A$
+and can always be expressed through \lstinline!raise! and \lstinline!pure!.
+We may then refactor any monadic code so that it uses only the \lstinline!raise!
+operation but does not refer to the specific type $E+A$ of the \lstinline!Either!
+monad. For instance, the refactored code will not apply pattern matching
+directly to monad values.
+
+The second ingredient of the MTL-style programming involves \textsf{``}lifting\textsf{''}
+the monad operations to arbitrary monad stacks. For example, the operations
+\lstinline!get! and \lstinline!set! can be lifted from the \lstinline!State!
+monad to any monad stack containing the \lstinline!State! monad.
+For any such monad stack $P$, there exists a specific composition
+of lifts that creates a monad morphism $p:\text{State}^{S,\bullet}\leadsto P^{\bullet}$.
+If $p$ is known, the new operations $\text{get}_{P}$ and $\text{set}_{P}$
+are expressed as
+\[
+\text{get}_{P}:P^{S}\triangleq\text{get}\triangleright p\quad,\quad\quad\text{set}_{P}:S\rightarrow P^{\bbnum 1}\triangleq\text{set}\bef p\quad.
+\]
+
+Similarly, the \lstinline!raise! operation of the \lstinline!Either!
+monad can be lifted to any monad stack $P$ that contains the \lstinline!Either!
+monad. For any such $P$, there exists a monad morphism $p:E+A\rightarrow P^{A}$,
+and the lifted operation ($\text{raise}_{P}$) is defined by
+\[
+\text{raise}_{P}:\forall A.\,P^{A}\quad,\quad\quad\text{raise}_{P}\triangleq\forall A.\,\text{raise}^{A}\triangleright p\quad.
+\]
+
+Lifting operations from a monad to a stack depends on having a suitable
+lift function ($p$) that maps values of the specific monad to the
+stack. The lift function $p$ will be different for each monad and
+each stack, and we would like to avoid having to implement $p$ by
+hand each time. In MTL-style programming, this is achieved by first
+refactoring the code to use special typeclasses that encapsulate the
+effectful operations of all the required monads. For the \lstinline!State!
+monad, the typeclass \lstinline!StateMonadOps! may be defined as
+\begin{lstlisting}
+trait StateMonadOps[F[_], S] { // `F` is any monad that has `State`-like operations.
+  def get: F[S]
+  def set: S => F[Unit]
+}
+\end{lstlisting}
+We can now write \lstinline!State!-monadic programs by using the
+\lstinline!StateMonadOps! typeclass:
+\begin{lstlisting}
+val ops = implicitly[StateMonadOps[F, S]] // Must be defined before.
+val program: F[A] = for {
+  s1 <- ops.get
+  s2 = f2(s1)
+  _ <- ops.set(s2)
+} yield f1(s2)
+\end{lstlisting}
+This code does \emph{not} assume that the monad \lstinline!F! has
+the \lstinline!State! monad\textsf{'}s type signature, \lstinline!S => (A, S)!.
+So, it will work unmodified with any monad \lstinline!F! that has
+the required typeclass instance. The \lstinline!State! monad itself,
+of course, admits an instance of \lstinline!StateMonadOps!:
+\begin{lstlisting}
+implicit val stateMonadOps: StateMonadOps[State[S, *], S] = new StateMonadOps[State[S, *], S] {
+  def get: State[S, S] = State(s => (s, s))
+  def set: S => State[S, Unit] = s => State(_ => ((), s)))
+}
+\end{lstlisting}
+
+For the \lstinline!Either! monad, the typeclass \lstinline!EitherMonadOps!
+is defined by
+\begin{lstlisting}
+trait EitherMonadOps[F[_], E] { // `F` is any monad that has `Either`-like operations.
+  def raise[A]: E => F[A]
+}
+\end{lstlisting}
+An instance of this typeclass can be implemented for the \lstinline!Either!
+monad:
+\begin{lstlisting}
+implicit val eitherMonadOps: EitherMonadOps[Either[E, *], E] = new EitherMonadOps[Either[E, *], E] {
+  def raise[A]: E => Either[E, A] = e => Left(e)
+}
+\end{lstlisting}
+
+Once all monadic code is refactored to use the monad operations via
+typeclasses, it remains to define the relevant typeclass instances
+for monad stacks. After that, the refactored code will work unchanged
+under any monad stack; the effectful operations will be lifted automatically
+through appropriate lift functions. Let us see in more detail how
+this works.
+
+The goal is to implement a typeclass instance of \lstinline!StateMonadOps!
+for any monad stack containing the \lstinline!State! monad; a typeclass
+instance of \lstinline!EitherMonadOps! for any stack containing the
+\lstinline!Either! monad; and so on, for other monads. To proceed,
+we need a rigorous definition of what it means that a monad stack
+$P$ \textsf{``}contains\textsf{''} some monad $L$. Intuitively, the stack $P$ should
+have the form $P=M_{1}\varangle M_{2}\varangle...\varangle L\varangle...\varangle M_{k}$
+for some monads $M_{1}$, ..., $M_{k}$. We can write a definition
+by induction: 
+\begin{itemize}
+\item Base case: $P$ contains $L$ when $P=L$ or $P=L\varangle Q$ for
+some other monad stack $Q$. (The stack $P=L$ can be seen as a special
+case of $P=L\varangle Q$ with $Q=\text{Id}$.) The lift function
+($p_{L,P}$) is
+\[
+p_{L,P}:L\leadsto L\varangle Q\quad,\quad\quad p_{L,P}\triangleq\text{blift}_{L}^{Q}\quad.
+\]
+\item Inductive step: $P$ contains $L$ when $P=N\varangle Q$, where $N$
+is some base monad and $Q$ is another monad stack that contains $L$.
+The lift function is
+\[
+p_{L,P}:L\leadsto N\varangle Q\quad,\quad\quad p_{L,P}\triangleq p_{L,Q}\bef\text{flift}_{N}\quad,
+\]
+where $p_{L,Q}$ is the lift function for the stack $Q$, which is
+exists by the inductive assumption.
+\end{itemize}
+As an example, we will implement a \lstinline!StateMonadOps! instance
+for all monad stacks that contain a \lstinline!State! monad. Begin
+with the base case: The \lstinline!State! monad itself already has
+a \lstinline!StateMonadOps! instance. If we have a stack of the form
+\lstinline!StateT[Q, S, *]! where \lstinline!Q! is any monad, we
+use the base lift of the \lstinline!StateT! transformer to implement
+the \lstinline!StateMonadOps! typeclass:
+\begin{lstlisting}
+implicit def stateTMonadOps[S, Q[_]](implicit monadQ: Monad[Q]): StateMonadOps[StateT[Q, S, *], S] = new StateMonadOps[StateT[Q, S, *], S] {
+  def get: StateT[Q, S, S] = StateT(s => monadQ.pure((s, s)))
+  def set: S => StateT[Q, S, Unit] = s => StateT(_ => monadQ.pure(((), s)))
+}
+\end{lstlisting}
+
+In the inductive step, the stack is of the form \lstinline!OtherT[Q, *]!
+where \textsf{``}\lstinline!OtherT!\textsf{''} is a monad transformer for the base
+monad $N$. By the inductive assumption, we already have a typeclass
+instance of \lstinline!StateMonadOps! for the monad \lstinline!Q!.
+Using the \lstinline!flift! method of the transformer \lstinline!OtherT!,
+we write:
+\begin{lstlisting}
+implicit def otherTMonadOps[OtherT[_[_], _], Q[_], S](implicit val qMonadOps: StateMonadOps[Q, S], otherT: MTrans[OtherT]): StateMonadOps[OtherT[Q, *]] = new StateMonadOps[OtherT[Q, *]] {
+  def get: OtherT[Q, S] = otherT.flift(qMonadOps.get)
+  def set: S => OtherT[Q, Unit] = qMonadOps.set andThen otherT]].flift
+}
+\end{lstlisting}
+
+To use the MTL style in practice, one needs a library (such as \texttt{cats-mtl}\footnote{See \texttt{\href{https://typelevel.org/blog/2018/10/06/intro-to-mtl.html}{https://typelevel.org/blog/2018/10/06/intro-to-mtl.html}}})
+that: 
+\begin{itemize}
+\item defines sufficiently many operations for each standard monad, so that
+any monadic program may be expressed without using the monad types
+explicitly;
+\item defines the operation typeclasses for each standard monad;
+\item implements instances of all monad operation typeclasses for \emph{all}
+possible monad stacks.
+\end{itemize}
+While the MTL style provides automatic lifting with somewhat less
+code than the direct approach of lifting relation (as developed in
+the previous section), two problems remain. The first problem is the
+large number of typeclass instances that the libraries need to maintain.
+As we have seen in the example with \lstinline!StateMonadOps!, just
+two implicit functions per monad type are in principle sufficient
+to define the operation typeclasses for all monad stacks. However,
+for reasons of run-time efficiency, libraries sometimes define a large
+number of operation typeclass instances for specific combinations
+of monads (say, \lstinline!Reader! with \lstinline!State!, \lstinline!Either!
+with \lstinline!Reader!, and so on). This makes the required number
+of typeclasses quadratic in the number of supported monads. So, libraries
+such as \texttt{cats-mtl} support only a limited number of most frequently
+used monads. Adding a new monad to \texttt{cats-mtl} would require
+adding a large number of new typeclass implementations.
+
+The second problem is the lack of standard conventions for the effectful
+operations. We have seen that two operations (\lstinline!get! and
+\lstinline!set!) are sufficient, in principle, to express any \lstinline!State!-monadic
+programs. However, it may not be adequate to write code just with
+those two operations. For example, suppose a program needs to \emph{update}
+the state using a given function of type $S\rightarrow S$. An update
+is equivalent to \lstinline!get!ting the previous value and immediately
+\lstinline!set!ting a new value. But a program may be required to
+handle certain state updates in a special way. Examples are updates
+required to be atomic in a concurrent program; updates wrapped in
+a database transaction; or updates that must be run on a specially
+designated processing thread (such as, the GUI thread that drives
+the user interface events). Special handling of updates cannot be
+implemented through \lstinline!get! and \lstinline!set!; a separate
+effectful operation (\lstinline!update!) must be provided to the
+programmer. 
+
+It is not obvious in advance what effectful operations will be necessary
+in practical tasks involving a given monad. Different libraries may
+choose different sets of supported operations. However, adding a new
+operation to a monad in an MTL-style library requires a rewrite of
+the typeclasses involving that monad. Users of the library will be
+unable to add any new operations.
+
+Here is a summary of various operations that may be defined for well-known
+monads.
+
+{*}{*}{*}
 
 \section{Laws of monad transformers}
 
@@ -10208,6 +10476,17 @@ $\phi^{:M\leadsto N}$, the following equation:
 
 \textbf{(b)} Show that (at least for some monads $M$) the function
 \lstinline!double! is \emph{not} a monad morphism $M\leadsto M$. 
+
+\subsubsection{Exercise \label{subsec:Exercise-monad-morphism-reader-state}\ref{subsec:Exercise-monad-morphism-reader-state}}
+
+Consider the monads $\text{Reader}^{R,A}$ and $\text{State}^{R,A}$
+(with the same fixed type $R$). 
+
+\textbf{(a)} Implement a monad morphism $\text{Reader}^{R,\bullet}\leadsto\text{State}^{R,\bullet}$
+and prove that the laws hold.
+
+\textbf{(b)} Show that a function of type $\text{State}^{R,A}\rightarrow\text{Reader}^{R,A}$
+cannot be a monad morphism.
 
 \subsubsection{Exercise \label{subsec:Exercise-monad-transformer-extra-layer-2}\ref{subsec:Exercise-monad-transformer-extra-layer-2} }
 
