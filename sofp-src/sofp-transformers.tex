@@ -1499,14 +1499,12 @@ of the chosen monad like this:
 \]
 As in the case of lifts, the implementations of the runners depend
 on the order of monads in the stack and will have to be changed if
-the stack changes. It would be convenient if the programmer could
-merely indicate which monad\textsf{'}s effects to run, without writing the
-code of the runner by hand.  However, it does not seem possible to
-define a \textsf{``}universal runner\textsf{''} that is fully parametric in the chosen
-monad. 
-
-As an example, consider a monad stack of type \lstinline!EitherT[E, ReaderT[R, Option, *], A]!.
-If we wish to run the effects of the \lstinline!Reader! monad alone,
+the stack changes. It does not seem possible to define a \textsf{``}stack
+runner\textsf{''} parametric in the chosen monad, allowing the programmer
+simply to indicate which monad\textsf{'}s effects need to be run and without
+writing the code of the runner by hand. To see why, consider a monad
+stack of type \lstinline!EitherT[E, ReaderT[R, Option, *], A]!. If
+we wish to run the effects of the \lstinline!Reader! monad alone,
 the result type must be \lstinline!EitherT[E, Option, A]!. But there
 is no simple way of obtaining that result type from the type of the
 stack: the type \lstinline!EitherT[E, Option, A]! cannot be expressed
@@ -1514,7 +1512,6 @@ as a type constructor \lstinline!Q[Reader, ...]! where \lstinline!Reader!
 is just one of the type parameters. This complication is due to the
 fact that the type of the stack is not parametric in the type of the
 base monad.
-
 
 \subsection{Constructing lifts via type relations\label{subsec:Constructing-lifts-via-type-relations}}
 
@@ -1586,7 +1583,7 @@ Scala compiler to direct the search for implicits towards finding
 the base monad of a given transformer.
 
 Finally, given a stack $K\varangle M$ and a monad $L$, we may lift
-$L\leadsto K\varangle M$ if there is already a lift relation $L\leadsto K$:
+$L\leadsto K\varangle M$ if there is already a lift $L\leadsto K$:
 \begin{lstlisting}
 implicit def monadToTransformer[KT[_[_], _], L[_] : Monad, M[_] : Monad]
   (implicit kt: MTrans[KT], lm: MM[L, M]): MM[L, KT[M, *]] = new MM[L, KT[M, *]] {
@@ -1618,24 +1615,25 @@ To implement the automatic lifts in this way, the programmer needs
 to create three implicit values for each monad: a \lstinline!Monad!
 typeclass instance, a monad transformer (\lstinline!MTrans!) typeclass
 instance, and a relation instance for the \lstinline!BaseMonad! type
-relation. Those instances can be defined as implicit values in a monad
-transformer library. Then the user may declare an arbitrary monad
-stack and use automatic lifts between any levels in a stack.
+relation. (So, the length of code is linear in the number of supported
+monad types.) Those instances can be defined as implicit values in
+a monad transformer library. Then the user may declare an arbitrary
+monad stack and use automatic lifts between any levels in a stack.
 
 \subsection{Constructing lifts via typeclasses for monad operations (\textsf{``}MTL-style\textsf{''})\label{subsec:Combining-monads-via-mtl-style}}
 
-The MTL-style\footnote{The name MTL stands for \textsf{``}monad transformer library\textsf{''}; see \texttt{\href{http://book.realworldhaskell.org/read/monad-transformers.html}{http://book.realworldhaskell.org/read/monad-transformers.html}}}
-monadic\index{monadic program!MTL-style} programming is another way
-of achieving automatic lifting of monadic programs to arbitrary monad
-stacks. The MTL approach has two main ingredients:
+The MTL-style\footnote{See \texttt{\href{http://book.realworldhaskell.org/read/monad-transformers.html}{http://book.realworldhaskell.org/read/monad-transformers.html}}.
+The name MTL stands for \textsf{``}monad transformer library\textsf{''}.} monadic\index{monadic program!MTL-style} programming is another
+way of achieving automatic lifting of monadic programs to arbitrary
+monad stacks. The MTL approach has two main ingredients:
 \begin{itemize}
 \item For a chosen set of \textsf{``}standard\textsf{''} monads (such as the \lstinline!Reader!
-monad having the type $\text{Reader}^{R,A}\triangleq R\rightarrow A$,
-the \lstinline!State! monad having the type $\text{State}^{S,A}\triangleq S\rightarrow A\times S$,
-and so on), define some typeclasses (\lstinline!ReaderMonadOps!,
-\lstinline!StateMonadOps!, etc.) that encapsulate all the \textsf{``}effectful
-operations\textsf{''} specific to each monad. Refactor all monadic code to
-use only the operations from the provided typeclasses. 
+monad of type $\text{Reader}^{R,A}\triangleq R\rightarrow A$, the
+\lstinline!State! monad of type $\text{State}^{S,A}\triangleq S\rightarrow A\times S$,
+etc.), define some typeclasses (\lstinline!ReaderMonadOps!, \lstinline!StateMonadOps!,
+etc.) encapsulating all the \textsf{``}effectful operations\textsf{''} specific to
+each monad. Refactor all monadic code to use only the operations from
+the provided typeclasses. 
 \item Provide appropriate typeclass instances for all monad transformers
 and all their combinations. For instance, all monad stacks that contain
 the \lstinline!State! monad will need to have a \lstinline!StateMonadOps!
@@ -1650,12 +1648,13 @@ an internal state value (of type $S$): the state can be read, updated,
 and automatically passed on to the next computation. We may now define
 the functions \lstinline!get! and \lstinline!set! that work with
 the internal state:
-\begin{align*}
- & \text{get}:\text{State}^{S,S}\quad,\quad\quad\text{get}\triangleq s^{:S}\rightarrow s\times s\quad,\\
- & \text{set}:S\rightarrow\text{State}^{S,\bbnum 1}\quad,\quad\quad\text{set}\triangleq s^{:S}\rightarrow\_^{:S}\rightarrow1\times s\quad.
-\end{align*}
-A functor block using the \lstinline!State! monad can then be written
-without referring to the type signature $S\rightarrow A\times S$:
+\[
+\text{get}:\text{State}^{S,S}\quad,\quad\quad\text{get}\triangleq s^{:S}\rightarrow s\times s\quad,\quad\quad\text{set}:S\rightarrow\text{State}^{S,\bbnum 1}\quad,\quad\quad\text{set}\triangleq s^{:S}\rightarrow\_^{:S}\rightarrow1\times s\quad.
+\]
+
+\begin{wrapfigure}{l}{0.43\columnwidth}%
+\vspace{-1\baselineskip}
+
 \begin{lstlisting}
 val program: State[S, A] = for {
   s1 <- get    // Get the initial state.
@@ -1663,21 +1662,30 @@ val program: State[S, A] = for {
   _ <- set(s2) // Assign the new state.
 } yield g(s2)  // Compute a result value.
 \end{lstlisting}
-The two functions \lstinline!get! and \lstinline!set! are sufficient
-to manipulate the internal state in an arbitrary way. So, these two
-functions are the \textsf{``}effectful operations\index{monad!effectful operations}\textsf{''}
+\vspace{-0.8\baselineskip}
+\end{wrapfigure}%
+
+A \lstinline!State!-monadic program can then be written as shown
+at left, without referring to the type signature $S\rightarrow A\times S$.
+The two functions \lstinline!get! and \lstinline!set! appear to
+be sufficient to manipulate the internal state in an arbitrary way.
+So, we regard these two functions as the \textsf{``}effectful operations\index{monad!effectful operations}\textsf{''}
 of the \lstinline!State! monad. Any \lstinline!State!-monadic program
 may be expressed via these two operations (together with the standard
 monad methods \lstinline!map!, \lstinline!flatMap!, and \lstinline!pure!).
 To see this formally, consider an arbitrary monadic program $q:\text{State}^{S,A}$
-and define two functions:
+and define functions $f_{1}$ and $f_{2}$ by
 \[
 f_{1}:S\rightarrow A\triangleq q\bef\pi_{1}\quad,\quad\quad f_{2}:S\rightarrow S\triangleq q\bef\pi_{2}\quad.
 \]
-These two functions show how the result value is computed and how
-the state is updated. Now we can express $q$ equivalently as a monadic
-program involving only \lstinline!map!, \lstinline!flatMap!, and
-the operations \lstinline!get! and \lstinline!set!:
+These two functions compute the result value and update the state.
+Now we can express $q$ equivalently as a monadic program involving
+only \lstinline!map!, \lstinline!flatMap!, and the operations \lstinline!get!
+and \lstinline!set!:
+
+\begin{wrapfigure}{l}{0.35\columnwidth}%
+\vspace{-0.6\baselineskip}
+
 \begin{lstlisting}
 q == for {
   s1 <- get
@@ -1685,9 +1693,14 @@ q == for {
   _ <- set(s2)
 } yield f1(s1)
 \end{lstlisting}
+\vspace{0.4\baselineskip}
+\end{wrapfigure}%
+
+~\vspace{-0.9\baselineskip}
 \[
 q=\text{get}\triangleright\text{flm}_{\text{State}}\big(s_{1}\rightarrow f_{2}(s_{1})\triangleright\text{set}\triangleright(\_\rightarrow f_{1}(s_{1}))^{\uparrow\text{State}}\big)\quad.
 \]
+
 We may refactor any \lstinline!State!-monadic code so that it does
 not directly refer to the type $S\rightarrow A\times S$ of the \lstinline!State!
 monad but instead only uses the operations \lstinline!get! and \lstinline!set!.
@@ -1818,18 +1831,17 @@ a \lstinline!StateMonadOps! instance. If we have a stack of the form
 use the base lift of the \lstinline!StateT! transformer to implement
 the \lstinline!StateMonadOps! typeclass:
 \begin{lstlisting}
-implicit def stateTMonadOps[S, Q[_]](implicit monadQ: Monad[Q]): StateMonadOps[StateT[Q, S, *], S] = new StateMonadOps[StateT[Q, S, *], S] {
-  def get: StateT[Q, S, S] = StateT(s => monadQ.pure((s, s)))
-  def set: S => StateT[Q, S, Unit] = s => StateT(_ => monadQ.pure(((), s)))
+implicit def stateTMonadOps[S, Q[_]: Monad] = new StateMonadOps[StateT[Q, S, *], S] {
+  def get: StateT[Q, S, S] = StateT(s => implicitly[Monad[Q]].pure((s, s)))
+  def set: S => StateT[Q, S, Unit] = s => StateT(_ => implicitly[Monad[Q]].pure(((), s)))
 }
 \end{lstlisting}
 
 In the inductive step, the stack is of the form \lstinline!OtherT[Q, *]!
 where \textsf{``}\lstinline!OtherT!\textsf{''} is a monad transformer for the base
-monad $N$. By the inductive assumption, we already have a typeclass
-instance of \lstinline!StateMonadOps! for the monad \lstinline!Q!.
-Using the \lstinline!flift! method of the transformer \lstinline!OtherT!,
-we write:
+monad $N$. By the inductive assumption, we already have a \lstinline!StateMonadOps!
+typeclass instance for the monad \lstinline!Q!. Using the \lstinline!flift!
+method of the transformer \lstinline!OtherT!, we write:
 \begin{lstlisting}
 implicit def otherTMonadOps[OtherT[_[_], _], Q[_], S](implicit val qMonadOps: StateMonadOps[Q, S], otherT: MTrans[OtherT]): StateMonadOps[OtherT[Q, *]] = new StateMonadOps[OtherT[Q, *]] {
   def get: OtherT[Q, S] = otherT.flift(qMonadOps.get)
@@ -1837,60 +1849,159 @@ implicit def otherTMonadOps[OtherT[_[_], _], Q[_], S](implicit val qMonadOps: St
 }
 \end{lstlisting}
 
-To use the MTL style in practice, one needs a library (such as \texttt{cats-mtl}\footnote{See \texttt{\href{https://typelevel.org/blog/2018/10/06/intro-to-mtl.html}{https://typelevel.org/blog/2018/10/06/intro-to-mtl.html}}})
-that: 
-\begin{itemize}
-\item defines sufficiently many operations for each standard monad, so that
-any monadic program may be expressed without using the monad types
-explicitly;
-\item defines the operation typeclasses for each standard monad;
-\item implements instances of all monad operation typeclasses for \emph{all}
-possible monad stacks.
-\end{itemize}
-While the MTL style provides automatic lifting with somewhat less
-code than the direct approach of lifting relation (as developed in
-the previous section), two problems remain. The first problem is the
-large number of typeclass instances that the libraries need to maintain.
-As we have seen in the example with \lstinline!StateMonadOps!, just
-two implicit functions per monad type are in principle sufficient
-to define the operation typeclasses for all monad stacks. However,
-for reasons of run-time efficiency, libraries sometimes define a large
-number of operation typeclass instances for specific combinations
-of monads (say, \lstinline!Reader! with \lstinline!State!, \lstinline!Either!
-with \lstinline!Reader!, and so on). This makes the required number
-of typeclasses quadratic in the number of supported monads. So, libraries
-such as \texttt{cats-mtl} support only a limited number of most frequently
-used monads. Adding a new monad to \texttt{cats-mtl} would require
-adding a large number of new typeclass implementations.
+To use the MTL-style monad stacks in practice, one needs a library
+(such as \texttt{cats-mtl}\footnote{See \texttt{\href{https://typelevel.org/blog/2018/10/06/intro-to-mtl.html}{https://typelevel.org/blog/2018/10/06/intro-to-mtl.html}}})
+that defines typeclasses with sufficiently many operations for each
+standard monad, so that any desired monadic program may be expressed
+through those operations, without using explicit monad types. The
+library should also implement instances of those typeclasses for all
+supported monad stacks. 
 
-The second problem is the lack of standard conventions for the effectful
-operations. We have seen that two operations (\lstinline!get! and
-\lstinline!set!) are sufficient, in principle, to express any \lstinline!State!-monadic
-programs. However, it may not be adequate to write code just with
-those two operations. For example, suppose a program needs to \emph{update}
-the state using a given function of type $S\rightarrow S$. An update
-is equivalent to \lstinline!get!ting the previous value and immediately
+While the MTL style does provide automatic lifting and requires somewhat
+shorter code than the direct approach of lifting relation (as developed
+in the previous section), some problems remain. 
+
+The first problem is the lack of standard conventions or principles
+for the choice of effectful operations. We have seen that the operations
+\lstinline!get! and \lstinline!set! are sufficient to express any
+\lstinline!State!-monadic programs. However, it may not be adequate
+to write code just with those two operations. 
+
+\begin{wraptable}{l}{0.62\columnwidth}%
+\begin{centering}
+\vspace{-0.4\baselineskip}
+\begin{tabular}{|>{\centering}m{1.3cm}|>{\centering}m{7.2cm}|}
+\hline 
+\textbf{\small{}Monad} & \textbf{\small{}Operations}\tabularnewline
+\hline 
+\hline 
+{\small{}$\text{State}^{S,A}$} & {\small{}$\text{get}:\text{State}^{S,S}$}{\small\par}
+
+{\small{}$\text{set}:S\rightarrow\text{State}^{S,\bbnum 1}$}{\small\par}
+
+{\small{}$\text{update}:(S\rightarrow S)\rightarrow\text{State}^{S,\bbnum 1}$}\tabularnewline
+\hline 
+{\small{}$\text{Reader}^{R,A}$} & {\small{}$\text{ask}:\text{Reader}^{R,R}$}{\small\par}
+
+{\small{}$\text{withEnv}:R\rightarrow\text{Reader}^{R,A}\rightarrow\text{Reader}^{R,A}$}\tabularnewline
+\hline 
+{\small{}$\text{Either}^{E,A}$} & {\small{}$\text{raise}:E\rightarrow\text{Either}^{E,A}$}{\small\par}
+
+{\small{}$\text{handle}:(E\rightarrow\text{Either}^{E,A})\rightarrow\text{Either}^{E,A}\rightarrow\text{Either}^{E,A}$}\tabularnewline
+\hline 
+{\small{}$\text{List}^{A}$} & {\small{}$\text{empty}:\text{List}^{A}$}{\small\par}
+
+{\small{}$\text{append}:\text{List}^{A}\times\text{List}^{A}\rightarrow\text{List}^{A}$}{\small\par}
+
+{\small{}$\text{filter}:\text{List}^{A}\rightarrow(A\rightarrow\bbnum 2)\rightarrow\text{List}^{A}$}\tabularnewline
+\hline 
+{\small{}$\text{Writer}^{W,A}$} & {\small{}$\text{log}:W\rightarrow\text{Writer}^{W,\bbnum 1}$}{\small\par}
+
+{\small{}$\text{clear}:\text{Writer}^{W,A}\rightarrow\text{Writer}^{W,A}$}\tabularnewline
+\hline 
+{\small{}$\text{Cont}^{R,A}$} & {\small{}$\text{abort}:R\rightarrow\text{Cont}^{R,A}$}{\small\par}
+
+{\small{}$\text{callcc}:((A\rightarrow\text{Cont}^{R,B})\rightarrow\text{Cont}^{R,A})\rightarrow\text{Cont}^{R,A}$}\tabularnewline
+\hline 
+\end{tabular}
+\par\end{centering}
+\caption{Known operations for some monads.\label{tab:Known-operations-for-some-monads}}
+\vspace{-0.4\baselineskip}
+\end{wraptable}%
+
+\noindent As an example, consider \emph{updating} the state using
+a given function of type $S\rightarrow S$. In theory, updating is
+equivalent to \lstinline!get!ting the previous value and immediately
 \lstinline!set!ting a new value. But a program may be required to
 handle certain state updates in a special way. Examples are updates
 required to be atomic in a concurrent program; updates wrapped in
 a database transaction; or updates that must be run on a specially
 designated processing thread (such as, the GUI thread that drives
 the user interface events). Special handling of updates cannot be
-implemented through \lstinline!get! and \lstinline!set!; a separate
-effectful operation (\lstinline!update!) must be provided to the
-programmer. 
+implemented through \lstinline!get! and \lstinline!set!; a new effectful
+operation (\lstinline!update!) must be provided to the programmer.
 
-It is not obvious in advance what effectful operations will be necessary
-in practical tasks involving a given monad. Different libraries may
-choose different sets of supported operations. However, adding a new
-operation to a monad in an MTL-style library requires a rewrite of
-the typeclasses involving that monad. Users of the library will be
-unable to add any new operations.
+Table~\ref{tab:Known-operations-for-some-monads} shows a selection
+of effectful operations for some well-known monads.\footnote{Operations were taken from the \texttt{cats-mtl} documentation and
+the papers \textsf{``}\emph{Monad transformers and modular interpreters}\textsf{''}
+(see \texttt{\href{http://web.cecs.pdx.edu/~mpj/pubs/modinterp.html}{http://web.cecs.pdx.edu/$\sim$mpj/pubs/modinterp.html}})
+and \textsf{``}\emph{Modular monad transformers}\textsf{''} (see \texttt{\href{https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.219.5365}{https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.219.5365}}).} The choice of operations appears to be heuristic, not following any
+principle or system. It is not obvious in advance what operations
+will be useful or necessary in practical tasks involving a given monad.
+(Do we need a \lstinline!filter! operation for the \lstinline!Either!
+monad?) Different libraries choose different sets of supported operations.
+However, adding a new operation to a monad in an MTL-style library
+requires rewriting the typeclasses involving that monad. Users who
+cannot modify the library code will be unable to add new operations.
 
-Here is a summary of various operations that may be defined for well-known
-monads.
+The second problem is the lack of a general method for lifting effectful
+operations to arbitrary monad transformers.\footnote{M.~\index{Mauro Jaskelioff}Jaskelioff developed a technique that
+can lift effectful operations systematically to almost all monad stacks;
+see  the paper \texttt{\href{https://www.fceia.unr.edu.ar/~mauro/pubs/monatron.pdf}{https://www.fceia.unr.edu.ar/$\sim$mauro/pubs/monatron.pdf}}} So far, the examples in this subsection were limited to operations
+with type signatures of the form $L^{A}$ or $A\rightarrow L^{B}$.
+All operations of this form are lifted from the monad $L$ to a monad
+stack $P$ by composing with a lift function $p:L^{A}\rightarrow P^{A}$.
+However, some operations have significantly different type signatures
+and cannot be lifted to arbtirary monad stacks by composing with a
+lift function. For instance, an operation called \lstinline!withEnv!
+(defined for the \lstinline!Reader! monad) has the type signature
+$R\rightarrow\text{Reader}^{R,A}\rightarrow\text{Reader}^{R,A}$.
+In that type signature, some \lstinline!Reader! values are used as
+arguments (that is, in a contravariant position). So, \lstinline!withEnv!
+cannot be converted to a function of type $R\rightarrow P^{A}\rightarrow P^{A}$
+by composing with a lift function $p:\text{Reader}^{R,A}\rightarrow P^{A}$.
+Another example is the \lstinline!Writer! monad\textsf{'}s \lstinline!clear!
+operation that has the type $\text{Writer}^{W,A}\rightarrow\text{Writer}^{W,A}$.
+Knowing only a lift function $p:\text{Writer}^{W,A}\rightarrow P^{A}$,
+one cannot transform \lstinline!clear! into a function of type $P^{A}\rightarrow P^{A}$
+with an arbitrary monad stack $P$.
 
-{*}{*}{*}
+Lifting \lstinline!clear! to a given monad stack $P$ (say, $P=\,$\lstinline!State!$\varangle$\lstinline!Writer!
+or $P=\,$\lstinline!Writer!$\varangle$\lstinline!Cont!), requires
+custom code. Let us see how to write that code. For the stack $P=\,$\lstinline!State!$\varangle$\lstinline!Writer!,
+we need to implement a function $\text{clear}_{P}$ of type $P^{A}\rightarrow P^{A}$
+given a function \lstinline!clear! with type signature
+\[
+\text{clear}:\text{Writer}^{W,A}\rightarrow\text{Writer}^{W,A}=W\times A\rightarrow W\times A\quad.
+\]
+Since the stack type is $P^{A}\triangleq T_{\text{State}}^{\text{Writer},A}=S\rightarrow W\times A\times S$,
+the code for $\text{clear}_{P}$ is
+\[
+\text{clear}_{P}:\left(S\rightarrow W\times A\times S\right)\rightarrow S\rightarrow W\times A\times S\quad,\quad\quad\text{clear}_{P}\triangleq p^{:S\rightarrow W\times A\times S}\rightarrow p\bef(\text{clear}\boxtimes\text{id}^{S})\quad.
+\]
+For the stack $P=\,$\lstinline!Writer!$\varangle$\lstinline!Cont!:
+\[
+P^{A}\triangleq T_{\text{Writer}}^{\text{Cont},A}=(W\times A\rightarrow R)\rightarrow R\quad,
+\]
+the lifted operation $\text{clear}_{P}$ is implemented as
+\begin{align*}
+ & \text{clear}_{P}:\left((W\times A\rightarrow R)\rightarrow R\right)\rightarrow(W\times A\rightarrow R)\rightarrow R\quad,\\
+ & \text{clear}_{P}\triangleq p^{:(W\times A\rightarrow R)\rightarrow R}\rightarrow q^{:W\times A\rightarrow R}\rightarrow p(\text{clear}\bef q)\quad.
+\end{align*}
+
+These examples show that lifting an operation to a specific monad
+transformer will require custom code adapted to a given combination
+of monads and operations. So, the length of required custom code is
+quadratic in the number of supported monads and linear in the number
+of operations.
+
+The third problem is the large number of typeclass instances that
+the libraries need to maintain. As we have seen in the example with
+\lstinline!StateMonadOps!, just two implicit functions per monad
+type are in principle sufficient to define the operation typeclasses
+for all monad stacks. This would make the number of typeclass instances
+linear in the number of supported monads. However, for reasons of
+run-time efficiency, libraries sometimes provide typeclass instances
+for many specific combination of monads (say, \lstinline!Reader!
+with \lstinline!State!, \lstinline!Either! with \lstinline!Reader!,
+and so on). This makes the required number of typeclass instances
+quadratic in the number of supported monads. For this reason, libraries
+such as \texttt{cats-mtl} support only a limited number of most frequently
+used monads. Adding a new monad to \texttt{cats-mtl} would require
+adding a large number of new typeclass implementations.
+
+For these reasons, MTL libraries usually support only a limited number
+of monads and operations.
 
 \section{Laws of monad transformers}
 
@@ -10380,6 +10491,20 @@ transformers:
 
 \textbf{(c)} \lstinline!Cont[R, *]!$\varangle$\lstinline!Try!$\varangle$\lstinline!State[S, *]!
 
+\subsubsection{Exercise \label{subsec:Exercise-monad-stack-1-1}\ref{subsec:Exercise-monad-stack-1-1}}
+
+Consider a monad stack $P\triangleq K_{1}\varangle...\varangle K_{n}$
+where each of the monads $K_{i}$ (for $i=1,...,n$) has a runner
+$\theta_{i}:K_{i}^{A}\rightarrow A$. Assume that the monads $K_{i}$
+have complete monad transformers, so that all base runners are defined.
+Show that each runner $\theta_{i}$ can be lifted to the stack $P$,
+which will give a monad morphism $\bar{\theta}_{i}$ with type signature
+\[
+\bar{\theta}_{i}:K_{1}\varangle...\varangle K_{n}\leadsto K_{1}\varangle...\varangle K_{i-1}\varangle K_{i+1}\varangle...\varangle K_{n}\quad.
+\]
+Prove that any two runners $\bar{\theta}_{i}$ commute: $\bar{\theta}_{i}\bef\bar{\theta}_{j}=\bar{\theta}_{j}\bef\bar{\theta}_{i}$
+for any $i\neq j$.
+
 \subsubsection{Exercise \label{subsec:Exercise-monad-transformer-extra-layer-4}\ref{subsec:Exercise-monad-transformer-extra-layer-4} }
 
 Statement~\ref{subsec:Statement-M-to-M-times-M-is-monadic-morphism}
@@ -10482,11 +10607,22 @@ $\phi^{:M\leadsto N}$, the following equation:
 Consider the monads $\text{Reader}^{R,A}$ and $\text{State}^{R,A}$
 (with the same fixed type $R$). 
 
-\textbf{(a)} Implement a monad morphism $\text{Reader}^{R,\bullet}\leadsto\text{State}^{R,\bullet}$
-and prove that the laws hold.
+\textbf{(a)} Implement a monad morphism $\text{Reader}^{R,A}\rightarrow\text{State}^{R,A}$
+and prove that its laws hold.
 
 \textbf{(b)} Show that a function of type $\text{State}^{R,A}\rightarrow\text{Reader}^{R,A}$
-cannot be a monad morphism.
+\emph{cannot} be a monad morphism.
+
+\subsubsection{Exercise \label{subsec:Exercise-monad-morphism-writer-state}\ref{subsec:Exercise-monad-morphism-writer-state}}
+
+Consider the monads $\text{Writer}^{W,A}$ and $\text{State}^{W,A}$
+(with the same fixed monoid type $W$). 
+
+\textbf{(a)} Implement a monad morphism $\text{Writer}^{W,A}\rightarrow\text{State}^{W,A}$
+and prove that its laws hold.
+
+\textbf{(b)} Show that a function of type $\text{State}^{W,A}\rightarrow\text{Writer}^{W,A}$
+\emph{cannot} be a monad morphism.
 
 \subsubsection{Exercise \label{subsec:Exercise-monad-transformer-extra-layer-2}\ref{subsec:Exercise-monad-transformer-extra-layer-2} }
 
@@ -10612,8 +10748,7 @@ M^{A} & \text{id}
 \end{array}\quad.
 \]
 Show that $\gamma_{M}$ is a monad morphism between the monads $N$
-and $M$.
-
+and $M$.%
 \begin{comment}
 Solution
 
@@ -10688,8 +10823,7 @@ The two sides are now equal.
 
 For any monads $K$ and $M$ and a given monad morphism $\phi:K\leadsto M$,
 show that one can implement a corresponding monad morphism $\psi:L\leadsto N$
-between free pointed monads $L^{A}\triangleq A+K^{A}$ and $N^{A}\triangleq A+M{}^{A}$.
-
+between free pointed monads $L^{A}\triangleq A+K^{A}$ and $N^{A}\triangleq A+M{}^{A}$.%
 \begin{comment}
 Solution
 
@@ -10847,8 +10981,7 @@ defined by
 \[
 \phi\triangleq(k\rightarrow k+\bbnum 0)\bef\psi\quad,\quad\quad\chi\triangleq(l\rightarrow\bbnum 0+l)\bef\psi\quad,
 \]
-are both natural transformations.
-
+are both natural transformations.%
 \begin{comment}
 Solution
 
@@ -10929,7 +11062,7 @@ morphism $\theta_{K}:K\leadsto M$ given a monad morphism $\theta_{L}:L\leadsto M
 at least for some monads $K$ and $M$.
 
 \textbf{(d){*}} Given a monad morphism $\theta_{L}:L^{A}\rightarrow A$,
-implement a lawful monad morphism $\theta_{K}:K^{A}\rightarrow A$. 
+implement a lawful monad morphism $\theta_{K}:K^{A}\rightarrow A$.
 
 
 \subsubsection{Exercise \label{par:Exercise-mt-3-2}\ref{par:Exercise-mt-3-2}}
@@ -10937,7 +11070,6 @@ implement a lawful monad morphism $\theta_{K}:K^{A}\rightarrow A$.
 Assume that $K$ is a given monad, and define $L$ as the free pointed
 monad $L^{A}\triangleq A+K^{A}$. Given a monad morphism $\phi:K\leadsto L$,
 show that one can implement a monad morphism $\delta:K\leadsto\text{Opt}$.
-
 
 \subsubsection{Exercise \label{par:Exercise-mt-3-2-2}\ref{par:Exercise-mt-3-2-2}}
 
