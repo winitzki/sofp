@@ -1,6 +1,5 @@
 ![License](https://img.shields.io/github/license/winitzki/sofp.svg)
-![GitHub release](https://img.shields.io/github/release/winitzki/sofp.svg?include_prereleases)
-![GitHub Release Date](https://img.shields.io/github/release-date/winitzki/sofp.svg?include_prereleases)
+[![GitHub release](https://img.shields.io/github/release/winitzki/sofp.svg?include_prereleases)](https://github.com/winitzki/sofp/releases)
 [![SOFP build status](https://github.com/winitzki/sofp/workflows/Build%20PDF/badge.svg)](https://github.com/winitzki/sofp/actions)
 
 # The Science of Functional Programming
