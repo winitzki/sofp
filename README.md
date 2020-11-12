@@ -1,3 +1,5 @@
+[![SOFP build status](https://github.com/winitzki/sofp/workflows/Build%20PDF/badge.svg)](https://github.com/winitzki/sofp/actions)
+
 # The Science of Functional Programming
 
 This is the official source repository for the new book _The Science of Functional Programming: A tutorial, with examples in Scala_.
