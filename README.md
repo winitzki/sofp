@@ -39,8 +39,9 @@ This `git` repository
 contains the full source code for the book (LyX / LaTeX / jpg / pdf) and shell scripts for building a PDF version of the book.
 So, this is a "transparent" copy in the sense of the GNU license; the source code of the book is in a format that is convenient to use and to modify.
 
-The ["releases" section](https://github.com/winitzki/sofp/releases) of this repository contain the full uncorrected draft (sofp.pdf)
+The ["Releases" section](https://github.com/winitzki/sofp/releases) of this repository contains (under "Assets") the full uncorrected draft (sofp.pdf)
 and the finished and proof-read part of the draft (sofp-draft.pdf).
+The current release is ![GitHub release](https://img.shields.io/github/release/winitzki/sofp.svg?include_prereleases) and represents the most recent, stable version of the text.
 
 This repository also contains the slides for YouTube presentations that initiated the work on this book.
 The talk slides are not part of the book and are partially obsolete both in content and in the notation used.
@@ -58,7 +59,7 @@ The draft version is [available for purchase on leanpub](https://leanpub.com/sof
 A printed version of the current draft [can be purchased at lulu.com](https://www.lulu.com/en/us/shop/sergei-winitzki/the-science-of-functional-programming-draft-version/paperback/product-1y5zzgje.html).
 
 This printed version contains only the chapters whose text has been edited and proofread. It corresponds to the PDF file
-[sofp-src/sofp-draft.pdf](sofp-src/sofp-draft.pdf).
+`sofp-draft.pdf`  (see the ["Releases / Assets" section of github](https://github.com/winitzki/sofp/releases)).
 
 Readers are invited to create github issues in this repository and comment if they find something not clearly explained or wrong in the book,
 or if they wish to make comments or suggestions regarding the contents of the book.
