@@ -9,16 +9,16 @@ name="sofp"
 draft_pages=473
 
 # The number of pages in each chapter:
-pagecounts=(3 17 42 34 24 49 43 12 63 54 63 10 6 23 134 4 5 6 3 6 6 3 5 17 1 2 1 1 5)
+pagecounts=(3 17 42 34 24 49 43 12 63 54 63 10 6 23 137 3 5 6 3 6 6 3 5 17 1 2 1 1 5)
 
 # To create the draft version that contains only proofread chapters:
-# cut out from here,
+# cut out from here, including:
 draft_title_1="Applicative functors and"
-# to here:
+# to here, not including:
 draft_title_2="Applied functional type theory"
-# and then cut out from here:
+# and then cut out from here, including:
 draft_title_3="Inferring code from types with the LJT algorithm"
-# to here:
+# to here, not including:
 draft_title_4="D Parametricity theorem"
 
 # Checking the page counts.

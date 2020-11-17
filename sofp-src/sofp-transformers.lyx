@@ -1270,19 +1270,14 @@ def flatMap[A, B](fa: Either[Z, R => A])(f: A => Either[Z, R => B]): Either[Z,
 
 \begin_layout Plain Layout
 
-                                 // Need to return a value of type B here,
- using only r, ra, and f.
-\end_layout
-
-\begin_layout Plain Layout
-
       val x: Either[Z, R => B] = f(ra(r))     // Can compute a value `x`
  of type Either[Z, R => B].
 \end_layout
 
 \begin_layout Plain Layout
 
-      ???                 )
+      ???                 )      // Need to return a value of type B here,
+ using only r, ra, and f.
 \end_layout
 
 \begin_layout Plain Layout
@@ -1368,7 +1363,7 @@ Right(...)
 \begin_inset space ~
 \end_inset
 
-4–6 because we cannot guarantee that the value 
+3–5 because we cannot guarantee that the value 
 \begin_inset Formula $x^{:Z+\left(R\rightarrow B\right)}$
 \end_inset
 
@@ -1389,7 +1384,7 @@ Right(...)
 \begin_inset space ~
 \end_inset
 
-6 cannot be filled.
+5 cannot be filled.
  
 \begin_inset Formula $\square$
 \end_inset
@@ -1399,13 +1394,9 @@ Right(...)
 
 \begin_layout Standard
 When the monad composition works both ways, the two resulting monads are
- usually not equivalent: the two effects are combined in quite different
- ways.
- 
-\end_layout
-
-\begin_layout Standard
-For instance, the 
+ usually not equivalent: the effects combined in different order behave
+ differently.
+ For example, the 
 \begin_inset listings
 inline true
 status open
@@ -1421,7 +1412,27 @@ Writer
 \begin_inset Formula $W\times A$
 \end_inset
 
- (appending a log message) and the pass/fail monad 
+ (
+\begin_inset Quotes eld
+\end_inset
+
+appending a log message
+\begin_inset Quotes erd
+\end_inset
+
+) and the 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Either
+\end_layout
+
+\end_inset
+
+ monad 
 \begin_inset Formula $Z+A$
 \end_inset
 
@@ -1430,12 +1441,12 @@ Writer
 \begin_inset Formula $M^{A}\triangleq W\times\left(Z+A\right)$
 \end_inset
 
- describes a computation that may fail but always outputs a message.
+ describes a computation that may fail but always appends a message.
  The monad 
 \begin_inset Formula $M^{A}\triangleq Z+W\times A$
 \end_inset
 
- will not output any message on failure.
+ will not append any message on failure.
 \end_layout
 
 \begin_layout Standard
@@ -2210,12 +2221,7 @@ final case class ListTry[A](value: List[Try[A]]) {
 
 \begin_layout Plain Layout
 
-    }
-\end_layout
-
-\begin_layout Plain Layout
-
-  )
+    })
 \end_layout
 
 \begin_layout Plain Layout
@@ -2398,7 +2404,7 @@ Solution
 \end_layout
 
 \begin_layout Standard
-We will find that the type signature of 
+There is no lawful 
 \begin_inset listings
 inline true
 status open
@@ -2410,14 +2416,14 @@ flatMap
 
 \end_inset
 
- cannot be implemented for the type constructor 
+ function for the type constructor 
 \begin_inset listings
 inline true
 status open
 
 \begin_layout Plain Layout
 
-OpSt[A] = Option[State[S, A]]
+Option[State[S, A]]
 \end_layout
 
 \end_inset
@@ -2553,19 +2559,7 @@ Solution
 \end_layout
 
 \begin_layout Standard
-Denoting the type constructor 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-StR[A] = State[S, R => A]
-\end_layout
-
-\end_inset
-
-, we try implementing its 
+Begin by implementing 
 \begin_inset listings
 inline true
 status open
@@ -2589,12 +2583,19 @@ flatMap
 
 \end_inset
 
- methods.
- We find that the required type signatures 
-\emph on
-can
-\emph default
- be implemented:
+ for the type constructor 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+State[S, R => A]
+\end_layout
+
+\end_inset
+
+:
 \begin_inset listings
 inline false
 status open
@@ -2612,29 +2613,20 @@ def pure[A](a: A): StR[A] = { s => (_ => a, s) }
 
 \begin_layout Plain Layout
 
-def flatMap[A, B](fa: StR[A])(f: A => StR[B]): StR[B] = { s =>
+def flatMap[A, B](fa: StR[A])(f: A => StR[B]): StR[B] = { s =>  // Need
+ a value of type (R => B, S).
 \end_layout
 
 \begin_layout Plain Layout
 
-      // Here we must return a value of type (R => B, S).
- Other than s: S, we can compute s1: S via:
+  val (s1, ra): (S, R => A) = fa(s)                  // We now have two
+ values (s and s1) of type S.
 \end_layout
 
 \begin_layout Plain Layout
 
-  val (s1, ra): (S, R => A) = fa(s)
-\end_layout
-
-\begin_layout Plain Layout
-
-  // We can also compute a value of type R => B, trying to preserve information
- as much as possible:
-\end_layout
-
-\begin_layout Plain Layout
-
-  val rb: R => B = { r =>
+  val rb: R => B = { r =>  // We can compute a value of type R => B.
+ Trying to preserve information.
 \end_layout
 
 \begin_layout Plain Layout
@@ -2650,6 +2642,7 @@ def flatMap[A, B](fa: StR[A])(f: A => StR[B]): StR[B] = { s =>
 \begin_layout Plain Layout
 
     rb(r)   // We must discard s2 here.
+ This loses information since we could not use `f` elsewhere.
 \end_layout
 
 \begin_layout Plain Layout
@@ -2670,8 +2663,7 @@ def flatMap[A, B](fa: StR[A])(f: A => StR[B]): StR[B] = { s =>
 
 \end_inset
 
-We may recognize a problem with this implementation: The new state value
- 
+There is a problem with this implementation: The new state value 
 \begin_inset Formula $s_{1}$
 \end_inset
 
@@ -2679,15 +2671,12 @@ We may recognize a problem with this implementation: The new state value
 \begin_inset Formula $f$
 \end_inset
 
-, because the 
-\begin_inset Quotes eld
+.
+ The only usage of 
+\begin_inset Formula $f$
 \end_inset
 
-correct
-\begin_inset Quotes erd
-\end_inset
-
- value (
+ (producing 
 \begin_inset Formula $s_{2}$
 \end_inset
 
@@ -2710,7 +2699,7 @@ flatMap
 \end_inset
 
  must discard the second monad's effect.
- This will violate the identity law: 
+ This will violate the identity law 
 \begin_inset listings
 inline true
 status open
@@ -3225,7 +3214,7 @@ List
 \end_inset
 
 .
- To achieve that, we annotate the code of Example
+ Begin by commenting the code of Example
 \begin_inset space ~
 \end_inset
 
@@ -3239,7 +3228,7 @@ noprefix "false"
 
 \end_inset
 
- to make explicit the usage of the 
+ to indicate the usage of the 
 \begin_inset listings
 inline true
 status open
@@ -3314,17 +3303,18 @@ final case class ListTry[A](value: List[Try[A]]) { // We will use List.map,
 
 \begin_layout Plain Layout
 
-    }
+    })
 \end_layout
 
 \begin_layout Plain Layout
 
-  )
+}
 \end_layout
 
 \begin_layout Plain Layout
 
-}  
+def pure[A](a: A): ListTry[A] = ListTry(List(Success(a))) // This is List.pure(Su
+ccess(a)).
 \end_layout
 
 \end_inset
@@ -3383,17 +3373,17 @@ texttt{'}$s `flatMap` here.
 
 \begin_layout Plain Layout
 
-    }
+    })
 \end_layout
 
 \begin_layout Plain Layout
 
-  )
+}
 \end_layout
 
 \begin_layout Plain Layout
 
-}  
+def pure[A](a: A): ListTry[A] = ListTry(Monad[M].pure(Success(a)))
 \end_layout
 
 \end_inset
@@ -3556,7 +3546,7 @@ res0: TryT[List, Int] = TryT(List(Success(101), Success(102), Success(103)))
 \end_layout
 
 \begin_layout Standard
-This example shows how to define a type constructor denoted by 
+This example defines a type constructor denoted by 
 \begin_inset Formula $T_{\text{Try}}^{M,\bullet}$
 \end_inset
 
@@ -3578,20 +3568,20 @@ This example shows how to define a type constructor denoted by
 \begin_inset Formula $M$
 \end_inset
 
- is the first type parameter in the transformer.) Similar code is required
- to define transformers for other monads, such as 
-\begin_inset Formula $T_{\text{Read}}^{M}$
+ is the first type parameter in the transformer.) We will later implement
+ transformers for other monads, such as 
+\begin_inset Formula $T_{\text{Reader}}^{M}$
 \end_inset
 
 , 
-\begin_inset Formula $T_{\text{Write}}^{M}$
+\begin_inset Formula $T_{\text{Writer}}^{M}$
 \end_inset
 
 , 
 \begin_inset Formula $T_{\text{State}}^{M}$
 \end_inset
 
-, and so on.
+, etc.
  The advantage of the transformer approach is that the code for 
 \begin_inset Formula $T_{L}^{M}$
 \end_inset
@@ -3685,7 +3675,7 @@ Success
 \end_inset
 
  subtypes).
- It is not obvious how to define the type of a monad transformer 
+ It is not obvious how to implement a monad transformer 
 \begin_inset Formula $T_{L}^{M}$
 \end_inset
 
@@ -3732,7 +3722,7 @@ Success
 \begin_inset Formula $L$
 \end_inset
 
- (this is reflected in the notation: 
+ (this is reflected in the notation, as 
 \begin_inset Formula $L$
 \end_inset
 
@@ -3749,7 +3739,7 @@ subscript
 \begin_inset Formula $L$
 \end_inset
 
- to another monad may require a complete rewrite of 
+ to another monad forces a complete rewrite of 
 \begin_inset Formula $T_{L}^{M}$
 \end_inset
 
@@ -4420,7 +4410,7 @@ ListT
 \end_inset
 
  transformer in the Haskell standard library.
- The type constructor for 
+ The transformer 
 \begin_inset listings
 inline true
 status open
@@ -4432,7 +4422,7 @@ ListT
 
 \end_inset
 
- was implemented incorrectly in 2002.
+ was implemented incorrectly in 2002; the code violated the monad laws.
  The faulty transformer remained in the library until 2007.
  See the discussion in 
 \family typewriter
@@ -4556,7 +4546,7 @@ noprefix "false"
 
 \end_inset
 
-.
+:
 \begin_inset listings
 inline false
 status open
@@ -4598,7 +4588,12 @@ final case class ReaderT[M[_]: Monad : Functor, R, A](run: R => M[A]) {
 
 \begin_layout Plain Layout
 
-}  
+}
+\end_layout
+
+\begin_layout Plain Layout
+
+def pure[M[_]: Monad, A](a: A): ReaderT[M, A] = ReaderT(_ => Monad[M].pure(a))
 \end_layout
 
 \end_inset
@@ -5157,6 +5152,35 @@ final case class WriterT[M[_]: Monad : Functor, W: Monoid, A](t: M[(A, W)])
 
 \end_inset
 
+The code of 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+pure
+\end_layout
+
+\end_inset
+
+ is straightforward:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+def pure[M[_]: Monad, W: Monoid, A](a: A): WriterT[M, W, A] =
+\end_layout
+
+\begin_layout Plain Layout
+
+  WriterT(Monad[M].pure((a, Monoid[W].empty))
+\end_layout
+
+\end_inset
+
 The 
 \begin_inset Quotes eld
 \end_inset
@@ -5185,7 +5209,7 @@ WriterT
 
 \end_inset
 
- are (omitting some Scala boilerplate):
+ are:
 \begin_inset listings
 inline false
 status open
@@ -5206,7 +5230,7 @@ def blift[A]: ((A, W)) => M[(A, W)] = { t => Monad[M].pure(t) }
 \begin_inset Formula 
 \begin{align*}
 \text{foreign lift}:\quad & \text{flift}:M^{A}\rightarrow T_{\text{Writer}}^{M,A}\quad,\quad\quad m^{:M^{A}}\triangleright\text{flift}\triangleq m\triangleright(a\rightarrow a\times e_{w})^{\uparrow M}\quad,\\
-\text{base lift}:\quad & \text{blift}:(R\rightarrow A)\rightarrow T_{\text{Writer}}^{M,A}\quad,\quad\quad\text{blift}\triangleq\text{pu}_{M}\quad.
+\text{base lift}:\quad & \text{blift}:\text{Writer}^{W,A}\rightarrow T_{\text{Writer}}^{M,A}\quad,\quad\quad\text{blift}\triangleq\text{pu}_{M}\quad.
 \end{align*}
 
 \end_inset
@@ -5696,6 +5720,39 @@ final case class ListT[M[_]: Monad : Functor, A](value: M[Option[(A, ListT[M,
 
 \end_inset
 
+The code of 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+pure
+\end_layout
+
+\end_inset
+
+ creates a single-element list, which uses a pair of an 
+\begin_inset Formula $a^{:A}$
+\end_inset
+
+ and an empty list:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+def pure[M[_]: Monad, A](a: A): ListT[M, A] =
+\end_layout
+
+\begin_layout Plain Layout
+
+  ListT(Monad[M].pure(Some((a, ListT(Monad[M].pure(None))))))
+\end_layout
+
+\end_inset
+
 The lifts for 
 \begin_inset listings
 inline true
@@ -5715,12 +5772,19 @@ status open
 
 \begin_layout Plain Layout
 
-def flift[A]: M[A] => ListT[M, A] = { m => ListT(m) }
+def flift[M[_]: Monad, A]: M[A] => ListT[M, A] = ListT(a => m.flatMap(ListT.pure(a
+).value))
 \end_layout
 
 \begin_layout Plain Layout
 
-def blift[A]: ((A, W)) => M[(A, W)] = { t => Monad[M].pure(t) }
+def blift[M[_]: Monad, A]: List[A] => ListT[M, A] =
+\end_layout
+
+\begin_layout Plain Layout
+
+  _.foldRight(Monad[M].pure(None)){ case (a, tail) => Monad[M].pure(Some((a,
+ blift(tail)))) }
 \end_layout
 
 \end_inset
@@ -5728,8 +5792,12 @@ def blift[A]: ((A, W)) => M[(A, W)] = { t => Monad[M].pure(t) }
 
 \begin_inset Formula 
 \begin{align*}
-\text{foreign lift}:\quad & \text{flift}:M^{A}\rightarrow T_{\text{Writer}}^{M,A}\quad,\quad\quad m^{:M^{A}}\triangleright\text{flift}\triangleq m\triangleright(a\rightarrow a\times e_{w})^{\uparrow M}\quad,\\
-\text{base lift}:\quad & \text{blift}:(R\rightarrow A)\rightarrow T_{\text{Writer}}^{M,A}\quad,\quad\quad\text{blift}\triangleq\text{pu}_{M}\quad.
+\text{foreign lift}:\quad & \text{flift}:M^{A}\rightarrow T_{\text{List}}^{M,A}\quad,\quad\quad m^{:M^{A}}\triangleright\text{flift}\triangleq m\triangleright(a\rightarrow\bbnum 0+a\times\text{pu}_{M}(1+\bbnum 0))^{\uparrow M}\quad,\\
+\text{base lift}:\quad & \text{blift}:\text{List}^{A}\rightarrow T_{\text{List}}^{M,A}\quad,\quad\quad\text{blift}\triangleq\,\begin{array}{|c||c|}
+ & M^{\bbnum 1+A\times T_{\text{List}}^{M,A}}\\
+\hline \bbnum 1 & 1\rightarrow\text{pu}_{M}(1+\bbnum 0)\\
+A\times\text{List}^{A} & a\times t\rightarrow\text{pu}_{M}(\bbnum 0+a\times\overline{\text{blift}}\,(t))
+\end{array}\quad.
 \end{align*}
 
 \end_inset
@@ -5751,33 +5819,22 @@ ListT
 \end_inset
 
 .
- List-like monads do not usually have runners (
-\begin_inset Formula $\theta_{\text{List}}:\text{List}^{A}\rightarrow A$
-\end_inset
-
-) because the 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-List
-\end_layout
-
-\end_inset
-
- monad normally represents 
+ List-like monads usually represent 
 \emph on
 several
 \emph default
  useful results rather than a single result.
- Also, a list may be empty, which prevents having a fully parametric function
- of type 
-\begin_inset Formula $\forall A.\,\text{List}^{A}\rightarrow A$
+ So, they may not need runners of type 
+\begin_inset Formula $\text{List}^{A}\rightarrow A$
 \end_inset
 
 .
+ Also, a list may be empty, which makes a fully parametric function of type
+ 
+\begin_inset Formula $\text{List}^{A}\rightarrow A$
+\end_inset
+
+ impossible.
  However, the foreign monad 
 \begin_inset Formula $M$
 \end_inset
@@ -5840,7 +5897,7 @@ ListT[M, A]
 
 \end_inset
 
- and obtain a 
+ and obtains a 
 \begin_inset listings
 inline true
 status open
@@ -5932,7 +5989,7 @@ ListT[M, A]
 \begin_inset Formula $M$
 \end_inset
 
- has a function type, a value of type 
+ is of function type, a value of type 
 \begin_inset listings
 inline true
 status open
@@ -6012,8 +6069,8 @@ status open
 
 \begin_layout Plain Layout
 
-def ascend(a: Int): ListT[Reader[Int, *], Int] = ListT(Lazy(m => Some((a,
- ascend(a + m)))))
+def ascend(a: Int): ListT[Reader[Int, *], Int] = ListT(Lazy(k => Some((a,
+ ascend(a + k)))))
 \end_layout
 
 \end_inset
@@ -6031,12 +6088,12 @@ ListT
 \end_inset
 
  that represents integer sequences 
-\begin_inset Formula $\left[a,a+m,a+2*m,...\right]$
+\begin_inset Formula $\left[a,a+k,a+2k,...\right]$
 \end_inset
 
 .
  The parameter 
-\begin_inset Formula $m$
+\begin_inset Formula $k$
 \end_inset
 
  is passed via the 
@@ -6360,11 +6417,11 @@ StateT[M, S, A] = S => M[(S, A)]
 
 \end_inset
 
-, requires us to place the foreign monad 
+, puts the foreign monad 
 \begin_inset Formula $M$
 \end_inset
 
- at a specific place in the type of the 
+ at a specific place within the type of the 
 \begin_inset listings
 inline true
 status open
@@ -6438,6 +6495,12 @@ final case class StateT[M[_]: Monad : Functor, S, A](run: S => M[(A, S)])
 }
 \end_layout
 
+\begin_layout Plain Layout
+
+def pure[M[_]: Monad, S, A](a: A): StateT[M, S, A] = StateT(s => Monad[M].pure((a
+, s)))
+\end_layout
+
 \end_inset
 
 
@@ -6453,8 +6516,7 @@ final case class StateT[M[_]: Monad : Functor, S, A](run: S => M[(A, S)])
 \end_layout
 
 \begin_layout Standard
-The implementations of the lift functions needs to be adapted to the type
- of 
+The implementations of the lift functions for 
 \begin_inset listings
 inline true
 status open
@@ -6466,7 +6528,7 @@ StateT
 
 \end_inset
 
-:
+ are:
 \begin_inset listings
 inline false
 status open
@@ -6534,11 +6596,11 @@ def runState[S, A](init: S)(p: State[S, A]): A = p.run(init)._1
 
 \end_inset
 
- We cannot use 
-\begin_inset Formula $\theta_{\text{State}}$
-\end_inset
 
- directly with 
+\end_layout
+
+\begin_layout Standard
+The transformer 
 \begin_inset listings
 inline true
 status open
@@ -6550,20 +6612,11 @@ StateT
 
 \end_inset
 
- because that transformer is not a functor composition.
- There is no general 
-\begin_inset Quotes eld
-\end_inset
-
-base runner
-\begin_inset Quotes erd
-\end_inset
-
- 
+ does not have a general base runner of the form 
 \begin_inset Formula $\text{brun}\,(\theta_{\text{State}})$
 \end_inset
 
- that would convert an 
+ converting an 
 \emph on
 arbitrary
 \emph default
@@ -6575,7 +6628,16 @@ arbitrary
 \begin_inset Formula $T_{\text{State}}^{M,A}\rightarrow M^{A}$
 \end_inset
 
- that runs the 
+.
+ Instead, we need to implement a specialized base runner that converts 
+\begin_inset Formula $T_{\text{State}}^{M,A}$
+\end_inset
+
+ into 
+\begin_inset Formula $M^{A}$
+\end_inset
+
+ directly, running the 
 \begin_inset listings
 inline true
 status open
@@ -6587,29 +6649,11 @@ State
 
 \end_inset
 
- monad's effects but keeps the effects of the foreign monad 
+ monad's effects but keeping the effects of the foreign monad 
 \begin_inset Formula $M$
 \end_inset
 
-.
- The type of 
-\begin_inset Formula $T_{\text{State}}^{M}$
-\end_inset
-
- does not allow base runners parametric in 
-\begin_inset Formula $\theta_{\text{State}}$
-\end_inset
-
-.
- Instead, we need to implement a specialized base runner that converts 
-\begin_inset Formula $T_{\text{State}}^{M,A}$
-\end_inset
-
- into 
-\begin_inset Formula $M^{A}$
-\end_inset
-
- directly:
+:
 \begin_inset listings
 inline false
 status open
@@ -6646,7 +6690,7 @@ State
 
 \end_inset
 
- monad's effect, we need different code:
+ monad's effect, we need the following code:
 \begin_inset listings
 inline false
 status open
@@ -6722,11 +6766,11 @@ ContT[M, R, A]
 \begin_inset Formula $M$
 \end_inset
 
- is applied to the result type 
+ wraps the type 
 \begin_inset Formula $R$
 \end_inset
 
- but not to any values of type 
+ but is not applied to any values of the main value type 
 \begin_inset Formula $A$
 \end_inset
 
@@ -6775,11 +6819,7 @@ final case class ContT[M[_], R, A](run: (A => M[R]) => M[R]) {
 
 \begin_layout Plain Layout
 
-\end_layout
-
-\begin_layout Plain Layout
-
-def blift[A](p: ContT[R, A]): ContT[M, R, A] = ???
+def pure[M[_], R, A](a: A): ContT[M, R, A] = ContT(k => k(a))
 \end_layout
 
 \end_inset
@@ -6833,12 +6873,12 @@ base lift
 
 \end_inset
 
-has no implementation that could work with all monads 
+has no implementation parametric in the monad 
 \begin_inset Formula $M$
 \end_inset
 
 .
- The reason is that, in general, we cannot produce a value of type 
+ The reason is that we cannot produce a value of type 
 \begin_inset Formula $R$
 \end_inset
 
@@ -6846,7 +6886,8 @@ has no implementation that could work with all monads
 \begin_inset Formula $M^{R}$
 \end_inset
 
- (not all monads have runners), and so we cannot convert 
+ parametrically (some monads have no runners), and so we cannot convert
+ 
 \begin_inset Formula $A\rightarrow M^{R}$
 \end_inset
 
@@ -6867,8 +6908,8 @@ blift
 
 \end_inset
 
- (a function having type 
-\begin_inset Formula $\left(A\rightarrow R\right)\rightarrow R$
+ (a function of type 
+\begin_inset Formula $(A\rightarrow R)\rightarrow R$
 \end_inset
 
 ), while creating a value of type 
@@ -6900,7 +6941,7 @@ curryhoward
 \begin_inset Formula $M^{R}$
 \end_inset
 
- that has no runner, e.g., 
+ that has no fully parametric runner, e.g., 
 \begin_inset Formula $M^{R}\triangleq Z+R$
 \end_inset
 
@@ -6952,27 +6993,24 @@ status open
 
 \begin_layout Plain Layout
 
-Cont
+Cont[R, A]
 \end_layout
 
 \end_inset
 
- (for instance, a value produced by a third-party library that cannot be
- modified) into the transformed monad 
+ into the transformed monad 
 \begin_inset listings
 inline true
 status open
 
 \begin_layout Plain Layout
 
-ContT
+ContT[M, R, A]
 \end_layout
 
 \end_inset
 
 .
- This is a serious deficiency of the continuation monad that makes it unsuitable
- for certain applications.
  Concrete values of type 
 \begin_inset listings
 inline true
@@ -6985,8 +7023,8 @@ Cont[R, A]
 
 \end_inset
 
- may be interfaces to system libraries implemented in non-fully parametric
- code.
+ may result from calling third-party libraries implemented in non-fully-parametr
+ic code.
  It may be impossible to rewrite that code to return 
 \begin_inset listings
 inline true
@@ -7012,6 +7050,9 @@ M
 \end_inset
 
 .
+ This deficiency of the continuation monad makes it unsuitable for certain
+ applications.
+ 
 \end_layout
 
 \begin_layout Standard
@@ -7032,7 +7073,7 @@ The continuation monad also does not support foreign runners or base runners.
 \begin_inset Formula $T_{\text{Cont}}^{M,A}\triangleq(A\rightarrow M^{R})\rightarrow M^{R}$
 \end_inset
 
- is not covariant in the parameter 
+ is not covariant in the type parameter 
 \begin_inset Formula $M$
 \end_inset
 
@@ -7041,8 +7082,8 @@ The continuation monad also does not support foreign runners or base runners.
 \begin_inset Formula $\text{brun}:((A\rightarrow M^{R})\rightarrow M^{R})\rightarrow M^{A}$
 \end_inset
 
-, cannot be implemented because there is no non-trivial way of constructing
- a value of type 
+, cannot be implemented because there is no way of constructing a value
+ of type 
 \begin_inset Formula $M^{A}$
 \end_inset
 
@@ -7050,7 +7091,11 @@ The continuation monad also does not support foreign runners or base runners.
 \begin_inset Formula $M^{R}$
 \end_inset
 
-.
+ (the type 
+\begin_inset Formula $A$
+\end_inset
+
+ is arbitrary).
 \end_layout
 
 \begin_layout Paragraph
@@ -7105,7 +7150,7 @@ final case class SelT[M[_]: Monad : Functor, Z, A](run: (M[A] => Z) => M[A])
 
 \begin_layout Plain Layout
 
-  def map[B](f: A => B): SelT[M, Z, B] = SelT { (mbz: M[B] => Z) => run(ma
+  def map[B](f: A => B): SelT[M,Z,B] = SelT { (mbz: M[B] => Z) => run(ma
  => mbz(ma.map(f))).map(f) }
 \end_layout
 
@@ -7140,6 +7185,11 @@ final case class SelT[M[_]: Monad : Functor, Z, A](run: (M[A] => Z) => M[A])
 }
 \end_layout
 
+\begin_layout Plain Layout
+
+def pure[M[_]: Monad, Z, A](a: A): SelT[M, Z, A] = SelT(_ => Monad[M].pure(a))
+\end_layout
+
 \end_inset
 
 Since 
@@ -7165,7 +7215,7 @@ status open
 
 \begin_layout Plain Layout
 
-def flift[A](m: M[A]): SelT[M, Z, A] = SelT(_ => m)   // This is the `pure`
+def flift[A](m: M[A]): SelT[M, Z, A] = SelT(_ => m)   // Using the `pure`
  method of the Sel monad.
 \end_layout
 
@@ -7188,28 +7238,6 @@ def blift[A](sel: Sel[Z, A]): SelT[M, Z, A] = SelT { (k: M[A] => Z) =>
 
 }
 \end_layout
-
-\end_inset
-
-
-\begin_inset Formula 
-\begin{align*}
-\text{foreign lift}:\quad & \text{flift}:M^{A}\rightarrow T_{\text{Sel}}^{M,A}\quad,\quad\quad m^{:M^{A}}\triangleright\text{flift}\triangleq\_^{:M^{A}\rightarrow Z}\rightarrow m=m\triangleright\text{pu}_{\text{Sel}}\quad,\\
-\text{base lift}:\quad & \text{blift}:(\left(A\rightarrow Z\right)\rightarrow A)\rightarrow T_{\text{Sel}}^{M,A}\quad,\quad\quad\text{blift}\triangleq\text{pu}_{M}^{\uparrow\text{Sel}}\quad.
-\end{align*}
-
-\end_inset
-
-
-\end_layout
-
-\begin_layout Standard
-The runners can be applied in any order because naturality makes them commute:
- 
-\begin_inset Formula 
-\[
-\theta_{M}^{\uparrow\text{Sel}}\bef\theta_{\text{Sel}}=\theta_{\text{Sel}}\bef\theta_{M}\quad.
-\]
 
 \end_inset
 
@@ -7243,7 +7271,7 @@ noprefix "false"
 
 \end_inset
 
- represents a choice between eager and lazy evaluation.
+ represents a choice of eager or lazy evaluation.
  The corresponding transformer is defined by
 \begin_inset Formula 
 \[
@@ -7303,27 +7331,20 @@ noprefix "false"
 
 \end_inset
 
- used a helper function that we called 
+ used a helper function 
 \begin_inset listings
 inline true
 status open
 
 \begin_layout Plain Layout
 
-get
+get: Eval[A] => A
 \end_layout
 
 \end_inset
 
-:
-\begin_inset Formula 
-\[
-\text{get}:\text{Eval}^{A}\rightarrow A\quad.
-\]
-
-\end_inset
-
-We see now that 
+.
+ We see that 
 \begin_inset listings
 inline true
 status open
@@ -7481,10 +7502,6 @@ value)) })
 
 \begin_layout Plain Layout
 
-\end_layout
-
-\begin_layout Plain Layout
-
 object EvalT {
 \end_layout
 
@@ -7495,12 +7512,8 @@ object EvalT {
 
 \begin_layout Plain Layout
 
-\end_layout
-
-\begin_layout Plain Layout
-
-  def brun[M[_]: Monad, A]: EvalT[M, A] => M[A] = _.value.flatMap {// Either[A,
- Unit=>M[A]] => M[A].
+  def brun[M[_]: Monad, A]: EvalT[M, A] => M[A] = _.value.flatMap { // Either[A,
+ Unit=>M[A]] => M[A]
 \end_layout
 
 \begin_layout Plain Layout
@@ -7635,8 +7648,8 @@ How can we combine
 \emph on
 three or more
 \emph default
- monads in a single functor block? For example, we may want to define some
- transformers and lifts so that the following code works:
+ monads in a single functor block? For example, we may want somehow to make
+ the following code work:
 \end_layout
 
 \begin_layout Standard
@@ -7740,7 +7753,7 @@ larger
 \end_inset
 
 .
- If we need to combine monad 
+ To combine the monad 
 \begin_inset Formula $T_{L}^{M}$
 \end_inset
 
@@ -7756,7 +7769,7 @@ larger
 \begin_inset Formula $T_{K}^{T_{L}^{M}}$
 \end_inset
 
- that can describe the effects of 
+ that describes the effects of 
 \begin_inset Formula $K$
 \end_inset
 
@@ -7853,15 +7866,12 @@ Writer
 
 \end_inset
 
-'s transformer composes inside the foreign monad, we write
-\begin_inset Formula 
-\[
-T_{\text{Writer}}^{\text{State},A}=S\rightarrow A\times W\times S\quad.
-\]
-
+'s transformer composes inside the foreign monad, we write 
+\begin_inset Formula $T_{\text{Writer}}^{\text{State},A}=S\rightarrow A\times W\times S$
 \end_inset
 
-Now we apply the 
+.
+ Now we apply the 
 \begin_inset listings
 inline true
 status open
@@ -7902,7 +7912,7 @@ This monad has an injected dependency of type
 \end_layout
 
 \begin_layout Standard
-If we already implemented the transformers 
+If the transformers 
 \begin_inset listings
 inline true
 status open
@@ -7926,21 +7936,25 @@ WriterT
 
 \end_inset
 
-, we may write the Scala type
+ are already implemented, we may write the Scala type
 \begin_inset listings
 inline false
 status open
 
 \begin_layout Plain Layout
 
-type RWS[R, W, S, A] = ReaderT[WriterT[State[S, *], W, *], R, A]
+type RWS[R, W, S, A] = ReaderT[WriterT[State[S, *], W, *], R, A] // Equivalent
+ to R => S => (A, W, S)
 \end_layout
 
 \end_inset
 
-Nested transformers are substituted into the first argument of the outer
- transformer, which has the type constructor kind.
- So, we need to use the 
+A nested transformer is substituted into the 
+\emph on
+first
+\emph default
+ argument of the outer transformer, which has the type constructor kind.
+ We use the 
 \begin_inset Quotes eld
 \end_inset
 
@@ -7966,7 +7980,7 @@ kind projector
 \begin_inset Quotes erd
 \end_inset
 
- plugin to represent those type constructors such as 
+ plugin for type constructors such as 
 \begin_inset listings
 inline true
 status open
@@ -8021,9 +8035,8 @@ We could stack the monads
 \end_inset
 
 .
- In general, different orders will produce inequivalent monads that combine
- effects in different ways, although in certain cases the results are independen
-t of the stacking order.
+ In general, different orders will produce inequivalent monads, although
+ in certain cases the stacking order does not matter.
  Table
 \begin_inset space ~
 \end_inset
@@ -8038,7 +8051,7 @@ noprefix "false"
 
 \end_inset
 
- shows some examples of stacking monads in different orders.
+ and the following examples illustrate stacking monads in different orders.
 \end_layout
 
 \begin_layout Standard
@@ -8737,7 +8750,7 @@ Solution
 \begin_layout Standard
 The types of the transformers are equivalent: the only difference is the
  flipped order of curried arguments.
- To verify that the implementations of 
+ We will verify that the functions 
 \begin_inset listings
 inline true
 status open
@@ -8761,8 +8774,8 @@ flatMap
 
 \end_inset
 
- in these transformers are also equivalent (up to the order of curried arguments
-), we begin by writing 
+ in these transformers also differ only by the order of curried arguments.
+ Begin by writing 
 \begin_inset listings
 inline true
 status open
@@ -8853,7 +8866,8 @@ noprefix "false"
 
 \end_inset
 
-We see that the codes differ only by flipping the curried arguments 
+We see that the codes indeed differ only by flipping the curried arguments
+ 
 \begin_inset Formula $r^{:R}$
 \end_inset
 
@@ -8867,34 +8881,6 @@ We see that the codes differ only by flipping the curried arguments
 \end_inset
 
 
-\end_layout
-
-\begin_layout Standard
-The next example shows two different ways of combining the effects of 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Reader
-\end_layout
-
-\end_inset
-
- and 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-List
-\end_layout
-
-\end_inset
-
-.
 \end_layout
 
 \begin_layout Subsubsection
@@ -8959,9 +8945,9 @@ eager
 \begin_inset Quotes erd
 \end_inset
 
- list of values.
- The length of the resulting list, as well as every value in it, are determined
- at once depending on the injected value of type 
+ list.
+ The length of the resulting list, as well as all its elements, are computed
+ at once from the injected value of type 
 \begin_inset Formula $R$
 \end_inset
 
@@ -8978,16 +8964,12 @@ lazy
 \begin_inset Quotes erd
 \end_inset
 
- (on-call) sequence because getting the value of each element is obtained
- by calling a 
-\emph on
-new
-\emph default
- function of type 
+ (on-call) sequence: getting the value of each next element requires calling
+ a function of type 
 \begin_inset Formula $R\rightarrow\bbnum 1+A\times T_{\text{List}}^{\text{Reader}}$
 \end_inset
 
-.
+ (possibly, a different function each time).
  The resulting on-call sequence may be unlimited in length.
  
 \begin_inset Formula $\square$
@@ -9093,16 +9075,15 @@ canceling
 \end_inset
 
 .
- We cannot implement a monad morphism converting a value of type 
+ We cannot convert a value of type 
 \begin_inset Formula $T_{\text{State}}^{\text{Either},A}$
 \end_inset
 
-, which may fail to update the state, into a value of type 
+ (which may fail to update the state) into a value of type 
 \begin_inset Formula $T_{\text{Either}}^{\text{State},A}$
 \end_inset
 
-, which always updates the state.
- 
+ (which always updates the state).
 \end_layout
 
 \begin_layout Paragraph
@@ -9156,14 +9137,13 @@ To combine
 \end_inset
 
 's transformer).
- With this technique, we may combine any number of monads in a monad stack.
- The only requirement is the need to know the transformers for each monad
- (except for the last one).
+ With this technique, we may combine any number of monads in a monad stack,
+ as long as the transformers for all monads are known (except for the last
+ one).
 \end_layout
 
 \begin_layout Standard
-We may also view monad stacking as a binary operation (which we denote by
- 
+Monad stacking can be viewed as a binary operation (which we denote by 
 \begin_inset Formula $\varangle$
 \end_inset
 
@@ -9182,7 +9162,7 @@ We may also view monad stacking as a binary operation (which we denote by
 .
  This operation is associative 
 \emph on
-by construction
+by definition
 \emph default
 : the transformer for the monad 
 \begin_inset Formula $T_{K}^{L}$
@@ -9401,7 +9381,7 @@ T_{\text{State}}^{M,A}=S\rightarrow M^{A\times S}=S\rightarrow\text{Eval}^{A\tim
 
 \end_inset
 
-Now translate the type notation into code, assuming that 
+Now translate the type notation into code, assuming that the type 
 \begin_inset listings
 inline true
 status open
@@ -9413,7 +9393,7 @@ S
 
 \end_inset
 
- is a fixed type:
+ is defined previously:
 \begin_inset listings
 inline false
 status open
@@ -9728,7 +9708,7 @@ ListOptionTry
 
 \end_inset
 
-, we need to start with the innermost nested monad, 
+, we need to start with the innermost nested monad (
 \begin_inset listings
 inline true
 status open
@@ -9740,7 +9720,7 @@ Try
 
 \end_inset
 
-, and use its transformer (
+) and apply its transformer (
 \begin_inset listings
 inline true
 status open
@@ -9752,7 +9732,7 @@ TryT
 
 \end_inset
 
-) on the foreign monad 
+) to the foreign monad 
 \begin_inset Formula $M$
 \end_inset
 
@@ -9868,11 +9848,11 @@ noprefix "false"
 \end_inset
 
 .
- In every example, if we choose 
+ In every example, if we set 
 \begin_inset Formula $M$
 \end_inset
 
- as the identity monad 
+ to the identity monad 
 \begin_inset Formula $\text{Id}$
 \end_inset
 
@@ -10013,8 +9993,8 @@ noprefix "false"
 
 \end_inset
 
-) even if restricted to exponential-polynomial type constructors whose monad
- methods are implemented by purely functional code.
+) even if restricted to monads whose methods are implemented by fully parametric
+ code.
 \end_layout
 
 \begin_layout Standard
@@ -10091,8 +10071,8 @@ zio
 \end_inset
 
  library.
- A transformer must allow the foreign monad to cancel the effects of the
- base monad, as we have seen in Example
+ A transformer must allow a foreign monad to cancel the effects of the base
+ monad, as we have seen in Example
 \begin_inset space ~
 \end_inset
 
@@ -10133,8 +10113,8 @@ literal "false"
 
 \begin_layout Standard
 Throughout this chapter, we will build transformers for every exponential-polyno
-mial monad derived in this book (although some transformers will only partially
- satisfy the required laws).
+mial monad considered in this book (although some transformers will only
+ partially satisfy the required laws).
 \end_layout
 
 \begin_layout Subsection
@@ -10226,19 +10206,23 @@ MTrans[T]
  to be a monad transformer.
  A simple definition of the monad transformer typeclass can look like this:
 \begin_inset listings
+lstparams "mathescape=true"
 inline false
 status open
 
 \begin_layout Plain Layout
 
-type Id[A] = A        // The identity monad's typeclass instance must be
- defined elsewhere.
+type Id[A] = A        // The identity monad$
+\backslash
+color{dkgreen}
+\backslash
+texttt{'}$s typeclass instance must be defined elsewhere.
 \end_layout
 
 \begin_layout Plain Layout
 
-trait MTrans[T[_[_]]] { // The type parameter T is a type constructor with
- 2 parameters.
+trait MTrans[T[_[_]]] {    // The type parameter T is a type constructor
+ with 2 parameters.
 \end_layout
 
 \begin_layout Plain Layout
@@ -10254,13 +10238,13 @@ trait MTrans[T[_[_]]] { // The type parameter T is a type constructor with
 
 \begin_layout Plain Layout
 
-  def blift[M[_]: Monad, A]: Base[A] => T[M, A] = frun[Id, M, A] // Default
- implementation.
+  def blift[M[_]: Monad, A]: Base[A] => T[M, A] = frun[Id, M, A](Monad[M].pure)
 \end_layout
 
 \begin_layout Plain Layout
 
-  def frun[M[_]: Monad, N[_]: Monad, A]: T[M, A] => T[N, A]
+  def frun[M[_]: Monad, N[_]: Monad, A](phi: M[A] => N[A]): T[M, A] => T[N,
+ A]
 \end_layout
 
 \begin_layout Plain Layout
@@ -10270,15 +10254,15 @@ trait MTrans[T[_[_]]] { // The type parameter T is a type constructor with
 
 \end_inset
 
-The transformer's code is specific for the base monad 
-\begin_inset Formula $L$
-\end_inset
-
- but depends parametrically on the foreign monad 
+The transformer's code is parametric in the foreign monad 
 \begin_inset Formula $M$
 \end_inset
 
-.
+ (but not in the base monad 
+\begin_inset Formula $L$
+\end_inset
+
+).
  Although 
 \begin_inset listings
 inline true
@@ -10357,13 +10341,13 @@ implicit val mTransReaderT = new MTrans[ReaderT] {
 
 \begin_layout Plain Layout
 
-  def frun[M[_] : Monad, N[_] : Monad, A](phi: M ~> N): ReaderT[M, A] =>
- ReaderT[N, A] =
+  def frun[M[_] : Monad, N[_] : Monad, A](phi: M[A] => N[A]): ReaderT[M,
+ A] => ReaderT[N, A] =
 \end_layout
 
 \begin_layout Plain Layout
 
-    t => ReaderT(Reader(r => phi.apply(t.run.run(r))))
+    t => ReaderT(Reader(r => phi(t.run.run(r))))
 \end_layout
 
 \begin_layout Plain Layout
@@ -10436,7 +10420,7 @@ Lifts
 \end_layout
 
 \begin_layout Standard
-We need to be able to transform values of types 
+We need to be able to lift values of types 
 \begin_inset Formula $K^{A}$
 \end_inset
 
@@ -10635,7 +10619,7 @@ frun
 \end_layout
 
 \begin_layout Standard
-Transformers for certain monads (such as the continuation and the 
+Transformers for certain monads (e.g., the continuation and the 
 \begin_inset Index idx
 status open
 
@@ -10645,7 +10629,7 @@ monads!codensity monad
 
 \end_inset
 
-codensity monad) have neither the 
+codensity monads) have neither the 
 \begin_inset listings
 inline true
 status open
@@ -10725,38 +10709,15 @@ ZIO
 's transformer:
 \begin_inset Formula 
 \[
-\text{flift}_{K\varangle L\varangle M}^{N}\triangleq\big(\text{flift}_{M}^{N}\bef\text{flift}_{L}^{M\varangle N}\bef\text{flift}_{K}^{L\varangle M\varangle N}\big):N^{A}\rightarrow(K\varangle L\varangle M\varangle N)^{A}\quad.
+\text{flift}_{K\varangle L\varangle M}^{N}:N^{A}\rightarrow(K\varangle L\varangle M\varangle N)^{A}\triangleq\text{flift}_{M}^{N}\bef\text{flift}_{L}^{M\varangle N}\bef\text{flift}_{K}^{L\varangle M\varangle N}\quad.
 \]
 
 \end_inset
 
-For this reason, one must put the 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-IO
-\end_layout
-
-\end_inset
-
- and 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Future
-\end_layout
-
-\end_inset
-
- monads at the deep end of the stack.
- This limits the use of those monads in stacks; for instance, a stack cannot
- contain both an 
+For this reason, the external side-effect monads and the task-like monads
+ are usually placed at the deep end of the stack.
+ This workaround limits the use of those monads in stacks; for instance,
+ a stack cannot contain both an 
 \begin_inset listings
 inline true
 status open
@@ -10805,29 +10766,18 @@ ZIO
 
 \end_inset
 
- monads include special methods for running parallel computations on new
- threads, which avoids the need to use a 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Future
-\end_layout
-
-\end_inset
-
- monad in the same monad stack.
+ monads include special methods for running concurrent computations on multiple
+ threads, which makes it unnecessary to add a task-like monad to the same
+ monad stack.
 \end_layout
 
 \begin_layout Standard
-While this solves the lifting problem in principle for most monad stacks,
+While we solved the lifting problem in principle for most monad stacks,
  it is impractical for the programmer to have to write manually a composition
  of several lifts for every source line in a functor block.
  Even if we implement all the lift functions as extension methods and abbreviate
  the type annotations as much as possible, the code would have to be written
- similarly to this fragment:
+ similarly to the fragment shown
 \end_layout
 
 \begin_layout Standard
@@ -10835,21 +10785,30 @@ While this solves the lifting problem in principle for most monad stacks,
 lines 0
 placement l
 overhang 0in
-width "40col%"
+width "40.8col%"
 status open
 
 \begin_layout Plain Layout
-\begin_inset VSpace 25baselineskip%
+\begin_inset VSpace -90baselineskip%
 \end_inset
 
 
 \begin_inset listings
+lstparams "mathescape=true"
 inline false
 status open
 
 \begin_layout Plain Layout
 
-for { // Using a stack of monads K, L, M, N.
+for {    // Using a stack $
+\backslash
+color{dkgreen} K
+\backslash
+varangle L
+\backslash
+varangle M
+\backslash
+varangle N$.
 \end_layout
 
 \begin_layout Plain Layout
@@ -10875,7 +10834,7 @@ for { // Using a stack of monads K, L, M, N.
 \end_inset
 
 
-\begin_inset VSpace -75baselineskip%
+\begin_inset VSpace -125baselineskip%
 \end_inset
 
 
@@ -10888,18 +10847,18 @@ for { // Using a stack of monads K, L, M, N.
 
 \begin_layout Standard
 \noindent
-If a monad stack 
+at left.
+ If a monad stack 
 \begin_inset Formula $K\varangle L\varangle M\varangle N$
 \end_inset
 
- needs to be extended to 
+ needs to be changed to 
 \begin_inset Formula $M\varangle L\varangle N\varangle K\varangle P$
 \end_inset
 
- because of a change in program requirements, all source lines in all functor
- blocks will have to be modified to accommodate the required changes in
- the lifts.
- Clearly, productive practical use of deep monad stacks needs better techniques.
+ because of new program requirements, all source lines in all functor blocks
+ will have to be modified to accommodate the required changes in the lifts.
+ Productive practical use of deep monad stacks needs better techniques.
  One such technique, the 
 \begin_inset Quotes eld
 \end_inset
@@ -10969,7 +10928,7 @@ Having computed a value of type, say,
 
  but keep the effects of other monads in the stack.
  If all the monad transformers in the stack support the foreign and base
- runners, we can run the effects of the chosen monad like this:
+ runners, we can run the effects of any chosen monad, e.g., like this:
 \begin_inset Formula 
 \[
 \text{frun}_{K}^{L\varangle M\varangle N}(\text{frun}_{L}^{M\varangle N}(\text{brun}_{M}^{N}(\theta_{M}))):K\varangle L\varangle M\varangle N\leadsto K\varangle L\varangle N\quad.
@@ -10988,8 +10947,7 @@ stack runner
 \end_inset
 
  parametric in the chosen monad, allowing the programmer simply to indicate
- which monad's effects need to be run and without writing the code of the
- runner by hand.
+ which monad's effects need to be run.
 \begin_inset Note Note
 status collapsed
 
@@ -11111,8 +11069,8 @@ Reader
 \end_inset
 
  is just one of the type parameters.
- This complication is due to the fact that the type of the stack is not
- parametric in the type of the base monad.
+ This is because the type of the stack is not parametric in the type of
+ the base monad.
 \begin_inset Note Note
 status collapsed
 
@@ -11242,6 +11200,14 @@ def run[S[_]: Monad, M[_]: Monad, A](s: S[A])(t: M[A] => A)
 
 \end_layout
 
+\begin_layout Standard
+As we will see in this chapter, some monad transformers do not support base
+ runners at all.
+ Monad stacks containing such transformers are still usable, but their effects
+ will have to be run in a specific order, so that the missing base runners
+ are not needed.
+\end_layout
+
 \begin_layout Subsection
 Constructing lifts via type relations
 \begin_inset CommandInset label
@@ -11312,11 +11278,7 @@ in a lift relation
 \end_inset
 
  by using the monad transformers from that stack.
- For instance, within the stack 
-\begin_inset Formula $K\varangle L\varangle M\varangle N$
-\end_inset
-
-, the monads 
+ For instance, the monads 
 \begin_inset Formula $L$
 \end_inset
 
@@ -11324,7 +11286,7 @@ in a lift relation
 \begin_inset Formula $K\varangle L\varangle M$
 \end_inset
 
- will be in a lift relation because we can construct a monad morphism 
+ are in a lift relation because we can construct a monad morphism 
 \begin_inset Formula $L\leadsto K\varangle L\varangle M$
 \end_inset
 
@@ -11369,9 +11331,7 @@ not
 \end_layout
 
 \begin_layout Standard
-The lift relation is implemented as a type relation for the monads' type
- constructors.
- The data carried by the type relation 
+The lift relation is implemented as a type relation 
 \begin_inset listings
 inline true
 status open
@@ -11383,7 +11343,44 @@ MM[P, Q]
 
 \end_inset
 
- will be the code for the required monad morphism between 
+ for the monads' type constructors (
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+P
+\end_layout
+
+\end_inset
+
+, 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Q
+\end_layout
+
+\end_inset
+
+).
+ A value of type 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+MM[P, Q]
+\end_layout
+
+\end_inset
+
+ will contain the required monad morphism between 
 \begin_inset listings
 inline true
 status open
