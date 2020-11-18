@@ -11,8 +11,8 @@
 \subsection{Combining monadic effects via functor composition}
 
 Monads describe effects that depend on previously computed values.
-It is often necessary to combine effects of several monads in one
-value. For example, a value of type \lstinline!Future! can be computed
+It is often necessary to combine effects of several monads in one.
+For example, the effect of \lstinline!Future! is to compute values
 concurrently, while \lstinline!Option! represents a possibly missing
 value. To describe a possibly missing value that is computed concurrently,
 we need somehow to combine \lstinline!Future! with \lstinline!Option!.
@@ -29,18 +29,17 @@ for {
 
 One way of combining two effects is by using functor composition,
 \lstinline!Future[Option[A]]!. However, we run into a problem if
-we want to chain a computation to the value within the nested type.
-For instance, this code will not compile:
+we want to use a result value within the nested type. For instance,
+this code will not compile:
 \begin{lstlisting}
 for {
   xOpt <- Future(Option(1))       // xOpt: Option[Int]
   x    <- xOpt    // We would like to get x: Int here.
   ...
 \end{lstlisting}
-The source type must be consistent within the entire functor block;
-we cannot mix source lines of \lstinline!Future! and \lstinline!Option!
-types. If we try working directly with the nested data type, we will
-have to write code like this:
+The source types must be compatible throughout the entire functor
+block; we cannot mix source lines of \lstinline!Future! and \lstinline!Option!
+types. We could work with the nested data type using code like this:
 \begin{lstlisting}
 val result: Future[Option[Int]] = for {
   xOpt <- Future(Option(1))  // xOpt: Option[Int]
@@ -62,12 +61,12 @@ to values of type \lstinline!A! within \lstinline!Future[Option[A]]!.
 The code is repetitive and deeply nested, which makes it hard to read
 and to change. 
 
-The first step towards solving the problem is by rewriting this monadic
+The first step towards solving the problem is to rewrite this monadic
 program as a direct chain of computations depending on the results
 of previous ones:
 \begin{lstlisting}
 val result: Future[Option[Int]] = for { // This will not compile!
-  x <- Future(Option(1))                // The type is x: Option[Int], although we need x: Int.
+  x <- Future(Option(1))                // The type is x: Option[Int], although we wanted x: Int.
   y <- Future(Option(x + 1))            // Type error: x + 1 is undefined.
   z <- Future(Option(y + 3))
 } yield z
@@ -94,7 +93,7 @@ val result: FutOpt[Int] = for {      // This code compiles now.
   z <- FutOpt(Future(Option(y + 3))) // z: Int
 } yield z
 \end{lstlisting}
-To improve usability, we may define conversions from \lstinline!Future!
+To shorten the code, we define conversions (\textsf{``}lifts\textsf{''}) from \lstinline!Future!
 to \lstinline!FutOpt! and from \lstinline!Option! to \lstinline!FutOpt!:
 \begin{lstlisting}
 implicit class FutOptLift1[A](fut: Future[A])(implicit ec: ExecutionContext) {
@@ -122,19 +121,19 @@ val result: SomeBigMonad[Int] = for {  // After some definitions, this code shou
   z <- Try { maybeError(y) }.up        // z: Int
 } yield z
 \end{lstlisting}
-This code will work if we somehow create a new monad that \textsf{``}unifies\textsf{''}
+This code will work if we somehow create a new monad that combines
 \lstinline!Seq!, \lstinline!Future!, and \lstinline!Try!. 
 
-It turns out that there is no simple recipe for implementing a \textsf{``}unified\textsf{''}
-monad for a given set of monads. Developing the necessary techniques
-is the main focus of this chapter.
+It turns out that there is no simple recipe for implementing a combined
+monad out of a given set of monads. Developing the necessary techniques
+is the focus of this chapter.
 
 We have seen that \lstinline!Future[A]! and \lstinline!Option[A]!
 are combined in a new monad as \lstinline!Future[Option[A]]!. Does
 functor composition always work? If $M_{1}$ and $M_{2}$ are monads
 then at least one of the compositions, $M_{1}\circ M_{2}$ or $M_{2}\circ M_{1}$,
-is often a monad. However, \lstinline!Option[Future[A]]! is not a
-monad. By trial and error, we may find further examples where the
+is sometimes a monad. However, \lstinline!Option[Future[A]]! is not
+a monad. By trial and error, we may find further examples where the
 functor composition works and where it does not (see Table~\ref{tab:Correct-and-incorrect-compositions};
 incorrect choices are marked with a strike-through line).
 
@@ -163,9 +162,8 @@ writing the code:
 def flatMap[A, B](fa: Either[Z, R => A])(f: A => Either[Z, R => B]): Either[Z, R => B] = fa match {
   case Left(z)    => Left(z)     // No other choice here.
   case Right(h)   => Right(r =>  // Cannot return a Left() here, since we have no values of type Z.
-                                 // Need to return a value of type B here, using only r, ra, and f.
       val x: Either[Z, R => B] = f(ra(r))     // Can compute a value `x` of type Either[Z, R => B].
-      ???                 )
+      ???                 )      // Need to return a value of type B here, using only r, ra, and f.
 }
 \end{lstlisting}
 In line~3, we must decide whether to return a \lstinline!Left(...)!
@@ -175,20 +173,18 @@ must be hard-coded since at that point we have no values of type $R$
 or $A$, so we cannot apply the functions $f$ and $h$ to any arguments.
 The only possible decision is to return a \lstinline!Right(...)!.
 But then we are not able to compute a value of type $B$ in the scope
-of lines~4\textendash 6 because we cannot guarantee that the value
+of lines~3\textendash 5 because we cannot guarantee that the value
 $x^{:Z+\left(R\rightarrow B\right)}$ contains a function $R\rightarrow B$
 rather than a value of type $Z$. So, the typed hole $\text{???}^{:B}$
-in line~6 cannot be filled. $\square$
+in line~5 cannot be filled. $\square$
 
 When the monad composition works both ways, the two resulting monads
-are usually not equivalent: the two effects are combined in quite
-different ways. 
-
-For instance, the \lstinline!Writer! monad $W\times A$ (appending
-an output message) and the pass/fail monads $Z+A$ (allowing failure)
-can be composed in two ways. The monad $M^{A}\triangleq W\times\left(Z+A\right)$
-describes a computation that may fail but always outputs a message;
-but the monad $M^{A}\triangleq Z+W\times A$ will not output any message
+are usually not equivalent: the effects combined in different order
+behave differently. For example, the \lstinline!Writer! monad $W\times A$
+(\textsf{``}appending a log message\textsf{''}) and the \lstinline!Either! monad
+$Z+A$ (allowing failure) can be composed in two ways. The monad $M^{A}\triangleq W\times\left(Z+A\right)$
+describes a computation that may fail but always appends a message.
+The monad $M^{A}\triangleq Z+W\times A$ will not append any message
 on failure.
 \begin{center}
 \begin{table}[h]
@@ -223,13 +219,13 @@ compositions of monads.}
 \end{table}
 \par\end{center}
 
-We will see throughout this chapter that when monads do compose, effects
-can be combined in different order. The programmer needs to choose
-carefully the desired order of composition, according to the desired
-meaning of the effects.
+Throughout this chapter, we will see other examples of monads whose
+effects can be combined in different order. The programmer needs to
+choose carefully the order of composition, according to the desired
+behavior of the effects.
 
-When functor composition works, implementing the \lstinline!lift!
-methods is straightforward:
+When functor composition works, implementing the \lstinline!up! methods
+is straightforward:
 
 \subsubsection{Example \label{subsec:Example-lift-for-List-Try-composition}\ref{subsec:Example-lift-for-List-Try-composition}}
 
@@ -239,10 +235,10 @@ monads for use in functor blocks.
 \subparagraph{Solution}
 
 Since \lstinline!Try! is a pass/fail monad, we must compose it \emph{inside}
-other monads; so we define the \textsf{``}unified\textsf{''} monad type as \lstinline!List[Try[A]]!.
+other monads. So, we define the combined monad type as \lstinline!List[Try[A]]!.
 We wrap the type \lstinline!List[Try[A]]! into a class, implement
 \lstinline!map! and \lstinline!flatMap! as methods, and then define
-the two \lstinline!lift! functions as extension methods:
+the two \lstinline!up! functions (the \textsf{``}lifts\textsf{''}) as extension methods:
 \begin{lstlisting}
 final case class ListTry[A](value: List[Try[A]]) {
   def map[B](f: A => B): ListTry[B] = ListTry(value.map(_.map(f)))
@@ -250,14 +246,14 @@ final case class ListTry[A](value: List[Try[A]]) {
     value.flatMap {        // Need to provide a function Try[A] => List[Try[B]] here.
       case Failure(t)   => List(Failure(t))
       case Success(a)   => f(a).value
-    }
-  )
-}                 // Rename `lift` to `up` because `lift` is already defined for `List` class.
+    })
+}
+def pure[A](a: A): ListTry[A] = ListTry(List(Success(a)))
 implicit class ListTryLift1[A](l: List[A]) { def up: ListTry[A] = ListTry(l.map(Success(_))) }
 implicit class ListTryLift2[A](t: Try[A]) { def up: ListTry[A] = ListTry(List(t)) }
 \end{lstlisting}
 After these definitions, we can write functor blocks that use \lstinline!List!
-and \lstinline!Try! as needed:
+and/or \lstinline!Try! as needed:
 \begin{lstlisting}
 scala> for {
          x <- List(1, 2, 3).up
@@ -277,8 +273,8 @@ Show that the \lstinline!State! monad fails to compose inside the
 
 \subparagraph{Solution}
 
-We will find that the type signature of \lstinline!flatMap! cannot
-be implemented for the type constructor \lstinline!OpSt[A] = Option[State[S, A]]!:
+There is no lawful \lstinline!flatMap! function for the type constructor
+\lstinline!Option[State[S, A]]!:
 \begin{lstlisting}
 type OpSt[A] = Option[S => (A, S)]                 // Here, the fixed type S must be already defined.
 def flatMap[A, B](fa: OpSt[A])(f: A => OpSt[B]): OpSt[B] = fa match {
@@ -302,31 +298,28 @@ Show that the \lstinline!State! monad fails to compose outside the
 
 \subparagraph{Solution}
 
-Denoting the type constructor \lstinline!StR[A] = State[S, R => A]!,
-we try implementing its \lstinline!pure! and \lstinline!flatMap!
-methods. We find that the required type signatures \emph{can} be implemented:
+Begin by implementing \lstinline!pure! and \lstinline!flatMap! for
+the type constructor \lstinline!State[S, R => A]!:
 \begin{lstlisting}
 type StR[A] = S => (R => A, S) // Here, the fixed types R and S must be already defined.
 def pure[A](a: A): StR[A] = { s => (_ => a, s) }
-def flatMap[A, B](fa: StR[A])(f: A => StR[B]): StR[B] = { s =>
-      // Here we must return a value of type (R => B, S). Other than s: S, we can compute s1: S via:
-  val (s1, ra): (S, R => A) = fa(s)
-  // We can also compute a value of type R => B, trying to preserve information as much as possible:
-  val rb: R => B = { r =>
+def flatMap[A, B](fa: StR[A])(f: A => StR[B]): StR[B] = { s =>  // Need a value of type (R => B, S).
+  val (s1, ra): (S, R => A) = fa(s)                  // We now have two values (s and s1) of type S.
+  val rb: R => B = { r =>  // We can compute a value of type R => B. Trying to preserve information.
     val a: A = ra(r)
     val (s2, rb): (S, R => B) = f(a)(s1)
-    rb(r)   // We must discard s2 here.
+    rb(r)   // We must discard s2 here. This loses information since we could not use `f` elsewhere.
   }
   (rb, s1)  // We can only return (rb, s1) or (rb, s) here, since `s2` is not visible in this scope!
 }
 \end{lstlisting}
-We may recognize a problem with this implementation: The new state
-value $s_{1}$ is computed without using the function argument $f$,
-because the \textsf{``}correct\textsf{''} value ($s_{2}$) is hidden within the scope
-of the nameless function of type $R\rightarrow B$. So, even though
-we have tried to preserve information as much as possible, the implementation
-of \lstinline!flatMap! must discard the second monad\textsf{'}s effect. This
-will violate the identity law: \lstinline!pure(x).flatMap(f) == f(x)!.
+There is a problem with this implementation: The new state value $s_{1}$
+is computed without using the function argument $f$. The only usage
+of $f$ (producing $s_{2}$) is hidden within the scope of the nameless
+function of type $R\rightarrow B$. So, even though we have tried
+to preserve information as much as possible, the implementation of
+\lstinline!flatMap! must discard the second monad\textsf{'}s effect. This
+will violate the identity law \lstinline!pure(x).flatMap(f) == f(x)!.
 That law cannot possibly hold if the implementation of \lstinline!flatMap!
 ignores the function $f$ when computing the new state:
 
@@ -381,9 +374,9 @@ that combines \lstinline!Try! with \lstinline!List!, but we now
 view \lstinline!Try! as the base monad and \lstinline!List! as the
 foreign monad. The goal is to replace \lstinline!List! by an arbitrary
 foreign monad $M$, so that the resulting code works in the same way
-for all monads $M$. To achieve that, we annotate the code of Example~\ref{subsec:Example-lift-for-List-Try-composition}
-to make explicit the usage of the \lstinline!List! monad\textsf{'}s methods
-\lstinline!pure! and \lstinline!flatMap!:
+for all monads $M$. Begin by commenting the code of Example~\ref{subsec:Example-lift-for-List-Try-composition}
+to indicate the usage of the \lstinline!List! monad\textsf{'}s methods \lstinline!pure!
+and \lstinline!flatMap!:
 \begin{lstlisting}
 final case class ListTry[A](value: List[Try[A]]) { // We will use List.map, List.pure, List.flatMap.
   def map[B](f: A => B): ListTry[B] = ListTry(value.map(_.map(f))) // Using List.map here.
@@ -391,9 +384,9 @@ final case class ListTry[A](value: List[Try[A]]) { // We will use List.map, List
     value.flatMap {         // Using List.flatMap here.
       case Failure(t)   => List(Failure(t)) // This is List.pure(Failure(t)).
       case Success(a)   => f(a).value
-    }
-  )
-}  
+    })
+}
+def pure[A](a: A): ListTry[A] = ListTry(List(Success(a))) // This is List.pure(Success(a)).
 \end{lstlisting}
 It is now straightforward to generalize that code to an arbitrary
 foreign monad $M$:
@@ -404,9 +397,9 @@ final case class TryT[M[_]: Monad : Functor, A](value: M[Try[A]]) {
     value.flatMap {                                                // Using M$\color{dkgreen} \texttt{'}$s `flatMap` here.
       case Failure(t)   => Monad[M].pure(Failure(t)) // Use Monad[M].pure(x) instead of List(x).
       case Success(a)   => f(a).value
-    }
-  )
-}  
+    })
+}
+def pure[A](a: A): ListTry[A] = ListTry(Monad[M].pure(Success(a)))
 \end{lstlisting}
 The \textsf{``}foreign lift\textsf{''} and the \textsf{``}base lift\textsf{''} also use the methods
 of the foreign monad $M$:
@@ -433,12 +426,12 @@ scala> val result = for {
 res0: TryT[List, Int] = TryT(List(Success(101), Success(102), Success(103)))
 \end{lstlisting}
 
-This example shows how to define a type constructor denoted by $T_{\text{Try}}^{M,\bullet}$
+This example defines a type constructor denoted by $T_{\text{Try}}^{M,\bullet}$
 that works parametrically in the foreign monad $M$. We can use $T_{\text{Try}}^{M,A}$
 as a monad with respect to the type parameter $A$. (The foreign monad
-$M$ is the first type parameter in the transformer.) Similar code
-is required to define transformers for other monads, such as $T_{\text{Read}}^{M}$,
-$T_{\text{Write}}^{M}$, $T_{\text{State}}^{M}$, and so on. The advantage
+$M$ is the first type parameter in the transformer.) We will later
+implement transformers for other monads, such as $T_{\text{Reader}}^{M}$,
+$T_{\text{Writer}}^{M}$, $T_{\text{State}}^{M}$, etc. The advantage
 of the transformer approach is that the code for $T_{L}^{M}$ needs
 to be written once for every base monad $L$, not for every pair of
 monads $L$, $M$.
@@ -448,12 +441,12 @@ monads $L$, $M$.
 While the code of \lstinline!TryT! works, it leaves us with further
 questions. The code of \lstinline!TryT! is specific to the \lstinline!Try!
 monad and uses its internal structure (the \lstinline!Failure! and
-\lstinline!Success! subtypes). It is not obvious how to define the
-type of a monad transformer $T_{L}^{M}$ for an arbitrary given base
-monad $L$. We expect the code for $T_{L}^{M}$\textsf{'}s methods to be parametric
-in $M$ but not in $L$ (this is reflected in the notation: $L$ is
-a \emph{subscript} in $T_{L}^{M}$). So, changing the base monad $L$
-to another monad may require a complete rewrite of $T_{L}^{M}$\textsf{'}s
+\lstinline!Success! subtypes). It is not obvious how to implement
+a monad transformer $T_{L}^{M}$ for an arbitrary given base monad
+$L$. We expect the code for $T_{L}^{M}$\textsf{'}s methods to be parametric
+in $M$ but not in $L$ (this is reflected in the notation, as $L$
+is a \emph{subscript} in $T_{L}^{M}$). So, changing the base monad
+$L$ to another monad forces a complete rewrite of $T_{L}^{M}$\textsf{'}s
 code.
 
 There is no general recipe for implementing a monad transformer $T_{L}^{M}$
@@ -502,10 +495,10 @@ monad (\lstinline!List!); and by mixing the foreign monad in a special
 way with the base monad (\lstinline!Eval!, \lstinline!State!, \lstinline!Cont!). 
 
 It is not easy to guess the type of a monad transformer.\footnote{The difficulty of that task is illustrated by the history of the \lstinline!ListT!
-transformer in the Haskell standard library. The type constructor
-for \lstinline!ListT! was implemented incorrectly in 2002. The faulty
-transformer remained in the library until 2007. See the discussion
-in \texttt{\href{https://wiki.haskell.org/index.php?title=ListT_done_right}{https://wiki.haskell.org/index.php?title=ListT\_done\_right}}} A justification for the types in Table~\ref{tab:Known-monad-transformers}
+transformer in the Haskell standard library. The transformer \lstinline!ListT!
+was implemented incorrectly in 2002; the code violated the monad laws.
+The faulty transformer remained in the library until 2007. See the
+discussion in \texttt{\href{https://wiki.haskell.org/index.php?title=ListT_done_right}{https://wiki.haskell.org/index.php?title=ListT\_done\_right}}} A justification for the types in Table~\ref{tab:Known-monad-transformers}
 is that they work and obey the required laws, while no simpler transformers
 are known. We will prove the required laws for these and other transformers
 later in this chapter. For now, we accept the results of Table~\ref{tab:Known-monad-transformers}
@@ -519,7 +512,7 @@ The type constructors for monad transformers are conventionally named
 
 \paragraph{The \texttt{ReaderT} transformer}
 
-The corresponding monad was already derived in Statement~\ref{subsec:Statement-monad-construction-1}.
+The corresponding monad was already derived in Statement~\ref{subsec:Statement-monad-construction-1}:
 \begin{lstlisting}
 final case class ReaderT[M[_]: Monad : Functor, R, A](run: R => M[A]) {
   def map[B](f: A => B): ReaderT[M, R, B] = ReaderT(r => run(r).map(f))
@@ -528,7 +521,8 @@ final case class ReaderT[M[_]: Monad : Functor, R, A](run: R => M[A]) {
            .flatMap(f)     // Type is M[ReaderT[M, R, B]].
            .map(_.run(r))  // Type is M[B].
   }
-}  
+}
+def pure[M[_]: Monad, A](a: A): ReaderT[M, A] = ReaderT(_ => Monad[M].pure(a))
 \end{lstlisting}
 The \textsf{``}foreign lift\textsf{''} and the \textsf{``}base lift\textsf{''} for \lstinline!ReaderT!
 are implemented by
@@ -617,15 +611,20 @@ final case class WriterT[M[_]: Monad : Functor, W: Monoid, A](t: M[(A, W)]) {
   })
 }  
 \end{lstlisting}
+The code of \lstinline!pure! is straightforward:
+\begin{lstlisting}
+def pure[M[_]: Monad, W: Monoid, A](a: A): WriterT[M, W, A] =
+  WriterT(Monad[M].pure((a, Monoid[W].empty))
+\end{lstlisting}
 The \textsf{``}foreign lift\textsf{''} and the \textsf{``}base lift\textsf{''} for \lstinline!WriterT!
-are (omitting some Scala boilerplate):
+are:
 \begin{lstlisting}
 def flift[A]: M[A] => M[(A, W)] = _.map { a => (a, Monoid[W].empty) }
 def blift[A]: ((A, W)) => M[(A, W)] = { t => Monad[M].pure(t) }
 \end{lstlisting}
 \begin{align*}
 {\color{greenunder}\text{foreign lift}:}\quad & \text{flift}:M^{A}\rightarrow T_{\text{Writer}}^{M,A}\quad,\quad\quad m^{:M^{A}}\triangleright\text{flift}\triangleq m\triangleright(a\rightarrow a\times e_{w})^{\uparrow M}\quad,\\
-{\color{greenunder}\text{base lift}:}\quad & \text{blift}:(R\rightarrow A)\rightarrow T_{\text{Writer}}^{M,A}\quad,\quad\quad\text{blift}\triangleq\text{pu}_{M}\quad.
+{\color{greenunder}\text{base lift}:}\quad & \text{blift}:\text{Writer}^{W,A}\rightarrow T_{\text{Writer}}^{M,A}\quad,\quad\quad\text{blift}\triangleq\text{pu}_{M}\quad.
 \end{align*}
 
 Comparing the lifts for \lstinline!ReaderT! and \lstinline!WriterT!,
@@ -693,27 +692,37 @@ final case class ListT[M[_]: Monad : Functor, A](value: M[Option[(A, ListT[M, A]
   })
 }
 \end{lstlisting}
+The code of \lstinline!pure! creates a single-element list, which
+uses a pair of an $a^{:A}$ and an empty list:
+\begin{lstlisting}
+def pure[M[_]: Monad, A](a: A): ListT[M, A] =
+  ListT(Monad[M].pure(Some((a, ListT(Monad[M].pure(None))))))
+\end{lstlisting}
 The lifts for \lstinline!ListT! are:
 \begin{lstlisting}
-def flift[A]: M[A] => ListT[M, A] = { m => ListT(m) }
-def blift[A]: ((A, W)) => M[(A, W)] = { t => Monad[M].pure(t) }
+def flift[M[_]: Monad, A]: M[A] => ListT[M, A] = ListT(a => m.flatMap(ListT.pure(a).value))
+def blift[M[_]: Monad, A]: List[A] => ListT[M, A] =
+  _.foldRight(Monad[M].pure(None)){ case (a, tail) => Monad[M].pure(Some((a, blift(tail)))) }
 \end{lstlisting}
 \begin{align*}
-{\color{greenunder}\text{foreign lift}:}\quad & \text{flift}:M^{A}\rightarrow T_{\text{Writer}}^{M,A}\quad,\quad\quad m^{:M^{A}}\triangleright\text{flift}\triangleq m\triangleright(a\rightarrow a\times e_{w})^{\uparrow M}\quad,\\
-{\color{greenunder}\text{base lift}:}\quad & \text{blift}:(R\rightarrow A)\rightarrow T_{\text{Writer}}^{M,A}\quad,\quad\quad\text{blift}\triangleq\text{pu}_{M}\quad.
+{\color{greenunder}\text{foreign lift}:}\quad & \text{flift}:M^{A}\rightarrow T_{\text{List}}^{M,A}\quad,\quad\quad m^{:M^{A}}\triangleright\text{flift}\triangleq m\triangleright(a\rightarrow\bbnum 0+a\times\text{pu}_{M}(1+\bbnum 0))^{\uparrow M}\quad,\\
+{\color{greenunder}\text{base lift}:}\quad & \text{blift}:\text{List}^{A}\rightarrow T_{\text{List}}^{M,A}\quad,\quad\quad\text{blift}\triangleq\,\begin{array}{|c||c|}
+ & M^{\bbnum 1+A\times T_{\text{List}}^{M,A}}\\
+\hline \bbnum 1 & 1\rightarrow\text{pu}_{M}(1+\bbnum 0)\\
+A\times\text{List}^{A} & a\times t\rightarrow\text{pu}_{M}(\bbnum 0+a\times\overline{\text{blift}}\,(t))
+\end{array}\quad.
 \end{align*}
 
 Finally, we turn to runners for \lstinline!ListT!. List-like monads
-do not usually have runners ($\theta_{\text{List}}:\text{List}^{A}\rightarrow A$)
-because the \lstinline!List! monad normally represents \emph{several}
-useful results rather than a single result. Also, a list may be empty,
-which prevents having a fully parametric function of type $\forall A.\,\text{List}^{A}\rightarrow A$.
-However, the foreign monad $M$ may come with its runner $\theta_{M}$.
-We can use $\theta_{M}$ to run the $M$\textsf{'}s effects and extract values
-from a \lstinline!ListT!. This is accomplished by a runner (call
-it \lstinline!runListT!) that applies $M$\textsf{'}s runner ($\theta_{M}$)
-to a value of type \lstinline!ListT[M, A]! and obtain a \lstinline!List[A]!.
-The code may be written as:
+usually represent \emph{several} useful results rather than a single
+result. So, they may not need runners of type $\text{List}^{A}\rightarrow A$.
+Also, a list may be empty, which makes a fully parametric function
+of type $\text{List}^{A}\rightarrow A$ impossible. However, the foreign
+monad $M$ may come with its runner $\theta_{M}$. We can use $\theta_{M}$
+to run the $M$\textsf{'}s effects and extract values from a \lstinline!ListT!.
+This is accomplished by a runner (call it \lstinline!runListT!) that
+applies $M$\textsf{'}s runner ($\theta_{M}$) to a value of type \lstinline!ListT[M, A]!
+and obtains a \lstinline!List[A]!. The code may be written as:
 \begin{lstlisting}
 def runListT[A](runner: M[A] => A)(listT: ListT[M, A]): List[A] = runner(listT.value) match {
   case None                => List()
@@ -724,17 +733,17 @@ However, this code will not always terminate. The reason is that the
 type of \lstinline!ListT! contains a layer of $M$ in every recursive
 step. So, extracting a value of type \lstinline!List[A]! from a value
 of type \lstinline!ListT[M, A]! involves applying $\theta_{M}$ once
-per list value. When $M$ has a function type, a value of type \lstinline!ListT[M, A]!
+per list value. When $M$ is of function type, a value of type \lstinline!ListT[M, A]!
 is an \textsf{``}on-call\textsf{''}\index{on-call value} sequence whose elements
 are not available in advance but will be evaluated on demand when
 $\theta_{M}$ is applied. So, the total number of elements in \lstinline!ListT!
 may not be known in advance and may be infinite. An example of an
 \textsf{``}infinite\textsf{''} collection uses the \lstinline!Reader! monad as $M$:
 \begin{lstlisting}
-def ascend(a: Int): ListT[Reader[Int, *], Int] = ListT(Lazy(m => Some((a, ascend(a + m)))))
+def ascend(a: Int): ListT[Reader[Int, *], Int] = ListT(Lazy(k => Some((a, ascend(a + k)))))
 \end{lstlisting}
 This is a well-defined value of type \lstinline!ListT! that represents
-integer sequences $\left[a,a+m,a+2*m,...\right]$. The parameter $m$
+integer sequences $\left[a,a+k,a+2k,...\right]$. The parameter $k$
 is passed via the \lstinline!Reader! monad\textsf{'}s dependency injection.
 It is clear that \lstinline!runListT! will not terminate when applied
 to such a sequence. 
@@ -776,9 +785,9 @@ $T_{\text{List}}^{M,A}\rightarrow M^{A}$.
 \paragraph{The \texttt{StateT} transformer}
 
 The formula for that transformer\textsf{'}s type, \lstinline!StateT[M, S, A] = S => M[(S, A)]!,
-requires us to place the foreign monad $M$ at a specific place in
-the type of the \lstinline!State! monad. Let us implement the monad
-methods for \lstinline!StateT!:
+puts the foreign monad $M$ at a specific place within the type of
+the \lstinline!State! monad. Let us implement the monad methods for
+\lstinline!StateT!:
 \begin{lstlisting}
 final case class StateT[M[_]: Monad : Functor, S, A](run: S => M[(A, S)]) {
   def map[B](f: A => B): StateT[M, S, B] = StateT(s1 => run(s1).map { // Use the map method of M.
@@ -788,14 +797,15 @@ final case class StateT[M[_]: Monad : Functor, S, A](run: S => M[(A, S)]) {
       case (a, s2) => f(a).run(s2)                // Use the updated intermediate state s2.
   })
 }
+def pure[M[_]: Monad, S, A](a: A): StateT[M, S, A] = StateT(s => Monad[M].pure((a, s)))
 \end{lstlisting}
 \begin{align}
  & T_{\text{State}}^{M,A}\triangleq T^{A}\triangleq S\rightarrow M^{A\times S}\quad,\quad\quad\text{pu}_{T}\triangleq a^{:A}\rightarrow s^{:S}\rightarrow\text{pu}_{M}(a\times s)\quad,\label{eq:pure-for-stateT-transformer}\\
  & \text{flm}_{T}(f^{:A\rightarrow T^{B}})\triangleq t^{:T^{A}}\rightarrow s_{1}^{:S}\rightarrow t(s_{1})\triangleright\text{flm}_{M}(a\times s_{2}\rightarrow f(a)(s_{2}))\quad.\label{eq:flatmap-for-stateT-transformer}
 \end{align}
 
-The implementations of the lift functions needs to be adapted to the
-type of \lstinline!StateT!:
+The implementations of the lift functions for \lstinline!StateT!
+are:
 \begin{lstlisting}
 def flift[M[_]: Functor, S, A](m: M[A]): StateT[M, S, A] = StateT(s => m.map { a => (a, s) })
 def blift[M[_]: Monad, S, A](p: State[S, A]): StateT[M, S, A] = StateT(s => Monad[M].pure(p.run(s)))
@@ -813,16 +823,14 @@ def runState[S, A](init: S)(p: State[S, A]): A = p.run(init)._1
 \[
 \theta_{\text{State}}(i^{:S})\triangleq p^{:S\rightarrow A\times S}\rightarrow i\triangleright p\triangleright\pi_{1}\quad.
 \]
- We cannot use $\theta_{\text{State}}$ directly with \lstinline!StateT!
-because that transformer is not a functor composition. There is no
-general \textsf{``}base runner\textsf{''} $\text{brun}\,(\theta_{\text{State}})$
-that would convert an \emph{arbitrary} runner $\theta_{\text{State}}:\text{State}^{S,A}\rightarrow A$
-into a function of type $T_{\text{State}}^{M,A}\rightarrow M^{A}$
-that runs the \lstinline!State! monad\textsf{'}s effects but keeps the effects
-of the foreign monad $M$. The type of $T_{\text{State}}^{M}$ does
-not allow base runners parametric in $\theta_{\text{State}}$. Instead,
-we need to implement a specialized base runner that converts $T_{\text{State}}^{M,A}$
-into $M^{A}$ directly:
+
+The transformer \lstinline!StateT! does not have a general base runner
+of the form $\text{brun}\,(\theta_{\text{State}})$ converting an
+\emph{arbitrary} runner $\theta_{\text{State}}:\text{State}^{S,A}\rightarrow A$
+into a function of type $T_{\text{State}}^{M,A}\rightarrow M^{A}$.
+Instead, we need to implement a specialized base runner that converts
+$T_{\text{State}}^{M,A}$ into $M^{A}$ directly, running the \lstinline!State!
+monad\textsf{'}s effects but keeping the effects of the foreign monad $M$:
 \begin{lstlisting}
 def brunStateT[M[_]: Functor, S, A](init: S)(t: StateT[M, S, A]): M[A] = t.run(init).map(_._1)
 \end{lstlisting}
@@ -830,7 +838,7 @@ def brunStateT[M[_]: Functor, S, A](init: S)(t: StateT[M, S, A]): M[A] = t.run(i
 \text{brun}_{\text{State}}(i^{:S})\triangleq t^{S\rightarrow M^{A\times S}}\rightarrow i\triangleright t\triangleright\pi_{1}^{\uparrow M}\quad.
 \]
 If we need to run only the effects of $M$ but keep the \lstinline!State!
-monad\textsf{'}s effect, we need different code:
+monad\textsf{'}s effect, we need the following code:
 \begin{lstlisting}
 def frunStateT[M[_], S, A](runner: M[A] => A)(t: StateT[M, S, A]): State[S, A] = State { s =>
   val m: M[(A, S)] = t.run(s)
@@ -846,9 +854,9 @@ def frunStateT[M[_], S, A](runner: M[A] => A)(t: StateT[M, S, A]): State[S, A] =
 
 For the continuation monad (\lstinline!Cont[R, A]!), the transformer\textsf{'}s
 type constructor \lstinline!ContT[M, R, A]! has a peculiar formula
-where the foreign monad\textsf{'}s constructor $M$ is applied to the result
-type $R$ but not to any values of type $A$. The code for the monad
-methods is:
+where the foreign monad\textsf{'}s constructor $M$ wraps the type $R$ but
+is not applied to any values of the main value type $A$. The code
+for the monad methods is:
 \begin{lstlisting}
 final case class ContT[M[_], R, A](run: (A => M[R]) => M[R]) {
   def map[B](f: A => B): ContT[M, R, B] = ContT { (k: B => M[R]) => run(f andThen k) }
@@ -857,8 +865,7 @@ final case class ContT[M[_], R, A](run: (A => M[R]) => M[R]) {
     run(g) 
   }
 }
-
-def blift[A](p: ContT[R, A]): ContT[M, R, A] = ???
+def pure[M[_], R, A](a: A): ContT[M, R, A] = ContT(k => k(a))
 \end{lstlisting}
 
 Turning now to the code for lifts, we can easily write the \textsf{``}foreign
@@ -874,17 +881,17 @@ type signature
 \[
 \text{blift}:(\left(A\rightarrow R\right)\rightarrow R)\rightarrow(A\rightarrow M^{R})\rightarrow M^{R}
 \]
-has no implementation that could work with all monads $M$. The reason
-is that, in general, we cannot produce a value of type $R$ out of
-$M^{R}$ (not all monads have runners), and so we cannot convert $A\rightarrow M^{R}$
+has no implementation parametric in the monad $M$. The reason is
+that we cannot produce a value of type $R$ out of $M^{R}$ parametrically
+(some monads have no runners), and so we cannot convert $A\rightarrow M^{R}$
 into $A\rightarrow R$. This prevents us from using the first argument
-of \lstinline!blift! (a function having type $\left(A\rightarrow R\right)\rightarrow R$),
+of \lstinline!blift! (a function of type $(A\rightarrow R)\rightarrow R$),
 while creating a value of type $(A\rightarrow M^{R})\rightarrow M^{R}$
 from scratch is impossible. 
 
 To produce an explicit example where \lstinline!blift! cannot be
 implemented, we use the \texttt{curryhoward} library and choose a
-monad $M^{R}$ that has no runner, e.g., $M^{R}\triangleq Z+R$:
+monad $M^{R}$ that has no fully parametric runner, e.g., $M^{R}\triangleq Z+R$:
 \begin{lstlisting}
 import io.chymyst.ch._
 
@@ -895,22 +902,22 @@ Error:(43, 65) type ((A => R) => R) => (A => Either[<c>Int,R]) => Either[<c>Int,
 The absence of \textsf{``}base lift\textsf{''} for the continuation monad transformer
 means that we cannot use the continuation monad in a functor block
 as freely as other monads. We cannot lift an arbitrary given value
-of type \lstinline!Cont! (for instance, a value produced by a third-party
-library that cannot be modified) into the transformed monad \lstinline!ContT!.
-This is a serious deficiency of the continuation monad that makes
-it unsuitable for certain applications. Concrete values of type \lstinline!Cont[R, A]!
-may be interfaces to system libraries implemented in non-fully parametric
-code. It may be impossible to rewrite that code to return \lstinline!ContT[M, R, A]!
-with an arbitrary monad \lstinline!M!.
+of type \lstinline!Cont[R, A]! into the transformed monad \lstinline!ContT[M, R, A]!.
+Concrete values of type \lstinline!Cont[R, A]! may result from calling
+third-party libraries implemented in non-fully-parametric code. It
+may be impossible to rewrite that code to return \lstinline!ContT[M, R, A]!
+with an arbitrary monad \lstinline!M!. This deficiency of the continuation
+monad makes it unsuitable for certain applications. 
 
 The continuation monad also does not support foreign runners or base
 runners. The type signature of the method $\text{frun}:T_{\text{Cont}}^{M,A}\rightarrow T_{\text{Cont}}^{N,A}$
 cannot be implemented with arbitrary monads $M$, $N$ because the
 type $T_{\text{Cont}}^{M,A}\triangleq(A\rightarrow M^{R})\rightarrow M^{R}$
-is not covariant in the parameter $M$. The base runner\textsf{'}s type signature,
-$\text{brun}:((A\rightarrow M^{R})\rightarrow M^{R})\rightarrow M^{A}$,
-cannot be implemented because there is no non-trivial way of constructing
-a value of type $M^{A}$ out of a value of type $M^{R}$.
+is not covariant in the type parameter $M$. The base runner\textsf{'}s type
+signature, $\text{brun}:((A\rightarrow M^{R})\rightarrow M^{R})\rightarrow M^{A}$,
+cannot be implemented because there is no way of constructing a value
+of type $M^{A}$ out of a value of type $M^{R}$ (the type $A$ is
+arbitrary).
 
 \paragraph{The \texttt{SelT} transformer}
 
@@ -921,40 +928,31 @@ replace $A$ by $M^{A}$ in the type of \lstinline!Sel!). Only one
 implementation fits the type signatures:
 \begin{lstlisting}
 final case class SelT[M[_]: Monad : Functor, Z, A](run: (M[A] => Z) => M[A]) {
-  def map[B](f: A => B): SelT[M, Z, B] = SelT { (mbz: M[B] => Z) => run(ma => mbz(ma.map(f))).map(f) }
+  def map[B](f: A => B): SelT[M,Z,B] = SelT { (mbz: M[B] => Z) => run(ma => mbz(ma.map(f))).map(f) }
   def flatMap[B](f: A => Sel[M, Z, B]): Sel[M, Z, B] = SelT { (mbz: M[B] => Z) =>
     val amb: A => M[B] = a => f(a).run(mbz)
     val maz: M[A] => Z = ma => mbz(ma.flatMap(amb))
     run(maz).flatMap(amb)
   }
 }
+def pure[M[_]: Monad, Z, A](a: A): SelT[M, Z, A] = SelT(_ => Monad[M].pure(a))
 \end{lstlisting}
 Since $T_{\text{Sel}}^{M}=\text{Sel}\circ M$ is a functor composition,
 the lifts and the runners work as in the \lstinline!Reader! monad:
 \begin{lstlisting}
-def flift[A](m: M[A]): SelT[M, Z, A] = SelT(_ => m)   // This is the `pure` method of the Sel monad.
+def flift[A](m: M[A]): SelT[M, Z, A] = SelT(_ => m)   // Using the `pure` method of the Sel monad.
 def blift[A](sel: Sel[Z, A]): SelT[M, Z, A] = SelT { (k: M[A] => Z) =>
   val az: A => Z = Monad[M].pure andThen k
   Monad[M].pure(sel(az))
 }
 \end{lstlisting}
-\begin{align*}
-{\color{greenunder}\text{foreign lift}:}\quad & \text{flift}:M^{A}\rightarrow T_{\text{Sel}}^{M,A}\quad,\quad\quad m^{:M^{A}}\triangleright\text{flift}\triangleq\_^{:M^{A}\rightarrow Z}\rightarrow m=m\triangleright\text{pu}_{\text{Sel}}\quad,\\
-{\color{greenunder}\text{base lift}:}\quad & \text{blift}:(\left(A\rightarrow Z\right)\rightarrow A)\rightarrow T_{\text{Sel}}^{M,A}\quad,\quad\quad\text{blift}\triangleq\text{pu}_{M}^{\uparrow\text{Sel}}\quad.
-\end{align*}
-
-The runners can be applied in any order because naturality makes them
-commute: 
-\[
-\theta_{M}^{\uparrow\text{Sel}}\bef\theta_{\text{Sel}}=\theta_{\text{Sel}}\bef\theta_{M}\quad.
-\]
 
 
 \paragraph{The \texttt{EvalT} transformer}
 
 The evaluation monad $\text{Eval}^{A}\triangleq A+\left(\bbnum 1\rightarrow A\right)$
 described in Section~\ref{subsec:The-eager-lazy-evaluation-monad}
-represents a choice between eager and lazy evaluation. The corresponding
+represents a choice of eager or lazy evaluation. The corresponding
 transformer is defined by
 \[
 T_{\text{Eval}}^{M,A}\triangleq M^{A+(\bbnum 1\rightarrow M^{A})}\quad.
@@ -962,15 +960,12 @@ T_{\text{Eval}}^{M,A}\triangleq M^{A+(\bbnum 1\rightarrow M^{A})}\quad.
 Let us implement the \lstinline!EvalT! monad using \lstinline!Either!
 and write the monad methods. The code for the \lstinline!Eval! monad
 in Section~\ref{subsec:The-eager-lazy-evaluation-monad} used a helper
-function that we called \lstinline!get!:
-\[
-\text{get}:\text{Eval}^{A}\rightarrow A\quad.
-\]
-We see now that \lstinline!get! is \lstinline!Eval!\textsf{'}s runner. A
-similar function (\lstinline!brun!) plays the role of the \textsf{``}base
-runner\textsf{''} for \lstinline!EvalT!: it runs \lstinline!Eval!\textsf{'}s effect
-(converting lazy values into eager ones) but keeps $M$\textsf{'}s effects
-intact. We use \lstinline!brun! to implement \lstinline!flatMap!:
+function \lstinline!get: Eval[A] => A!. We see that \lstinline!get!
+is \lstinline!Eval!\textsf{'}s runner. A similar function (\lstinline!brun!)
+plays the role of the \textsf{``}base runner\textsf{''} for \lstinline!EvalT!: it
+runs \lstinline!Eval!\textsf{'}s effect (converting lazy values into eager
+ones) but keeps $M$\textsf{'}s effects intact. We use \lstinline!brun! to
+implement \lstinline!flatMap!:
 \begin{lstlisting}
 final case class EvalT[M[_]: Monad : Functor, A](value: M[Either[A, Unit => M[A]]]) {
   def map[B](f: A => B): EvalT[M, B] = EvalT(value.map {
@@ -982,11 +977,9 @@ final case class EvalT[M[_]: Monad : Functor, A](value: M[Either[A, Unit => M[A]
     case Right(g)  => Monad[M].pure(Right { _ => g(()).flatMap(a => EvalT.brun(f(a).value)) })
   })
 }
-
 object EvalT {
   def pure[M[_]: Monad, A](a: A): EvalT[M, A] = EvalT(Monad[M].pure(Left(a)))
-
-  def brun[M[_]: Monad, A]: EvalT[M, A] => M[A] = _.value.flatMap {// Either[A, Unit=>M[A]] => M[A].
+  def brun[M[_]: Monad, A]: EvalT[M, A] => M[A] = _.value.flatMap { // Either[A, Unit=>M[A]] => M[A]
     case Left(a)   => Monad[M].pure(a)
     case Right(g)  => g(())
   }
@@ -1015,8 +1008,8 @@ def runEvalT[A](runner: M[A] => A)(t: EvalT[M, A]): Eval[A] = runner(t) match {
 \subsection{Combining more than two monads: monad stacks\label{subsec:Combining-more-than-monad-stacks}}
 
 How can we combine \emph{three or more} monads in a single functor
-block? For example, we may want to define some transformers and lifts
-so that the following code works:
+block? For example, we may want somehow to make the following code
+work:
 
 \begin{wrapfigure}{l}{0.38\columnwidth}%
 \vspace{-0.5\baselineskip}
@@ -1036,19 +1029,16 @@ for {   // Could this code compile?
 \noindent A monad transformer combines a base monad $L$ with any
 given foreign monad $M$. The result is a new, \textsf{``}larger\textsf{''} monad
 $T_{L}^{M}$ that can describe the effects of both $L$ and $M$.
-If we need to combine monad $T_{L}^{M}$ with a third monad (say,
-$K$), we could use $K$\textsf{'}s transformer and obtain the monad $T_{K}^{T_{L}^{M}}$
-that can describe the effects of $K$, $L$, and $M$. This technique
+To combine the monad $T_{L}^{M}$ with a third monad (say, $K$),
+we could use $K$\textsf{'}s transformer and obtain the monad $T_{K}^{T_{L}^{M}}$
+that describes the effects of $K$, $L$, and $M$. This technique
 is known as making a \index{monads!stack of}\textbf{stack} of monads.
 
 As an example, let us build a stack of \lstinline!Reader!, \lstinline!Writer!,
 and \lstinline!State! monads. We set $K^{\bullet}=\text{Reader}^{R,\bullet}$,
 $L^{\bullet}=\text{Writer}^{W,\bullet}$, and $M^{\bullet}=\text{State}^{S,\bullet}$,
 and begin with $T_{L}^{M}$. Since the \lstinline!Writer!\textsf{'}s transformer
-composes inside the foreign monad, we write
-\[
-T_{\text{Writer}}^{\text{State},A}=S\rightarrow A\times W\times S\quad.
-\]
+composes inside the foreign monad, we write $T_{\text{Writer}}^{\text{State},A}=S\rightarrow A\times W\times S$.
 Now we apply the \lstinline!Reader!\textsf{'}s transformer, which composes
 outside the foreign monad:
 \[
@@ -1059,15 +1049,15 @@ maintained state of type $S$, and an output value of type $W$. A
 value of type $R\rightarrow S\rightarrow A\times W\times S$ describes
 all three effects at once.
 
-If we already implemented the transformers \lstinline!ReaderT! and
-\lstinline!WriterT!, we may write the Scala type
+If the transformers \lstinline!ReaderT! and \lstinline!WriterT!
+are already implemented, we may write the Scala type
 \begin{lstlisting}
-type RWS[R, W, S, A] = ReaderT[WriterT[State[S, *], W, *], R, A]
+type RWS[R, W, S, A] = ReaderT[WriterT[State[S, *], W, *], R, A] // Equivalent to R => S => (A, W, S)
 \end{lstlisting}
-Nested transformers are substituted into the first argument of the
-outer transformer, which has the type constructor kind. So, we need
-to use the \textsf{``}kind projector\index{kind@\textsf{``}kind projector\textsf{''} plugin}\textsf{''}
-plugin to represent those type constructors such as \lstinline!State[S, *]!.
+A nested transformer is substituted into the \emph{first} argument
+of the outer transformer, which has the type constructor kind. We
+use the \textsf{``}kind projector\index{kind@\textsf{``}kind projector\textsf{''} plugin}\textsf{''}
+plugin for type constructors such as \lstinline!State[S, *]!.
 
 Note that the transformer composition does not necessarily represent
 functor composition. For instance, the plain functor composition \lstinline!Reader[R, Writer[W, State[S, A]]]!
@@ -1075,10 +1065,10 @@ is not a monad.
 
 We could stack the monads $K$, $L$, and $M$ in a different order,
 e.g., $T_{L}^{T_{M}^{K}}$ or $T_{M}^{T_{K}^{L}}$. In general, different
-orders will produce inequivalent monads that combine effects in different
-ways, although in certain cases the results are independent of the
-stacking order. Table~\ref{tab:Examples-of-monad-stacks} shows some
-examples of stacking monads in different orders.
+orders will produce inequivalent monads, although in certain cases
+the stacking order does not matter. Table~\ref{tab:Examples-of-monad-stacks}
+and the following examples illustrate stacking monads in different
+orders.
 
 \begin{table}
 
@@ -1117,10 +1107,10 @@ of $T_{\text{Reader}}^{\text{State}}$.
 \subparagraph{Solution}
 
 The types of the transformers are equivalent: the only difference
-is the flipped order of curried arguments. To verify that the implementations
-of \lstinline!pure! and \lstinline!flatMap! in these transformers
-are also equivalent (up to the order of curried arguments), we begin
-by writing \lstinline!flatMap! for the \lstinline!Reader! and \lstinline!State!
+is the flipped order of curried arguments. We will verify that the
+functions \lstinline!pure! and \lstinline!flatMap! in these transformers
+also differ only by the order of curried arguments. Begin by writing
+\lstinline!flatMap! for the \lstinline!Reader! and \lstinline!State!
 monads:
 \begin{align*}
  & \text{flm}_{\text{Reader}}(g^{:A\rightarrow R\rightarrow B})=p^{:R\rightarrow A}\rightarrow r^{:R}\rightarrow(p(r)\triangleright g)(r)\quad,\\
@@ -1143,11 +1133,8 @@ Eq.~(\ref{eq:flatmap-for-stateT-transformer}):
  & \quad=t\rightarrow s_{1}\rightarrow t(s_{1})\triangleright\big(p\rightarrow r\rightarrow(p(r)\triangleright(a\times s_{2}\rightarrow f(a)(s_{2})))(r)\big)\\
  & \quad=t\rightarrow s_{1}\rightarrow r\rightarrow(t(s_{1})(r)\triangleright(a\times s_{2}\rightarrow f(a)(s_{2})))(r)\quad.
 \end{align*}
-We see that the codes differ only by flipping the curried arguments
+We see that the codes indeed differ only by flipping the curried arguments
 $r^{:R}$ and $s_{1}^{:S}$. $\square$
-
-The next example shows two different ways of combining the effects
-of \lstinline!Reader! and \lstinline!List!.
 
 \subsubsection{Example \label{subsec:Example-reader-list-transformed}\ref{subsec:Example-reader-list-transformed}}
 
@@ -1161,14 +1148,14 @@ The difference becomes clear once we write out the types:
 T_{\text{Reader}}^{\text{List},A}\triangleq R\rightarrow\text{List}^{A}\quad,\quad\quad T_{\text{List}}^{\text{Reader},A}\triangleq R\rightarrow\bbnum 1+A\times T_{\text{List}}^{\text{Reader},A}\quad.
 \]
 In a value of type $T_{\text{Reader}}^{\text{List}}$, the injected
-dependency (of type $R$) is used to produce an \textsf{``}eager\textsf{''} list of
-values. The length of the resulting list, as well as every value in
-it, are determined at once depending on the injected value of type
-$R$. In contrast, a data structure of type $T_{\text{List}}^{\text{Reader}}$
-represents a \textsf{``}lazy\textsf{''} (on-call) sequence because getting the value
-of each element is obtained by calling a \emph{new} function of type
-$R\rightarrow\bbnum 1+A\times T_{\text{List}}^{\text{Reader}}$. The
-resulting on-call sequence may be unlimited in length. $\square$
+dependency (of type $R$) is used to produce an \textsf{``}eager\textsf{''} list.
+The length of the resulting list, as well as all its elements, are
+computed at once from the injected value of type $R$. In contrast,
+a data structure of type $T_{\text{List}}^{\text{Reader}}$ represents
+a \textsf{``}lazy\textsf{''} (on-call) sequence: getting the value of each next element
+requires calling a function of type $R\rightarrow\bbnum 1+A\times T_{\text{List}}^{\text{Reader}}$
+(possibly, a different function each time). The resulting on-call
+sequence may be unlimited in length. $\square$
 
 The next example shows that effects of the two monads are not always
 independent within the larger transformed monad. An effect of one
@@ -1191,10 +1178,10 @@ The first type describes a computation that may fail with an error
 description (of type $E$) and produce \emph{no} new state, \textsf{``}canceling\textsf{''}
 the state-updating effect of the base monad. The second type describes
 a computation that never fails to update the state, although it could
-fail to give a result of type $A$. We cannot implement a monad morphism
-converting a value of type $T_{\text{State}}^{\text{Either},A}$,
-which may fail to update the state, into a value of type $T_{\text{Either}}^{\text{State},A}$,
-which always updates the state. 
+fail to give a result of type $A$. We cannot convert a value of type
+$T_{\text{State}}^{\text{Either},A}$ (which may fail to update the
+state) into a value of type $T_{\text{Either}}^{\text{State},A}$
+(which always updates the state).
 
 \paragraph{Transformers for stacks}
 
@@ -1207,14 +1194,14 @@ T_{T_{K}^{L}}^{M}\triangleq T_{K}^{T_{L}^{M}}\quad.\label{eq:monad-transformers-
 To combine $T_{K}^{T_{L}^{M}}$ with a new monad $N$, we write the
 stack $T_{K}^{T_{L}^{T_{M}^{N}}}$ (where $T_{M}$ is $M$\textsf{'}s transformer).
 With this technique, we may combine any number of monads in a monad
-stack. The only requirement is the need to know the transformers for
-each monad (except for the last one).
+stack, as long as the transformers for all monads are known (except
+for the last one).
 
-We may also view monad stacking as a binary operation (which we denote
+Monad stacking can be viewed as a binary operation (which we denote
 by $\varangle$) that combines monads $K$ and $L$ into a new monad
 $K\varangle L\triangleq T_{K}^{L}$. This operation is associative
-\emph{by construction}: the transformer for the monad $T_{K}^{L}$
-is defined via Eq.~(\ref{eq:monad-transformers-associativity-of-combination}),
+\emph{by definition}: the transformer for the monad $T_{K}^{L}$ is
+defined via Eq.~(\ref{eq:monad-transformers-associativity-of-combination}),
 which we can rewrite as the equation
 \[
 \left(K\varangle L\right)\varangle M\triangleq K\varangle\left(L\varangle M\right)\quad.
@@ -1239,8 +1226,8 @@ transformer:
 \[
 T_{\text{State}}^{M,A}=S\rightarrow M^{A\times S}=S\rightarrow\text{Eval}^{A\times S}\quad.
 \]
-Now translate the type notation into code, assuming that \lstinline!S!
-is a fixed type:
+Now translate the type notation into code, assuming that the type
+\lstinline!S! is defined previously:
 \begin{lstlisting}
 type StateEval[A] = S => Either[(A, S), Unit => (A, S)]
 \end{lstlisting}
@@ -1275,8 +1262,9 @@ final case class ListOptionTry[A](value: Try[Option[Option[(A, ListOptionTry[A])
 \end{lstlisting}
 
 To define the transformer for the monad \lstinline!ListOptionTry!,
-we need to start with the innermost nested monad, \lstinline!Try!,
-and use its transformer (\lstinline!TryT!) on the foreign monad $M$:
+we need to start with the innermost nested monad (\lstinline!Try!)
+and apply its transformer (\lstinline!TryT!) to the foreign monad
+$M$:
 \begin{lstlisting}
 type TryM[A] = M[Try[A]]
 \end{lstlisting}
@@ -1294,7 +1282,7 @@ $\square$
 Does the stacking operation ($\varangle$) have a unit? We notice
 from Table~\ref{tab:Known-monad-transformers} that each transformer
 $T_{L}^{M}$ somehow mixes the foreign monad $M$ with the type of
-the base monad $L$. In every example, if we choose $M$ as the identity
+the base monad $L$. In every example, if we set $M$ to the identity
 monad $\text{Id}$ (defined by $\text{Id}^{A}\triangleq A$), the
 transformed type will become equivalent to the base monad $L$. So,
 we may expect that property to hold for every transformer:
@@ -1322,8 +1310,8 @@ and has a unit (the monad \lstinline!Id!). However, the monad $L\varangle M$
 is defined only if the monad $L$ has a transformer. It is unknown\footnote{For a discussion, see \texttt{\href{https://stackoverflow.com/questions/24515876/}{https://stackoverflow.com/questions/24515876/}}}
 whether a transformer exists for every monad relevant to functional
 programming. The question is open (Problem~\ref{par:Problem-monads-2})
-even if restricted to exponential-polynomial type constructors whose
-monad methods are implemented by purely functional code.
+even if restricted to monads whose methods are implemented by fully
+parametric code.
 
 Monad transformers certainly cannot exist for monads defined using
 code that executes side effects. Examples of that kind are the \lstinline!Future!
@@ -1331,14 +1319,14 @@ monad and other \textsf{``}task-like\textsf{''} monads that perform side effects
 parallel threads. Transformers also cannot exist for external side-effect
 monads, such as \lstinline!IO! from the \lstinline!cats-effect!
 library or \lstinline!ZIO! from the \lstinline!zio! library. A transformer
-must allow the foreign monad to cancel the effects of the base monad,
+must allow a foreign monad to cancel the effects of the base monad,
 as we have seen in Example~\ref{subsec:Example-either-state-transformed-cancels-effect}.
 However, side effects cannot be undone once they are performed, because
 side effects may change the state of the external world irreversibly.\footnote{For a discussion, see \texttt{\href{https://stackoverflow.com/questions/11792275/}{https://stackoverflow.com/questions/11792275/}}} 
 
 Throughout this chapter, we will build transformers for every exponential-polynomial
-monad derived in this book (although some transformers will only partially
-satisfy the required laws).
+monad considered in this book (although some transformers will only
+partially satisfy the required laws).
 
 \subsection{The monad transformer typeclass}
 
@@ -1349,18 +1337,18 @@ with known type signatures. We may specify these properties via a
 typeclass \lstinline!MTrans[T]! that describes what is requred for
 $T$ to be a monad transformer. A simple definition of the monad transformer
 typeclass can look like this:
-\begin{lstlisting}
-type Id[A] = A        // The identity monad\textsf{'}s typeclass instance must be defined elsewhere.
-trait MTrans[T[_[_]]] { // The type parameter T is a type constructor with 2 parameters.
+\begin{lstlisting}[mathescape=true]
+type Id[A] = A        // The identity monad$\color{dkgreen}\texttt{'}$s typeclass instance must be defined elsewhere.
+trait MTrans[T[_[_]]] {    // The type parameter T is a type constructor with 2 parameters.
   def monadT[M[_]: Monad]: Monad[T[M, *]]       // A monad instance must exist for T[M, *].
   def flift[M[_]: Monad, A]: M[A] => T[M, A]
-  def blift[M[_]: Monad, A]: Base[A] => T[M, A] = frun[Id, M, A] // Default implementation.
-  def frun[M[_]: Monad, N[_]: Monad, A]: T[M, A] => T[N, A]
+  def blift[M[_]: Monad, A]: Base[A] => T[M, A] = frun[Id, M, A](Monad[M].pure)
+  def frun[M[_]: Monad, N[_]: Monad, A](phi: M[A] => N[A]): T[M, A] => T[N, A]
 }
 \end{lstlisting}
-The transformer\textsf{'}s code is specific for the base monad $L$ but depends
-parametrically on the foreign monad $M$. Although \lstinline!blift!
-can be implemented via \lstinline!frun! as $\text{blift}_{L}^{M}\triangleq\text{frun}_{L}^{\text{Id},M}(\text{pu}_{M})$,
+The transformer\textsf{'}s code is parametric in the foreign monad $M$ (but
+not in the base monad $L$). Although \lstinline!blift! can be implemented
+via \lstinline!frun! as $\text{blift}_{L}^{M}\triangleq\text{frun}_{L}^{\text{Id},M}(\text{pu}_{M})$,
 it is convenient to keep all three methods defined separately in the
 typeclass.
 
@@ -1371,8 +1359,8 @@ final case class ReaderT[M[_], A](run: Reader[M[A]])
 implicit val mTransReaderT = new MTrans[ReaderT] {
   def monadT[M[_] : Monad]: Monad[ReaderT[M, *]] = ...
   def flift[M[_] : Monad, A]: M[A] => ReaderT[M, A] = { ma => ReaderT(Reader(_ => ma)) }
-  def frun[M[_] : Monad, N[_] : Monad, A](phi: M ~> N): ReaderT[M, A] => ReaderT[N, A] =
-    t => ReaderT(Reader(r => phi.apply(t.run.run(r))))
+  def frun[M[_] : Monad, N[_] : Monad, A](phi: M[A] => N[A]): ReaderT[M, A] => ReaderT[N, A] =
+    t => ReaderT(Reader(r => phi(t.run.run(r))))
 }
 \end{lstlisting}
 
@@ -1395,11 +1383,11 @@ stack.
 
 \paragraph{Lifts}
 
-We need to be able to transform values of types $K^{A}$, $L^{A}$,
-$M^{A}$, $N^{A}$, $(K\varangle L)^{A}$, $(L\varangle M)^{A}$,
-etc., to the stack type $(K\varangle L\varangle M\varangle N)^{A}$.
-Assume that we have the base lifts, foreign lifts, and the runners
-of the relevant transformers, such as:
+We need to be able to lift values of types $K^{A}$, $L^{A}$, $M^{A}$,
+$N^{A}$, $(K\varangle L)^{A}$, $(L\varangle M)^{A}$, etc., to the
+stack type $(K\varangle L\varangle M\varangle N)^{A}$. Assume that
+we have the base lifts, foreign lifts, and the runners of the relevant
+transformers, such as:
 \[
 \text{flift}_{K}^{P}:P\leadsto(K\varangle P)\quad,\quad\text{blift}_{L}^{P}:L\leadsto(L\varangle P)\quad,\quad\text{frun}_{M}^{P,Q}(f^{:P\leadsto Q}):M\varangle P\leadsto M\varangle Q\quad,\quad\text{etc.,}
 \]
@@ -1435,54 +1423,53 @@ With these techniques, we can construct all required liftings in any
 monad stack, as long as every monad transformer in the stack has the
 methods \lstinline!flift!, \lstinline!blift!, and \lstinline!frun!.
 
-Transformers for certain monads (such as the continuation and the
-\index{monads!codensity monad}codensity monad) have neither the \lstinline!frun!
-nor the \lstinline!blift! methods. Also, task-like monads (such as
-\lstinline!Future!) and the external side-effect monads (such as
-\lstinline!IO! and \lstinline!ZIO!) have no transformers at all.
-Values of those monads can be lifted to a monad stack only when the
-problematic monad is located at the deep end of the stack, so that
-its transformer is not needed. For example, the monad $N$ at the
-end of the stack $K\varangle L\varangle M\varangle N$ can be lifted
-to the stack without need for $N$\textsf{'}s transformer:
+Transformers for certain monads (e.g., the continuation and the \index{monads!codensity monad}codensity
+monads) have neither the \lstinline!frun! nor the \lstinline!blift!
+methods. Also, task-like monads (such as \lstinline!Future!) and
+the external side-effect monads (such as \lstinline!IO! and \lstinline!ZIO!)
+have no transformers at all. Values of those monads can be lifted
+to a monad stack only when the problematic monad is located at the
+deep end of the stack, so that its transformer is not needed. For
+example, the monad $N$ at the end of the stack $K\varangle L\varangle M\varangle N$
+can be lifted to the stack without need for $N$\textsf{'}s transformer:
 \[
-\text{flift}_{K\varangle L\varangle M}^{N}\triangleq\big(\text{flift}_{M}^{N}\bef\text{flift}_{L}^{M\varangle N}\bef\text{flift}_{K}^{L\varangle M\varangle N}\big):N^{A}\rightarrow(K\varangle L\varangle M\varangle N)^{A}\quad.
+\text{flift}_{K\varangle L\varangle M}^{N}:N^{A}\rightarrow(K\varangle L\varangle M\varangle N)^{A}\triangleq\text{flift}_{M}^{N}\bef\text{flift}_{L}^{M\varangle N}\bef\text{flift}_{K}^{L\varangle M\varangle N}\quad.
 \]
-For this reason, one must put the \lstinline!IO! and \lstinline!Future!
-monads at the deep end of the stack. This limits the use of those
-monads in stacks; for instance, a stack cannot contain both an \lstinline!IO!
-and a \lstinline!Future! monad. To provide adequate functionality
-for applications, the \lstinline!IO! and \lstinline!ZIO! monads
-include special methods for running parallel computations on new threads,
-which avoids the need to use a \lstinline!Future! monad in the same
-monad stack.
+For this reason, the external side-effect monads and the task-like
+monads are usually placed at the deep end of the stack. This workaround
+limits the use of those monads in stacks; for instance, a stack cannot
+contain both an \lstinline!IO! and a \lstinline!Future! monad. To
+provide adequate functionality for applications, the \lstinline!IO!
+and \lstinline!ZIO! monads include special methods for running concurrent
+computations on multiple threads, which makes it unnecessary to add
+a task-like monad to the same monad stack.
 
-While this solves the lifting problem in principle for most monad
-stacks, it is impractical for the programmer to have to write manually
-a composition of several lifts for every source line in a functor
-block. Even if we implement all the lift functions as extension methods
-and abbreviate the type annotations as much as possible, the code
-would have to be written similarly to this fragment:
+While we solved the lifting problem in principle for most monad stacks,
+it is impractical for the programmer to have to write manually a composition
+of several lifts for every source line in a functor block. Even if
+we implement all the lift functions as extension methods and abbreviate
+the type annotations as much as possible, the code would have to be
+written similarly to the fragment shown
 
-\begin{wrapfigure}{l}{0.4\columnwidth}%
-\vspace{0.25\baselineskip}
-\begin{lstlisting}
-for { // Using a stack of monads K, L, M, N.
+\begin{wrapfigure}{l}{0.408\columnwidth}%
+\vspace{-0.9\baselineskip}
+\begin{lstlisting}[mathescape=true]
+for {    // Using a stack $\color{dkgreen} K\varangle L\varangle M\varangle N$.
   x <- valueM.blift[N].flift[L].flift[K]
   y <- valueK.blift[TL[TM[N]]]
   z <- valueL.blift[TM[N]].flift[K]
 } yield ...
 \end{lstlisting}
-\vspace{-0.75\baselineskip}
+\vspace{-1.25\baselineskip}
 \end{wrapfigure}%
 
-\noindent If a monad stack $K\varangle L\varangle M\varangle N$ needs
-to be extended to $M\varangle L\varangle N\varangle K\varangle P$
-because of a change in program requirements, all source lines in all
-functor blocks will have to be modified to accommodate the required
-changes in the lifts. Clearly, productive practical use of deep monad
-stacks needs better techniques. One such technique, the \textsf{``}lift relation\textsf{''},
-is described in Section~\ref{subsec:Constructing-lifts-via-type-relations}.
+\noindent at left. If a monad stack $K\varangle L\varangle M\varangle N$
+needs to be changed to $M\varangle L\varangle N\varangle K\varangle P$
+because of new program requirements, all source lines in all functor
+blocks will have to be modified to accommodate the required changes
+in the lifts. Productive practical use of deep monad stacks needs
+better techniques. One such technique, the \textsf{``}lift relation\textsf{''}, is
+described in Section~\ref{subsec:Constructing-lifts-via-type-relations}.
 Another technique is an \textsf{``}MTL-style\textsf{''} monad stack (Section~\ref{subsec:Combining-monads-via-mtl-style}).
 Both techniques are based on creating special typeclasses that produce
 the required lifts automatically.
@@ -1494,7 +1481,7 @@ we may want to run the effects of a chosen monad (say $M$) using
 a known runner $\theta_{M}:M^{A}\rightarrow A$ but keep the effects
 of other monads in the stack. If all the monad transformers in the
 stack support the foreign and base runners, we can run the effects
-of the chosen monad like this:
+of any chosen monad, e.g., like this:
 \[
 \text{frun}_{K}^{L\varangle M\varangle N}(\text{frun}_{L}^{M\varangle N}(\text{brun}_{M}^{N}(\theta_{M}))):K\varangle L\varangle M\varangle N\leadsto K\varangle L\varangle N\quad.
 \]
@@ -1502,17 +1489,20 @@ As in the case of lifts, the implementations of the runners depend
 on the order of monads in the stack and will have to be changed if
 the stack changes. It does not seem possible to define a \textsf{``}stack
 runner\textsf{''} parametric in the chosen monad, allowing the programmer
-simply to indicate which monad\textsf{'}s effects need to be run and without
-writing the code of the runner by hand. To see why, consider a monad
-stack of type \lstinline!EitherT[E, ReaderT[R, Option, *], A]!. If
-we wish to run the effects of the \lstinline!Reader! monad alone,
+simply to indicate which monad\textsf{'}s effects need to be run. To see why,
+consider a monad stack of type \lstinline!EitherT[E, ReaderT[R, Option, *], A]!.
+If we wish to run the effects of the \lstinline!Reader! monad alone,
 the result type must be \lstinline!EitherT[E, Option, A]!. But there
 is no simple way of obtaining that result type from the type of the
 stack: the type \lstinline!EitherT[E, Option, A]! cannot be expressed
 as a type constructor \lstinline!Q[Reader, ...]! where \lstinline!Reader!
-is just one of the type parameters. This complication is due to the
-fact that the type of the stack is not parametric in the type of the
-base monad.
+is just one of the type parameters. This is because the type of the
+stack is not parametric in the type of the base monad.
+
+As we will see in this chapter, some monad transformers do not support
+base runners at all. Monad stacks containing such transformers are
+still usable, but their effects will have to be run in a specific
+order, so that the missing base runners are not needed.
 
 \subsection{Constructing lifts via type relations\label{subsec:Constructing-lifts-via-type-relations}}
 
@@ -1522,10 +1512,9 @@ possible liftings within a given monad stack. Two monads $P$ and
 $Q$ are \textbf{in a lift relation} if there exists a monad morphism
 $P\leadsto Q$. If $Q$ is itself a monad stack containing the monad
 $P$, we can implement the lift relation $P\leadsto Q$ by using the
-monad transformers from that stack. For instance, within the stack
-$K\varangle L\varangle M\varangle N$, the monads $L$ and $K\varangle L\varangle M$
-will be in a lift relation because we can construct a monad morphism
-$L\leadsto K\varangle L\varangle M$ as
+monad transformers from that stack. For instance, the monads $L$
+and $K\varangle L\varangle M$ are in a lift relation because we can
+construct a monad morphism $L\leadsto K\varangle L\varangle M$ as
 \[
 \big(\text{blift}_{L}^{M}\bef\text{flift}_{K}^{L\varangle M}\big):L\leadsto K\varangle L\varangle M\quad.
 \]
@@ -1534,10 +1523,10 @@ be in a lift relation since, in general, we have no way of lifting
 the effects of the monad $M$ into the monad $K\varangle L$ (assuming
 that we have no monad morphisms $M\leadsto K$ or $M\leadsto L$).
 
-The lift relation is implemented as a type relation for the monads\textsf{'}
-type constructors. The data carried by the type relation \lstinline!MM[P, Q]!
-will be the code for the required monad morphism between \lstinline!P!
-and \lstinline!Q!:
+The lift relation is implemented as a type relation \lstinline!MM[P, Q]!
+for the monads\textsf{'} type constructors (\lstinline!P!, \lstinline!Q!).
+A value of type \lstinline!MM[P, Q]! will contain the required monad
+morphism between \lstinline!P! and \lstinline!Q!:
 \begin{lstlisting}
 trait MM[P[_], Q[_]] { def up[A]: P[A] => Q[A] } // This function must be a monad morphism.
 \end{lstlisting}
@@ -1567,8 +1556,7 @@ It is assumed that the function \lstinline!iso! should be a monad
 isomorphism. Declaring a relation instance of \lstinline!BaseMonad!
 looks like this example:
 \begin{lstlisting}
-implicit val readerBase: BaseMonad[Reader, ReaderT] = BaseMonad(
-  new MM[Reader, ReaderT[Id, *]] {
+implicit val readerBase: BaseMonad[Reader, ReaderT] = BaseMonad(new MM[Reader, ReaderT[Id, *]] {
     def apply[A]: Reader[A] => ReaderT[Id, A] = ReaderT[Id, A](_)
 })
 \end{lstlisting}
@@ -1577,7 +1565,7 @@ Now we can implement a relation instance for the base lift:
 implicit def baseMonadToTransformer[KT[_[_], _], M[_] : Monad, L[_] : Monad]
   (implicit kt: MTrans[KT], isBase: BaseMonad[L, KT]): MM[L, KT[M, *]] = new MM[L, KT[M, *]] {
     override def apply[A]: L[A] => KT[M, A] = isBase.iso.apply andThen kt.blift[M, A]
-  }
+}
 \end{lstlisting}
 The typeclass constraint \lstinline!BaseMonad[L, KT]! permits the
 Scala compiler to direct the search for implicits towards finding
@@ -1615,18 +1603,19 @@ val resultStack3: Stack3[Int] = for { // Lift each value to Stack3 with a single
 To implement the automatic lifts in this way, the programmer needs
 to create three implicit values for each monad: a \lstinline!Monad!
 typeclass instance, a monad transformer (\lstinline!MTrans!) typeclass
-instance, and a relation instance for the \lstinline!BaseMonad! type
-relation. (So, the length of code is linear in the number of supported
-monad types.) Those instances can be defined as implicit values in
-a monad transformer library. Then the user may declare an arbitrary
-monad stack and use automatic lifts between any levels in a stack.
+instance, and an instance of the \lstinline!BaseMonad! type relation.
+(So, the length of code is linear in the number of supported monad
+types.) Those instances can be defined as implicit values in a monad
+transformer library. Then the user may declare an arbitrary monad
+stack \lstinline!MyStack! and use the \lstinline!up[MyStack]! method
+as an automatic lift from any level in the stack.
 
 \subsection{Constructing lifts via typeclasses for monad operations (\textsf{``}MTL-style\textsf{''})\label{subsec:Combining-monads-via-mtl-style}}
 
-The MTL-style\footnote{See \texttt{\href{http://book.realworldhaskell.org/read/monad-transformers.html}{http://book.realworldhaskell.org/read/monad-transformers.html}}.
-The name MTL stands for \textsf{``}monad transformer library\textsf{''}.} monadic\index{monadic program!MTL-style} programming is another
-way of achieving automatic lifting of monadic programs to arbitrary
-monad stacks. The MTL approach has two main ingredients:
+The MTL-style\footnote{The name MTL stands for \textsf{``}monad transformer library\textsf{''}.}
+monadic\index{monadic program!MTL-style} programming is another way
+of achieving automatic lifting of monadic values in arbitrary monad
+stacks. The MTL approach has two main ingredients:
 \begin{itemize}
 \item For a chosen set of \textsf{``}standard\textsf{''} monads (such as the \lstinline!Reader!
 monad of type $\text{Reader}^{R,A}\triangleq R\rightarrow A$, the
@@ -1644,14 +1633,14 @@ the \lstinline!State! monad.
 \end{itemize}
 First, we need to define the \textsf{``}effectful operations\textsf{''} corresponding
 to each monad. As an example, consider the \lstinline!State! monad
-($\text{State}^{S,A}$). Its effect allows programs to manipulate
-an internal state value (of type $S$): the state can be read, updated,
-and automatically passed on to the next computation. We may now define
-the functions \lstinline!get! and \lstinline!set! that work with
-the internal state:
-\[
-\text{get}:\text{State}^{S,S}\quad,\quad\quad\text{get}\triangleq s^{:S}\rightarrow s\times s\quad,\quad\quad\text{set}:S\rightarrow\text{State}^{S,\bbnum 1}\quad,\quad\quad\text{set}\triangleq s^{:S}\rightarrow\_^{:S}\rightarrow1\times s\quad.
-\]
+($\text{State}^{S,A}$). Its effect is to manipulate an internal state
+value (of type $S$): the state can be read, updated, and automatically
+passed on to the next computation. We may define the functions \lstinline!get!
+and \lstinline!set! that work with the internal state:
+\begin{align*}
+ & \text{get}:\text{State}^{S,S}\quad,\quad\quad\text{get}\triangleq s^{:S}\rightarrow s\times s\quad,\\
+ & \text{set}:S\rightarrow\text{State}^{S,\bbnum 1}\quad,\quad\quad\text{set}\triangleq s^{:S}\rightarrow\_^{:S}\rightarrow1\times s\quad.
+\end{align*}
 
 \begin{wrapfigure}{l}{0.43\columnwidth}%
 \vspace{-1\baselineskip}
@@ -1711,22 +1700,22 @@ an argument of type $S$.
 Another example is the \lstinline!Either! monad, for which we define
 an operation called \lstinline!raise!:
 \[
-\text{raise}:E\rightarrow\forall A.\,E+A\quad,\quad\quad\text{raise}\triangleq e^{:E}\rightarrow e+\bbnum 0^{:A}\quad.
+\text{raise}:E\rightarrow E+A\quad,\quad\quad\text{raise}\triangleq e^{:E}\rightarrow e+\bbnum 0^{:A}\quad.
 \]
 Any \lstinline!Either!-monadic program is a value of type $E+A$
 and can always be expressed through \lstinline!raise! and \lstinline!pure!.
 We may then refactor any monadic code so that it uses only the \lstinline!raise!
-operation but does not refer to the specific type $E+A$ of the \lstinline!Either!
+operation but does not refer to the type $E+A$ of the \lstinline!Either!
 monad. For instance, the refactored code will not apply pattern matching
 directly to monad values.
 
-The second ingredient of the MTL-style programming involves \textsf{``}lifting\textsf{''}
+The second ingredient of the MTL-style programming involves lifting
 the monad operations to arbitrary monad stacks. For example, the operations
 \lstinline!get! and \lstinline!set! can be lifted from the \lstinline!State!
 monad to any monad stack containing the \lstinline!State! monad.
-For any such monad stack $P$, there exists a specific composition
-of lifts that creates a monad morphism $p:\text{State}^{S,\bullet}\leadsto P^{\bullet}$.
-If $p$ is known, the new operations $\text{get}_{P}$ and $\text{set}_{P}$
+For any such monad stack $P$, a certain composition of lift functions
+will create a monad morphism $p:\text{State}^{S,\bullet}\leadsto P^{\bullet}$.
+Once $p$ is known, the new operations $\text{get}_{P}$ and $\text{set}_{P}$
 are expressed as
 \[
 \text{get}_{P}:P^{S}\triangleq\text{get}\triangleright p\quad,\quad\quad\text{set}_{P}:S\rightarrow P^{\bbnum 1}\triangleq\text{set}\bef p\quad.
@@ -1737,7 +1726,7 @@ monad can be lifted to any monad stack $P$ that contains the \lstinline!Either!
 monad. For any such $P$, there exists a monad morphism $p:E+A\rightarrow P^{A}$,
 and the lifted operation ($\text{raise}_{P}$) is defined by
 \[
-\text{raise}_{P}:\forall A.\,P^{A}\quad,\quad\quad\text{raise}_{P}\triangleq\forall A.\,\text{raise}^{A}\triangleright p\quad.
+\text{raise}_{P}:P^{A}\quad,\quad\quad\text{raise}_{P}\triangleq\text{raise}\triangleright p\quad.
 \]
 
 Lifting operations from a monad to a stack depends on having a suitable
@@ -1808,7 +1797,7 @@ have the form $P=M_{1}\varangle M_{2}\varangle...\varangle L\varangle...\varangl
 for some monads $M_{1}$, ..., $M_{k}$. We can write a definition
 by induction: 
 \begin{itemize}
-\item Base case: $P$ contains $L$ when $P=L$ or $P=L\varangle Q$ for
+\item Base cases: $P$ contains $L$ when $P=L$ or $P=L\varangle Q$ for
 some other monad stack $Q$. (The stack $P=L$ can be seen as a special
 case of $P=L\varangle Q$ with $Q=\text{Id}$.) The lift function
 ($p_{L,P}$) is
@@ -1821,20 +1810,20 @@ The lift function is
 \[
 p_{L,P}:L\leadsto N\varangle Q\quad,\quad\quad p_{L,P}\triangleq p_{L,Q}\bef\text{flift}_{N}\quad,
 \]
-where $p_{L,Q}$ is the lift function for the stack $Q$, which is
-exists by the inductive assumption.
+where $p_{L,Q}$ is the lift function for the stack $Q$. (By the
+inductive assumption, $p_{L,Q}$ is known.)
 \end{itemize}
 As an example, we will implement a \lstinline!StateMonadOps! instance
 for all monad stacks that contain a \lstinline!State! monad. Begin
-with the base case: The \lstinline!State! monad itself already has
+with the base cases: The \lstinline!State! monad itself already has
 a \lstinline!StateMonadOps! instance. If we have a stack of the form
 \lstinline!StateT[Q, S, *]! where \lstinline!Q! is any monad, we
 use the base lift of the \lstinline!StateT! transformer to implement
 the \lstinline!StateMonadOps! typeclass:
 \begin{lstlisting}
 implicit def stateTMonadOps[S, Q[_]: Monad] = new StateMonadOps[StateT[Q, S, *], S] {
-  def get: StateT[Q, S, S] = StateT(s => implicitly[Monad[Q]].pure((s, s)))
-  def set: S => StateT[Q, S, Unit] = s => StateT(_ => implicitly[Monad[Q]].pure(((), s)))
+  def get: StateT[Q, S, S] = StateT(s => Monad[Q].pure((s, s)))
+  def set: S => StateT[Q, S, Unit] = s => StateT(_ => Monad[Q].pure(((), s)))
 }
 \end{lstlisting}
 
@@ -1858,9 +1847,8 @@ through those operations, without using explicit monad types. The
 library should also implement instances of those typeclasses for all
 supported monad stacks. 
 
-While the MTL style does provide automatic lifting and requires somewhat
-shorter code than the direct approach of lifting relation (as developed
-in the previous section), some problems remain. 
+While the MTL style does provide automatic liftings, some problems
+remain. 
 
 The first problem is the lack of standard conventions or principles
 for the choice of effectful operations. We have seen that the operations
@@ -1870,38 +1858,30 @@ to write code just with those two operations.
 
 \begin{wraptable}{l}{0.62\columnwidth}%
 \begin{centering}
-\vspace{-0.4\baselineskip}
+\vspace{-0.35\baselineskip}
 \begin{tabular}{|>{\centering}m{1.3cm}|>{\centering}m{7.2cm}|}
 \hline 
 \textbf{\small{}Monad} & \textbf{\small{}Operations}\tabularnewline
 \hline 
 \hline 
-{\small{}$\text{State}^{S,A}$} & {\small{}$\text{get}:\text{State}^{S,S}$}{\small\par}
-
-{\small{}$\text{set}:S\rightarrow\text{State}^{S,\bbnum 1}$}{\small\par}
-
+{\small{}$\text{State}^{S,A}$} & {\small{}$\text{get}:\text{State}^{S,S}$}\\
+{\small{}$\text{set}:S\rightarrow\text{State}^{S,\bbnum 1}$}\\
 {\small{}$\text{update}:(S\rightarrow S)\rightarrow\text{State}^{S,\bbnum 1}$}\tabularnewline
 \hline 
-{\small{}$\text{Reader}^{R,A}$} & {\small{}$\text{ask}:\text{Reader}^{R,R}$}{\small\par}
-
+{\small{}$\text{Reader}^{R,A}$} & {\small{}$\text{ask}:\text{Reader}^{R,R}$}\\
 {\small{}$\text{withEnv}:R\rightarrow\text{Reader}^{R,A}\rightarrow\text{Reader}^{R,A}$}\tabularnewline
 \hline 
-{\small{}$\text{Either}^{E,A}$} & {\small{}$\text{raise}:E\rightarrow\text{Either}^{E,A}$}{\small\par}
-
+{\small{}$\text{Either}^{E,A}$} & {\small{}$\text{raise}:E\rightarrow\text{Either}^{E,A}$}\\
 {\small{}$\text{handle}:(E\rightarrow\text{Either}^{E,A})\rightarrow\text{Either}^{E,A}\rightarrow\text{Either}^{E,A}$}\tabularnewline
 \hline 
-{\small{}$\text{List}^{A}$} & {\small{}$\text{empty}:\text{List}^{A}$}{\small\par}
-
-{\small{}$\text{append}:\text{List}^{A}\times\text{List}^{A}\rightarrow\text{List}^{A}$}{\small\par}
-
+{\small{}$\text{List}^{A}$} & {\small{}$\text{empty}:\text{List}^{A}$}\\
+{\small{}$\text{append}:\text{List}^{A}\times\text{List}^{A}\rightarrow\text{List}^{A}$}\\
 {\small{}$\text{filter}:\text{List}^{A}\rightarrow(A\rightarrow\bbnum 2)\rightarrow\text{List}^{A}$}\tabularnewline
 \hline 
-{\small{}$\text{Writer}^{W,A}$} & {\small{}$\text{log}:W\rightarrow\text{Writer}^{W,\bbnum 1}$}{\small\par}
-
+{\small{}$\text{Writer}^{W,A}$} & {\small{}$\text{log}:W\rightarrow\text{Writer}^{W,\bbnum 1}$}\\
 {\small{}$\text{clear}:\text{Writer}^{W,A}\rightarrow\text{Writer}^{W,A}$}\tabularnewline
 \hline 
-{\small{}$\text{Cont}^{R,A}$} & {\small{}$\text{abort}:R\rightarrow\text{Cont}^{R,A}$}{\small\par}
-
+{\small{}$\text{Cont}^{R,A}$} & {\small{}$\text{abort}:R\rightarrow\text{Cont}^{R,A}$}\\
 {\small{}$\text{callcc}:((A\rightarrow\text{Cont}^{R,B})\rightarrow\text{Cont}^{R,A})\rightarrow\text{Cont}^{R,A}$}\tabularnewline
 \hline 
 \end{tabular}
@@ -1922,9 +1902,9 @@ the user interface events). Special handling of updates cannot be
 implemented through \lstinline!get! and \lstinline!set!; a new effectful
 operation (\lstinline!update!) must be provided to the programmer.
 
-Table~\ref{tab:Known-operations-for-some-monads} shows a selection
-of effectful operations for some well-known monads.\footnote{Operations were taken from the \texttt{cats-mtl} documentation and
-the papers \textsf{``}\emph{Monad transformers and modular interpreters}\textsf{''}
+Table~\ref{tab:Known-operations-for-some-monads} shows a number
+of operations for some monads.\footnote{Operations were gathered from the \texttt{cats-mtl} documentation
+and the papers \textsf{``}\emph{Monad transformers and modular interpreters}\textsf{''}
 (see \texttt{\href{http://web.cecs.pdx.edu/~mpj/pubs/modinterp.html}{http://web.cecs.pdx.edu/$\sim$mpj/pubs/modinterp.html}})
 and \textsf{``}\emph{Modular monad transformers}\textsf{''} (see \texttt{\href{https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.219.5365}{https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.219.5365}}).} The choice of operations appears to be heuristic, not following any
 principle or system. It is not obvious in advance what operations
@@ -1932,8 +1912,8 @@ will be useful or necessary in practical tasks involving a given monad.
 (Do we need a \lstinline!filter! operation for the \lstinline!Either!
 monad?) Different libraries choose different sets of supported operations.
 However, adding a new operation to a monad in an MTL-style library
-requires rewriting the typeclasses involving that monad. Users who
-cannot modify the library code will be unable to add new operations.
+means updating all typeclasses related to that monad. Users who cannot
+modify the library code will be unable to add new operations.
 
 The second problem is the lack of a general method for lifting effectful
 operations to arbitrary monad transformers.\footnote{M.~\index{Mauro Jaskelioff}Jaskelioff developed a technique that
@@ -1943,22 +1923,21 @@ with type signatures of the form $L^{A}$ or $A\rightarrow L^{B}$.
 All operations of this form are lifted from the monad $L$ to a monad
 stack $P$ by composing with a lift function $p:L^{A}\rightarrow P^{A}$.
 However, some operations have significantly different type signatures
-and cannot be lifted to arbtirary monad stacks by composing with a
-lift function. For instance, an operation called \lstinline!withEnv!
-(defined for the \lstinline!Reader! monad) has the type signature
-$R\rightarrow\text{Reader}^{R,A}\rightarrow\text{Reader}^{R,A}$.
+and cannot be lifted to arbitrary monad stacks by composing with a
+lift. For instance, an operation called \lstinline!withEnv! (defined
+for the \lstinline!Reader! monad) has the type signature $R\rightarrow\text{Reader}^{R,A}\rightarrow\text{Reader}^{R,A}$.
 In that type signature, some \lstinline!Reader! values are used as
 arguments (that is, in a contravariant position). So, \lstinline!withEnv!
 cannot be converted to a function of type $R\rightarrow P^{A}\rightarrow P^{A}$
 by composing with a lift function $p:\text{Reader}^{R,A}\rightarrow P^{A}$.
 Another example is the \lstinline!Writer! monad\textsf{'}s \lstinline!clear!
 operation that has the type $\text{Writer}^{W,A}\rightarrow\text{Writer}^{W,A}$.
-Knowing only a lift function $p:\text{Writer}^{W,A}\rightarrow P^{A}$,
-one cannot transform \lstinline!clear! into a function of type $P^{A}\rightarrow P^{A}$
-with an arbitrary monad stack $P$.
+Knowing only a lift function $p:\text{Writer}^{W,A}\rightarrow P^{A}$
+is not sufficient for transforming \lstinline!clear! into a function
+of type $P^{A}\rightarrow P^{A}$.
 
 Lifting \lstinline!clear! to a given monad stack $P$ (say, $P=\,$\lstinline!State!$\varangle$\lstinline!Writer!
-or $P=\,$\lstinline!Writer!$\varangle$\lstinline!Cont!), requires
+or $P=\,$\lstinline!Writer!$\varangle$\lstinline!Cont!) requires
 custom code. Let us see how to write that code. For the stack $P=\,$\lstinline!State!$\varangle$\lstinline!Writer!,
 we need to implement a function $\text{clear}_{P}$ of type $P^{A}\rightarrow P^{A}$
 given a function \lstinline!clear! with type signature
@@ -1970,36 +1949,35 @@ the code for $\text{clear}_{P}$ is
 \[
 \text{clear}_{P}:\left(S\rightarrow W\times A\times S\right)\rightarrow S\rightarrow W\times A\times S\quad,\quad\quad\text{clear}_{P}\triangleq p^{:S\rightarrow W\times A\times S}\rightarrow p\bef(\text{clear}\boxtimes\text{id}^{S})\quad.
 \]
-For the stack $P=\,$\lstinline!Writer!$\varangle$\lstinline!Cont!:
+For the stack $P=\,$\lstinline!Writer!$\varangle$\lstinline!Cont!,
+or more verbosely:
 \[
 P^{A}\triangleq T_{\text{Writer}}^{\text{Cont},A}=(W\times A\rightarrow R)\rightarrow R\quad,
 \]
-the lifted operation $\text{clear}_{P}$ is implemented as
-\begin{align*}
- & \text{clear}_{P}:\left((W\times A\rightarrow R)\rightarrow R\right)\rightarrow(W\times A\rightarrow R)\rightarrow R\quad,\\
- & \text{clear}_{P}\triangleq p^{:(W\times A\rightarrow R)\rightarrow R}\rightarrow q^{:W\times A\rightarrow R}\rightarrow p(\text{clear}\bef q)\quad.
-\end{align*}
+the lifted operation $\text{clear}_{P}$ of type $\left((W\times A\rightarrow R)\rightarrow R\right)\rightarrow(W\times A\rightarrow R)\rightarrow R$
+is implemented as
+\[
+\text{clear}_{P}\triangleq p^{:(W\times A\rightarrow R)\rightarrow R}\rightarrow q^{:W\times A\rightarrow R}\rightarrow p(\text{clear}\bef q)\quad.
+\]
 
 These examples show that lifting an operation to a specific monad
-transformer will require custom code adapted to a given combination
-of monads and operations. So, the length of required custom code is
+transformer will require custom code adapted to every combination
+of a monad and an operation. The length of required custom code is
 quadratic in the number of supported monads and linear in the number
 of operations.
 
 The third problem is the large number of typeclass instances that
-the libraries need to maintain. As we have seen in the example with
+MTL libraries need to maintain. As we have seen in the example with
 \lstinline!StateMonadOps!, just two implicit functions per monad
 type are in principle sufficient to define the operation typeclasses
 for all monad stacks. This would make the number of typeclass instances
-linear in the number of supported monads. However, for reasons of
-run-time efficiency, libraries sometimes provide typeclass instances
-for many specific combination of monads (say, \lstinline!Reader!
-with \lstinline!State!, \lstinline!Either! with \lstinline!Reader!,
-and so on). This makes the required number of typeclass instances
-quadratic in the number of supported monads. For this reason, libraries
-such as \texttt{cats-mtl} support only a limited number of most frequently
-used monads. Adding a new monad to \texttt{cats-mtl} would require
-adding a large number of new typeclass implementations.
+linear in the number of supported monads. However, to make the code
+run faster, libraries provide typeclass instances for every combination
+of monads (say, \lstinline!Reader! with \lstinline!State!, \lstinline!Either!
+with \lstinline!Reader!, and so on). This makes the required number
+of typeclass instances quadratic in the number of supported monads.
+Adding a new monad to an MTL library requires adding many new typeclass
+instances.
 
 For these reasons, MTL libraries usually support only a limited number
 of monads and operations.
@@ -2013,8 +1991,8 @@ of other monads. Our next goal is to derive the properties required
 for the new monad to work well in practice. So, let us look at the
 programmer\textsf{'}s intuitions about monadic programs written using transformers.
 
-To be specific, assume that we have combined the monads $L$ and $M$
-into a transformed monad $T\triangleq L\varangle M$$\triangleq T_{L}^{M}$
+To be specific, assume that we have combined two monads $L$ and $M$
+into a transformed monad $T\triangleq L\varangle M\triangleq T_{L}^{M}$
 and defined the necessary lifts, $\text{up}_{L}:L^{A}\rightarrow T^{A}$
 and $\text{up}_{M}:M^{A}\rightarrow T^{A}$. After these definitions,
 a programmer should be able to write functor blocks with lifted values
@@ -2184,7 +2162,7 @@ write the equation
 (\text{pu}_{L}\bef\text{blift})=(\text{pu}_{L}\bef\text{blift})\diamond_{_{T}}\text{pu}_{T}=\text{pu}_{T}\quad.
 \]
 So, the first two laws are equivalent to a single\index{identity laws!of monad transformer\textsf{'}s lift}
-\textbf{identity law}, 
+\textbf{identity law}:
 \[
 \text{pu}_{L}\bef\text{blift}=\text{pu}_{T}\quad.
 \]
@@ -2193,32 +2171,45 @@ The third law says that the post-composition with \lstinline!blift!
 will map a Kleisli composition in $L$ to a Kleisli composition in
 $T$. This is the \textbf{composition law}\index{composition law!of monad transformer\textsf{'}s lift}
 of lifts. This law is sometimes easier to verify when expressed through
-\lstinline!flatten!, although this formulation of the law is less
-visually clear:
+\lstinline!flatten!, although the formulation of the law becomes
+less visually clear:
+
+\begin{wrapfigure}{l}{0.3\columnwidth}%
+\vspace{-1.65\baselineskip}
+\[
+\xymatrix{\xyScaleY{1.6pc}\xyScaleX{2.0pc}L^{L^{A}}\ar[d]\sb(0.45){\text{ftn}_{L}}\ar[r]\sb(0.5){\text{blift}} & T^{L^{A}}\ar[r]\sb(0.5){\text{blift}^{\uparrow T}} & T^{T^{A}}\ar[d]\sp(0.45){\text{ftn}_{T}}\\
+L^{A}\ar[rr]\sp(0.5){\text{blift}} &  & T^{A}
+}
+\]
+
+\vspace{0.2\baselineskip}
+\end{wrapfigure}%
+
+~\vspace{-0.35\baselineskip}
 \[
 \text{blift}\bef\text{blift}^{\uparrow T}\bef\text{ftn}_{T}=\text{ftn}_{L}\bef\text{blift}\quad.
 \]
 
-The function \lstinline!blift! maps values $L^{A}$ to $T_{L}^{M,A}$,
-and the identity and composition law enforce its compatibility with
-the monad methods of $L$ and $T_{L}^{M}$. Laws of this form were
-introduced in Section~\ref{subsec:Monads-in-category-theory-monad-morphisms}
-where we considered general monad morphisms $\phi:M\leadsto N$ between
-two monads $M$ and $N$. So, we have now shown that the expected
-properties of functor blocks are equivalent to the requirement that
-\lstinline!blift! should be a monad morphism $L\leadsto T_{L}^{M}$.
+\noindent The identity and composition law enforce a certain compatibility
+of \lstinline!blift! with the monad methods of $L$ and $T_{L}^{M}$.
+Laws of this form were introduced in Section~\ref{subsec:Monads-in-category-theory-monad-morphisms}
+where we considered monad morphisms\index{monad morphisms} $\phi:M\leadsto N$
+between two monads $M$ and $N$. So, we have now shown that the expected
+properties of \lstinline!blift! in functor blocks are equivalent
+to the requirement that \lstinline!blift! should be a monad morphism
+of type $L\leadsto T_{L}^{M}$.
 
 Since we expect to be able to use the monads $L$ and $M$ equally
 well within a functor block, the same refactorings must be possible
 with values of type $M$ instead of $L$. Thus, the laws of monad
 morphisms must hold also for the foreign lift function ($\text{flift}_{L}:M\leadsto T_{L}^{M}$).
 
-Since monad morphisms are automatically natural transformations (Statement~\ref{subsec:Statement-flatMap-formulation-of-monad-morphism}),
-both lifts also obey the corresponding naturality laws. The naturality
-laws can be also motivated by considering functor blocks where a source
-line with a lift occurs next to a non-source line. We will omit the
-details, keeping in mind that naturality laws always hold for fully
-parametric code.
+Since monad morphisms are natural transformations (Statement~\ref{subsec:Statement-flatMap-formulation-of-monad-morphism}),
+both \lstinline!blift! and \lstinline!flift! obey the corresponding
+naturality laws. The naturality laws can be also motivated by considering
+functor blocks where a source line with a lift occurs next to a non-source
+line. We will omit the details, keeping in mind that naturality laws
+always hold for fully parametric code.
 
 \subsection{Motivation for the laws of runners}
 
@@ -2229,7 +2220,7 @@ of monad morphisms (see Definition~\ref{subsec:Definition-monad-morphism});
 a runner $\theta_{M}$ must be a monad morphism $M\leadsto\text{Id}$
 between $M$ and the identity monad ($\text{Id}$). Heuristically,
 a runner \textsf{``}executes\textsf{''} or \textsf{``}runs\textsf{''} the effects of the monad $M$
-and delivers a pure value as a result.
+and delivers an effect-free value as a result.
 
 How can we extract the result values from a monad stack that combines
 the effects of several monads? Let us try to create a runner $\theta_{T}:T_{L}^{M,A}\rightarrow A$
@@ -2243,8 +2234,8 @@ $\theta_{M}^{\uparrow L}$,
 \[
 \theta_{M}^{\uparrow L}:L^{M^{A}}\rightarrow L^{A}\quad.
 \]
-The result of type $A$ can be now extracted by using $L$\textsf{'}s runner.
-So, we may write
+A result value of type $A$ can be now extracted by using $L$\textsf{'}s runner.
+So, we may express $\theta_{T}$ as
 \[
 \theta_{T}\triangleq\theta_{M}^{\uparrow L}\bef\theta_{L}\quad.
 \]
@@ -2254,9 +2245,9 @@ by the (assumed) naturality of $\theta_{L}$. So, the runners commute.
 This is intuitively to be expected because the two runners work on
 different effects that are separately present in a value of type $T_{L}^{M}$.
 
-A similar situation occurs for pass/fail monads $L$ that have composed-inside
-transformers $T_{L}^{M}=M\circ L$. We may run just the effects of
-one of the monads, or both if needed; the runners commute.
+A similar situation occurs for pass/fail monads that have composed-inside
+transformers. We may run the effects of only one of the monads, or
+both if needed; the runners commute.
 
 Now consider a non-compositional transformer such as \lstinline!StateT!:
 \[
@@ -2264,17 +2255,18 @@ T_{\text{State}}^{M,A}=S\rightarrow M^{A\times S}\quad.
 \]
 In this case, we cannot run the effects of \lstinline!State! using
 $\theta_{\text{State}}$ or the effects of $M$ using $\theta_{M}^{\uparrow\text{State}}$:
-the types do not match.
+the types do not match. Compare the types of \lstinline!brun!, \lstinline!frun!,
+$\theta_{\text{State}}$, and $\theta_{M}^{\uparrow\text{State}}$:
 \begin{align*}
- & \text{frun}:T_{\text{State}}^{M,A}\rightarrow M^{A}=(S\rightarrow M^{A\times S})\rightarrow M^{A}\quad\quad\text{vs.}\quad\theta_{\text{State}}:\left(S\rightarrow A\times S\right)\rightarrow A\quad,\\
- & \text{brun}:T_{\text{State}}^{M,A}\rightarrow\text{State}^{S,A}=(S\rightarrow M^{A\times S})\rightarrow S\rightarrow A\times S\quad\quad\text{vs.}\quad\theta_{M}^{\uparrow\text{State}}:(S\rightarrow M^{A}\times S)\rightarrow S\rightarrow A\times S\quad.
+ & \text{brun}:T_{\text{State}}^{M,A}\rightarrow M^{A}=(S\rightarrow M^{A\times S})\rightarrow M^{A}\quad\quad\text{vs.}\quad\theta_{\text{State}}:\left(S\rightarrow A\times S\right)\rightarrow A\quad,\\
+ & \text{frun}:T_{\text{State}}^{M,A}\rightarrow\text{State}^{S,A}=(S\rightarrow M^{A\times S})\rightarrow S\rightarrow A\times S\quad\quad\text{vs.}\quad\theta_{M}^{\uparrow\text{State}}:(S\rightarrow M^{A}\times S)\rightarrow S\rightarrow A\times S\quad.
 \end{align*}
 We need to use new runners specially adapted to \lstinline!StateT!,
 as shown in Section~\ref{subsec:Monad-transformers-for-standard-monads}.
 The foreign runner (\lstinline!frun!) is a function of $\theta_{M}$
 and works for all foreign monads $M$. The base runner \lstinline!brun!,
 however, is not a function of $\theta_{\text{State}}$ but has custom
-code. The commutativity of runners,
+code. So, the commutativity of runners,
 \[
 \text{frun}_{\text{State}}(\theta_{M})\bef\theta_{\text{State}}(i)\overset{?}{=}\text{brun}_{\text{State}}(i)\bef\theta_{M}\quad,
 \]
@@ -2307,7 +2299,7 @@ target monads $N$. A monad morphism $M\leadsto N$ may partially
 run the effects of $M$ and represent the results using $N$\textsf{'}s effects.
 For instance, the continuation monad can be mapped to a task monad
 such as \lstinline!Future!; the \lstinline!Option! monad can be
-mapped to the \lstinline!Either! monad. 
+mapped to an \lstinline!Either! monad. 
 
 When a foreign monad $M$ requires a runner of the form $\phi:M\leadsto N$
 with a nontrivial target $N\not\cong\text{Id}$, we would like to
@@ -2339,9 +2331,9 @@ base runner as
 \]
 
 Apart from the laws of monad morphisms, do we need additional properties
-for all these runners? For intuition, recall the example with the
-continuation monad\textsf{'}s runner (Section~\ref{subsec:The-continuation-monad})
-that works by first converting \lstinline!Cont! $\leadsto$ \lstinline!Future!
+for all the runners? For intuition, recall the example with the continuation
+monad\textsf{'}s runner (Section~\ref{subsec:The-continuation-monad}) that
+works by first mapping \lstinline!Cont! $\leadsto$ \lstinline!Future!
 and then \lstinline!Future! $\leadsto$ \lstinline!Id!. Denote the
 two runners by
 \[
@@ -2398,7 +2390,7 @@ must be created from a value $a^{:A}$ via $\text{pu}_{L}$. The only
 way to obtain a value $a^{:A}$ is by applying a runner $\theta_{M}$
 to the value $m:M^{A}$. So, we derived the \textsf{``}purity\textsf{''} law:
 \[
-m\triangleright\text{flift}_{L}\triangleright\text{frun}_{L}(\theta_{M})=m\triangleright\theta_{M}\triangleright\text{pu}_{L}\quad,\quad\quad\text{flift}_{L}\bef\text{frun}_{L}(\theta_{M})=\theta_{M}\bef\text{pu}_{L}\quad.
+m\triangleright\text{flift}_{L}\triangleright\text{frun}_{L}(\theta_{M})=m\triangleright\theta_{M}\triangleright\text{pu}_{L}\quad,\quad\text{or equivalently:}\quad\quad\text{flift}_{L}\bef\text{frun}_{L}(\theta_{M})=\theta_{M}\bef\text{pu}_{L}\quad.
 \]
 
 The analogous purity law\index{purity laws!of monad transformer runners}
@@ -2411,10 +2403,10 @@ In the second case, we lift a foreign value $m:M^{A}$ to the stack,
 obtaining a value $t\triangleq\text{flift}\left(m\right)$, and then
 apply the \emph{base} runner to $t$ (running just the effects of
 $L$). This yields a monad morphism $M^{A}\rightarrow M^{A}$. We
-expect this morphism to be an identity function\footnote{It is unknown whether there exist non-identity monad morphisms $M^{A}\rightarrow M^{A}$
-that work for all monads $M$. See Problem~\ref{par:Problem-identity-natural-monad-morphism}.} because the monad $M$ is arbitrary, and the code of \lstinline!flift!
-and \lstinline!brun! must be generic in $M$. This requirement is
-written as the law
+expect this morphism to be an identity function\footnote{Is there a non-identity monad morphism of type $M^{A}\rightarrow M^{A}$
+that is parametric in the monad $M$? See Problem~\ref{par:Problem-identity-natural-monad-morphism}.} because the monad $M$ is arbitrary, and the code of \lstinline!flift!
+and \lstinline!brun! must be parametric in $M$. This requirement
+is written as the law
 \[
 m\triangleright\text{flift}\triangleright\text{brun}\overset{!}{=}m\quad,\quad\text{or equivalently:}\quad\quad\text{flift}\bef\text{brun}\overset{!}{=}\text{id}\quad,
 \]
@@ -2431,7 +2423,7 @@ is
 \subsection{Category-theoretic properties of lifts and runners\label{subsec:Category-theoretic-properties-of-lifts-and-runners-functors-in-category-of-monads}}
 
 We have derived many laws of lifts and runners from heuristic considerations.
-Let us turn to category theory for guidance about creating a simplified
+Let us turn to category theory for guidance about obtaining a simplified
 and coherent picture of those laws.
 
 The composition law~(\ref{eq:composition-law-of-frun}) suggests
@@ -2450,10 +2442,10 @@ as $T_{L}^{M}$, $T_{L}^{N}$, etc.).
 
 So, let us consider the category of monad stacks with a fixed base
 monad $L$. The objects of that category are all monad stacks $T_{L}^{M}$,
-$T_{L}^{N}$, etc., all with the same base monad $L$. The morphisms
-of that category are all monad morphisms between those monad stacks.
-(Since monad stacks are themselves monads, the category of monad stacks
-is a sub-category of the category of monads\index{monads!category of}.) 
+$T_{L}^{N}$, etc., with the same base monad. The morphisms of that
+category are all monad morphisms between those monad stacks. (Since
+monad stacks are themselves monads, the category of monad stacks with
+base $L$ is a sub-category of the category of monads\index{monads!category of}.) 
 
 We can now observe that \lstinline!frun! plays the role of the \lstinline!map!
 function for a (categorical) functor from the category of monads to
@@ -2481,7 +2473,7 @@ a monad morphism $T_{L}^{M}\leadsto T_{L}^{N}$ as $\text{frun}_{L}\left(\phi\rig
 These monad morphisms can be drawn as a square diagram.\begin{wrapfigure}{l}{0.22\columnwidth}%
 \vspace{-1.65\baselineskip}
 \[
-\xymatrix{\xyScaleY{2.0pc}\xyScaleX{3.0pc}M^{A}\ar[d]\sb(0.45){\phi}\ar[r]\sp(0.5){\text{flift}} & T_{L}^{M,A}\ar[d]\sb(0.45){\text{frun}_{L}\left(\phi\right)}\\
+\xymatrix{\xyScaleY{1.6pc}\xyScaleX{2.1pc}M^{A}\ar[d]\sb(0.45){\phi}\ar[r]\sp(0.5){\text{flift}} & T_{L}^{M,A}\ar[d]\sp(0.45){\text{frun}_{L}(\phi)}\\
 N^{A}\ar[r]\sp(0.5){\text{flift}} & T_{L}^{N,A}
 }
 \]
@@ -2493,15 +2485,15 @@ naturality law} holds:
 \begin{equation}
 \text{flift}_{L}^{M,A}\bef\text{frun}_{L}(\phi^{:M^{A}\rightarrow N^{A}})=\phi\bef\text{flift}_{L}^{N,A}\quad.\label{eq:monadic-naturality-law-of-flift}
 \end{equation}
-Is it reasonable to require this law? To aid intuition, consider three
-special cases where the law is simplified, namely $M=\text{Id}$,
+Is it reasonable to require this law? To get some intuition, consider
+three special cases where the law is simplified, namely $M=\text{Id}$,
 $N=\text{Id}$, or $M=N$. 
 
 When $M=\text{Id}$, we must choose $\phi$ as the monad morphism
 $\phi\triangleq\text{pu}_{N}:\text{Id}\leadsto N$. (Exercise~\ref{subsec:Exercise-monad-transformer-extra-layer}
 shows that there are no other monad morphisms between $\text{Id}$
 and $N$.) The monad stack $T_{L}^{M}$ is simplified to $T_{L}^{\text{Id}}\cong L$.
-The function $\text{flift}_{L}^{M,A}$ has the type signature $\text{Id}^{A}\rightarrow T_{L}^{M,A}$,
+The function $\text{flift}_{L}^{M,A}$ has type signature $\text{Id}^{A}\rightarrow T_{L}^{M,A}$,
 which is the same as $A\rightarrow L^{A}$. For a general monad $L$,
 there is no other function of this type except $\text{pu}_{L}$; so,
 $\text{flift}_{L}^{\text{Id}}$ must be equal to $\text{pu}_{L}$.
@@ -2543,14 +2535,15 @@ So, we found that the law~(\ref{eq:monadic-naturality-law-of-flift})
 agrees with previously derived laws and, moreover, covers one of the
 laws of runners. The interpretation of the monadic naturality law
 becomes clear from viewing \lstinline!frun! as a lifting (\textsf{``}\lstinline!map!\textsf{''})
-corresponding to the functor $T_{L}$ in the category of monads. Denoting
-that lifting temporarily by $^{\uparrow T_{L}}$, we rewrite the law~(\ref{eq:monadic-naturality-law-of-flift})
+corresponding to the functor $T_{L}$. Denoting that lifting temporarily
+by $^{\uparrow T_{L}}$, we rewrite the law~(\ref{eq:monadic-naturality-law-of-flift})
 as
 \[
 \text{flift}\bef\phi^{\uparrow T_{L}}=\phi\bef\text{flift}\quad.
 \]
 This is a standard form of a naturality law if we view $\text{flift}^{M}:M\leadsto T_{L}^{M}$
-as a \emph{natural transformation} between the identity functor $\text{Id}^{M}\triangleq M$
+as a \index{natural transformation!in the category of monads}natural
+transformation between the identity functor $\text{Id}^{M}\triangleq M$
 (in the category of monads) to the functor $T_{L}^{\bullet}$, the
 monad transformer functor with the base monad $L$. The law expresses
 the property that the code of \lstinline!flift! works in the same
@@ -2600,30 +2593,32 @@ The monadic naturality law of \lstinline!frun! is equivalent to \lstinline!frun!
 composition law:\footnote{This is similar to the fact that the naturality law and the composition
 law are the same for \lstinline!fmap!.}
 \[
-\text{frun}_{L}(\phi^{:M\leadsto N})\bef\gunderline{\chi^{\uparrow T_{L}}}=\text{frun}_{L}(\phi)\bef\text{frun}_{L}(\chi)=\text{frun}_{L}(\phi\bef\chi)\quad.
+\text{frun}_{L}(\phi^{:M\leadsto N})\bef\chi^{\uparrow T_{L}}=\text{frun}_{L}(\phi)\bef\text{frun}_{L}(\chi)=\text{frun}_{L}(\phi\bef\chi)\quad.
 \]
 
-To summarize, we are considering a functor $T_{L}$ in the category
-of monads, such that a natural transformation $\text{flift}_{L}:\text{Id}^{M}\leadsto T_{L}^{M}$
+Since the category of monad stacks is a sub-category of the category
+of monads, $T_{L}$ is an \emph{endofunctor}\index{endofunctor!in the category of monads}
+in the category of monads, such that a natural transformation $\text{flift}_{L}:\text{Id}^{M}\leadsto T_{L}^{M}$
 exists (in the sense of the category of monads, i.e., parametric in
-the monad $M$). 
+the monad $M$ and obeying the monad morphism laws). 
 
-Ordinary functors $F^{A}$ having a natural transformation $\text{pu}_{F}:\text{Id}^{A}\rightarrow F^{A}$
-are \emph{pointed} functors; those with a natural transformation $\text{ex}_{F}:F^{A}\rightarrow\text{Id}^{A}$
-are co-pointed. Naturality forces the non-degeneracy law $\text{pu}_{F}\bef\text{ex}_{F}=\text{id}$.
-So, by analogy, we see that the functor $T_{L}$ is pointed in the
-category of monads. If the transformer $T_{L}$ has a base runner,
-the functor $T_{L}$ will be also \emph{co-pointed}, with $\text{brun}_{L}:T_{L}^{\bullet}\leadsto\text{Id}^{\bullet}$
-being a natural transformation in the category of monads.
+Endofunctors $F^{A}$ having a natural transformation $\text{pu}_{F}:\text{Id}^{A}\rightarrow F^{A}$
+are \textsf{``}pointed\textsf{''}\index{pointed functor!in the category of monads};
+those with a natural transformation $\text{ex}_{F}:F^{A}\rightarrow\text{Id}^{A}$
+are \textsf{``}co-pointed\textsf{''}\index{co-pointed functor!in the category of monads}.
+Naturality forces the non-degeneracy law $\text{pu}_{F}\bef\text{ex}_{F}=\text{id}$.
+We find that $T_{L}$ is a pointed endofunctor in the category of
+monads. If the transformer $T_{L}$ has a base runner ($\text{brun}_{L}:T_{L}^{M}\leadsto\text{Id}^{M}$)
+then $T_{L}$ will be also co-pointed.
 
 It is remarkable that all the laws of monad transformers can be derived
 from a single (but more abstract) definition: a monad transformer
-$T$ is an arbitrary pointed and co-pointed functor in the category
-of monads. Such a functor $T$ maps monads $M$, $N$, etc., to monads
-$T^{M}$, $T^{N}$, etc. Suppose we were given such a functor $T$,
-but were not told that it is a monad transformer for some base monad.
-Still, we can \emph{compute} the base monad $L$ as the image of the
-identity monad under $T$:
+$T$ is \emph{just a pointed and co-pointed endofunctor in the category
+of monads}.\footnote{\textsf{``}\emph{What\textsf{'}s the problem?}\textsf{''} as the joke would go.}
+Such a endofunctor $T$ maps monads $M$, $N$, etc., to monads $T^{M}$,
+$T^{N}$, etc. Suppose we were given such a $T$ but were not told
+that it is a monad transformer for some base monad. Still, we can
+recover its base monad $L$ as the image of the identity monad:
 \[
 L\triangleq T^{\text{Id}}\quad.
 \]
@@ -2633,7 +2628,7 @@ The definition of $T$ already specifies functions \lstinline!flift!,
 \text{flift}_{T}^{M}:\text{Id}^{M}\leadsto T^{M}\quad,\quad\quad\text{brun}_{T}^{M}:T^{M}\leadsto\text{Id}^{M}\quad,\quad\quad\text{frun}_{T}^{M,N}:(M\leadsto N)\rightarrow T^{M}\leadsto T^{N}\quad.
 \]
 The functor laws and the monadic naturality laws for those transformations
-will then enforce all 18 laws of monad transformers. In this way,
+will then enforce the 18 laws of monad transformers. In this way,
 a single definition expresses all monad transformer laws.
 
 \paragraph{The non-degeneracy law of \texttt{brun}}
@@ -2647,8 +2642,8 @@ any category, including the category of monads. So, the composition
 $\text{Id}^{\bullet}\leadsto\text{Id}^{\bullet}$; but it is a natural
 transformation \emph{in the category of monads} (rather than in the
 category of all functors). To show that this natural transformation
-must be equal to an identity function, we need to prove that there
-exist no other natural transformations between identity functors in
+is equal to an identity function, we would need to prove that there
+are no other natural transformations between identity functors in
 the category of monads.
 
 A natural transformation of type $\text{Id}^{\bullet}\leadsto\text{Id}^{\bullet}$
@@ -2662,26 +2657,27 @@ shows a failed attempt to define such a monad morphism.
 
 Since we have not shown that the non-degeneracy law for base runners
 automatically follows from monadic naturality, we will need to verify
-that law separately whenever the base runner exists (which is not
-the case for all base monads $L$).
+that law separately whenever the base runner exists.
 
 \subsection{Summary of the laws of monad transformers\label{subsec:Laws-of-monad-transformers}}
 
-We can now propose a formal definition: A \textbf{monad transformer}\index{monad transformers!formal definition}
-$T_{L}^{M,A}$ is a functor with a type parameter $A$ and a monad
-parameter $M$, such that the following laws hold:
+We have found that a \textbf{monad transformer}\index{monad transformers!full definition}
+\textbf{for a base monad} $L$ is a type constructor $T_{L}^{M,A}$
+with a type parameter $A$ and a monad parameter $M$, such that the
+following laws hold:
 \begin{enumerate}
 \item \textbf{Monad construction law}: $T_{L}^{M,\bullet}$ is a lawful
 monad for any monad $M$.\index{monad transformers!monad construction law}
-In other words, the transformed monad $T_{L}^{M,\bullet}$ has methods
-$\text{pu}_{T}$ and $\text{ftn}_{T}$ that satisfy the monad laws.
+(The functor $T_{L}^{M,\bullet}$ has methods $\text{pu}_{T}$ and
+$\text{ftn}_{T}$ that satisfy the monad laws.)
 \item \textbf{Identity law}s:\index{monad transformers!identity law} $T_{L}^{\text{Id},\bullet}\cong L^{\bullet}$
-via a monad isomorphism, where $\text{Id}$ is the identity monad,
-$\text{Id}^{A}\triangleq A$.
+via a monad isomorphism, where $\text{Id}$ is the identity monad
+($\text{Id}^{A}\triangleq A$).
 \item \textbf{Lifting law}s:\index{monad transformers!lifting law} There
 is a function $\text{flift}_{L}:M^{A}\rightarrow T_{L}^{M,A}$ (in
 a shorter notation, $\text{flift}_{L}:M\leadsto T_{L}^{M}$) that
-works for any monad $M$ and obeys the laws of monad morphisms.
+works parametrically in the monad $M$ and obeys the laws of monad
+morphisms.
 \item \textbf{Runner laws}:\index{monad transformers!runner laws} There
 is a \textsf{``}foreign runner\textsf{''}\footnote{This function is called \lstinline!hoist! in Haskell standard libraries
 and in \texttt{scalaz}.} $\text{frun}\left(\phi\right)$ such that for any monads $M$, $N$
@@ -2693,13 +2689,13 @@ the corresponding \textbf{functor laws}\index{monad transformers!functor laws of
 \text{frun}\left(\text{id}\right)=\text{id}\quad,\quad\quad\text{frun}\left(\phi\right)\bef\text{frun}\left(\chi\right)=\text{frun}\left(\phi\bef\chi\right)\quad.
 \]
 It follows from the identity law $T_{L}^{\text{Id}}\cong L$ that
-the base monad $L$ can be lifted into $T_{L}^{M}$: Setting $\phi=\text{pu}_{M}:\text{Id}\leadsto M$,
-we obtain
+the base monad $L$ can be lifted into $T_{L}^{M}$. Namely, by computing
+$\text{frun}\left(\phi\right)$ with $\phi\triangleq\text{pu}_{M}:\text{Id}\leadsto M$,
+we obtain a function called the \index{monad transformers!base lift}\textbf{base
+lift} (\lstinline!blift!):
 \[
-\text{frun}\,(\text{pu}_{M}):T_{L}^{\text{Id}}\leadsto T_{L}^{M}=L\leadsto T_{L}^{M}.
+\text{blift}:T_{L}^{\text{Id}}\leadsto T_{L}^{M}\cong L\leadsto T_{L}^{M}\quad,\quad\quad\text{blift}\triangleq\text{frun}\,(\text{pu}_{M})\quad.
 \]
-This function is called the \index{monad transformers!base lift}\textbf{base
-lift}, $\text{blift}\triangleq\text{frun}\,(\text{pu}_{M}):L^{A}\rightarrow T_{L}^{M,A}$.
 The base lift automatically satisfies the non-degeneracy law,
 \[
 \text{blift}\bef\text{frun}\,(\phi^{:M\leadsto\text{Id}})=\text{id}\quad,
@@ -2708,16 +2704,16 @@ for any monad morphism $\phi:M\leadsto\text{Id}$, because the left-hand
 side equals $\text{frun}\,(\text{pu}_{M}\bef\phi)$, and the composition
 law for monad morphisms gives $\text{pu}_{M}\bef\phi=\text{pu}_{\text{Id}}=\text{id}$.
 \item \textbf{Base runner laws}:\index{monad transformers!base runner laws}
-There is a \textbf{base runner}, $\text{brun}:T_{L}^{M}\leadsto M$,
-must be defined for any monad $M$. The base runner must also satisfy
-the \textbf{non-degeneracy law},\index{monad transformers!non-degeneracy law}
+There is a \textbf{base runner}, a monad morphism $\text{brun}_{L}^{M}:T_{L}^{M}\leadsto M$
+defined parametrically in the monad $M$. The base runner must also
+satisfy the \textbf{non-degeneracy law},\index{monad transformers!non-degeneracy law}
 \[
-\text{flift}\bef\text{brun}=\text{id}\quad.
+\text{flift}_{L}^{M}\bef\text{brun}_{L}^{M}=\text{id}\quad.
 \]
-Since the monad transformer is specific to the base monad $L$ and
-does not support an arbitrary other base monad, there are in general
-no functor laws for \lstinline!brun!, unlike \lstinline!frun!. Some
-monads have a general base runner, $\text{brun}\,(\theta_{L})$, parameterized
+Since monad transformers are specific to their base monad and do not
+support a transition to another base monad, there are no functor laws
+for \lstinline!brun!, unlike \lstinline!frun!. Some monads have
+a general base runner, $\text{brun}\,(\theta_{L})$, parameterized
 by an arbitrary runner $\theta_{L}:L\leadsto\text{Id}$. If so, the
 function $\text{brun}\,(\theta_{L})$ must obey the base runner laws
 for any fixed $\theta_{L}$.
@@ -2730,7 +2726,7 @@ For an arbitrary monad morphism $\phi:M\leadsto N$,
 {\color{greenunder}\text{monadic naturality of }\text{brun}:}\quad & \text{brun}^{M}\bef\phi^{:M\leadsto N}=\text{frun}\,(\phi^{:M\leadsto N})\bef\text{brun}^{N}\quad.
 \end{align*}
 \end{enumerate}
-In total, we find 18 laws for monad transformers. Are all these laws
+In total, we found 18 laws for monad transformers. Are all these laws
 necessary? 
 
 The main use of the laws is to verify correctness of the code. The
@@ -2748,18 +2744,16 @@ not work correctly.
 
 The simplest example of an invalid monad transformer is obtained by
 defining the new monad to be the unit monad ($T_{L}^{M,A}\triangleq\bbnum 1$)
-for any monads $L$ and $M$. This \textsf{``}transformer\textsf{''} is useless: it
-cannot possibly describe the effects of $L$ and $M$, because the
-methods of the unit monad discard \emph{all} information and return
-$1$. However, the type constructor $T_{L}^{M,A}$ has all the required
-methods $\text{pu}_{T}$, $\text{ftn}_{T}$, $\text{flift}_{L}$,
-$\text{frun}_{L}$, and $\text{brun}_{L}$ (they are constant functions
-returning $1$). All these functions are automatically monad morphisms,
-since a function from any monad to the unit monad is always a monad
-morphism. So, the fake \textsf{``}transformer\textsf{''} actually satisfies many of
-the monad transformer laws! However, the identity law $T_{L}^{\text{Id}}\cong L$
-and the non-degeneracy law ($\text{flift}\bef\text{brun}=\text{id}$)
-are violated since $T_{L}^{\text{Id}}=\bbnum 1\not\cong L$ and $\text{flift}\bef\text{brun}=\left(\_\rightarrow1\right)\neq\text{id}$.
+for any monads $L$ and $M$. This \textsf{``}fake transformer\textsf{''} cannot possibly
+describe the effects of $L$ and $M$, because the methods of the
+unit monad discard \emph{all} information and return $1$. However,
+the type constructor $T_{L}^{M,A}$ has the required methods $\text{pu}_{T}$,
+$\text{ftn}_{T}$, $\text{flift}_{L}$, and $\text{frun}_{L}$ (they
+are constant functions returning $1$). All these functions are automatically
+monad morphisms, since a function from any monad to the unit monad
+is always a monad morphism. So, the \textsf{``}fake transformer\textsf{''} actually
+satisfies many of the monad transformer laws! However, the identity
+law $T_{L}^{\text{Id}}\cong L$ is violated since $T_{L}^{\text{Id}}=\bbnum 1\not\cong L$.
 For this reason, $T_{L}^{M,A}\triangleq\bbnum 1$ is not a lawful
 monad transformer.
 
@@ -2769,10 +2763,10 @@ laws are $T_{L}^{M}\triangleq L$ (no lifting law) and $T_{L}^{M}\triangleq M$
 
 These examples demonstrate the importance of the monad transformer
 laws. A wrong implementation of a \textsf{``}transformer\textsf{''} could fail to
-represent properly the effects of the monads, even though all the
-required methods with the correct type signatures are provided. The
-only way for us to detect the problem is to establish a violation
-of some of the required laws.
+represent properly the effects of the monads, even though the transformer\textsf{'}s
+methods with the correct type signatures are provided. The only way
+for us to detect the problem is to establish a violation of some of
+the required laws.
 
 In these cases, it is intuitively clear that the transformer definitions
 are incorrect because the information about either $L$ or $M$ is
@@ -2783,12 +2777,11 @@ the monad transformer laws, as the next subsection shows.
 
 \subsection{Examples of failure to define a generic monad transformer}
 
-One would hope to discover a type construction that works in the same
-way for all monads $L$ and $M$ and faithfully represents the effects
-of both monads at once (i.e., satisfies the laws of monad transformers).
-We will now consider a few different ways of combining the type constructors
-$L$ and $M$. In all cases, we will find that some monad transformer
-laws are violated.
+No type construction is known that works in the same way for all monad
+pairs $L$, $M$ and correctly combines the effects of both monads
+(i.e., satisfies the laws of monad transformers). We will now consider
+a few different ways of combining the type constructors $L$ and $M$.
+In all cases, we will find that some monad transformer laws are violated.
 
 Simple ways of combining two type constructors $L^{\bullet}$ and
 $M^{\bullet}$ are functor composition ($L^{M^{\bullet}}$ or $M^{L^{\bullet}}$),
@@ -2814,7 +2807,7 @@ product $M_{1}^{A}\times M_{2}^{A}$ is a monad when $M_{1}$ and
 $M_{2}$ are themselves monads. However, the product $M_{1}^{A}\times M_{2}^{A}$
 describes two separate computations with two separate effects. Instead,
 we need a single computation with a combined effect. Formally, we
-find that there is no naturally defined $\text{flift}:M^{\bullet}\leadsto L^{\bullet}\times M^{\bullet}$
+find that there is no naturally defined $\text{flift}:M^{A}\rightarrow L^{A}\times M^{A}$
 because we cannot create values of type $L^{A}$ out of values of
 type $M^{A}$ when monads $L$ and $M$ are arbitrary.
 
@@ -2861,7 +2854,7 @@ identities
 \[
 L^{A}\cong\exists P.\,L^{P}\times\left(P\rightarrow A\right)\quad,\quad\quad M^{A}\cong\exists Q.\,M^{Q}\times\left(Q\rightarrow A\right)\quad.
 \]
-The functor product $L\times M$ is equivalent to $\exists P.\,\exists Q.\,L^{P}\times M^{Q}\times\left(P+Q\rightarrow A\right)$:
+The functor product $L^{A}\times M^{A}$ is equivalent to $\exists P.\,\exists Q.\,L^{P}\times M^{Q}\times\left(P+Q\rightarrow A\right)$:
 \begin{align}
  & L^{A}\times M^{A}\nonumber \\
 {\color{greenunder}\text{co-Yoneda identities for }L^{A}\text{ and }M^{A}:}\quad & \cong\exists P.\,L^{P}\times\gunderline{\left(P\rightarrow A\right)}\times\exists Q.\,M^{Q}\times\gunderline{\left(Q\rightarrow A\right)}\nonumber \\
@@ -2871,25 +2864,24 @@ where we used the type equivalence
 \begin{equation}
 \left(P\rightarrow A\right)\times\left(Q\rightarrow A\right)\cong P+Q\rightarrow A\quad.\label{eq:equivalence-pq-a-for-monoidal-convolution}
 \end{equation}
-If we (arbitrarily) replace $P+Q\rightarrow A$ by $P\times Q\rightarrow A$
-in Eq.~(\ref{eq:product-l-m-for-monoidal-convolution}), we will
-obtain Eq.~(\ref{eq:definition-of-monoidal-convolution}).
+If we (arbitrarily) replace $P+Q$ by $P\times Q$ in Eq.~(\ref{eq:product-l-m-for-monoidal-convolution}),
+we will obtain Eq.~(\ref{eq:definition-of-monoidal-convolution}).
 
 The Day convolution $L\star M$ is associative\footnote{\texttt{\href{https://en.wikipedia.org/wiki/Day_convolution}{https://en.wikipedia.org/wiki/Day\_convolution}}}
 and always produces a functor since Eq.~(\ref{eq:definition-of-monoidal-convolution})
 is covariant in $A$. A simple example where the Day convolution fails
 to produce a monad transformer is $L^{A}\triangleq1+A$ and $M^{A}\triangleq R\rightarrow A$.
-We compute the functor $L\star M$ and establish that it is not a
-monad:
+We compute the functor $L\star M$:
 \begin{align*}
  & \left(L\star M\right)^{A}\\
 {\color{greenunder}\text{definitions of }L,M,\star:}\quad & \cong\exists P.\,\exists Q.\,\gunderline{\left(P\times Q\rightarrow A\right)}\times\left(\bbnum 1+P\right)\times\left(R\rightarrow Q\right)\\
-{\color{greenunder}\text{curry the arguments, move quantifier}:}\quad & \cong\exists P.\left(\bbnum 1+P\right)\times\gunderline{\exists Q.\left(Q\rightarrow P\rightarrow A\right)\times\left(R\rightarrow Q\right)}\\
+{\color{greenunder}\text{curry the arguments, move a quantifier}:}\quad & \cong\exists P.\left(\bbnum 1+P\right)\times\gunderline{\exists Q.\left(Q\rightarrow P\rightarrow A\right)\times\left(R\rightarrow Q\right)}\\
 {\color{greenunder}\text{co-Yoneda identity with }\exists Q:}\quad & \cong\exists P.\left(\bbnum 1+P\right)\times\left(\gunderline{R\rightarrow P}\rightarrow A\right)\\
 {\color{greenunder}\text{swap curried arguments}:}\quad & \cong\exists P.\left(\bbnum 1+P\right)\times\left(P\rightarrow R\rightarrow A\right)\\
 {\color{greenunder}\text{co-Yoneda identity with }\exists P:}\quad & \cong\bbnum 1+\left(R\rightarrow A\right)\quad.
 \end{align*}
-This functor is not a monad (see Exercise~\ref{subsec:Exercise-1-monads-7}).
+This functor is not a monad (see Exercise~\ref{subsec:Exercise-1-monads-7}),
+so the monad construction law fails.
 
 The Day convolution works because the type-level operations $P+Q$
 and $P\times Q$ are both monoidal, in a suitable sense. We could
@@ -2900,7 +2892,7 @@ convolution\textsf{''} ($\star_{Z}$):
 \[
 \left(L\star_{Z}M\right)^{A}\triangleq\exists P.\:\exists Q.\,\left(P+Q+Z\times P\times Q\rightarrow A\right)\times L^{P}\times M^{Q}\quad.
 \]
-But this construction also fails to combine monads.
+But this construction also fails to produce a lawful monad transformer.
 
 \paragraph{Using a codensity monad}
 
@@ -2922,11 +2914,11 @@ F^{A}\triangleq\forall B.\,\big(A\rightarrow L^{M^{B}}\big)\rightarrow L^{M^{B}}
 does not support a lift $M^{A}\rightarrow F^{A}$. Intuitively, the
 reason is that we can use values of types $M^{A}$ and $A\rightarrow L^{M^{B}}$
 only in one way: using \lstinline!map! to transform $M^{A}$ into
-$M^{L^{M^{B}}}$. There is no way of exchanging the layers of $M$
-and $L$ when those monads are arbitrary, so we cannot obtain a value
-of type $L^{M^{B}}$. A simple formal counterexample is found with
-$L^{A}\triangleq\bbnum 1+A$ and $M^{A}\triangleq Z\rightarrow A$
-for a fixed type $Z$: the type signature
+$M^{L^{M^{B}}}$. We cannot exchange the layers of $M$ and $L$ when
+those monads are arbitrary, and so we cannot obtain a value of type
+$L^{M^{B}}$. A simple counterexample is found with $L^{A}\triangleq\bbnum 1+A$
+and $M^{A}\triangleq Z\rightarrow A$ for a fixed type $Z$: the type
+signature
 \[
 (Z\rightarrow A)\rightarrow(A\rightarrow\bbnum 1+(Z\rightarrow B))\rightarrow\bbnum 1+(Z\rightarrow B)
 \]
@@ -2945,7 +2937,7 @@ A counterexample is $L^{A}\triangleq S\rightarrow A$ and $M^{A}\triangleq R\righ
 for which the Yoneda identity gives:
 \begin{align*}
  & F^{A}=\forall B.\,(\gunderline{(R\rightarrow A)\rightarrow S}\rightarrow B)\rightarrow S\rightarrow B\cong\forall B.\,(\gunderline{(R\rightarrow A)\times S}\rightarrow B)\rightarrow L^{B}\\
- & \cong L^{(R\rightarrow A)\times S}=S\rightarrow S\times\left(R\rightarrow A\right)\quad.
+ & \cong L^{(R\rightarrow A)\times S}=S\rightarrow\left(R\rightarrow A\right)\times S\quad.
 \end{align*}
 The last type constructor is not a monad: it is a composition of the
 \lstinline!Reader! and \lstinline!State! monads in the wrong order
@@ -3029,8 +3021,8 @@ $G^{A}\triangleq T_{P}^{M,A}$.
 
 We need to show that $T_{P}^{T_{Q}^{M}}$ is a monad for any monad
 $M$. The monad construction law for $T_{Q}$ says that $T_{Q}^{M}$
-must be a monad. The monad construction law for $T_{P}$ says that
-$T_{P}^{S}$ is a monad for any monad $S$; in particular, for $S=T_{Q}^{M}$.
+is a monad. The monad construction law for $T_{P}$ says that $T_{P}^{S}$
+is a monad for any monad $S$; in particular, for $S=T_{Q}^{M}$.
 Therefore, $T_{P}^{S}=T_{P}^{T_{Q}^{M}}$ is a monad.
 
 \paragraph{Identity law}
@@ -3049,9 +3041,9 @@ we need to verify that
 \[
 \text{frun}_{P}\left(\phi\right)\bef\text{frun}_{P}\left(\chi\right)=\text{id}\quad,\quad\quad\text{frun}_{P}\left(\chi\right)\bef\text{frun}_{P}\left(\phi\right)=\text{id}\quad.
 \]
-By the runner law for $T_{P}$, we have $\text{frun}_{P}\left(f\right)\bef\text{frun}_{P}\left(g\right)=\text{frun}_{P}\left(f\bef g\right)$
-for any two monad morphisms $f$ and $g$. We also have $\text{frun}_{P}\left(\text{id}\right)=\text{id}$
-by the same law. So, 
+By the runner laws for $T_{P}$, we have $\text{frun}_{P}\left(\text{id}\right)=\text{id}$
+and $\text{frun}_{P}\left(f\right)\bef\text{frun}_{P}\left(g\right)=\text{frun}_{P}\left(f\bef g\right)$
+for any two monad morphisms $f$ and $g$. So, 
 \begin{align*}
 \text{frun}_{P}\left(\phi\right)\bef\text{frun}_{P}\left(\chi\right) & =\text{frun}_{P}\left(\phi\bef\chi\right)=\text{frun}_{P}\left(\text{id}\right)=\text{id}\quad,\\
 \text{frun}_{P}\left(\chi\right)\bef\text{frun}_{P}\left(\phi\right) & =\text{frun}_{P}\left(\chi\bef\phi\right)=\text{frun}_{P}\left(\text{id}\right)=\text{id}\quad.
@@ -3065,10 +3057,8 @@ We need to show that there exists a monad morphism $\text{flift}_{R}:M\leadsto T
 for any monad $M$. The lifting law for $T_{Q}$ gives a monad morphism
 $\text{flift}_{Q}:M\leadsto T_{Q}^{M}$. The lifting law for $T_{P}$
 can be applied to the monad $T_{Q}^{M}$, which gives a monad morphism
-\[
-\text{flift}_{P}:T_{Q}^{M}\leadsto T_{P}^{T_{Q}^{M}}\quad.
-\]
-The composition $\text{flift}_{R}\triangleq\text{flift}_{Q}\bef\text{flift}_{P}$
+$\text{flift}_{P}:T_{Q}^{M}\leadsto T_{P}^{T_{Q}^{M}}$. The composition
+$\text{flift}_{R}\triangleq\text{flift}_{Q}\bef\text{flift}_{P}$
 has the required type $M\leadsto T_{P}^{T_{Q}^{M}}$ and is a monad
 morphism by Statement~\ref{subsec:Statement-monadic-morphism-composition}.
 
@@ -3098,16 +3088,16 @@ are lawful liftings; we need to show that their composition is also
 a lawful lifting. To verify the identity law of lifting, apply $\text{flift}_{R}$
 to an identity function $\text{id}:M\leadsto M$,
 \begin{align*}
- & \text{frun}_{R}\left(\text{id}^{:M\leadsto M}\right)=\text{frun}_{P}\gunderline{\big(\text{frun}_{Q}(\text{id}^{:M\leadsto M})\big)}\\
-{\color{greenunder}\text{identity law for }\text{frun}_{Q}:}\quad & =\text{frun}_{P}\big(\text{id}^{:T_{Q}^{M}\leadsto T_{Q}^{M}}\big)\\
-{\color{greenunder}\text{identity law for }\text{frun}_{P}:}\quad & =\text{id}\quad.
+ & \text{frun}_{R}(\text{id}^{:M\leadsto M})=\text{frun}_{P}\gunderline{\big(\text{frun}_{Q}(\text{id}^{:M\leadsto M})\big)}\\
+{\color{greenunder}\text{identity law of }\text{frun}_{Q}:}\quad & =\text{frun}_{P}\big(\text{id}^{:T_{Q}^{M}\leadsto T_{Q}^{M}}\big)\\
+{\color{greenunder}\text{identity law of }\text{frun}_{P}:}\quad & =\text{id}\quad.
 \end{align*}
 To verify the composition law of lifting, apply $\text{frun}_{R}$
 to a composition of two monad morphisms $\phi:L\leadsto M$ and $\chi:M\leadsto N$,
 \begin{align*}
 \text{frun}_{R}\left(\phi\bef\chi\right) & =\text{frun}_{P}\gunderline{(\text{frun}_{Q}(\phi\bef\chi))}\\
-{\color{greenunder}\text{composition law for }\text{frun}_{Q}:}\quad & =\gunderline{\text{frun}_{P}}(\text{frun}_{Q}(\phi)\bef\text{frun}_{Q}(\chi))\\
-{\color{greenunder}\text{composition law for }\text{frun}_{P}:}\quad & =\gunderline{\text{frun}_{P}(\text{frun}_{Q}(\phi))}\bef\gunderline{\text{frun}_{P}(\text{frun}_{Q}(\phi))}\\
+{\color{greenunder}\text{composition law of }\text{frun}_{Q}:}\quad & =\gunderline{\text{frun}_{P}}(\text{frun}_{Q}(\phi)\bef\text{frun}_{Q}(\chi))\\
+{\color{greenunder}\text{composition law of }\text{frun}_{P}:}\quad & =\gunderline{\text{frun}_{P}(\text{frun}_{Q}(\phi))}\bef\gunderline{\text{frun}_{P}(\text{frun}_{Q}(\phi))}\\
 {\color{greenunder}\text{definition of }\text{frun}_{R}:}\quad & =\text{frun}_{R}(\phi)\bef\text{frun}_{R}(\chi)\quad.
 \end{align*}
 
@@ -3116,16 +3106,15 @@ to a composition of two monad morphisms $\phi:L\leadsto M$ and $\chi:M\leadsto N
 
 We need to show that for any monad morphism $\theta:T_{P}^{Q}\leadsto\text{Id}$
 and for any monad $M$, there exists a monad morphism $\text{brun}_{R}(\theta):T_{P}^{T_{Q}^{M}}\leadsto M$.
-To define this morphism for a given $\theta$, we clearly need to
-use the base runners for $T_{P}$ and $T_{Q}$. The base runner for
-$T_{Q}$ has the type signature
+To define this morphism for a given $\theta$, we will need to use
+the base runners for $T_{P}$ and $T_{Q}$. The base runner for $T_{Q}$
+has the type signature
 \[
-\text{brun}_{Q}:\left(Q\leadsto\text{Id}\right)\rightarrow T_{Q}^{M}\leadsto M\quad.
+\text{brun}_{Q}:\left(Q\leadsto\text{Id}\right)\rightarrow(T_{Q}^{M}\leadsto M)\quad.
 \]
-We can apply the base runner for $T_{P}$ to $T_{Q}^{M}$ as the foreign
-monad,
+We can apply the base runner for $T_{P}$ with the foreign monad $T_{Q}^{M}$,
 \[
-\text{brun}_{P}:\left(P\leadsto\text{Id}\right)\rightarrow T_{P}^{T_{Q}^{M}}\leadsto T_{Q}^{M}\quad.
+\text{brun}_{P}:\left(P\leadsto\text{Id}\right)\rightarrow\big(T_{P}^{T_{Q}^{M}}\leadsto T_{Q}^{M}\big)\quad.
 \]
 It is now clear that we could obtain a monad morphism $T_{P}^{T_{Q}^{M}}\leadsto M$
 if we had some monad morphisms $\phi:P\leadsto\text{Id}$ and $\chi:Q\leadsto\text{Id}$,
@@ -3154,12 +3143,12 @@ and $T_{Q}$, which are
 \[
 \text{flift}_{P}\bef\text{brun}_{P}(\chi^{:P\leadsto\text{Id}})=\text{id}\quad,\quad\quad\text{flift}_{Q}\bef\text{brun}_{Q}(\psi^{:Q\leadsto\text{Id}})=\text{id}\quad.
 \]
-Then we can write
+Then we can write:
 \begin{align*}
  & \gunderline{\text{flift}_{R}}\bef\gunderline{\text{brun}_{R}(\theta)}\\
 {\color{greenunder}\text{expand definitions}:}\quad & =\text{flift}_{Q}\bef\gunderline{\text{flift}_{P}\bef\text{brun}_{P}\left(\text{blift}_{P}\bef\theta\right)}\bef\text{brun}_{Q}\left(\text{flift}_{P}\bef\theta\right)\\
-{\color{greenunder}\text{non-degeneracy for }\text{brun}_{P}:}\quad & =\gunderline{\text{flift}_{Q}\bef\text{brun}_{Q}\left(\text{flift}_{P}\bef\theta\right)}\\
-{\color{greenunder}\text{non-degeneracy for }\text{brun}_{Q}:}\quad & =\text{id}\quad.
+{\color{greenunder}\text{non-degeneracy law of }\text{brun}_{P}:}\quad & =\gunderline{\text{flift}_{Q}\bef\text{brun}_{Q}\left(\text{flift}_{P}\bef\theta\right)}\\
+{\color{greenunder}\text{non-degeneracy law of }\text{brun}_{Q}:}\quad & =\text{id}\quad.
 \end{align*}
 
 
@@ -3170,7 +3159,7 @@ The monadic naturality law of $\text{flift}_{R}$ is
 \text{flift}_{R}\bef\text{frun}_{R}(\phi)=\phi\bef\text{flift}_{R}\quad.
 \]
 We have defined $\text{flift}_{R}\triangleq\text{flift}_{Q}\bef\text{flift}_{P}$,
-and we may assume that the monad naturality laws hold for $\text{flift}_{P}$
+and we may assume that the monadic naturality laws hold for $\text{flift}_{P}$
 and $\text{flift}_{Q}$. A composition of natural transformations
 is again a natural transformation; this holds for any category, including
 the category of monads. We can also verify this law directly:
