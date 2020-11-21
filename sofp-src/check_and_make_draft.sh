@@ -15,11 +15,15 @@ pagecounts=(3 17 42 34 24 49 43 12 63 54 63 10 6 23 137 3 5 6 3 6 6 3 5 17 1 2 1
 # cut out from here, including:
 draft_title_1="Applicative functors and"
 # to here, not including:
-draft_title_2="Applied functional type theory"
+draft_title_2="Computations in functor blocks. III."
 # and then cut out from here, including:
-draft_title_3="Inferring code from types with the LJT algorithm"
+draft_title_3="Summary and problems"
 # to here, not including:
-draft_title_4="D Parametricity theorem"
+draft_title_4="Applied functional type theory"
+# and then cut out from here, including:
+draft_title_5="Inferring code from types with the LJT algorithm"
+# to here, not including:
+draft_title_6="D Parametricity theorem"
 
 # Checking the page counts.
 
@@ -59,10 +63,10 @@ function create_draft {
 	local base="$1" output_pdf="$2"
 	"$pdftk" $name.pdf dump_data output $name.data
 	egrep -v 'Bookmark(Level|Begin)' $name.data|fgrep Bookmark|perl -e 'undef $/; while(<>){ s/\nBookmarkPageNumber/ BookmarkPageNumber/ig; print; }' | tee $name.chapters | \
-	egrep "($draft_title_1|$draft_title_2|$draft_title_3|$draft_title_4)" | egrep -o '[0-9]+$' | \
-		(read b1; read e1; read b2; read e2; \
-                 pdftk sofp.pdf cat 1-$((b1-1)) $e1-$((b2-1)) $e2-end output $output_pdf; \
-                 echo Draft page ranges 1-$((b1-1)) $e1-$((b2-1)) $e2-end )
+	egrep "($draft_title_1|$draft_title_2|$draft_title_3|$draft_title_4|$draft_title_5|$draft_title_6)" | egrep -o '[0-9]+$' | \
+		(read b1; read e1; read b2; read e2; read b3; read e3; pageranges="1-$((b1-1)) $e1-$((b2-1)) $e2-$((b3-1)) $e3-end"; \
+                 pdftk sofp.pdf cat $pageranges output $output_pdf; \
+                 echo Draft page ranges $pageranges )
 
 	# Check that the page number did not grow by mistake after wrong formatting.
 	local got_draft_pages=`pdfPages $output_pdf`
