@@ -9,6 +9,8 @@ name="sofp"
 draft="$name-draft"
 srcbase="sofp-src"
 
+export GS_OPTIONS="-dEmbedAllFonts=true -dPDFSETTINGS=/printer"
+
 # Set custom lyx directory if needed.
 if [ x"$LYXDIR" == x ]; then
 	lyxdir=""
