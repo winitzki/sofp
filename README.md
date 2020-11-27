@@ -50,6 +50,8 @@ The talk slides are not part of the book and are partially obsolete both in cont
 
 Chapters 1-10 and 14, as well as some appendices and discussion chapters are ready after a second proofreading of the draft.
 
+Chapters 11-13 and two more appendices are under construction.
+
 # Leanpub version of the draft
 
 The draft version is [available for purchase on leanpub](https://leanpub.com/sofp) for people who want to be notified about updates.
@@ -69,8 +71,8 @@ or if they wish to make comments or suggestions regarding the contents of the bo
 
 - Milestone 1 (achieved as of August 2019): chapters 1-6 are completed and available for purchase at lulu.com as a cheap (black/white) paperback.
 - Milestone 2 (achieved as of December 2019): chapters 1-9 are completed.
-- Milestone 3 (ETA: October 2020): chapters 10 and 14 are completed. The draft is available for purchase at lulu.com (black/white, cheaper) and at blurb.com (color, more expensive) in paperback.
-- Milestone 4 (ETA: End of year 2020): chapters 1-14 are completed and available for purchase at lulu.com (black/white, cheaper) and blurb.com (color, more expensive) as both paperback and hardcover versions.
+- Milestone 3 (achieved as of November 2020): chapters 10 and 14 are completed.
+- Milestone 4 (ETA: January 2021): chapters 1-14 are completed and available for on-demand printing at lulu.com or elsewhere.
 
 # Building a PDF version of the book from LyX sources
 
@@ -79,7 +81,10 @@ It contains the proofread chapters as well as some chapters that are not ready a
 
 If you want to build from source, currently you need `LyX` 2.3.x and `pdftk` installed. 
 
-`bash make_sofp_pdf.sh` builds the PDF file `sofp.pdf`.
+The command `bash make_sofp_pdf.sh` builds PDF files `sofp.pdf` and `sofp-draft.pdf`.
+
+If this does not work, you can build manually with a simple command such as `lyx --export pdf sofp.lyx`,
+but the resulting PDF version will lack certain cosmetic features such as special colors and formatting.
 
 If you do not have `LyX`, you can simply build from the provided LaTeX sources using commands such as
 
@@ -89,8 +94,11 @@ makeindex sofp.idx
 pdflatex --interaction=batchmode sofp.tex
 ```
 
-# Docker image for builds
+# Docker image for PDF builds
 
-A Docker image is built by the repository https://hub.docker.com/repository/docker/winitzki/sofp-docker-build/builds
+A Docker image (containing a compatible version of LyX and LaTeX) is configured by the repository https://github.com/winitzki/sofp-docker-build
+and is automatically uploaded to Docker Hub at https://hub.docker.com/repository/docker/winitzki/sofp-docker-build/builds
 
-This image is referenced by the file [build-pdf.yml](.github/workflows/build-pdf.yml) 
+This Docker image is loaded by the file [build-pdf.yml](.github/workflows/build-pdf.yml#L31) in order to build the PDF version of the book.
+
+The latest build is uploaded to Github when a new git tag is pushed, which 

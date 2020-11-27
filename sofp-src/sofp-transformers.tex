@@ -10418,6 +10418,346 @@ holds.
 \end{comment}
 
 
+\subsection{Lifting monad operations via the codensity monad (Jaskelioff\textsf{'}s \texttt{Monatron})}
+
+Section~\ref{subsec:Combining-monads-via-mtl-style} showed that
+MTL-style programming requires custom code for lifting all monad operations
+to all supported monad stacks.\index{Mauro Jaskelioff} M.~Jaskelioff\textsf{'}s
+\texttt{Monatron} library\footnote{See \texttt{\href{https://www.fceia.unr.edu.ar/~mauro/pubs/monatron.pdf}{https://www.fceia.unr.edu.ar/$\sim$mauro/pubs/monatron.pdf}}}\index{Monatron library@\texttt{Monatron} library}
+is based on an advanced method that lifts all known monad operations
+to almost all monad stacks. This includes all monad stacks used in
+practice, where a single monad with an incomplete or missing transformer
+(such as \lstinline!Cont! or \lstinline!IO!) is always located at
+the deep end of the stack. To explain how \texttt{Monatron} works,
+this section will follow the ideas developed in M.~Jaskelioff\textsf{'}s paper.\footnote{See \texttt{\href{https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.219.5365}{https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.219.5365}}}
+
+\paragraph{Common type signatures for operations}
+
+The first step is to transform all effectful operations into a standard
+type signature. Looking at Table~\ref{tab:effectful-operations-for-some-monads},
+we find that the types of existing operations in a monad $M$ fall
+into four patterns: 
+
+{*} $M^{Q}$ or $P\rightarrow M^{Q}$ where $P$ and $Q$ are fixed
+types.
+
+{*} $\forall A.\,M^{A}$ or $\forall A.\,F^{A}\rightarrow M^{A}$,
+where $F$ is a functor that does not depend on $M$.
+
+{*} $\forall A.\,F^{M^{A}}\rightarrow M^{A}$, where $F$ is a functor
+that does not depend on $M$.
+
+{*} Another type signature (e.g., the \lstinline!callcc! and \lstinline!filter!
+operations).
+
+At first glance, the type signatures of different operations appear
+to be different and incompatible with each other. However, it turns
+out that all operations may be converted into a common type signature.
+The following definition introduces some helpful names:
+
+\subsubsection{Definition \label{subsec:Definition-simple-standard-operation-monatron-1}\ref{subsec:Definition-simple-standard-operation-monatron-1}}
+
+Given a monad $M$ and a functor $F$:
+
+\textbf{(a)} A \textbf{\textsf{``}fixed-type\textsf{''} operation} is a value of type
+$P\rightarrow M^{Q}$, where $P$ and $Q$ are fixed types.
+
+\textbf{(b)} A \textbf{\textsf{``}simple\textsf{''} operation} is a natural transformation
+(\lstinline!sop!) with type signature
+\[
+\text{sop}:\forall A.\,F^{A}\rightarrow M^{A}\quad.
+\]
+
+\textbf{(c)} A \textbf{\textsf{``}standard\textsf{''} operation} is a natural transformation
+(\lstinline!op!) with type signature
+\[
+\text{op}:\forall A.\,F^{M^{A}}\rightarrow M^{A}\quad.
+\]
+
+According to this definition, the \lstinline!State! monad\textsf{'}s \lstinline!get!
+and \lstinline!set! operations are \textsf{``}fixed-type\textsf{''}, the \lstinline!Either!
+monad\textsf{'}s \lstinline!raise! operation is \textsf{``}simple\textsf{''} (with the functor
+$F$ defined as the constant functor $F^{A}\triangleq E$), and the
+\lstinline!List! monad\textsf{'}s \lstinline!append! operation is \textsf{``}standard\textsf{''}
+(with the functor $F^{A}\triangleq A\times A$). 
+
+The following statement shows that these classes of operations are
+subsets of each other: the \textsf{``}fixed-type\textsf{''} operations are a subset
+of \textsf{``}simple\textsf{''} operations, which are a subset of \textsf{``}standard\textsf{''} operations.
+
+\subsubsection{Statement \label{subsec:Statement-simple-standard-operations-monatron-1}\ref{subsec:Statement-simple-standard-operations-monatron-1}}
+
+\textbf{(a)} Any \textsf{``}fixed-type\textsf{''} operation $\text{fop}:P\rightarrow M^{Q}$
+is computationally equivalent to a \textsf{``}simple\textsf{''} operation \lstinline!sop!
+with functor $F^{A}\triangleq P\times\left(Q\rightarrow A\right)$.
+The operations \lstinline!fop! and \lstinline!sop! are related by:
+\[
+\text{sop}:P\times\left(Q\rightarrow A\right)\rightarrow M^{A}\quad,\quad\quad\text{sop}=p^{:P}\times q^{:Q\rightarrow A}\rightarrow p\triangleright\text{fop}\bef q^{\uparrow M}\quad,\quad\quad\text{fop}=p^{:P}\rightarrow\text{sop}^{Q}(p\times\text{id}^{Q\rightarrow Q})\quad.
+\]
+
+\textbf{(b)} Any \textsf{``}standard\textsf{''} operation $\text{op}:F^{M^{A}}\rightarrow M^{A}$
+that satisfies the following compatibility law,
+\begin{equation}
+\text{op}\bef\text{ftn}_{M}=\text{ftn}_{M}^{\uparrow F}\bef\text{op}\quad,\label{eq:monatron-standard-operation-compatibility-law-1}
+\end{equation}
+is computationally equivalent to a \textsf{``}simple\textsf{''} operation \lstinline!sop!
+defined by
+\[
+\text{sop}:F^{A}\rightarrow M^{A}\quad,\quad\quad\text{sop}\triangleq\text{pu}_{M}^{\uparrow F}\bef\text{op}\quad,\quad\quad\text{op}=\text{sop}\bef\text{ftn}_{M}.
+\]
+
+
+\subparagraph{Proof}
+
+\textbf{(a)} The type equivalence $P\rightarrow M^{Q}\cong\forall A.\,P\times\left(Q\rightarrow A\right)\rightarrow M^{A}$
+follows from the covariant Yoneda identity:
+\[
+\forall A.\,P\times\left(Q\rightarrow A\right)\rightarrow M^{A}\cong P\rightarrow\forall A.\,\left(Q\rightarrow A\right)\rightarrow M^{A}\cong P\rightarrow M^{Q}\quad.
+\]
+
+\textbf{(b)} We will prove separately the two directions of the isomorphism.
+
+Direction $\text{op}\rightarrow\text{sop}$: Given that a \textsf{``}standard\textsf{''}
+operation $\text{op}:F^{M^{A}}\rightarrow M^{A}$ satisfying Eq.~(\ref{eq:monatron-standard-operation-compatibility-law-1}),
+we first define $\text{sop}\triangleq\text{pu}_{M}^{\uparrow F}\bef\text{op}$
+and then compute a new \textsf{``}standard\textsf{''} operation $\text{op}^{\prime}\triangleq\text{sop}\bef\text{ftn}_{M}$.
+The new operation is then equal to the initial \lstinline!op!:
+\begin{align*}
+ & \text{op}^{\prime}=\text{sop}\bef\text{ftn}_{M}=\text{pu}^{\uparrow F}\bef\gunderline{\text{op}\bef\text{ftn}_{M}}\\
+{\color{greenunder}\text{use Eq.~(\ref{eq:monatron-standard-operation-compatibility-law-1})}:}\quad & =\gunderline{\text{pu}^{\uparrow F}\bef\text{ftn}_{M}^{\uparrow F}}\bef\text{op}=(\gunderline{\text{pu}\bef\text{ftn}_{M}})^{\uparrow F}=\text{op}\quad.
+\end{align*}
+
+Direction $\text{sop}\rightarrow\text{op}$: Given a \textsf{``}simple\textsf{''}
+operation $\text{sop}:F^{A}\rightarrow M^{A}$, we first define $\text{op}\triangleq\text{sop}\bef\text{ftn}_{M}$
+and then compute a new \textsf{``}simple\textsf{''} operation $\text{sop}^{\prime}\triangleq\text{pu}^{\uparrow F}\bef\text{op}$.
+The new operation is then equal to the initial \lstinline!sop!:
+\begin{align*}
+ & \text{sop}^{\prime}=\text{pu}^{\uparrow F}\bef\text{op}=\gunderline{\text{pu}^{\uparrow F}\bef\text{sop}}\bef\text{ftn}_{M}\\
+{\color{greenunder}\text{naturality law of }\text{sop}:}\quad & =\text{sop}\bef\gunderline{\text{pu}^{\uparrow M}\bef\text{ftn}_{M}}=\text{sop}\quad.
+\end{align*}
+
+$\square$
+
+All operations shown in Table~\ref{tab:effectful-operations-for-some-monads},
+except \lstinline!callcc! and \lstinline!filter!, are equivalent
+to some \textsf{``}standard\textsf{''} operations, and many of them are also \textsf{``}simple\textsf{''}.
+For instance, \lstinline!List! monad\textsf{'}s \lstinline!append! operation
+has the type signature of the \textsf{``}standard\textsf{''} form $F^{\text{List}^{A}}\rightarrow\text{List}^{A}$
+with $F^{A}\triangleq A\times A$. However, \lstinline!append! satisfies
+the compatibility law~(\ref{eq:monatron-standard-operation-compatibility-law-1}),
+as shown by Exercise~\ref{subsec:Exercise-flatten-concat-distributive-law}.
+So, by Statement~\ref{subsec:Statement-simple-standard-operations-monatron-1},
+\lstinline!append! is equivalent to a \textsf{``}simple\textsf{''} operation \lstinline!sappend!
+defined by
+\begin{align*}
+ & \text{sappend}:A\times A\rightarrow\text{List}^{A}\quad,\quad\quad\text{sappend}\left(a_{1}\times a_{2}\right)\triangleq[a_{1},a_{2}]=\text{pu}_{\text{List}}(a_{1})\pplus\text{pu}_{\text{List}}(a_{2})\quad,\\
+ & p^{:\text{List}^{A}}\pplus q^{:\text{List}^{A}}=\text{ftn}_{\text{List}}([p,q])=\left(p\times q\right)\triangleright\text{sappend}\triangleright\text{ftn}_{\text{List}}\quad.
+\end{align*}
+Many \textsf{``}standard\textsf{''} operations satisfy the compatibility law, but
+some do not (such as \lstinline!Either! monad\textsf{'}s \lstinline!handle!
+operation).
+
+Postponing the handling of \lstinline!callcc! and \lstinline!filter!,
+we now focus on the methods for lifting \textsf{``}simple\textsf{''} and \textsf{``}standard\textsf{''}
+operations to monad stacks.
+
+\paragraph{Lifting \textsf{``}simple\textsf{''} operations}
+
+We have seen in Section~\ref{subsec:Combining-monads-via-mtl-style}
+that the \lstinline!State! monad\textsf{'}s \lstinline!get! and \lstinline!set!
+operations are lifted to any monad stack by composing with a lift
+function. This method applies equally well to any \textsf{``}simple\textsf{''} operation
+$\text{sop}_{M}:F^{A}\rightarrow M^{A}$ of a monad $M$ and an arbitrary
+monad stack $P$ that has a lift function $p:M^{A}\rightarrow P^{A}$.
+The result is a simple operation $\text{sop}_{P}$ defined by
+\begin{equation}
+\text{sop}_{P}:F^{A}\rightarrow P^{A}\quad,\quad\quad\text{sop}_{P}\triangleq\text{sop}_{M}\bef p\quad.\label{eq:monatron-lift-simple-operation-1}
+\end{equation}
+The following statement shows how to express this lifting in terms
+of \textsf{``}standard\textsf{''} operations, and also proves that the \textsf{``}standard\textsf{''}
+version of $\text{sop}_{P}$ always satisfies a suitable monadic naturality
+law.
+
+\subsubsection{Statement \label{subsec:Statement-monatron-lifting-simple-operation-1}\ref{subsec:Statement-monatron-lifting-simple-operation-1}}
+
+Given a \textsf{``}simple\textsf{''} $M$-operation $\text{sop}_{M}:F^{A}\rightarrow M^{A}$
+and a monad morphism $p:M\leadsto P$ between two monads $M$ and
+$P$, define the corresponding $P$-operation ($\text{sop}_{P}$)
+by Eq.~(\ref{eq:monatron-lift-simple-operation-1}). Then the \textsf{``}standard\textsf{''}
+operation $\text{op}_{P}\triangleq\text{sop}_{P}\bef\text{ftn}_{P}$
+corresponding to $\text{sop}_{P}$ is expressed via $\text{op}_{M}\triangleq\text{sop}_{M}\bef\text{ftn}_{M}$
+by
+\[
+\text{op}_{P}=\text{pu}_{M}^{\uparrow F}\bef\text{op}_{M}\bef p\bef\text{ftn}_{P}
+\]
+and satisfies the monadic naturality law:
+\[
+\text{op}_{M}\bef p=p^{\uparrow F}\bef\text{op}_{P}\quad.
+\]
+
+
+\subparagraph{Proof}
+
+We substitute the definitions of $\text{sop}_{P}$ and the relationship
+between $\text{sop}_{M}$ and $\text{op}_{M}$:
+\[
+\text{op}_{P}=\gunderline{\text{sop}_{P}}\bef\text{ftn}_{P}=\gunderline{\text{sop}_{M}}\bef p\bef\text{ftn}_{P}=\text{pu}_{M}^{\uparrow F}\bef\text{op}_{M}\bef p\bef\text{ftn}_{P}\quad.
+\]
+To verify the monadic naturality law:
+\begin{align*}
+ & \gunderline{\text{op}_{M}}\bef p=\text{sop}_{M}\bef\gunderline{\text{ftn}_{M}\bef p}\\
+{\color{greenunder}\text{monad morphism composition law of }p:}\quad & =\gunderline{\text{sop}_{M}\bef p^{\uparrow M}}\bef p\bef\text{ftn}_{P}\\
+{\color{greenunder}\text{naturality law of }\text{sop}_{M}:}\quad & =p^{\uparrow F}\bef\gunderline{\text{sop}_{M}\bef p}\bef\text{ftn}_{P}=p^{\uparrow F}\bef\gunderline{\text{sop}_{P}\bef\text{ftn}_{P}}=p^{\uparrow F}\bef\text{op}_{P}\quad.
+\end{align*}
+
+$\square$
+
+The method of Statement~\ref{subsec:Statement-monatron-lifting-simple-operation-1}
+allows us to lift a \textsf{``}simple\textsf{''} operation from a monad $M$ to any
+monad stack $P$ containing $M$, as long as there exists a lift function
+$p:M\leadsto P$. The lift $p$ will exist if the monad $M$ is at
+the deep end of the stack, or if $M$\textsf{'}s transformer supports a base
+lift. For this method to work, one must place the continuation monad,
+the search monad, the codensity monad, and task-like monads (such
+as \lstinline!IO!) at the deep end of the stack, since those monads
+do not support base lifts.
+
+\paragraph{Lifting \textsf{``}standard\textsf{''} operations}
+
+If a \textsf{``}standard\textsf{''} operation can be reduced to the form of a \textsf{``}simple\textsf{''}
+operation, the lifting is just a composition with a lift function.
+But some \textsf{``}standard\textsf{''} operations do not satisfy the compatibility
+law~(\ref{eq:monatron-standard-operation-compatibility-law-1}),
+so they need a different method of lifting.
+
+\subsubsection{Example \label{subsec:Example-monatron-flush-operation-1}\ref{subsec:Example-monatron-flush-operation-1}}
+
+The \lstinline!Writer! monad\textsf{'}s \lstinline!clear! operation (erasing
+the message log) is defined by
+\[
+\text{clear}:M^{A}\rightarrow M^{A}\cong A\times W\rightarrow A\times W\quad,\quad\quad\text{clear}\triangleq a^{:A}\times\_^{:W}\rightarrow a\times e_{W}\quad.
+\]
+Its type signature $M^{A}\rightarrow M^{A}$ is of the \textsf{``}standard\textsf{''}
+form $F^{M^{A}}\rightarrow M^{A}$ with $F^{A}\triangleq A$. It turns
+out that \lstinline!clear! does not satisfy the compatibility law~(\ref{eq:monatron-standard-operation-compatibility-law-1})
+and is not equivalent to a \textsf{``}simple\textsf{''} operation. If it were, the
+corresponding \textsf{``}simple\textsf{''} operation would be a natural transformation
+of type $F^{A}\rightarrow M^{A}\cong A\rightarrow A\times W$. Such
+a natural transformation must be implemented as $\text{sop}:a^{:A}\rightarrow a\times w_{0}$
+with some fixed value $w_{0}^{:W}$ that is independent of $a$. The
+corresponding \textsf{``}standard\textsf{''} operation is 
+\[
+\text{op}:M^{A}\rightarrow M^{A}\quad,\quad\quad\text{op}\triangleq\text{sop}\bef\text{ftn}_{M}=(a\times w\rightarrow a\times w\times w_{0})\bef\text{ftn}_{M}=a\times w\rightarrow a\times(w\oplus w_{0})\quad.
+\]
+This operation appends to the log rather than erasing it. $\square$
+
+We will first consider lifting a monad $M$\textsf{'}s \textsf{``}standard\textsf{''} operation
+to a stack $P$ where the monad $M$ occurs at the end. So, we assume
+that $P^{A}=T_{L}^{M,A}$ for some base monad (or stack) $L$.
+
+A \textsf{``}standard\textsf{''} operation $\text{op}:F^{M^{A}}\rightarrow M^{A}$
+is lifted to a stack $T_{L}^{M}$ in three steps: 
+\begin{enumerate}
+\item Convert $\text{op}$ into an equivalent \textsf{``}simple\textsf{''} operation $\text{cop}$
+in the codensity monad $\text{Cod}^{M,\bullet}$.
+\item Lift \lstinline!cop! to the stack $T_{L}^{\text{Cod}^{M,\bullet}}$
+that contains the codensity monad instead of $M$.
+\item Run the stack, replacing the codensity monad $\text{Cod}^{M,\bullet}$
+by the original monad $M$.
+\end{enumerate}
+We will now go through these steps in detail.
+
+The first step uses the monad $\text{Cod}^{M,\bullet}$ (the codensity\index{monads!codensity monad}
+monad on $M$, see Section~\ref{subsec:The-codensity-monad}). It
+turns out that the type of natural transformations $F^{A}\rightarrow\text{Cod}^{M,A}$
+is \emph{equivalent} to the type of natural transformations $F^{M^{A}}\rightarrow M^{A}$.
+To show this, we will prove a more general property that does not
+depend on any monadic structures.
+
+\subsubsection{Statement \label{subsec:Statement-kan-extension-property-1}\ref{subsec:Statement-kan-extension-property-1}}
+
+For any three functors $F$, $K$, $L$, the set of natural transformations
+of type $F\circ K\leadsto L$ is isomorphic to the set of natural
+transformations of type
+\[
+F^{A}\rightarrow\forall R.\,(A\rightarrow K^{R})\rightarrow L^{R}\quad.
+\]
+
+
+\subparagraph{Proof}
+
+The two directions of the isomorphism are implemented via two functions
+\lstinline!inK!, \lstinline!outK!:
+\begin{align*}
+ & \text{inK}:(\forall B.\,F^{K^{B}}\rightarrow L^{B})\rightarrow F^{A}\rightarrow\left(A\rightarrow K^{R}\right)\rightarrow L^{R}\quad,\quad\quad\text{inK}\,(\text{op}^{:\forall B.\,F^{K^{B}}\rightarrow L^{B}})\triangleq f^{:F^{A}}\rightarrow k^{:A\rightarrow K^{A}}\rightarrow f\triangleright k^{\uparrow F}\triangleright\text{op}^{B=R}\quad,\\
+ & \text{outK}:\big(\forall R.\,F^{A}\rightarrow(A\rightarrow K^{R})\rightarrow L^{R}\big)\rightarrow F^{K^{A}}\rightarrow L^{A}\quad,\quad\quad\text{outK}\,(\text{cop}^{:F^{A}\rightarrow\forall R.\,(A\rightarrow K^{R})\rightarrow L^{R}})\triangleq g^{:F^{K^{A}}}\rightarrow(g\triangleright\text{cop})^{R=K^{A}}(\text{id}^{K^{A}})\quad.
+\end{align*}
+We now need to show that \lstinline!inK! and \lstinline!outK! are
+inverses of each other. One direction:
+\begin{align*}
+{\color{greenunder}\text{expect to equal }\text{id}:}\quad & \text{inK}\bef\text{outK}=(\text{op}\rightarrow f\rightarrow k\rightarrow f\triangleright k^{\uparrow F}\triangleright\text{op})\bef\big(\text{cop}\rightarrow g\rightarrow\text{cop}\,(g)(\text{id})\big)\\
+ & =\text{op}\rightarrow g\rightarrow(\gunderline{f\rightarrow k\rightarrow}\,f\triangleright k^{\uparrow F}\triangleright\text{op})\gunderline{(g)(\text{id})}=\text{op}\rightarrow g\rightarrow g\triangleright\text{id}^{\uparrow F}\triangleright\text{op}\\
+ & =\text{op}\rightarrow\gunderline{g\rightarrow g\,\triangleright}\,\text{op}=\text{op}\rightarrow\text{op}=\text{id}\quad.
+\end{align*}
+Proving the other direction requires using the naturality law of the
+\lstinline!cop! functions:
+\[
+\text{cop}^{A,R}:F^{A}\rightarrow\left(A\rightarrow K^{R}\right)\rightarrow L^{R}\quad,\quad\quad(f^{:A\rightarrow B})^{\uparrow F}\bef\text{cop}^{B,R}=\text{cop}^{A,R}\bef\big(c^{:(A\rightarrow K^{R})\rightarrow L^{R}}\rightarrow k^{:B\rightarrow K^{R}}\rightarrow(f\bef k)\triangleright c\big)\quad.
+\]
+For convenience, we apply both sides of this naturality law to arbitrary
+values $x^{:F^{A}}$and $y^{:B\rightarrow K^{R}}$:
+\[
+(x\triangleright f^{\uparrow F}\bef\text{cop})(y)=\text{cop}\,(x\triangleright f^{\uparrow F})(y)\overset{!}{=}\big(x\triangleright\text{cop}\bef(c\rightarrow k\rightarrow(f\bef k)\triangleright c)\big)(y)=\text{cop}\,(x)(f\bef y)\quad.
+\]
+We now rewrite $\text{outK}\bef\text{inK}$ to verify the other direction
+of the isomorphism:
+\begin{align*}
+{\color{greenunder}\text{expect to equal }\text{id}:}\quad & \text{outK}\bef\text{inK}=\big(\text{cop}\rightarrow g\rightarrow\text{cop}\,(g)(\text{id})\big)\bef(\text{op}\rightarrow f\rightarrow k\rightarrow f\triangleright k^{\uparrow F}\triangleright\text{op})\\
+ & =\text{cop}\rightarrow f\rightarrow k\rightarrow f\triangleright k^{\uparrow F}\triangleright\big(g\rightarrow\text{cop}\,(g)(\text{id})\big)=\text{cop}\rightarrow f\rightarrow k\rightarrow\gunderline{\text{cop}\,(f\triangleright k^{\uparrow F})(\text{id})}\\
+{\color{greenunder}\text{naturality law of }\text{cop}:}\quad & =\text{cop}\rightarrow f\rightarrow k\rightarrow\text{cop}(f)(k\bef\text{id})=\text{cop}\rightarrow f\rightarrow k\rightarrow\text{cop}\,(f)(k)=\text{cop}\rightarrow\text{cop}=\text{id}\quad.
+\end{align*}
+
+Finally, we need to show that \lstinline!inK! produces \lstinline!cop!
+functions that satisfy their naturality law:
+\[
+\text{inK}\,(\text{op})(x\triangleright f^{\uparrow F})(y)\overset{?}{=}\text{inK}\,(\text{op})(x)(f\bef y)\quad.
+\]
+\begin{align*}
+ & \text{inK}\,(\text{op})(x\triangleright f^{\uparrow F})(y)\overset{?}{=}\text{inK}\,(\text{op})(x)(f\bef y)\quad,\\
+ & (f\rightarrow k\rightarrow f\triangleright k^{\uparrow F}\triangleright\text{op})(x\triangleright f^{\uparrow F})(y)\overset{?}{=}(f\rightarrow k\rightarrow f\triangleright k^{\uparrow F}\triangleright\text{op})(x)(f\bef y)\quad,\\
+ & x\triangleright f^{\uparrow F}\triangleright y^{\uparrow F}\triangleright\text{op}\overset{?}{=}x\triangleright(f\bef y)^{\uparrow F}\triangleright\text{op}\quad.
+\end{align*}
+The last line holds due to a property of $\triangleright$-notation
+($x\triangleright f\triangleright g=x\triangleright f\bef g$).
+
+Note that the proof did not require the naturality law of the \lstinline!op!
+functions,
+\[
+\text{op}^{A}:F^{K^{A}}\rightarrow L^{A}\quad,\quad\quad(f^{:A\rightarrow B})^{\uparrow K\uparrow F}\bef\text{op}^{B}=\text{op}^{A}\bef f^{\uparrow L}\quad.
+\]
+ Any \lstinline!op! function obtained via \lstinline!outK! will
+satisfy this naturality law:
+\begin{align*}
+{\color{greenunder}\text{left-hand side}:}\quad & x^{:F^{K^{A}}}\triangleright f^{\uparrow K\uparrow F}\bef\text{outK}\,(\text{cop})=x\triangleright f^{\uparrow K\uparrow F}\triangleright\big(g\rightarrow\text{cop}\,(g)(\text{id})\big)=\text{cop}\,(x\triangleright f^{\uparrow K\uparrow F})(\text{id})\\
+{\color{greenunder}\text{naturality law of }\text{cop}:}\quad & \quad=\text{cop}\,(x)(f^{\uparrow K}\bef\text{id})=\text{cop}\,(x)(f^{\uparrow K})\quad,\\
+{\color{greenunder}\text{right-hand side}:}\quad & x\triangleright\text{outK}\,(\text{cop})\triangleright f^{\uparrow L}=x\triangleright\big(g\rightarrow\text{cop}\,(g)(\text{id})\big)\triangleright f^{\uparrow L}=\text{cop}\,(x)(\text{id})\triangleright f^{\uparrow L}\quad.
+\end{align*}
+The two sides become equal once we require that the function of type
+$(A\rightarrow K^{R})\rightarrow L^{R}$ returned by $\text{cop}\,(x)$
+be a natural transformation with respect to $R$: 
+\[
+\text{cop}\,(x)(y\bef f^{\uparrow K})\overset{!}{=}y\triangleright\text{cop}\,(x)\triangleright f^{\uparrow L}=\text{cop}\,(x)(y)\triangleright f^{\uparrow L}\quad.
+\]
+This concludes the proof. $\square$
+
+Using Statement~\ref{subsec:Statement-kan-extension-property-1}
+with $K=L=M$, we find that any \textsf{``}standard\textsf{''} operation \lstinline!op!
+in a monad $M$ is equivalent to a \textsf{``}simple\textsf{''} operation \lstinline!cop!
+in the codensity monad $\text{Cod}^{M,\bullet}$. It is straightforward
+to lift that operation to a stack $P^{\prime}\triangleq T_{L}^{\text{Cod}^{M,\bullet}}$
+that contains the codensity monad instead of $M$. We use $T_{L}$\textsf{'}s
+\lstinline!flift! function to transform between $P$ and $P^{\prime}$:
+
 \subsection{Exercises\index{exercises}}
 
 \subsubsection{Exercise \label{subsec:Exercise-monad-stack-1}\ref{subsec:Exercise-monad-stack-1}}
