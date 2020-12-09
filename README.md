@@ -39,8 +39,8 @@ This `git` repository
 contains the full source code for the book (LyX / LaTeX / jpg / pdf) and shell scripts for building a PDF version of the book.
 So, this is a "transparent" copy in the sense of the GNU license; the source code of the book is in a format that is convenient to use and to modify.
 
-The ["Releases" section](https://github.com/winitzki/sofp/releases) of this repository contains (under "Assets") the full uncorrected draft (sofp.pdf)
-and the finished and proof-read part of the draft (sofp-draft.pdf).
+The ["Releases" section](https://github.com/winitzki/sofp/releases) of this repository contains (under "Assets") the full uncorrected draft (`sofp.pdf`)
+and the finished and proof-read part of the draft (`sofp-draft.pdf`).
 The current release is ![GitHub release](https://img.shields.io/github/release/winitzki/sofp.svg?include_prereleases) and represents the most recent, stable version of the text.
 
 This repository also contains the slides for YouTube presentations that initiated the work on this book.
