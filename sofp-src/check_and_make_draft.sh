@@ -6,7 +6,7 @@
 name="sofp"
 
 # Expected total number of pages in the book draft:
-draft_pages=609
+draft_pages=629
 
 # The number of pages in each chapter:
 pagecounts=(3 17 42 34 24 49 43 12 63 54 63 10 6 24 140 3 5 6 3 6 6 3 5 17 16 1 2 1 1 5)
