@@ -41,7 +41,9 @@ So, this is a "transparent" copy in the sense of the GNU license; the source cod
 
 The ["Releases" section](https://github.com/winitzki/sofp/releases) of this repository contains (under "Assets") the full uncorrected draft (`sofp.pdf`)
 and the finished and proof-read part of the draft (`sofp-draft.pdf`).
-The current release is ![GitHub release](https://img.shields.io/github/release/winitzki/sofp.svg?include_prereleases) and represents the most recent, stable version of the text.
+The current release is
+[![GitHub release](https://img.shields.io/github/release/winitzki/sofp.svg?include_prereleases)](https://github.com/winitzki/sofp/releases)
+and represents the most recent, relatively stable version of the text.
 
 This repository also contains the slides for YouTube presentations that initiated the work on this book.
 The talk slides are not part of the book and are partially obsolete both in content and in the notation used.

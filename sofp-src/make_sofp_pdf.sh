@@ -90,7 +90,7 @@ function insert_examples_exercises_count { # This is replaced in the root file o
 	local codesnippets=`cat "$base"-*.tex | LC_ALL=C fgrep -c '\begin{lstlisting}'`
 	local stmts=`cat "$base"-*.tex | LC_ALL=C fgrep -c '\subsubsection{Statement '`
 	local diagrams=`cat "$base"-*.tex | LC_ALL=C fgrep -c '\xymatrix{'`
-	local bdate=`date -R -u`
+	local bdate=`date -R`
 	local osinfo=`uname -prs`
 	LC_ALL=C sed -i.bak -e "s|BUILDDATE|$bdate|g; s|BUILDOPERATINGSYSTEM|$osinfo|g; s,NUMBEROFEXAMPLES,$examples,g; s,NUMBEROFEXERCISES,$exercises,g; s,NUMBEROFDIAGRAMS,$diagrams,g; s,NUMBEROFSTATEMENTS,$stmts,g; s,NUMBEROFCODESNIPPETS,$codesnippets,g;" "$target"
 }
