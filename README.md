@@ -41,7 +41,7 @@ So, this is a "transparent" copy in the sense of the GNU license; the source cod
 
 The ["Releases" section](https://github.com/winitzki/sofp/releases) of this repository contains (under "Assets") the full uncorrected draft (`sofp.pdf`)
 and the finished and proof-read part of the draft (`sofp-draft.pdf`).
-The current release is
+The latest release is
 [![GitHub release](https://img.shields.io/github/release/winitzki/sofp.svg?include_prereleases)](https://github.com/winitzki/sofp/releases)
 and represents the most recent, relatively stable version of the text.
 
