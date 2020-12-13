@@ -608,20 +608,20 @@ Formulas of Boolean logic may be transformed by \textsf{``}expanding brackets\te
 {\color{greenunder}\text{expand brackets with a conjunction inside}:}\quad & (a\wedge b)\vee c=\left(a\vee c\right)\wedge\left(b\vee c\right)\quad,\\
 {\color{greenunder}\text{expand brackets with a disjunction inside}:}\quad & (a\vee b)\wedge c=\left(a\wedge c\right)\vee\left(b\wedge c\right)\quad.
 \end{align*}
-Implication is written as $(a\Rightarrow b)=((\neg a)\vee b)$. We
-can write these transformations in Scala code as
+Implication is transformed as $(a\Rightarrow b)=((\neg a)\vee b)$.
+These transformations (expressed in Scala at left)
 
 \begin{wrapfigure}{l}{0.4\columnwidth}%
 \vspace{-0.6\baselineskip}
 \begin{lstlisting}
 (a && b) || c  ==  (a || c) && (b || c)
 (a || b) && c  ==  (a && c) || (b && c)
-(a implies b)  ==  ((!a) || b)
+(a implies b)  ==  (!a) || b
 \end{lstlisting}
 \vspace{-0.8\baselineskip}
 \end{wrapfigure}%
 
-\noindent So, we can rewrite any Boolean formula as a conjunction
+\noindent allow us to rewrite any Boolean formula as a conjunction
 of disjunctions with no more nested conjunctions inside, e.g., \lstinline*(a || b) && ((!c) || d || e)*.
 This form is called the \textbf{conjunctive normal form}\index{conjunctive normal form}\footnote{\texttt{\href{https://en.wikipedia.org/wiki/Conjunctive_normal_form}{https://en.wikipedia.org/wiki/Conjunctive\_normal\_form}}}
 (CNF) of a Boolean formula. We can also rewrite Boolean formula into
@@ -1995,14 +1995,12 @@ time.
 
 \subsection{The continuation monad (\texttt{Cont})\label{subsec:The-continuation-monad}}
 
-\index{monads!continuation monad (Cont)@continuation monad (\texttt{Cont})}The
-continuation monad is another monadic design pattern that involves
+The continuation monad is another monadic design pattern that involves
 a non-standard evaluation strategy called the \textbf{continuation-passing}
 programming style.\index{continuation-passing|textit} In that style,
 functions do not return their results directly but instead call an
 auxiliary function that consumes the result. The auxiliary function
-is called a \textsf{``}continuation\textsf{''} or a \textsf{``}callback\index{callback}\textsf{''},
-and is passed as an additional argument.
+is called a \textsf{``}continuation\textsf{''} or a \textsf{``}callback\index{callback}\textsf{''}.
 
 To compare the direct style with the continuation-passing style, consider
 an arithmetic calculation:
@@ -2029,8 +2027,8 @@ def pure(x: Int)(callback: Int => Unit): Unit =
 
 def result(callback: Int => Unit): Unit =
   pure(10) { x =>
-    mult4(r1) { y =>
-      add3(r2) { z =>
+    mult4(x) { y =>
+      add3(y) { z =>
         callback(z)
       }
     }
@@ -2094,7 +2092,8 @@ concurrently.
 
 So, we generalize the type constructor $L$ to $\left(A\rightarrow R\right)\rightarrow R$,
 where $R$ is a fixed \textsf{``}result\textsf{''} type. This type constructor is
-called the \textbf{continuation monad} and is denoted by $\text{Cont}^{R,A}\triangleq\left(A\rightarrow R\right)\rightarrow R$.
+called the \textbf{continuation monad}\index{monads!continuation monad (Cont)@continuation monad (\texttt{Cont})}
+and is denoted by $\text{Cont}^{R,A}\triangleq\left(A\rightarrow R\right)\rightarrow R$.
 
 How does the continuation monad make callback-based code composable?
 The answer is in the code of the \lstinline!flatMap! method. Its
@@ -2103,10 +2102,10 @@ implementation is (Exercise~\ref{subsec:ch-Exercise-7})
 type Cont[R, A] = (A => R) => R
 def flatMap[R, A, B](ca: Cont[R, A])(f: A => Cont[R, B]): Cont[R, B] = { br => ca(a => f(a)(br)) }
 \end{lstlisting}
-The code of \lstinline!flatMap! substitutes the new callback, \lstinline!br: B => R!,
+The code of \lstinline!flatMap! substitutes a new callback, \lstinline!br: B => R!,
 into the innermost scope of the computation \lstinline!f!. In this
 way, we obtain easy access to the innermost callback scope. This trick
-makes deeply nested callback code easily composable.
+makes code with deeply nested callbacks composable.
 
 After defining \lstinline!map! and \lstinline!flatMap! as extension
 methods on \lstinline!Cont!, we can rewrite the code above as
@@ -2124,7 +2123,7 @@ val result: Cont[Unit, Int] = for {
 This style of code is more readable and easier to modify.
 
 The result of the computation has type $\text{Cont}^{\bbnum 1,\text{Int}}$
-and is a function value. Like the \lstinline!State! and the \lstinline!Reader!
+(so, it is a function). Like the \lstinline!State! and the \lstinline!Reader!
 monads, the continuation monad delays all computations until we apply
 a runner.\index{monads!runner} One way of extracting values from
 \lstinline!Cont!-monadic programs is to use a runner producing a
@@ -2135,8 +2134,8 @@ a runner.\index{monads!runner} One way of extracting values from
 \begin{lstlisting}
 def runner[A](c: Cont[Unit, A]): Future[A] = {
   val pr = Promise[A]() // scala.concurrent.Promise
-  c { a => pr.success(a) } // Resolve the promise.
-  pr.future       // Create a Future from Promise.
+  c { a => pr.success(a) }  // Resolve the promise.
+  pr.future        // Create a Future from Promise.
 }
 // Wait for the Future value.
 Await.result(runner(result), Duration.Inf)
@@ -2151,9 +2150,9 @@ features are used in many places in the code, the programmer runs
 the risk of creating concurrency bugs, such as race conditions or
 deadlocks, that are difficult to fix. When using the continuation
 monad, typically there will be only one place in the code where a
-monadic program is being \textsf{``}run\textsf{''}. In this way, we can isolate the
-high-level business logic in the \lstinline!Cont! monad from the
-low-level code of the runners.
+monadic program is being \textsf{``}run\textsf{''}. In this way, we isolate the high-level
+business logic in the \lstinline!Cont! monad from the low-level code
+of the runners.
 
 We conclude this subsection with some more examples of using the continuation
 monad.
@@ -6738,7 +6737,7 @@ values $u_{0}^{:U}$ and $v_{0}^{:V}$ were given:
 \text{pu}_{F}\triangleq a^{:A}\rightarrow a\times u_{0}\times v_{0}\quad.
 \]
 Show that $F$ would still not be a full monad because identity laws
-would not hold.
+fail to hold.
 
 \subsubsection{Exercise \label{subsec:Exercise-1-monads-2}\ref{subsec:Exercise-1-monads-2}}
 
@@ -6747,12 +6746,12 @@ methods that satisfy all laws, in particular, the left identity law
 $\text{pu}_{M}\bef\text{ftn}_{M}=\text{id}$. The \lstinline!flatMap!
 function is then defined through \lstinline!flatten! by $\text{flm}_{M}(f)\triangleq f^{\uparrow M}\bef\text{ftn}_{M}$.
 Show that this \lstinline!flatMap! function will satisfy its left
-identity law, $\text{pu}_{M}\bef\text{flm}_{M}(f)=f$, for any $f^{:A\rightarrow M^{B}}$.
+identity law ($\text{pu}_{M}\bef\text{flm}_{M}(f)=f$ for any $f^{:A\rightarrow M^{B}}$).
 
 \subsubsection{Exercise \label{subsec:Exercise-1-monads-3}\ref{subsec:Exercise-1-monads-3}}
 
 Verify the associativity law for the \lstinline!Reader! monad by
-a fully explicit calculation.
+an explicit derivation.
 
 \subsubsection{Exercise \label{subsec:Exercise-1-monads-4}\ref{subsec:Exercise-1-monads-4}}
 
