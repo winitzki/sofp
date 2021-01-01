@@ -168,6 +168,7 @@ echo Result is "$name.pdf", size `kbSize "$name.pdf"` bytes, with `pdfPages "$na
 # Also, check page counts.
 bash check_and_make_draft.sh
 bash check-consistent-labels.sh
+bash check-lines_with_displaymath_in_new_paragraph.sh
 
 # Attach sources to the draft file.
 if test -s $name-src.tar.bz2 && test -s $draft.pdf; then  "$pdftk" $draft.pdf attach_files "$name-src.tar.bz2" output $draft-src.pdf
