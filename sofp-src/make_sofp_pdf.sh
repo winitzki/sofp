@@ -127,15 +127,24 @@ rm -f $name*tex $name*log $name*ilg $name*idx $name*toc
 
 echo "Exporting LyX files $name.lyx and its child documents into LaTeX..."
 "$lyx" $lyxdir --export pdflatex $name.lyx # Exports LaTeX for all child documents as well.
+
+#### Here, the LaTeX files are heavily post-processed after exporting from LyX.
+
 echo "Post-processing LaTeX files..."
+
 # Insert the number of examples and exercises. This replacement is only for the root file.
 insert_examples_exercises_count $name $name.tex
 ## Remove mathpazo. This was a mistake: should not remove it.
-#LC_ALL=C sed -i.bak -e 's/^.*usepackage.*mathpazo.*$//' sofp.tex
+#LC_ALL=C sed -i.bak -e 's/^.*usepackage.*mathpazo.*$//' $name.tex
 # Replace ugly Palatino quote marks and apostrophes by sans-serif marks.
-LC_ALL=C sed -i.bak -e " s|'s|\\\\textsf{'}s|g; s|s'|s\\\\textsf{'}|g;  "' s|``|\\textsf{``}|g; s|“|\\textsf{``}|g; '" s|''|\\\\textsf{''}|g; s|”|\\\\textsf{''}|g;  s|\\\\textsf{'}'|\\\\textsf{''}|g; " sofp*.tex
+LC_ALL=C sed -i.bak -e " s|'s|\\\\textsf{'}s|g; s|s'|s\\\\textsf{'}|g;  "' s|``|\\textsf{``}|g; s|“|\\textsf{``}|g; '" s|''|\\\\textsf{''}|g; s|”|\\\\textsf{''}|g;  s|\\\\textsf{'}'|\\\\textsf{''}|g; " $name*.tex
 # Add color to equation displays.
 for f in $name*tex; do add_color "$f"; done
+# Export Scala code snippets.
+for f in $name-*tex; do g=`basename "$f" .tex`; cat $g.pre.md <(perl extract_scala_snippets.pl < $f) > ../mdoc/$g.md; done
+# Remove control annotations for Scala code snippets.
+LC_ALL=C sed -i.bak -e " s| +//IGNORETHIS.*||" $name*.tex
+
 # Check whether the sources have changed. If so, create a new sources archive and a new PDF file.
 if add_source_hashes $name.tex; then
         assemble_sources &
