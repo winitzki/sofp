@@ -1074,11 +1074,10 @@ and the following examples illustrate stacking monads in different
 orders.
 
 \begin{table}
-
 \begin{centering}
 \begin{tabular}{|c|c|c|c|c|}
 \hline 
-\textbf{\small{}Base monad $L^{A}$} & \textbf{\small{}Foreign monad $M^{A}$} & \textbf{\small{}Monad $T_{L}^{M}$} & \textbf{\small{}Monad $T_{M}^{L}$} & \textbf{\small{}Same?}\tabularnewline
+\textbf{\small{}Monad $L^{A}$} & \textbf{\small{}Monad $M^{A}$} & \textbf{\small{}Monad $T_{L}^{M}$} & \textbf{\small{}Monad $T_{M}^{L}$} & \textbf{\small{}Same?}\tabularnewline
 \hline 
 \hline 
 {\small{}}\lstinline!Reader[R, A]! & {\small{}}\lstinline!Either[E, A]! & {\small{}$T_{L}^{M,A}=R\rightarrow E+A$} & {\small{}$T_{M}^{L,A}=R\rightarrow E+A$} & {\small{}Yes}\tabularnewline
@@ -1259,7 +1258,8 @@ which is a functor composition:
 \begin{lstlisting}
 type OptionTry[A] = Try[Option[A]]
 \end{lstlisting}
-We now apply \lstinline!ListT! to the monad \lstinline!OptionTry!:
+We now apply \lstinline!ListT! to the monad \lstinline!OptionTry!,
+which gives a recursive type definition:
 \begin{lstlisting}
 final case class ListOptionTry[A](value: Try[Option[Option[(A, ListOptionTry[A])]]])
 \end{lstlisting}
@@ -1269,12 +1269,12 @@ we need to start with the innermost nested monad (\lstinline!Try!)
 and apply its transformer (\lstinline!TryT!) to the foreign monad
 $M$:
 \begin{lstlisting}
-type TryM[A] = M[Try[A]]
+type TryM[A] = M[Try[A]]   // TryT[M, A] is defined as M[Try[A]].
 \end{lstlisting}
 The next step is to apply \lstinline!Option!\textsf{'}s transformer to the
-monad \lstinline!TryM!:
+foreign monad \lstinline!TryM!:
 \begin{lstlisting}
-type OptionTryM[A] = M[Try[Option[A]]
+type OptionTryM[A] = M[Try[Option[A]]  // OptionT[TryM, A] is defined as TryM[Option[A]].
 \end{lstlisting}
 Finally, we apply the \lstinline!ListT! transformer to the last monad:
 \begin{lstlisting}
@@ -1288,7 +1288,7 @@ $T_{L}^{M}$ somehow mixes the foreign monad $M$ with the type of
 the base monad $L$. In every example, if we set $M$ to the identity
 monad $\text{Id}$ (defined by $\text{Id}^{A}\triangleq A$), the
 transformed type will become equivalent to the base monad $L$. So,
-we may expect that property to hold for every transformer:
+we may expect this property to hold for every transformer:
 \[
 T_{L}^{\text{Id}}\cong L\quad,\quad\text{equivalently written as:}\quad\quad L\varangle\text{Id}\cong L\quad.
 \]
@@ -1316,22 +1316,22 @@ programming. The question is open (Problem~\ref{par:Problem-monads-2})
 even if restricted to monads whose methods are implemented by fully
 parametric code.
 
-Monad transformers certainly cannot exist for monads defined using
-code that executes side effects. Examples of that kind are the \lstinline!Future!
-monad and other \textsf{``}task-like\textsf{''} monads that perform side effects with
-parallel threads. Transformers also cannot exist for external side-effect
-monads, such as \lstinline!IO! from the \lstinline!cats-effect!
-library or \lstinline!ZIO! from the \lstinline!zio! library. A transformer
-must allow a foreign monad to cancel the effects of the base monad,
-as we have seen in Example~\ref{subsec:Example-either-state-transformed-cancels-effect}.
-However, side effects cannot be undone once they are performed, because
-side effects may change the state of the external world irreversibly.\footnote{For a discussion, see \texttt{\href{https://stackoverflow.com/questions/11792275/}{https://stackoverflow.com/questions/11792275/}}} 
+Transformers certainly cannot exist for monads defined using code
+that executes side effects. Examples of that kind are the \lstinline!Future!
+monad and other \textsf{``}task-like\textsf{''} monads that create new threads. Transformers
+also cannot exist for external side-effect monads, such as \lstinline!IO!
+from the \lstinline!cats-effect! library or \lstinline!ZIO! from
+the \lstinline!zio! library. The reason is that a transformer must
+allow a foreign monad to cancel the effects of the base monad, as
+we have seen in Example~\ref{subsec:Example-either-state-transformed-cancels-effect}.
+But side effects often cannot be undone once they are run, because
+changes in the external world may be irreversible.\footnote{For a discussion, see \texttt{\href{https://stackoverflow.com/questions/11792275/}{https://stackoverflow.com/questions/11792275/}}} 
 
 Throughout this chapter, we will build transformers for every exponential-polynomial
 monad considered in this book (although some transformers will only
 partially satisfy the required laws).
 
-\subsection{The monad transformer typeclass}
+\subsection{A typeclass for monad transformers}
 
 Transformers such as \lstinline!EitherT! and \lstinline!StateT!
 are type constructors that depend on an arbitrary foreign monad $M$
@@ -1355,7 +1355,8 @@ via \lstinline!frun! as $\text{blift}_{L}^{M}\triangleq\text{frun}_{L}^{\text{Id
 it is convenient to keep all three methods defined separately in the
 typeclass.
 
-Here is a schematic example of defining a typeclass instance for \lstinline!ReaderT!:
+Here is a schematic example of defining an \lstinline!MTrans! typeclass
+instance for \lstinline!ReaderT!:
 \begin{lstlisting}
 final case class Reader[A](run: R => A)     // The fixed type R must be already defined.
 final case class ReaderT[M[_], A](run: Reader[M[A]])
@@ -2917,10 +2918,10 @@ The type constructor
 \[
 \text{Cod}^{F,A}\triangleq\forall B.\,(A\rightarrow F^{B})\rightarrow F^{B}
 \]
-is called the \index{codensity monad}\textbf{codensity monad} on
-a functor $F$. The codensity monad provides yet another way of making
-a monad out of any functor. Can we then combine arbitrary monads $L$,
-$M$ into a new monad? It turns out that the codensity construction
+is called the \index{monads!codensity monad}\textbf{codensity monad}
+on a functor $F$. The codensity monad provides yet another way of
+making a monad out of any functor. Can we then combine arbitrary monads
+$L$, $M$ into a new monad? It turns out that the codensity construction
 does not provide enough properties to create a usable monad transformer.
 Here are some attempts:
 
@@ -2960,15 +2961,15 @@ The last type constructor is not a monad: it is a composition of the
 \lstinline!Reader! and \lstinline!State! monads in the wrong order
 (see Statement~\ref{subsec:Example-state-monad-composition-fails-with-reader}).
 
-\textbf{(3)} Consider the \textbf{composed codensity monad}\index{codensity monad!composed},
-defined by
+\textbf{(3)} The \textbf{composed codensity monad}\index{monads!composed codensity monad}
+is defined by
 \[
 \text{Cod}_{L}^{M,A}\triangleq\forall X.\,(A\rightarrow L^{X})\rightarrow L^{M^{X}}\quad.
 \]
 This type constructor can be viewed as the continuation monad transformer
 for the base monad $\forall X.\,(A\rightarrow X)\rightarrow M^{X}\cong M^{A}$
 (this equivalence is a Yoneda identity). Although $\text{Cod}_{L}^{M,A}$
-is a lawful monad (Statement~\ref{par:Exercise-combined-codensity-monad}),
+is a lawful monad (Exercise~\ref{subsec:Exercise-combined-codensity-monad}),
 it cannot serve as a monad transformer because the lift $M^{A}\rightarrow\text{Cod}_{L}^{M,A}$
 does not exist for some $L$ and $M$. A simple counterexample is
 found with $M^{A}\triangleq R\rightarrow A$ and $L^{A}\triangleq\bbnum 1+A$
@@ -9056,7 +9057,7 @@ and for more references.} \textbf{on} $F$ is defined by
 \[
 \text{Cod}^{F,A}\triangleq\forall R.\,(A\rightarrow F^{R})\rightarrow F^{R}\quad.
 \]
-Before considering its transformer, we will establish some properties
+Before considering its transformer, we need to establish some properties
 of this monad.
 
 Note the similarity of $\text{Cod}^{F,A}$ with the continuation monad
@@ -9251,8 +9252,8 @@ f(a)(b\rightarrow g(b)(\text{pu}_{F}))\neq f(a)(\text{pu}_{F})\triangleright\tex
 \]
 There are no laws that would allow us to replace $\text{pu}_{F}$
 in the \emph{argument} of $f$ because $f$ is an arbitrary function.
-In part (c) of this proof, we will see an example that violates the
-composition law of \lstinline!outC!.
+In part \textbf{(c)} of this proof, we will see an example that violates
+the composition law of \lstinline!outC!.
 
 \textbf{(c)} The functions \lstinline!inC! and \lstinline!outC!
 are not isomorphisms because $\text{outC}\bef\text{inC}\not=\text{id}$.
@@ -9322,7 +9323,7 @@ groups of laws.
 
 \paragraph{The monad laws}
 
-holds for $T_{\text{Cod}}^{M,A}$ due to Statement~\ref{subsec:Statement-codensity-monad-lawful},
+hold for $T_{\text{Cod}}^{M,A}$ due to Statement~\ref{subsec:Statement-codensity-monad-lawful},
 where we need to replace the type constructor $F$ by the composition
 $M^{F^{\bullet}}$.
 
@@ -10428,7 +10429,7 @@ to most monad stacks, including stacks that contain a single monad
 with an incomplete or missing transformer (such as \lstinline!Cont!
 or \lstinline!IO!) located at the deep end of the stack. This section,
 based on the methods and results explained in a paper by M.~Jaskelioff,\footnote{\textsf{``}Modular monad transformers\textsf{''}, see \texttt{\href{https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.219.5365}{https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.219.5365}}}
-will show how \texttt{Monatron}\textsf{'}s lifting works. 
+will show how \texttt{Monatron}\textsf{'}s liftings work. 
 
 \paragraph{Common type signatures for operations}
 
@@ -11483,7 +11484,7 @@ type parameter $B$ appears under the universal quantifier ($\forall B$)
 and is in a covariant position. So, we can set $B=\bbnum 0$ in the
 type of \lstinline!callcc! and obtain an equivalent type:
 \[
-A\rightarrow(\bbnum 0\rightarrow R)\rightarrow R\cong A\rightarrow\bbnum 1\rightarrow R\cong A\rightarrow R\quad.
+\gunderline{\forall B.}\,A\rightarrow(\gunderline B\rightarrow R)\rightarrow R\cong A\rightarrow(\gunderline{\bbnum 0\rightarrow R})\rightarrow R\cong A\rightarrow\gunderline{\bbnum 1\rightarrow}\,R\cong A\rightarrow R\quad.
 \]
 The type $A\rightarrow R$ can be seen as equivalent to a function
 of type $A\rightarrow(B\rightarrow R)\rightarrow R$ that ignores
@@ -12014,10 +12015,10 @@ in \textbf{(b)}, because a lawful \lstinline!flift! function with
 type $M^{A}\rightarrow L^{A}$ cannot be implemented.
 
 
-\subsubsection{Exercise \label{par:Exercise-combined-codensity-monad}\ref{par:Exercise-combined-codensity-monad}{*}}
+\subsubsection{Exercise \label{subsec:Exercise-combined-codensity-monad}\ref{subsec:Exercise-combined-codensity-monad}{*}}
 
-\textbf{(a)} The \textbf{composed} \index{codensity monad!composed}\textbf{codensity
-monad} $\text{Cod}_{F}^{M,A}$ is defined by
+\textbf{(a)} The\index{monads!composed codensity monad} \textbf{composed}
+\textbf{codensity monad} $\text{Cod}_{F}^{M,A}$ is defined by
 \[
 \text{Cod}_{F}^{M,A}\triangleq\forall X.\,(A\rightarrow F^{X})\rightarrow F^{M^{X}}\quad,
 \]
@@ -12036,9 +12037,9 @@ that satisfy an appropriate naturality law.
 
 \textbf{(b)} Show that the quantifier $\forall X$ cannot be removed
 from the definition of $\text{Cod}_{F}^{M,A}$ even if $F^{A}\triangleq A$:
-show that for a fixed type $X$ and for some $M^{\bullet}$, the type
-constructor $L^{A}\triangleq(A\rightarrow X)\rightarrow M^{X}$ is
-\emph{not} a monad.
+for a fixed type $X$ and for some $M^{\bullet}$, the type constructor
+$L^{A}\triangleq(A\rightarrow X)\rightarrow M^{X}$ is \emph{not}
+a monad.
 
 \subsubsection{Exercise \label{subsec:Exercise-pair-functor-is-rigid}\ref{subsec:Exercise-pair-functor-is-rigid}}
 
