@@ -51,9 +51,11 @@ function make_pdf_with_index_via_ps2pdf {
 }
 
 function make_pdf_with_index {
-	local base="$1"
-	pdflatex --interaction=batchmode "$base"
-	makeindex "$base.idx"
+	local base="$1" fast="$2"
+	if [[ -z "$fast" ]]; then
+		pdflatex --interaction=batchmode "$base"
+		makeindex "$base.idx"
+	fi
 	pdflatex --interaction=batchmode "$base"
 }
 
@@ -137,7 +139,7 @@ insert_examples_exercises_count $name $name.tex
 ## Remove mathpazo. This was a mistake: should not remove it.
 #LC_ALL=C sed -i.bak -e 's/^.*usepackage.*mathpazo.*$//' $name.tex
 # Replace ugly Palatino quote marks and apostrophes by sans-serif marks.
-LC_ALL=C sed -i.bak -e " s|'s|\\\\textsf{'}s|g; s|s'|s\\\\textsf{'}|g;  "' s|``|\\textsf{``}|g; s|“|\\textsf{``}|g; '" s|''|\\\\textsf{''}|g; s|”|\\\\textsf{''}|g;  s|\\\\textsf{'}'|\\\\textsf{''}|g; " $name*.tex
+LC_ALL=C sed -i.bak -e " s|'s|\\\\textsf{'}s|g; s|O'|O\\\\textsf{'}|g; s|s'|s\\\\textsf{'}|g; "' s|``|\\textsf{``}|g; s|“|\\textsf{``}|g; '" s|''|\\\\textsf{''}|g; s|”|\\\\textsf{''}|g;  s|\\\\textsf{'}'|\\\\textsf{''}|g; " $name*.tex
 # Add color to equation displays.
 for f in $name*tex; do add_color "$f"; done
 # Export Scala code snippets.
@@ -195,6 +197,14 @@ create_draft $name $draft-nolulu.pdf
 mv "$name"-lulu.pdf "$name".pdf
 
 fi
+
+# Create a full pdf without hyperlinks.
+mv "$name.pdf" "$name-hyperlinks.pdf"
+LC_ALL=C sed -i.bak -e 's|colorlinks=true|colorlinks=false|' $name.tex 
+make_pdf_with_index $name fast
+mv "$name.pdf" "$name-nohyperlinks.pdf"
+mv "$name-hyperlinks.pdf" "$name.pdf"
+
 
 bash spelling_check.sh
 
