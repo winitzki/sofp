@@ -128,7 +128,7 @@ echo "Info: Using pdftk from '$pdftk' and lyx from '$lyx', lyx directory $lyxdir
 rm -f $name*tex $name*log $name*ilg $name*idx $name*toc
 
 echo "Exporting LyX files $name.lyx and its child documents into LaTeX..."
-"$lyx" $lyxdir --export pdflatex $name.lyx # Exports LaTeX for all child documents as well.
+"$lyx" $lyxdir -f all --export pdflatex $name.lyx # Exports LaTeX for all child documents as well.
 
 #### Here, the LaTeX files are heavily post-processed after exporting from LyX.
 
@@ -198,13 +198,14 @@ mv "$name"-lulu.pdf "$name".pdf
 
 fi
 
-# Create a full pdf without hyperlinks.
+if [ x"$1" == x-print ]; then
+# Create a full pdf without hyperlinks, for printing on paper. Remove the cover image from first page.
 mv "$name.pdf" "$name-hyperlinks.pdf"
-LC_ALL=C sed -i.bak -e 's|colorlinks=true|colorlinks=false|' $name.tex 
+LC_ALL=C sed -i.bak -e 's|colorlinks=true|colorlinks=false|; s|\\input{sofp-cover-page}||; ' $name.tex 
 make_pdf_with_index $name fast
 mv "$name.pdf" "$name-nohyperlinks.pdf"
 mv "$name-hyperlinks.pdf" "$name.pdf"
-
+fi
 
 bash spelling_check.sh
 
