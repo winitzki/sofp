@@ -52,7 +52,7 @@ function make_pdf_with_index_via_ps2pdf {
 
 function make_pdf_with_index {
 	local base="$1" fast="$2"
-	if [[ -z "$fast" ]]; then
+	if [ x"$fast" == x ]]; then
 		pdflatex --interaction=batchmode "$base"
 		makeindex "$base.idx"
 	fi
@@ -76,13 +76,7 @@ function add_source_hashes {
 	sourcehash=`source_hash`
 	echo $sourcehash > $name.source_hash1
 	LC_ALL=C sed -i.bak -E -e "s/INSERTSOURCEHASH/$sourcehash/; s/INSERTGITCOMMIT/$gitcommit/" $name.tex
-	if diff -q $name.source_hash $name.source_hash1 > /dev/null; then
-		mv $name.source_hash1 $name.source_hash
-		false
-	else
-		mv $name.source_hash1 $name.source_hash
-		true
-	fi
+	mv $name.source_hash1 $name.source_hash
 }
 
 function insert_examples_exercises_count { # This is replaced in the root file only.
@@ -130,7 +124,11 @@ rm -f $name*tex $name*log $name*ilg $name*idx $name*toc
 echo "Exporting LyX files $name.lyx and its child documents into LaTeX..."
 "$lyx" $lyxdir -f all --export pdflatex $name.lyx # Exports LaTeX for all child documents as well.
 
-#### Here, the LaTeX files are heavily post-processed after exporting from LyX.
+# Preparing source files for the book cover.
+cp book_cover/sofp-cover-page-no-bg.tex .
+cp book_cover/sofp-cover-page.tex .
+
+#### The LaTeX files are heavily post-processed after exporting from LyX.
 
 echo "Post-processing LaTeX files..."
 
@@ -153,20 +151,18 @@ for f in $name-*tex; do g=`basename "$f" .tex`; cat $g.pre.md <(perl extract_sca
 LC_ALL=C sed -i.bak -e " s| +//IGNORETHIS.*||" $name*.tex
 
 # Check whether the sources have changed. If so, create a new sources archive and a new PDF file.
-if add_source_hashes $name.tex; then
-        assemble_sources &
-	echo "Creating a full PDF file..."
-	make_pdf_with_index "$name" # Output is $name.pdf, main file is $name.tex, and other .tex files are \include'd.
-	wait
-	# Do not attach sources to the main PDF file.
-	#"$pdftk" "$name.pdf" attach_files "$name-src.tar.bz2" output "1$name.pdf"
-	#mv "1$name.pdf" "$name.pdf"
-	# Cleanup.
-	( tar jcvf "$name-logs.tar.bz2" $name*log $name*ilg $name*idx $name*toc
-	  echo "Log files are found in $name-logs.tar.bz2"
-        ) &
-fi
-
+add_source_hashes $name.tex
+assemble_sources &
+echo "Creating a full PDF file..."
+make_pdf_with_index "$name" # Output is $name.pdf, main file is $name.tex, and other .tex files are \include'd.
+wait
+# Do not attach sources to the main PDF file.
+#"$pdftk" "$name.pdf" attach_files "$name-src.tar.bz2" output "1$name.pdf"
+#mv "1$name.pdf" "$name.pdf"
+# Cleanup.
+( tar jcvf "$name-logs.tar.bz2" $name*log $name*ilg $name*idx $name*toc
+  echo "Log files are found in $name-logs.tar.bz2"
+) &
 
 function kbSize {
  local file="$1"
@@ -217,9 +213,10 @@ fi
 bash spelling_check.sh
 
 # Prepare book covers.
-insert_examples_exercises_count $name sofp-back-cover.tex
-sed -i.bak -e "s|TOTALPAGES|$total_pages|" sofp-cover-parameters.tex
-bash sofp-make-cover.sh
+for f in sofp-back-cover sofp-cover-parameters; do cp book_cover/$f.tex.src book_cover/$f.tex; done
+insert_examples_exercises_count $name book_cover/sofp-back-cover.tex
+sed -i.bak -e "s|TOTALPAGES|$total_pages|" book_cover/sofp-cover-parameters.tex
+(cd book_cover; bash sofp-make-cover.sh)
 
 # Cleanup?
 #rm -f $name*{idx,ind,aux,dvi,ilg,out,toc,log,ps,lof,lot,data}
