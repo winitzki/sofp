@@ -150,15 +150,25 @@ for f in $name-*tex; do g=`basename "$f" .tex`; cat $g.pre.md <(perl extract_sca
 # Remove control annotations for Scala code snippets.
 LC_ALL=C sed -i.bak -e " s| +//IGNORETHIS.*||" $name*.tex
 
+# Prepare book cover sources.
+for f in sofp-back-cover sofp-cover-parameters; do cp book_cover/$f.tex.src book_cover/$f.tex; done
+cp book_cover/cover-background* .
+
 # Check whether the sources have changed. If so, create a new sources archive and a new PDF file.
 add_source_hashes $name.tex
+
 assemble_sources &
+
 echo "Creating a full PDF file..."
+
 make_pdf_with_index "$name" # Output is $name.pdf, main file is $name.tex, and other .tex files are \include'd.
+
 wait
+
 # Do not attach sources to the main PDF file.
 #"$pdftk" "$name.pdf" attach_files "$name-src.tar.bz2" output "1$name.pdf"
 #mv "1$name.pdf" "$name.pdf"
+
 # Cleanup.
 ( tar jcf "$name-logs.tar.bz2" $name*log $name*ilg $name*idx $name*toc
   echo "Log files are found in $name-logs.tar.bz2"
@@ -190,30 +200,28 @@ else
 	echo Not attaching sources to draft since no source file $name-src.tar.bz2 is found or no $draft.pdf is found.
 fi
 if [ x"$1" == x-nolulu ]; then
-# Create a pdf file without references to lulu.com and without lulu.com's ISBN.
-mv "$name".pdf "$name"-lulu.pdf
-remove_lulu $name
-make_pdf_with_index "$name" fast
-create_draft $name $draft-nolulu.pdf
+	# Create a pdf file without references to lulu.com and without lulu.com's ISBN.
+	mv "$name".pdf "$name"-lulu.pdf
+	remove_lulu $name
+	make_pdf_with_index "$name" fast
+	create_draft $name $draft-nolulu.pdf
 
-# The main file "$name".pdf has lulu.com information.
-mv "$name"-lulu.pdf "$name".pdf
-
+	# The main file "$name".pdf has lulu.com information.
+	mv "$name"-lulu.pdf "$name".pdf
 fi
 
 if [ x"$1" == x-print ]; then
-# Create a full pdf without hyperlinks, for printing on paper. Remove the cover image from first page.
-mv "$name.pdf" "$name-hyperlinks.pdf"
-LC_ALL=C sed -i.bak -e 's|colorlinks=true|colorlinks=false|; s|\\input{sofp-cover-page}||; ' $name.tex 
-make_pdf_with_index $name fast
-mv "$name.pdf" "$name-nohyperlinks.pdf"
-mv "$name-hyperlinks.pdf" "$name.pdf"
+	# Create a full pdf without hyperlinks, for printing on paper. Remove the cover image from first page.
+	mv "$name.pdf" "$name-hyperlinks.pdf"
+	LC_ALL=C sed -i.bak -e 's|colorlinks=true|colorlinks=false|; s|\\input{sofp-cover-page}||; ' $name.tex 
+	make_pdf_with_index $name fast
+	mv "$name.pdf" "$name-nohyperlinks.pdf"
+	mv "$name-hyperlinks.pdf" "$name.pdf"
 fi
 
 bash spelling_check.sh
 
 # Prepare book covers.
-for f in sofp-back-cover sofp-cover-parameters; do cp book_cover/$f.tex.src book_cover/$f.tex; done
 insert_examples_exercises_count $name book_cover/sofp-back-cover.tex
 sed -i.bak -e "s|TOTALPAGES|$total_pages|" book_cover/sofp-cover-parameters.tex
 (cd book_cover; bash sofp-make-cover.sh)
