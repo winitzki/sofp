@@ -136,14 +136,19 @@ echo "Post-processing LaTeX files..."
 
 # Insert the number of examples and exercises. This replacement is only for the root file.
 insert_examples_exercises_count $name $name.tex
+
 ## Remove mathpazo. This was a mistake: should not remove it.
 #LC_ALL=C sed -i.bak -e 's/^.*usepackage.*mathpazo.*$//' $name.tex
+
 # Replace ugly Palatino quote marks and apostrophes by sans-serif marks.
 LC_ALL=C sed -i.bak -e " s|'s|\\\\textsf{'}s|g; s|O'|O\\\\textsf{'}|g; s|s'|s\\\\textsf{'}|g; "' s|``|\\textsf{``}|g; s|“|\\textsf{``}|g; '" s|''|\\\\textsf{''}|g; s|”|\\\\textsf{''}|g;  s|\\\\textsf{'}'|\\\\textsf{''}|g; " $name*.tex
+
 # Add color to equation displays.
 for f in $name*tex; do add_color "$f"; done
+
 # Export Scala code snippets.
 for f in $name-*tex; do g=`basename "$f" .tex`; cat $g.pre.md <(perl extract_scala_snippets.pl < $f) > ../mdoc/$g.md; done
+
 # Remove control annotations for Scala code snippets.
 LC_ALL=C sed -i.bak -e " s| +//IGNORETHIS.*||" $name*.tex
 
@@ -173,10 +178,12 @@ function pdfPages {
  "$pdftk" "$file" dump_data | fgrep NumberOfPages | sed -e 's,^.* ,,'
 }
 
-echo Result is "$name.pdf", size `kbSize "$name.pdf"` bytes, with `pdfPages "$name.pdf"` pages.
+total_pages=`pdfPages "$name".pdf`
+
+echo Result is "$name.pdf", size `kbSize "$name.pdf"` bytes, with $total_pages pages.
 
 # Create the lulu.com draft file by selecting the chapters that have been proofread.
-# Also, check page counts.
+# Check page counts in the draft file and in individual chapters.
 bash check_and_make_draft.sh
 bash check-consistent-labels.sh
 bash check-lines_with_displaymath_in_new_paragraph.sh
@@ -208,6 +215,11 @@ mv "$name-hyperlinks.pdf" "$name.pdf"
 fi
 
 bash spelling_check.sh
+
+# Prepare book covers.
+insert_examples_exercises_count $name sofp-back-cover.tex
+sed -i.bak -e "s|TOTALPAGES|$total_pages|" sofp-cover-parameters.tex
+bash sofp-make-cover.sh
 
 # Cleanup?
 #rm -f $name*{idx,ind,aux,dvi,ilg,out,toc,log,ps,lof,lot,data}
