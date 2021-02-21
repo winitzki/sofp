@@ -52,7 +52,7 @@ function make_pdf_with_index_via_ps2pdf {
 
 function make_pdf_with_index {
 	local base="$1" fast="$2"
-	if [ x"$fast" == x ]]; then
+	if [ x"$fast" == x ]; then
 		pdflatex --interaction=batchmode "$base"
 		makeindex "$base.idx"
 	fi
@@ -107,7 +107,7 @@ function assemble_sources {
 	mkdir "$srcbase"
 	# Copy the required source files to "$srcbase"/. Include graphics files referenced as images.
 	cp ../README.md excluded_words $name*lyx $name*tex $name*dvi `grep -o 'includegraphics[^}]*}' $name*tex | sed -e 's,[^{]*{\([^}]*\)}.*,\1.*,' |while read f; do ls $f ; done` *.sh "$srcbase"/
-	tar jcvf "$name-src.tar.bz2" "$srcbase"/*
+	tar jcf "$name-src.tar.bz2" "$srcbase"/*
 	rm -rf "$srcbase"/
 }
 
@@ -160,7 +160,7 @@ wait
 #"$pdftk" "$name.pdf" attach_files "$name-src.tar.bz2" output "1$name.pdf"
 #mv "1$name.pdf" "$name.pdf"
 # Cleanup.
-( tar jcvf "$name-logs.tar.bz2" $name*log $name*ilg $name*idx $name*toc
+( tar jcf "$name-logs.tar.bz2" $name*log $name*ilg $name*idx $name*toc
   echo "Log files are found in $name-logs.tar.bz2"
 ) &
 
