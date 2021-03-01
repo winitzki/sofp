@@ -10,6 +10,10 @@ This is the official source repository for the new book _The Science of Function
 
 The book is a tutorial exposition of the theoretical knowledge that functional programmers need. The material is developed from first principles and contains complete explanations, derivations, and proofs of almost all required results.
 
+## Discussions about the book
+
+[Discuss the book on github](https://github.com/winitzki/sofp/discussions)
+
 ## Related video presentations
 
 [Explaining "theorems for free" and parametricity](https://youtu.be/nSyG5USX3-c)
