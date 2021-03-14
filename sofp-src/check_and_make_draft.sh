@@ -38,7 +38,7 @@ chapters=("Preface" "Mathematical formulas as code. I." \
  "\`\`Applied functional type theory'': A proposal" "Essay: Software engineers and software artisans" \
  "Essay: Towards functional data engineering with Scala" "Essay: Why category theory" \
  "A Notations" "B Glossary of terms" "C Inferring code from types" \
- "D Parametricity theorem" "E Solutions to some exercises" "F A humorous disclaimer" "G GNU Free Documentation License" \
+ "D Parametricity theorem" "E Solutions of some exercises" "F A humorous disclaimer" "G GNU Free Documentation License" \
  "List of Tables" "List of Figures" "Index" "END_OF_BOOK")
 
 function kbSize {
