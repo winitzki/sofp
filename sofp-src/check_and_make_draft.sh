@@ -6,10 +6,10 @@
 name="sofp"
 
 # Expected total number of pages in the book draft:
-draft_pages=638
+draft_pages=672
 
 # The number of pages in each chapter:
-pagecounts=(3 17 42 34 24 49 43 12 63 54 63 10 6 24 148 4 5 6 3 6 6 3 5 17 16 1 2 1 1 5)
+pagecounts=(3 17 42 34 24 49 43 12 63 54 63 10 6 24 148 4 5 6 3 6 6 3 5 48 17 1 2 1 1 6)
 
 # To create the draft version that contains only proofread chapters:
 # cut out from here, including:
@@ -38,7 +38,7 @@ chapters=("Preface" "Mathematical formulas as code. I." \
  "\`\`Applied functional type theory'': A proposal" "Essay: Software engineers and software artisans" \
  "Essay: Towards functional data engineering with Scala" "Essay: Why category theory" \
  "A Notations" "B Glossary of terms" "C Inferring code from types" \
- "D Parametricity theorem" "E Solutions to some exercises" "F A humorous disclaimer" "G GNU Free Documentation License" \
+ "D Parametricity theorem" "E Solutions of some exercises" "F A humorous disclaimer" "G GNU Free Documentation License" \
  "List of Tables" "List of Figures" "Index" "END_OF_BOOK")
 
 function kbSize {

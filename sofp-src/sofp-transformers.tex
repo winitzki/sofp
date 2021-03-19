@@ -722,10 +722,11 @@ result. So, they may not need runners of type $\text{List}^{A}\rightarrow A$.
 Also, a list may be empty, which makes a fully parametric function
 of type $\text{List}^{A}\rightarrow A$ impossible. However, the foreign
 monad $M$ may come with its runner $\theta_{M}$. We can use $\theta_{M}$
-to run the $M$\textsf{'}s effects and extract values from a \lstinline!ListT!.
-This is accomplished by a runner (call it \lstinline!runListT!) that
-applies $M$\textsf{'}s runner ($\theta_{M}$) to a value of type \lstinline!ListT[M, A]!
-and obtains a \lstinline!List[A]!. The code may be written as:
+to run the $M$\textsf{'}s effects and extract values from a \lstinline!ListT!
+into an ordinary \lstinline!List!. This is accomplished by a runner
+(call it \lstinline!runListT!) that applies $M$\textsf{'}s runner ($\theta_{M}$)
+to a value of type \lstinline!ListT[M, A]! and obtains a \lstinline!List[A]!.
+The code may be written as:
 \begin{lstlisting}
 def runListT[A](runner: M[A] => A)(listT: ListT[M, A]): List[A] = runner(listT.value) match {
   case None                => List()
@@ -740,15 +741,16 @@ per list value. When $M$ is of function type, a value of type \lstinline!ListT[M
 is an \textsf{``}on-call\textsf{''}\index{on-call value} sequence whose elements
 are not available in advance but will be evaluated on demand when
 $\theta_{M}$ is applied. So, the total number of elements in \lstinline!ListT!
-may not be known in advance and may be infinite. An example of an
-\textsf{``}infinite\textsf{''} collection uses the \lstinline!Reader! monad as $M$:
+may not be known in advance and may be infinite. Here is an example
+of an \textsf{``}infinite\textsf{''} collection that uses the \lstinline!Reader!
+monad as $M$:
 \begin{lstlisting}
-def ascend(a: Int): ListT[Reader[Int, *], Int] = ListT(Lazy(k => Some((a, ascend(a + k)))))
+def ascend(n: Int): ListT[Reader[Int, *], Int] = ListT(Lazy(k => Some((n, ascend(n + k)))))
 \end{lstlisting}
-This is a well-defined value of type \lstinline!ListT! that represents
-integer sequences $\left[a,a+k,a+2k,...\right]$. The parameter $k$
-is passed via the \lstinline!Reader! monad\textsf{'}s dependency injection.
-It is clear that \lstinline!runListT! will not terminate when applied
+Evaluating \lstinline!ascend(n)! gives a well-defined value representing
+the sequence $\left[n,n+k,n+2k,...\right]$. The parameter $k$ is
+passed via the \lstinline!Reader! monad\textsf{'}s dependency injection. It
+is clear that \lstinline!runListT! will not terminate when applied
 to such a sequence. 
 
 This example shows how to use \lstinline!ListT! for creating effectful
@@ -819,7 +821,7 @@ def blift[M[_]: Monad, S, A](p: State[S, A]): StateT[M, S, A] = StateT(s => Mona
 \end{align*}
 
 The \lstinline!State! monad\textsf{'}s runner ($\theta_{\text{State}}$) substitutes
-a given initial state and extracts the final value:
+a given initial state (\lstinline!init!) and extracts the final value:
 \begin{lstlisting}
 def runState[S, A](init: S)(p: State[S, A]): A = p.run(init)._1
 \end{lstlisting}
@@ -828,12 +830,12 @@ def runState[S, A](init: S)(p: State[S, A]): A = p.run(init)._1
 \]
 
 The transformer \lstinline!StateT! does not have a general base runner
-of the form $\text{brun}\,(\theta_{\text{State}})$ converting an
-\emph{arbitrary} runner $\theta_{\text{State}}:\text{State}^{S,A}\rightarrow A$
+of the form $\text{brun}\,(\theta_{\text{State}})$: we cannot convert
+an \emph{arbitrary} runner $\theta_{\text{State}}:\text{State}^{S,A}\rightarrow A$
 into a function of type $T_{\text{State}}^{M,A}\rightarrow M^{A}$.
 Instead, we need to implement a specialized base runner that converts
-$T_{\text{State}}^{M,A}$ into $M^{A}$ directly, running the \lstinline!State!
-monad\textsf{'}s effects but keeping the effects of the foreign monad $M$:
+$T_{\text{State}}^{M,A}$ into $M^{A}$ by running the \lstinline!State!
+monad\textsf{'}s effects while keeping the effects of the foreign monad $M$:
 \begin{lstlisting}
 def brunStateT[M[_]: Functor, S, A](init: S)(t: StateT[M, S, A]): M[A] = t.run(init).map(_._1)
 \end{lstlisting}
@@ -888,8 +890,8 @@ has no implementation parametric in the monad $M$. The reason is
 that we cannot produce a value of type $R$ out of $M^{R}$ parametrically
 (some monads have no runners), and so we cannot convert $A\rightarrow M^{R}$
 into $A\rightarrow R$. This prevents us from using the first argument
-of \lstinline!blift! (a function of type $(A\rightarrow R)\rightarrow R$),
-while creating a value of type $(A\rightarrow M^{R})\rightarrow M^{R}$
+of \lstinline!blift! (a function of type $(A\rightarrow R)\rightarrow R$).
+Also, creating a value of type $(A\rightarrow M^{R})\rightarrow M^{R}$
 from scratch is impossible. 
 
 To produce an explicit example where \lstinline!blift! cannot be
@@ -906,11 +908,11 @@ The absence of \textsf{``}base lift\textsf{''} for the continuation monad transf
 means that we cannot use the continuation monad in a functor block
 as freely as other monads. We cannot lift an arbitrary given value
 of type \lstinline!Cont[R, A]! into the transformed monad \lstinline!ContT[M, R, A]!.
-Concrete values of type \lstinline!Cont[R, A]! may result from calling
-third-party libraries implemented in non-fully-parametric code. It
-may be impossible to rewrite that code to return \lstinline!ContT[M, R, A]!
-with an arbitrary monad \lstinline!M!. This deficiency of the continuation
-monad makes it unsuitable for certain applications. 
+Values of type \lstinline!Cont[R, A]! may come from third-party libraries
+implemented in non-fully-parametric code. It may be impossible to
+rewrite that code to return \lstinline!ContT[M, R, A]! with an arbitrary
+monad \lstinline!M!. This deficiency of the continuation monad makes
+it unsuitable for certain applications. 
 
 The continuation monad also does not support foreign runners or base
 runners. The type signature of the method $\text{frun}:T_{\text{Cont}}^{M,A}\rightarrow T_{\text{Cont}}^{N,A}$
@@ -1074,11 +1076,10 @@ and the following examples illustrate stacking monads in different
 orders.
 
 \begin{table}
-
 \begin{centering}
 \begin{tabular}{|c|c|c|c|c|}
 \hline 
-\textbf{\small{}Base monad $L^{A}$} & \textbf{\small{}Foreign monad $M^{A}$} & \textbf{\small{}Monad $T_{L}^{M}$} & \textbf{\small{}Monad $T_{M}^{L}$} & \textbf{\small{}Same?}\tabularnewline
+\textbf{\small{}Monad $L^{A}$} & \textbf{\small{}Monad $M^{A}$} & \textbf{\small{}Monad $T_{L}^{M}$} & \textbf{\small{}Monad $T_{M}^{L}$} & \textbf{\small{}Same?}\tabularnewline
 \hline 
 \hline 
 {\small{}}\lstinline!Reader[R, A]! & {\small{}}\lstinline!Either[E, A]! & {\small{}$T_{L}^{M,A}=R\rightarrow E+A$} & {\small{}$T_{M}^{L,A}=R\rightarrow E+A$} & {\small{}Yes}\tabularnewline
@@ -1259,7 +1260,8 @@ which is a functor composition:
 \begin{lstlisting}
 type OptionTry[A] = Try[Option[A]]
 \end{lstlisting}
-We now apply \lstinline!ListT! to the monad \lstinline!OptionTry!:
+We now apply \lstinline!ListT! to the monad \lstinline!OptionTry!,
+which gives a recursive type definition:
 \begin{lstlisting}
 final case class ListOptionTry[A](value: Try[Option[Option[(A, ListOptionTry[A])]]])
 \end{lstlisting}
@@ -1269,12 +1271,12 @@ we need to start with the innermost nested monad (\lstinline!Try!)
 and apply its transformer (\lstinline!TryT!) to the foreign monad
 $M$:
 \begin{lstlisting}
-type TryM[A] = M[Try[A]]
+type TryM[A] = M[Try[A]]   // TryT[M, A] is defined as M[Try[A]].
 \end{lstlisting}
 The next step is to apply \lstinline!Option!\textsf{'}s transformer to the
-monad \lstinline!TryM!:
+foreign monad \lstinline!TryM!:
 \begin{lstlisting}
-type OptionTryM[A] = M[Try[Option[A]]
+type OptionTryM[A] = M[Try[Option[A]]  // OptionT[TryM, A] is defined as TryM[Option[A]].
 \end{lstlisting}
 Finally, we apply the \lstinline!ListT! transformer to the last monad:
 \begin{lstlisting}
@@ -1288,7 +1290,7 @@ $T_{L}^{M}$ somehow mixes the foreign monad $M$ with the type of
 the base monad $L$. In every example, if we set $M$ to the identity
 monad $\text{Id}$ (defined by $\text{Id}^{A}\triangleq A$), the
 transformed type will become equivalent to the base monad $L$. So,
-we may expect that property to hold for every transformer:
+we may expect this property to hold for every transformer:
 \[
 T_{L}^{\text{Id}}\cong L\quad,\quad\text{equivalently written as:}\quad\quad L\varangle\text{Id}\cong L\quad.
 \]
@@ -1316,22 +1318,22 @@ programming. The question is open (Problem~\ref{par:Problem-monads-2})
 even if restricted to monads whose methods are implemented by fully
 parametric code.
 
-Monad transformers certainly cannot exist for monads defined using
-code that executes side effects. Examples of that kind are the \lstinline!Future!
-monad and other \textsf{``}task-like\textsf{''} monads that perform side effects with
-parallel threads. Transformers also cannot exist for external side-effect
-monads, such as \lstinline!IO! from the \lstinline!cats-effect!
-library or \lstinline!ZIO! from the \lstinline!zio! library. A transformer
-must allow a foreign monad to cancel the effects of the base monad,
-as we have seen in Example~\ref{subsec:Example-either-state-transformed-cancels-effect}.
-However, side effects cannot be undone once they are performed, because
-side effects may change the state of the external world irreversibly.\footnote{For a discussion, see \texttt{\href{https://stackoverflow.com/questions/11792275/}{https://stackoverflow.com/questions/11792275/}}} 
+Transformers certainly cannot exist for monads defined using code
+that executes side effects. Examples of that kind are the \lstinline!Future!
+monad and other \textsf{``}task-like\textsf{''} monads that create new threads. Transformers
+also cannot exist for external side-effect monads, such as \lstinline!IO!
+from the \lstinline!cats-effect! library or \lstinline!ZIO! from
+the \lstinline!zio! library. The reason is that a transformer must
+allow a foreign monad to cancel the effects of the base monad, as
+we have seen in Example~\ref{subsec:Example-either-state-transformed-cancels-effect}.
+But side effects often cannot be undone once they are run, because
+changes in the external world may be irreversible.\footnote{For a discussion, see \texttt{\href{https://stackoverflow.com/questions/11792275/}{https://stackoverflow.com/questions/11792275/}}} 
 
 Throughout this chapter, we will build transformers for every exponential-polynomial
 monad considered in this book (although some transformers will only
 partially satisfy the required laws).
 
-\subsection{The monad transformer typeclass}
+\subsection{A typeclass for monad transformers}
 
 Transformers such as \lstinline!EitherT! and \lstinline!StateT!
 are type constructors that depend on an arbitrary foreign monad $M$
@@ -1355,7 +1357,8 @@ via \lstinline!frun! as $\text{blift}_{L}^{M}\triangleq\text{frun}_{L}^{\text{Id
 it is convenient to keep all three methods defined separately in the
 typeclass.
 
-Here is a schematic example of defining a typeclass instance for \lstinline!ReaderT!:
+Here is a schematic example of defining an \lstinline!MTrans! typeclass
+instance for \lstinline!ReaderT!:
 \begin{lstlisting}
 final case class Reader[A](run: R => A)     // The fixed type R must be already defined.
 final case class ReaderT[M[_], A](run: Reader[M[A]])
@@ -1926,16 +1929,16 @@ modify the library code will be unable to add new operations.
 The second problem is the lack of a general method for lifting effectful
 operations to arbitrary monad transformers.\footnote{M.~\index{Mauro Jaskelioff}Jaskelioff developed a technique that
 can lift effectful operations systematically to almost all monad stacks;
-see the paper \texttt{\href{https://www.fceia.unr.edu.ar/~mauro/pubs/monatron.pdf}{https://www.fceia.unr.edu.ar/$\sim$mauro/pubs/monatron.pdf}}} So far, the examples in this subsection were limited to operations
+see Section~\ref{subsec:Monatron}.} So far, the examples in this subsection were limited to operations
 with type signatures of the form $L^{A}$ or $A\rightarrow L^{B}$.
 All operations of this form are lifted from the monad $L$ to a monad
 stack $P$ by composing with a lift function $p:L^{A}\rightarrow P^{A}$.
 However, some operations have significantly different type signatures
 and cannot be lifted to arbitrary monad stacks by composing with a
-lift. For instance, an operation called \lstinline!withEnv! (defined
+lift. For instance, an operation called \lstinline!local! (defined
 for the \lstinline!Reader! monad) has the type signature $R\rightarrow\text{Reader}^{R,A}\rightarrow\text{Reader}^{R,A}$.
 In that type signature, some \lstinline!Reader! values are used as
-arguments (that is, in a contravariant position). So, \lstinline!withEnv!
+arguments (that is, in a contravariant position). So, \lstinline!local!
 cannot be converted to a function of type $R\rightarrow P^{A}\rightarrow P^{A}$
 by composing with a lift function $p:\text{Reader}^{R,A}\rightarrow P^{A}$.
 Another example is the \lstinline!Writer! monad\textsf{'}s \lstinline!clear!
@@ -2041,7 +2044,7 @@ and refactoring two adjacent lifted source lines into a separate functor
 block.
 
 If $L$\textsf{'}s \lstinline!pure! method is used before a source line, we
-expect this refactoring to work:
+expect the following refactoring to work:
 
 \vspace{-0.6\baselineskip}
 
@@ -2228,24 +2231,24 @@ A monad\textsf{'}s runner ($\theta_{M}:M^{A}\rightarrow A$) extracts results
 of type $A$ from monadic values of type $M^{A}$. The use of a runner
 will agree with programmer\textsf{'}s intuition if the runner obeys the laws
 of monad morphisms (see Definition~\ref{subsec:Definition-monad-morphism});
-a runner $\theta_{M}$ must be a monad morphism $M\leadsto\text{Id}$
-between $M$ and the identity monad ($\text{Id}$). Heuristically,
+a runner $\theta_{M}$ must be a monad morphism of type $M\leadsto\text{Id}$
+(between $M$ and $\text{Id}$, the identity monad). Heuristically,
 a runner \textsf{``}executes\textsf{''} or \textsf{``}runs\textsf{''} the effects of the monad $M$
 and delivers an effect-free value as a result.
 
-How can we extract the result values from a monad stack that combines
+How can we extract effect-free values from a monad stack that combines
 the effects of several monads? Let us try to create a runner $\theta_{T}:T_{L}^{M,A}\rightarrow A$
-for the transformed monad $T_{L}^{M}$ assuming that both $L$ and
+for the transformed monad $T_{L}^{M}$, provided that both $L$ and
 $M$ have known runners $\theta_{L}$ and $\theta_{M}$.
 
 As a first example, assume a compositional transformer such as $T_{L}^{M}=L\circ M$;
 this is the case for $L=$ \lstinline!Reader! and some other monads.
 Given a runner $\theta_{M}$, we may first run $M$\textsf{'}s effects by using
-$\theta_{M}^{\uparrow L}$,
+$\theta_{M}^{\uparrow L}$:
 \[
 \theta_{M}^{\uparrow L}:L^{M^{A}}\rightarrow L^{A}\quad.
 \]
-A result value of type $A$ can be now extracted by using $L$\textsf{'}s runner.
+A value of type $A$ can be now extracted by using $L$\textsf{'}s runner.
 So, we may express $\theta_{T}$ as
 \[
 \theta_{T}\triangleq\theta_{M}^{\uparrow L}\bef\theta_{L}\quad.
@@ -2296,7 +2299,7 @@ These examples motivate the requirement that a monad transformer should
 come equipped with a base runner $\text{brun}_{L}:T_{L}^{M}\leadsto M$
 and a foreign runner $\text{frun}_{L}(\theta_{M}):T_{L}^{M}\leadsto L$
 as long as the monads $L$ and $M$ have runners $\theta_{L}$ and
-$\theta_{M}$. The foreign runner must be a function $\theta_{M}$,
+$\theta_{M}$. The foreign runner must be a function of $\theta_{M}$,
 but the base runner is not necessarily expressed as a function of
 $\theta_{L}$. The effects of the base monad and of the foreign monad
 may be run in any order, and the results must be the same:
@@ -2341,10 +2344,10 @@ base runner as
 \text{brun}_{L,K}(\phi):(T_{L}^{M}\leadsto T_{K}^{M})\triangleq\phi^{\uparrow M}\quad.
 \]
 
-Apart from the laws of monad morphisms, do we need additional properties
-for the runners? For intuition, recall the example with the continuation
-monad\textsf{'}s runner (Section~\ref{subsec:The-continuation-monad}) that
-works by first mapping \lstinline!Cont! $\leadsto$ \lstinline!Future!
+Apart from the laws of monad morphisms, do \lstinline!frun! and \lstinline!brun!
+need additional properties? For intuition, recall the example with
+the continuation monad\textsf{'}s runner (Section~\ref{subsec:The-continuation-monad})
+that works by first mapping \lstinline!Cont! $\leadsto$ \lstinline!Future!
 and then \lstinline!Future! $\leadsto$ \lstinline!Id!. Denote the
 two runners by
 \[
@@ -2421,17 +2424,16 @@ is written as the law
 \[
 m\triangleright\text{flift}\triangleright\text{brun}\overset{!}{=}m\quad,\quad\text{or equivalently:}\quad\quad\text{flift}\bef\text{brun}\overset{!}{=}\text{id}\quad,
 \]
-called the \textbf{non-degeneracy law}\index{monad transformers!non-degeneracy law}
-of \lstinline!flift! and \lstinline!brun!. The law requires \lstinline!flift!
-and \lstinline!brun! to preserve all information about $M$-effects.
-The analogous non-degeneracy law for \lstinline!blift! and \lstinline!frun!
-is
+called the \textbf{nondegeneracy law}\index{nondegeneracy law!of base runners (brun)@of base runners (\texttt{brun})}
+of  \lstinline!brun!. The law requires \lstinline!flift! and \lstinline!brun!
+to preserve all information about $M$-effects. The analogous nondegeneracy
+law for \lstinline!blift! and \lstinline!frun! is
 \[
 \text{blift}\bef\text{frun}_{L}(\theta_{M})=\text{id}\quad.
 \]
 
 
-\subsection{Category-theoretic properties of lifts and runners\label{subsec:Category-theoretic-properties-of-lifts-and-runners-functors-in-category-of-monads}}
+\subsection{Simplifying the laws of lifts and runners via category theory\label{subsec:Category-theoretic-properties-of-lifts-and-runners-functors-in-category-of-monads}}
 
 We have derived many laws of lifts and runners from heuristic considerations.
 Let us turn to category theory for guidance about obtaining a simplified
@@ -2451,14 +2453,15 @@ we find that \lstinline!frun! maps morphisms between monads ($M$,
 $N$, etc.) to morphisms between monad stacks with base $L$ (such
 as $T_{L}^{M}$, $T_{L}^{N}$, etc.). 
 
-So, let us consider the category of monad stacks with a fixed base
-monad $L$. The objects of that category are all monad stacks $T_{L}^{M}$,
-$T_{L}^{N}$, etc., with the same base monad. The morphisms of that
-category are all monad morphisms between those monad stacks. (Since
-monad stacks are themselves monads, the category of monad stacks with
-base $L$ is a sub-category of the category of monads\index{monads!category of}.) 
+So, let us consider the category of monad\index{category of monads}
+stacks with a fixed base monad $L$. The objects of that category
+are all monad stacks $T_{L}^{M}$, $T_{L}^{N}$, etc., with the same
+base monad. The morphisms of that category are all monad morphisms
+between those monad stacks. (Since monad stacks are themselves monads,
+the category of monad stacks with base $L$ is a sub-category of the
+category of monads\index{monads!category of}.) 
 
-We can now observe that \lstinline!frun! plays the role of the \lstinline!map!
+Observe that \lstinline!frun! plays the role of the \lstinline!fmap!
 function for a (categorical) functor from the category of monads to
 the category of monad stacks with base $L$. That functor (which we
 may denote by $T_{L}^{\bullet}$) maps each monad $M$ to the stack
@@ -2472,14 +2475,14 @@ it maps objects of one category to objects of another. It is not a
 function from \emph{values} of type $M^{A}$ to values of type $T_{L}^{M,A}$.
 That function is \lstinline!flift!. What is the role of \lstinline!flift!
 in the category of monads? The function \lstinline!flift! works in
-the same way for any foreign monad $M$ because the code of \lstinline!flift!
-is parametric in the type constructor $M$. So, let us look at the
+the same way for any foreign monad $M$ (because the code of \lstinline!flift!
+is parametric in the type constructor $M$). So, let us look at the
 relationship between the functions \lstinline!flift! applied to different
 foreign monads.
 
 Assume $M$ and $N$ are some monads for which a monad morphism $\phi:M^{A}\leadsto N^{A}$
 exists. We may use \lstinline!flift! to transform $M^{A}$ into $T_{L}^{M,A}$
-or to transform $N^{A}$ into $T_{L}^{N,A}$. But we can also obtain
+and to transform $N^{A}$ into $T_{L}^{N,A}$. But we can also obtain
 a monad morphism $T_{L}^{M}\leadsto T_{L}^{N}$ as $\text{frun}_{L}\left(\phi\right)$.
 These monad morphisms can be drawn as a square diagram.\begin{wrapfigure}{l}{0.22\columnwidth}%
 \vspace{-1.65\baselineskip}
@@ -2506,11 +2509,12 @@ shows that there are no other monad morphisms between $\text{Id}$
 and $N$.) The monad stack $T_{L}^{M}$ is simplified to $T_{L}^{\text{Id}}\cong L$.
 The function $\text{flift}_{L}^{M,A}$ has type signature $\text{Id}^{A}\rightarrow T_{L}^{M,A}$,
 which is the same as $A\rightarrow L^{A}$. For a general monad $L$,
-there is no other function of this type except $\text{pu}_{L}$; so,
+there is no other function of this type except $\text{pu}_{L}$. So,
 $\text{flift}_{L}^{\text{Id}}$ must be equal to $\text{pu}_{L}$.
 The monad morphism $\text{frun}_{L}(\phi)$ has type signature $T_{L}^{M}\leadsto T_{L}^{N}$,
-which is the same as $L\leadsto T_{L}^{N}$, the type of \lstinline!blift!.
-Since the monad $N$ is arbitrary, it is reasonable to assume that
+which is the same as $L\leadsto T_{L}^{N}$, the type signature of
+\lstinline!blift!. Since the monad $N$ is arbitrary, it is reasonable
+to assume that 
 \[
 \text{frun}_{L}(\phi)=\text{frun}_{L}(\text{pu}_{N})=\text{blift}_{L}^{N}\quad.
 \]
@@ -2540,12 +2544,12 @@ law~(\ref{eq:monadic-naturality-law-of-flift}) becomes
 \text{flift}\bef\text{frun}_{L}(\text{id})=\text{flift}\quad.
 \]
 This equation holds as long as \lstinline!frun! satisfies the identity
-law of monad morphisms.
+law of monad morphisms ($\text{frun}_{L}(\text{id})=\text{id}$).
 
 So, we found that the law~(\ref{eq:monadic-naturality-law-of-flift})
 agrees with previously derived laws and, moreover, covers one of the
 laws of runners. The interpretation of the monadic naturality law
-becomes clear from viewing \lstinline!frun! as a lifting (\textsf{``}\lstinline!map!\textsf{''})
+becomes clear from viewing \lstinline!frun! as a lifting (\textsf{``}\lstinline!fmap!\textsf{''})
 corresponding to the functor $T_{L}$. Denoting that lifting temporarily
 by $^{\uparrow T_{L}}$, we rewrite the law~(\ref{eq:monadic-naturality-law-of-flift})
 as
@@ -2564,19 +2568,19 @@ because $\text{flift}_{L}^{M,A}:M^{A}\rightarrow T_{L}^{M,A}$ also
 satisfies the ordinary naturality law with respect to the type parameter
 $A$, for a fixed monad $M$.
 
-What other runners have monadic naturality properties? Consider the
-base runner, $\text{brun}_{L}:T_{L}^{M}\leadsto M$, assuming it exists
-for the chosen base monad $L$. Viewed in the category of monads,
-this function is a natural transformation between the functor $T_{L}^{\bullet}$
-and the identity functor (going in the opposite way compared with
-\lstinline!flift!). The corresponding \textbf{monadic naturality
-law}\index{monadic naturality law!of base runner (brun)@of base runner (\texttt{brun})}
+What other runners have monadic naturality properties? Suppose that
+the monad $L$\textsf{'}s transformer has a base runner, $\text{brun}_{L}:T_{L}^{M}\leadsto M$.
+Viewed in the category of monads, this function is a natural transformation
+between the functor $T_{L}^{\bullet}$ and the identity functor (going
+in the opposite way compared with \lstinline!flift!). The corresponding
+\textbf{monadic naturality law}\index{monadic naturality law!of base runner (brun)@of base runner (\texttt{brun})}
 is
 \[
-\text{brun}_{L}^{M}\bef\phi^{:M\leadsto N}=\phi^{\uparrow T_{L}}\bef\text{brun}_{L}^{N}=\text{frun}_{L}(\phi)\bef\text{brun}_{L}^{N}\quad.
+\text{brun}_{L}^{M}\bef\phi^{:M\leadsto N}=\text{frun}_{L}(\phi)\bef\text{brun}_{L}^{N}\quad.
 \]
 To see whether it is reasonable to assume this law, let us derive
-some consequences using specific choices of $M$ and $N$.
+some consequences of this law by making specific choices of $M$ and
+$N$.
 
 With $M=\text{Id}$, the function $\phi$ must be $\phi=\text{pu}_{N}$
 (Exercise~\ref{subsec:Exercise-monad-transformer-extra-layer}),
@@ -2617,15 +2621,16 @@ Endofunctors $F^{A}$ having a natural transformation $\text{pu}_{F}:\text{Id}^{A
 are \textsf{``}pointed\textsf{''}\index{pointed functor!in the category of monads};
 those with a natural transformation $\text{ex}_{F}:F^{A}\rightarrow\text{Id}^{A}$
 are \textsf{``}co-pointed\textsf{''}\index{co-pointed functor!in the category of monads}.
-Naturality forces the non-degeneracy law $\text{pu}_{F}\bef\text{ex}_{F}=\text{id}$.
-We find that $T_{L}$ is a pointed endofunctor in the category of
-monads. If the transformer $T_{L}$ has a base runner ($\text{brun}_{L}:T_{L}^{M}\leadsto\text{Id}^{M}$)
+Naturality forces the nondegeneracy law $\text{pu}_{F}\bef\text{ex}_{F}=\text{id}$
+(see Section~\ref{subsec:Co-pointed-functors}). We find that $T_{L}$
+is a pointed endofunctor in the category of monads. If the transformer
+$T_{L}$ has a base runner ($\text{brun}_{L}:T_{L}^{M}\leadsto\text{Id}^{M}$)
 then $T_{L}$ will be also co-pointed.
 
 It is remarkable that all the laws of monad transformers can be derived
 from a single (but more abstract) definition: a monad transformer
 $T$ is \emph{just a pointed and co-pointed endofunctor in the category
-of monads}.\footnote{\textsf{``}\emph{What\textsf{'}s the problem?}\textsf{''} as the joke would go.}
+of monads}.\footnote{\textsf{``}\emph{What\textsf{'}s the big deal?}\textsf{''} as the joke would go.}
 Such a endofunctor $T$ maps monads $M$, $N$, etc., to monads $T^{M}$,
 $T^{N}$, etc. Suppose we were given such a $T$ but were not told
 that it is a monad transformer for some base monad. Still, we can
@@ -2642,20 +2647,16 @@ The functor laws and the monadic naturality laws for those transformations
 will then enforce the 18 laws of monad transformers. In this way,
 a single definition expresses all monad transformer laws.
 
-\paragraph{The non-degeneracy law of \texttt{brun}}
+\paragraph{Open question\texttt{ }}
 
-Is the non-degeneracy law ($\text{flift}_{T}\bef\text{brun}_{T}=\text{id}$)
-a consequence of monadic naturality of \lstinline!brun!? It may be,
-but this book does not have a proof. The composition of two natural
-transformations is again a natural transformation; this is true in
-any category, including the category of monads. So, the composition
-($\text{flift}\bef\text{brun}$) is a natural transformation of type
-$\text{Id}^{\bullet}\leadsto\text{Id}^{\bullet}$; but it is a natural
-transformation \emph{in the category of monads} (rather than in the
-category of all functors). To show that this natural transformation
-is equal to an identity function, we would need to prove that there
-are no other natural transformations between identity functors in
-the category of monads.
+\label{par:Open-question-monad-id-trans}Does the nondegeneracy law
+$\text{flift}_{T}\bef\text{brun}_{T}=\text{id}$ follow from the monadic
+naturality of \lstinline!brun! or other properties? This book does
+not have a proof. The composition ($\text{flift}_{T}\bef\text{brun}_{T}$)
+is a natural transformation of type $\text{Id}^{\bullet}\leadsto\text{Id}^{\bullet}$;
+but it is a natural transformation \emph{in the category of monads}.
+One would need to prove that there are no non-identity natural transformations
+between identity functors in the category of monads.
 
 A natural transformation of type $\text{Id}^{\bullet}\leadsto\text{Id}^{\bullet}$
 means, by definition, a family of monad morphisms $\varepsilon^{M}:M\leadsto M$
@@ -2666,7 +2667,7 @@ whether there exist non-identity monad morphisms $M\leadsto M$ that
 work the same way for every monad $M$. For instance, Exercise~\ref{subsec:Exercise-monad-transformer-extra-layer-3}
 shows a failed attempt to define such a monad morphism.
 
-Since we have not shown that the non-degeneracy law for base runners
+Since we have not shown that the nondegeneracy law for base runners
 automatically follows from monadic naturality, we will need to verify
 that law separately whenever the base runner exists.
 
@@ -2702,12 +2703,13 @@ the corresponding \textbf{functor laws}\index{monad transformers!functor laws of
 It follows from the identity law $T_{L}^{\text{Id}}\cong L$ that
 the base monad $L$ can be lifted into $T_{L}^{M}$. Namely, by computing
 $\text{frun}\left(\phi\right)$ with $\phi\triangleq\text{pu}_{M}:\text{Id}\leadsto M$,
-we obtain a function called the \index{monad transformers!base lift}\textbf{base
-lift} (\lstinline!blift!):
+we obtain a \index{monad transformers!base lift}\textbf{base lift}
+function (\lstinline!blift!):
 \[
 \text{blift}:T_{L}^{\text{Id}}\leadsto T_{L}^{M}\cong L\leadsto T_{L}^{M}\quad,\quad\quad\text{blift}\triangleq\text{frun}\,(\text{pu}_{M})\quad.
 \]
-The base lift automatically satisfies a non-degeneracy law,
+The base lift and the foreign runner automatically satisfy a \textbf{nondegeneracy
+law},\index{nondegeneracy law!of base lift}
 \[
 \text{blift}\bef\text{frun}\,(\phi^{:M\leadsto\text{Id}})=\text{id}\quad,
 \]
@@ -2717,7 +2719,7 @@ law for monad morphisms gives $\text{pu}_{M}\bef\phi=\text{pu}_{\text{Id}}=\text
 \item \textbf{Base runner laws}:\index{monad transformers!base runner laws}
 There is a \textbf{base runner}, a monad morphism $\text{brun}_{L}^{M}:T_{L}^{M}\leadsto M$
 defined parametrically in the monad $M$. The base runner must also
-satisfy a \textbf{non-degeneracy law}:\index{monad transformers!non-degeneracy law}
+satisfy a \textbf{nondegeneracy law}:\index{nondegeneracy law!of base runner}
 \[
 \text{flift}_{L}^{M}\bef\text{brun}_{L}^{M}=\text{id}\quad.
 \]
@@ -2829,14 +2831,14 @@ type $M^{A}$ when monads $L$ and $M$ are arbitrary.
 
 \paragraph{Functor co-product}
 
-The functor co-product $L^{\bullet}+M^{\bullet}$ is in general not
-a monad when $L$ and $M$ are arbitrary monads. A simple counterexample
-is found by using two \lstinline!Reader! monads, $L^{A}\triangleq P\rightarrow A$
-and $M^{A}\triangleq Q\rightarrow A$. The co-product $\left(P\rightarrow A\right)+\left(Q\rightarrow A\right)$
+The co-product $L^{\bullet}+M^{\bullet}$ is in general not a monad
+when $L$ and $M$ are arbitrary monads. A counterexample is found
+by using two \lstinline!Reader! monads, $L^{A}\triangleq P\rightarrow A$
+and $M^{A}\triangleq Q\rightarrow A$: the co-product $\left(P\rightarrow A\right)+\left(Q\rightarrow A\right)$
 is not a monad (Exercise~\ref{subsec:Exercise-1-monads-6}). But
-even if $L^{\bullet}+M^{\bullet}$ were a monad, the result would
-be a \emph{choice} between two different effectful computations, not
-a single computation with a combined effect.
+even when $L^{\bullet}+M^{\bullet}$ is a monad, the identity law
+is violated: with $M=\text{Id}$, the monad $L+\text{Id}$ is not
+equivalent to $L$.
 
 \paragraph{Using the free monad}
 
@@ -2860,7 +2862,7 @@ monad laws hold for the resulting (non-free) monad.
 
 \paragraph{\textsf{``}Day convolution\textsf{''}}
 
-The construction called \textsf{``}\textbf{Day convolution\index{Day convolution}}\textsf{''}
+The construction called \textbf{Day convolution\index{Day convolution}}
 defines a new functor $L\star M$ as 
 \begin{equation}
 \left(L\star M\right)^{A}\triangleq\exists P.\:\exists Q.\,\left(P\times Q\rightarrow A\right)\times L^{P}\times M^{Q}\quad.\label{eq:definition-of-monoidal-convolution}
@@ -2887,7 +2889,7 @@ The Day convolution $L\star M$ is associative\footnote{\texttt{\href{https://en.
 and always produces a functor since Eq.~(\ref{eq:definition-of-monoidal-convolution})
 is covariant in $A$. A simple example where the Day convolution fails
 to produce a monad transformer is $L^{A}\triangleq1+A$ and $M^{A}\triangleq R\rightarrow A$.
-We compute the functor $L\star M$:
+We can compute the functor $L\star M$ explicitly:
 \begin{align*}
  & \left(L\star M\right)^{A}\\
 {\color{greenunder}\text{definitions of }L,M,\star:}\quad & \cong\exists P.\,\exists Q.\,\gunderline{\left(P\times Q\rightarrow A\right)}\times\left(\bbnum 1+P\right)\times\left(R\rightarrow Q\right)\\
@@ -2916,10 +2918,10 @@ The type constructor
 \[
 \text{Cod}^{F,A}\triangleq\forall B.\,(A\rightarrow F^{B})\rightarrow F^{B}
 \]
-is called the \index{codensity monad}\textbf{codensity monad} on
-a functor $F$. The codensity monad provides yet another way of making
-a monad out of any functor. Can we then combine arbitrary monads $L$,
-$M$ into a new monad? It turns out that the codensity construction
+is called the \index{monads!codensity monad}\textbf{codensity monad}
+on a functor $F$. The codensity monad provides yet another way of
+making a monad out of any functor. Can we then combine arbitrary monads
+$L$, $M$ into a new monad? It turns out that the codensity construction
 does not provide enough properties to create a usable monad transformer.
 Here are some attempts:
 
@@ -2959,15 +2961,15 @@ The last type constructor is not a monad: it is a composition of the
 \lstinline!Reader! and \lstinline!State! monads in the wrong order
 (see Statement~\ref{subsec:Example-state-monad-composition-fails-with-reader}).
 
-\textbf{(3)} Consider the \textbf{composed codensity monad}\index{codensity monad!composed},
-defined by
+\textbf{(3)} The \textbf{composed codensity monad}\index{monads!composed codensity monad}
+is defined by
 \[
 \text{Cod}_{L}^{M,A}\triangleq\forall X.\,(A\rightarrow L^{X})\rightarrow L^{M^{X}}\quad.
 \]
 This type constructor can be viewed as the continuation monad transformer
 for the base monad $\forall X.\,(A\rightarrow X)\rightarrow M^{X}\cong M^{A}$
 (this equivalence is a Yoneda identity). Although $\text{Cod}_{L}^{M,A}$
-is a lawful monad (Statement~\ref{par:Exercise-combined-codensity-monad}),
+is a lawful monad (Exercise~\ref{subsec:Exercise-combined-codensity-monad}),
 it cannot serve as a monad transformer because the lift $M^{A}\rightarrow\text{Cod}_{L}^{M,A}$
 does not exist for some $L$ and $M$. A simple counterexample is
 found with $M^{A}\triangleq R\rightarrow A$ and $L^{A}\triangleq\bbnum 1+A$
@@ -3153,8 +3155,8 @@ Since we have defined $\text{brun}_{R}(\theta)$ as a composition
 of monad morphisms, $\text{brun}_{R}(\theta)$ is itself a monad morphism
 by Statement~\ref{subsec:Statement-monadic-morphism-composition}.
 
-To verify the non-degeneracy law of the base runner, $\text{flift}_{R}\bef\text{brun}_{R}(\theta)=\text{id}$,
-we need to use the non-degeneracy laws for the base runners of $T_{P}$
+To verify the nondegeneracy law of the base runner, $\text{flift}_{R}\bef\text{brun}_{R}(\theta)=\text{id}$,
+we need to use the nondegeneracy laws for the base runners of $T_{P}$
 and $T_{Q}$, which are 
 \[
 \text{flift}_{P}\bef\text{brun}_{P}(\chi^{:P\leadsto\text{Id}})=\text{id}\quad,\quad\quad\text{flift}_{Q}\bef\text{brun}_{Q}(\psi^{:Q\leadsto\text{Id}})=\text{id}\quad.
@@ -3295,7 +3297,6 @@ easily implement $\text{pu}_{T}$:
 
 \begin{wrapfigure}{l}{0.25\columnwidth}%
 \vspace{-1.75\baselineskip}
-
 \[
 \xymatrix{\xyScaleY{1.4pc}\xyScaleX{3pc}A\ar[r]\sp(0.5){\text{pu}_{M}}\ar[rd]\sb(0.45){\text{pu}_{T}\triangleq} & M^{A}\ar[d]\sp(0.45){\text{pu}_{L}}\\
  & L^{M^{A}}
@@ -3347,12 +3348,12 @@ and the corresponding type diagram are:%
 precarious formatting
 \end{comment}
 
-\begin{wrapfigure}{i}{0.4\columnwidth}%
+\begin{wrapfigure}{i}{0.35\columnwidth}%
 \vspace{-2.5\baselineskip}
 
 \begin{centering}
 \[
-\xymatrix{\xyScaleY{1.2pc}\xyScaleX{2.5pc}L^{M^{L^{M^{A}}}}\ar[r]\sp(0.5){\text{sw}^{\uparrow L}}\ar[rrd]\sb(0.5){\text{ftn}_{T}\triangleq} & L^{L^{M^{M^{A}}}}\ar[r]\sp(0.5){\text{ftn}_{L}} & L^{M^{M^{A}}}\ar[d]\sp(0.4){\text{ftn}_{M}^{\uparrow L}}\\
+\xymatrix{\xyScaleY{1.2pc}\xyScaleX{2.0pc}L^{M^{L^{M^{A}}}}\ar[r]\sp(0.5){\text{sw}^{\uparrow L}}\ar[rrd]\sb(0.5){\text{ftn}_{T}\triangleq} & L^{L^{M^{M^{A}}}}\ar[r]\sp(0.5){\text{ftn}_{L}} & L^{M^{M^{A}}}\ar[d]\sp(0.4){\text{ftn}_{M}^{\uparrow L}}\\
  &  & L^{M^{A}}
 }
 \]
@@ -3433,9 +3434,8 @@ parameter, there is one naturality law: for any function $f:A\rightarrow B$,
 
 \begin{wrapfigure}{l}{0.35\columnwidth}%
 \vspace{-1\baselineskip}
-
 \[
-\xymatrix{\xyScaleY{1.5pc}\xyScaleX{2.5pc}M^{L^{A}}\ar[r]\sp(0.5){f^{\uparrow L\uparrow M}}\ar[d]\sb(0.45){\text{sw}} & M^{L^{B}}\ar[d]\sp(0.45){\text{sw}}\\
+\xymatrix{\xyScaleY{1.3pc}\xyScaleX{2.5pc}M^{L^{A}}\ar[r]\sp(0.5){f^{\uparrow L\uparrow M}}\ar[d]\sb(0.45){\text{sw}} & M^{L^{B}}\ar[d]\sp(0.45){\text{sw}}\\
 L^{M^{A}}\ar[r]\sp(0.5){f^{\uparrow M\uparrow L}} & L^{M^{B}}
 }
 \]
@@ -3451,10 +3451,9 @@ f^{\uparrow L\uparrow M}\bef\text{sw}_{L,M}=\text{sw}_{L,M}\bef f^{\uparrow M\up
 \noindent To derive further laws for \lstinline!swap!, consider the
 requirement that the transformed monad $T$ should satisfy the monad
 laws:
-\begin{align*}
-\text{pu}_{T}\bef\text{ftn}_{T}=\text{id}\quad, & \quad\quad\text{pu}_{T}^{\uparrow T}\bef\text{ftn}_{T}=\text{id}\quad,\\
-\text{ftn}_{T}^{\uparrow T}\bef\text{ftn}_{T} & =\text{ftn}_{T}\bef\text{ftn}_{T}\quad.
-\end{align*}
+\[
+\text{pu}_{T}\bef\text{ftn}_{T}=\text{id}\quad,\quad\quad\text{pu}_{T}^{\uparrow T}\bef\text{ftn}_{T}=\text{id}\quad,\quad\quad\text{ftn}_{T}^{\uparrow T}\bef\text{ftn}_{T}=\text{ftn}_{T}\bef\text{ftn}_{T}\quad.
+\]
 We will now discover the laws for \texttt{swap} that make the laws
 for $\text{ftn}_{T}$ hold automatically, as long as $\text{ftn}_{T}$
 is derived from \texttt{}\lstinline!swap! using Eq.~(\ref{eq:define-flatten-via-swap}).
@@ -3484,7 +3483,6 @@ for \lstinline!swap!:
 
 \begin{wrapfigure}{l}{0.3\columnwidth}%
 \vspace{-1\baselineskip}
-
 \[
 \xymatrix{\xyScaleY{1pc}\xyScaleX{2.5pc}L^{A}\ar[r]\sp(0.5){\text{pu}_{M}}\ar[rd]\sb(0.4){\text{pu}_{M}^{\uparrow L}} & M^{L^{A}}\ar[d]\sp(0.4){\text{sw}}\\
  & L^{M^{A}}
@@ -3513,7 +3511,6 @@ In the same way, we motivate the \textsf{``}inner identity\textsf{''} law for \t
 
 \begin{wrapfigure}{l}{0.3\columnwidth}%
 \vspace{-1.25\baselineskip}
-
 \[
 \xymatrix{\xyScaleY{1pc}\xyScaleX{2.5pc}M^{A}\ar[r]\sp(0.5){\text{pu}_{L}^{\uparrow M}}\ar[rd]\sb(0.45){\text{pu}_{L}} & M^{L^{A}}\ar[d]\sp(0.4){\text{sw}}\\
  & L^{M^{A}}
@@ -3573,16 +3570,16 @@ precarious formatting
 \end{comment}
 
 \begin{wrapfigure}{i}{0.34\columnwidth}%
-\vspace{-2.2\baselineskip}
+\vspace{-2.3\baselineskip}
 
 \begin{centering}
 \[
-\xymatrix{\xyScaleY{1pc}\xyScaleX{2.5pc} & M^{M^{L^{A}}}\ar[r]\sp(0.5){\text{ftn}_{M}}\ar[ld]\sb(0.45){\text{sw}^{\uparrow M}} & M^{L^{A}}\ar[d]\sb(0.4){\text{sw}}\\
-M^{L^{M^{A}}}\ar[r]\sb(0.5){\text{sw}} & L^{M^{M^{A}}}\ar[r]\sb(0.5){\text{ftn}_{M}^{\uparrow L}} & L^{M^{A}}
+\xymatrix{\xyScaleY{0.8pc}\xyScaleX{2.5pc} & M^{M^{L^{A}}}\ar[r]\sp(0.5){\text{ftn}_{M}}\ar[ld]\sb(0.45){\text{sw}^{\uparrow M}} & M^{L^{A}}\ar[d]\sb(0.45){\text{sw}}\\
+M^{L^{M^{A}}}\ar[r]\sp(0.5){\text{sw}} & L^{M^{M^{A}}}\ar[r]\sp(0.5){\text{ftn}_{M}^{\uparrow L}} & L^{M^{A}}
 }
 \]
 \par\end{centering}
-\vspace{-0.2\baselineskip}
+\vspace{1\baselineskip}
 \end{wrapfigure}%
 
 ~\vspace{-0.2\baselineskip}
@@ -3595,12 +3592,12 @@ $L$ and a transformation $M\circ L\circ L\leadsto L\circ M$ is written
 as:
 
 \begin{wrapfigure}{i}{0.34\columnwidth}%
-\vspace{-2\baselineskip}
+\vspace{-2.9\baselineskip}
 
 \noindent 
 \[
-\xymatrix{\xyScaleY{1pc}\xyScaleX{2.5pc} & M^{L^{L^{A}}}\ar[r]\sp(0.5){\text{ftn}_{L}^{\uparrow M}}\ar[ld]\sb(0.45){\text{sw}} & M^{L^{A}}\ar[d]\sb(0.4){\text{sw}}\\
-L^{M^{L^{A}}}\ar[r]\sb(0.5){\text{sw}^{\uparrow L}} & L^{L^{M^{A}}}\ar[r]\sb(0.5){\text{ftn}_{L}} & L^{M^{A}}
+\xymatrix{\xyScaleY{0.8pc}\xyScaleX{2.5pc} & M^{L^{L^{A}}}\ar[r]\sb(0.5){\text{ftn}_{L}^{\uparrow M}}\ar[ld]\sb(0.45){\text{sw}} & M^{L^{A}}\ar[d]\sb(0.45){\text{sw}}\\
+L^{M^{L^{A}}}\ar[r]\sp(0.55){\text{sw}^{\uparrow L}} & L^{L^{M^{A}}}\ar[r]\sp(0.5){\text{ftn}_{L}} & L^{M^{A}}
 }
 \]
 
@@ -3834,12 +3831,11 @@ layers of $L$ and then flatten the two remaining layers of $\left(L\circ M\right
 \[
 (\text{ftn}_{L}\bef\text{ftn}_{T}):L\circ L\circ M\circ L\circ M\leadsto L\circ M\quad.
 \]
-So we conjecture that a possibly useful additional law for $\text{ftn}_{T}$
+We see that a possibly useful additional law for $\text{ftn}_{T}$
 is
 
 \begin{wrapfigure}{l}{0.3\columnwidth}%
 \vspace{-1.8\baselineskip}
-
 \[
 \xymatrix{\xyScaleY{1.4pc}\xyScaleX{2.5pc}L^{L^{M^{L^{M^{A}}}}}\ar[r]\sp(0.5){\text{ftn}_{L}}\ar[d]\sb(0.45){\text{ftn}_{T}^{\uparrow L}} & L^{M^{L^{M^{A}}}}\ar[d]\sb(0.45){\text{ftn}_{T}}\\
 L^{L^{M^{A}}}\ar[r]\sb(0.5){\text{ftn}_{L}} & L^{M^{A}}
@@ -3857,12 +3853,13 @@ This law expresses a certain kind of \textsf{``}compatibility\textsf{''} between
 monads $L$ and $T$.
 
 With this law, the right-hand side of Eq.~(\ref{eq:deriv-sw-from-ftn-a})
-becomes
+becomes:
 \begin{align*}
  & \text{pu}_{M}^{\uparrow L\uparrow M\uparrow L}\bef\gunderline{\text{pu}_{L}^{\uparrow L}\bef\text{ftn}_{L}}\bef\text{ftn}_{T}\bef\text{ftn}_{M}^{\uparrow L}\\
 {\color{greenunder}\text{right identity law of }L:}\quad & =\text{pu}_{M}^{\uparrow L\uparrow M\uparrow L}\bef\text{ftn}_{T}\bef\text{ftn}_{M}^{\uparrow L}\quad.
 \end{align*}
-Again, we cannot proceed unless we assume a law involving the expression
+Again, we cannot proceed unless we assume a new law involving the
+expression
 \[
 \big(\text{ftn}_{T}\bef\text{ftn}_{M}^{\uparrow L}\big):L\circ M\circ L\circ M\circ M\leadsto L\circ M\quad.
 \]
@@ -3873,11 +3870,10 @@ layers of $M$:
 \[
 \big(\text{ftn}_{M}^{\uparrow L\uparrow M\uparrow L}\bef\text{ftn}_{T}\big):L\circ M\circ L\circ M\circ M\leadsto L\circ M\quad.
 \]
-The second conjectured law is therefore
+So, the second law to be assumed is:
 
 \begin{wrapfigure}{l}{0.3\columnwidth}%
 \vspace{-1.8\baselineskip}
-
 \[
 \xymatrix{\xyScaleY{1.4pc}\xyScaleX{2.5pc}L^{M^{L^{M^{M^{A}}}}}\ar[r]\sp(0.5){\text{ftn}_{T}}\ar[d]\sb(0.5){\text{ftn}_{M}^{\uparrow L\uparrow M\uparrow L}} & L^{M^{M^{A}}}\ar[d]\sb(0.5){\text{ftn}_{M}^{\uparrow L}}\\
 L^{M^{L^{M^{A}}}}\ar[r]\sb(0.5){\text{ftn}_{T}} & L^{M^{A}}
@@ -3919,7 +3915,7 @@ monad laws of $L\circ M$ via Statement~\ref{sec:Statement-swap-laws-to-monad-tra
 
 Assume that $\text{pu}_{T}$ and $\text{ftn}_{T}$ are defined by
 Eqs.~(\ref{eq:def-pure-T-via-pure-L-and-pure-M})\textendash (\ref{eq:def-flatten-T-via-sw-and-flatten-L-M}),
-and that the two identity laws of \lstinline!swap! hold (see Statement~\ref{sec:Statement-swap-laws-to-monad-transformer-first-law}),
+and that the two identity laws of \lstinline!swap! hold (see Statement~\ref{sec:Statement-swap-laws-to-monad-transformer-first-law}):
 \begin{align*}
 {\color{greenunder}\text{outer identity law}:}\quad & \text{pu}_{L}^{\uparrow M}\bef\text{sw}_{L,M}=\text{pu}_{L}\quad,\\
 {\color{greenunder}\text{inner identity law}:}\quad & \text{pu}_{M}\bef\text{sw}_{L,M}=\text{pu}_{M}^{\uparrow L}\quad.
@@ -3932,14 +3928,14 @@ via monad isomorphisms.
 First consider what happens to $\text{sw}_{L,M}$ when $L$ or $M$
 are set to the identity monad ($\text{Id}$). For composed-outside
 transformers ($T_{L}^{M}=L\circ M$) the foreign monad is $M$. Setting
-$M=\text{Id}$ in the inner identity law, we obtain 
+$M=\text{Id}$ in the inner identity law, we obtain: 
 \[
 \text{pu}_{\text{Id}}\bef\text{sw}_{L,\text{Id}}=\text{pu}_{\text{Id}}^{\uparrow L}\quad.
 \]
 Since $\text{pu}_{\text{Id}}=\text{id}$, it follows that $\text{sw}_{L,\text{Id}}=\text{id}$.
 In a similar way, for composed-inside transformers ($T_{L}^{M}=M\circ L$)
 we need to switch the roles of $M$ and $L$ in the same computation
-and substitute $L=\text{id}$ into the outer identity law,
+and substitute $L=\text{id}$ into the outer identity law:
 \[
 \text{pu}_{\text{Id}}^{\uparrow M}\bef\text{sw}_{\text{Id},M}=\text{pu}_{\text{Id}}\quad.
 \]
@@ -3998,7 +3994,7 @@ Designate $L$ as the foreign monad and $M$ as the base monad in
 Eq.~(\ref{eq:def-pure-T-via-pure-L-and-pure-M}), as appropriate
 for the composed-inside transformer $T_{L}^{M}=M\circ L$. Setting
 the foreign monad to identity, $L=\text{Id}$, in Eq.~(\ref{eq:def-pure-T-via-pure-L-and-pure-M})
-gives
+gives:
 \[
 \text{pu}_{T}=\text{pu}_{M}\bef\text{pu}_{\text{Id}}=\text{pu}_{M}.
 \]
@@ -4094,7 +4090,7 @@ runner laws and the base runner laws, as long as the \lstinline!swap!
 function is monadically natural as given by Eqs.~(\ref{eq:monadic-naturality-of-sw-l-m})
 or~(\ref{eq:monadic-naturality-sw-n-m}) below. Compositional monad
 transformers have general base runners, $\text{brun}\left(\theta\right)$,
-that satisfy the laws for any lawful runner $\theta:L\leadsto\text{Id}$.
+that satisfy the laws for any runner $\theta:L\leadsto\text{Id}$.
 The functions \lstinline!frun! and \lstinline!brun! also satisfy
 the monadic naturality laws.
 
@@ -4126,13 +4122,13 @@ To derive these laws, we may use the identity and composition laws
 of monad morphisms for $\phi$ and $\theta$. We also use Eqs.~(\ref{eq:def-pure-T-via-pure-L-and-pure-M})\textendash (\ref{eq:def-flatten-T-via-sw-and-flatten-L-M})
 as definitions of the monad $T$. Additionally, we assume the \textbf{monadic
 naturality}\index{monadic naturality law!of swap@of \texttt{swap}}
-of \lstinline!swap! with respect to $\phi$ and $\theta$,
+of \lstinline!swap! with respect to $\phi$ and $\theta$:
 \begin{equation}
 \text{sw}_{L,M}\bef\phi^{\uparrow L}=\phi\bef\text{sw}_{L,N}\quad,\quad\quad\text{sw}_{L,M}\bef\theta=\theta^{\uparrow M}\quad.\label{eq:monadic-naturality-of-sw-l-m}
 \end{equation}
 \[
-\xymatrix{\xyScaleY{1.5pc}\xyScaleX{3pc}M^{L^{A}}\ar[r]\sp(0.5){\text{sw}_{L,M}}\ar[d]\sb(0.4){\phi} & L^{M^{A}}\ar[d]\sp(0.4){\phi^{\uparrow L}} & M^{L^{A}}\ar[r]\sp(0.5){\text{sw}_{L,M}}\ar[rd]\sb(0.45){\theta^{\uparrow M}} & L^{M^{A}}\ar[d]\sp(0.4){\theta}\\
-N^{L^{A}}\ar[r]\sb(0.5){\text{sw}_{L,N}} & L^{N^{A}} &  & M^{A}
+\xymatrix{\xyScaleY{1.3pc}\xyScaleX{3pc}M^{L^{A}}\ar[r]\sp(0.5){\text{sw}_{L,M}}\ar[d]\sb(0.4){\phi} & L^{M^{A}}\ar[d]\sp(0.4){\phi^{\uparrow L}} & M^{L^{A}}\ar[r]\sp(0.5){\text{sw}_{L,M}}\ar[rd]\sb(0.45){\theta^{\uparrow M}} & L^{M^{A}}\ar[d]\sp(0.4){\theta}\\
+N^{L^{A}}\ar[r]\sp(0.5){\text{sw}_{L,N}} & L^{N^{A}} &  & M^{A}
 }
 \]
 
@@ -4190,7 +4186,7 @@ The functor laws for \lstinline!frun! are
 Since $\text{frun}\left(\phi\right)=\phi^{\uparrow L}$ in our case,
 these laws hold because they are the same as the functor laws of $L$.
 
-To verify the non-degeneracy law for \lstinline!brun!:
+To verify the nondegeneracy law for \lstinline!brun!:
 \begin{align*}
 {\color{greenunder}\text{expect to equal }\text{id}:}\quad & \text{flift}\bef\text{brun}\left(\theta\right)\\
 {\color{greenunder}\text{definitions of }\text{flift}\text{ and }\text{brun}:}\quad & =\text{pu}_{L}\bef\theta\\
@@ -4231,7 +4227,7 @@ and $\chi$ are
 \end{equation}
 \[
 \xymatrix{\xyScaleY{1.5pc}\xyScaleX{3pc}M^{L^{A}}\ar[r]\sp(0.5){\text{sw}_{L,M}}\ar[d]\sb(0.4){\phi^{\uparrow M}} & L^{M^{A}}\ar[d]\sp(0.4){\phi} & M^{L^{A}}\ar[r]\sp(0.5){\text{sw}_{L,M}}\ar[rd]\sb(0.45){\theta} & L^{M^{A}}\ar[d]\sp(0.4){\theta^{\uparrow L}}\\
-M^{N^{A}}\ar[r]\sb(0.5){\text{sw}_{N,M}} & N^{M^{A}} &  & L^{A}
+M^{N^{A}}\ar[r]\sp(0.5){\text{sw}_{N,M}} & N^{M^{A}} &  & L^{A}
 }
 \]
 
@@ -4287,7 +4283,7 @@ The functor laws of \lstinline!frun! are
 Since $\text{frun}\left(\phi\right)=\phi$ in our case, these laws
 are satisfied.
 
-To verify the non-degeneracy law of \lstinline!brun!:
+To verify the nondegeneracy law of \lstinline!brun!:
 \begin{align*}
 {\color{greenunder}\text{expect to equal }\text{id}:}\quad & \text{flift}\bef\text{brun}\left(\theta\right)\\
 {\color{greenunder}\text{definitions of }\text{flift}\text{ and }\text{brun}:}\quad & =\text{pu}_{M}^{\uparrow L}\bef\theta^{\uparrow L}=\text{id}^{\uparrow L}=\text{id}\quad.
@@ -4341,13 +4337,13 @@ follows from the conditions of Statement~\ref{sec:Statement-swap-laws-to-monad-t
 
 In many cases, Statements~\ref{subsec:Statement-outside-transformer-swap-laws}\textendash \ref{subsec:Statement-inside-transformer-swap-laws}
 make monad transformer proofs quicker because the 6 laws of \lstinline!swap!
-replace the 18 monad transformer laws and also use simpler types.
+use simpler types and replace the 18 monad transformer laws.
 
-\section{Composed-inside transformers for linear monads\label{sec:transformers-linear-monads}}
+\section{Composed-inside transformers. Linear monads\label{sec:transformers-linear-monads}}
 
 In the previous section, we derived a number of properties common
 to all compositional transformers. We will now use those properties
-to prove the laws of composed-outside transformers. All those transformers
+to prove the laws of composed-inside transformers. All those transformers
 have a \textsf{``}linear\textsf{''} monad as their base monad.
 
 A monad $M$ is\textbf{ linear}\index{monads!linear} if its type
@@ -4809,23 +4805,23 @@ We can show that the functor composition of any two linear monads
 has a composed-inside transformer. Suppose $M_{1}$ and $M_{2}$ are
 linear monads, so their transformers are also composed-inside:
 \[
-T_{M_{1}}^{N}=N\circ M_{1}\quad,\quad\quad T_{M_{2}}^{N}=N\circ M_{2}\quad.
+M_{1}\varangle N=T_{M_{1}}^{N}=N\circ M_{1}\quad,\quad\quad M_{2}\varangle N=T_{M_{2}}^{N}=N\circ M_{2}\quad.
 \]
 The functor composition of $M_{1}$ and $M_{2}$ can be seen as a
 monad stack,
 \[
-M_{1}\circ M_{2}=T_{M_{2}}^{M_{1}}\quad.
+M_{1}\circ M_{2}=T_{M_{2}}^{M_{1}}=M_{2}\varangle M_{1}\quad.
 \]
 What is the transformer for the monad $M_{1}\circ M_{2}$? For any
-foreign monad $N$, we have the monad stack
+foreign monad $N$, we have:
 \[
-T_{M_{2}}^{T_{M_{1}}^{N}}=T_{M_{2}}^{N\circ M_{1}}=N\circ\left(M_{1}\circ M_{2}\right)\quad.
+(M_{1}\circ M_{2})\varangle N=(M_{2}\varangle M_{1})\varangle N=M_{2}\varangle(M_{1}\varangle N)=M_{2}\varangle(N\circ M_{1})=N\circ M_{1}\circ M_{2}\quad.
 \]
 This is a lawful monad transformer, as we have seen in Section~\ref{subsec:Stacking-two-monads}.
 So, this is the transformer for $M_{1}\circ M_{2}$, and it is of
 the composed-inside kind.
 
-\section{Composed-outside transformers for rigid monads\label{sec:transformers-rigid-monads}}
+\section{Composed-outside transformers. Rigid monads\label{sec:transformers-rigid-monads}}
 
 Section~\ref{sec:transformers-linear-monads} shows that the composed-inside
 transformers are available for monads\index{monads!linear} of the
@@ -4887,14 +4883,16 @@ monad.
 
 If we show that $R_{1}^{A}\times R_{2}^{A}$ has a composed-outside
 transformer, it will follow (by definition) that $R_{1}^{A}\times R_{2}^{A}$
-is a rigid monad. It follows from Statement~\ref{subsec:Statement-product-of-monad-transformers}
-(whose proof does not depend on any of the results of this section)
-that a lawful monad transformer $T^{M,A}$ for the product monad $R_{1}^{A}\times R_{2}^{A}$
-is the product of transformers : for any foreign monad $M$,
+is a rigid monad. Due to Statement~\ref{subsec:Statement-product-of-monad-transformers}
+(whose proof does not depend on any of the results of this section),
+a lawful monad transformer $T_{R_{1}\times R_{2}}^{M,A}$ for the
+product monad $R_{1}^{A}\times R_{2}^{A}$ is the product of transformers:
+for any foreign monad $M$,
 \[
 T_{R_{1}}^{M,A}\times T_{R_{2}}^{M,A}=R_{1}^{M^{A}}\times R_{2}^{M^{A}}\quad.
 \]
-This is the required composed-outside transformer for the monad $R_{1}^{A}\times R_{2}^{A}$.
+This is the required composed-outside transformer ($T_{R_{1}\times R_{2}}^{M,A}$)
+for the monad $R_{1}^{A}\times R_{2}^{A}$.
 
 \subsection{Rigid monad construction 2 (composition)}
 
@@ -5007,7 +5005,8 @@ monad does actually satisfy the predicate. However, that mapping is
 not a monad morphism (Exercise~\ref{subsec:Statement-search-and-selector-monads}).
 
 The selector monad is superficially similar to the continuation monad,
-and there is a monad morphism in one direction (Exercise~\ref{subsec:Exercise-selector-and-continuation-monads}).
+and there is a monad morphism in one direction between \lstinline!Sel!
+and \lstinline!Cont! (Exercise~\ref{subsec:Exercise-selector-and-continuation-monads}).
 
 Assume that $H$ is a contrafunctor and $M$ is a monad, and denote
 for brevity 
@@ -5067,13 +5066,13 @@ value of type $H^{A}$:
 We have a value $q:H^{M^{A}}$ and a method $\text{pu}_{M}:A\rightarrow M^{A}$.
 This gives us the solution:
 \[
-\text{sw}_{R,M}\triangleq m^{:M^{H^{A}\rightarrow A}}\rightarrow q^{:H^{M^{A}}}\rightarrow m\triangleright\big(r^{:H^{A}\rightarrow A}\rightarrow r(q\triangleright\text{pu}_{M}^{\downarrow H})\big)\quad.
+\text{sw}_{R,M}\triangleq m^{:M^{H^{A}\rightarrow A}}\rightarrow q^{:H^{M^{A}}}\rightarrow m\triangleright\big(r^{:H^{A}\rightarrow A}\rightarrow r(q\triangleright\text{pu}_{M}^{\downarrow H})\big)^{\uparrow M}\quad.
 \]
 Rewrite the formula in the $\triangleright$-notation to obtain Eq.~(\ref{eq:rigid-monad-short-formula-for-swap}):
 \[
-\text{sw}_{R,M}:M^{R^{A}}\rightarrow R^{M^{A}}\quad,\quad\quad\text{sw}_{R,M}\triangleq m^{:M^{R^{A}}}\rightarrow q^{:H^{M^{A}}}\rightarrow m\triangleright(r\rightarrow q\triangleright\text{pu}_{M}^{\downarrow H}\bef r)^{\uparrow M}\quad.
+\text{sw}_{R,M}:M^{R^{A}}\rightarrow R^{M^{A}}\quad,\quad\quad\text{sw}_{R,M}\triangleq m^{:M^{R^{A}}}\rightarrow q^{:H^{M^{A}}}\rightarrow m\triangleright(r^{:H^{A}\rightarrow A}\rightarrow q\triangleright\text{pu}_{M}^{\downarrow H}\bef r)^{\uparrow M}\quad.
 \]
-Equivalently, we may write
+Equivalently, we may write the code of $\text{sw}_{R,M}$ as:
 \begin{equation}
 q\triangleright\big(m\triangleright\text{sw}_{R,M}\big)=m\triangleright(r\rightarrow q\triangleright\text{pu}_{M}^{\downarrow H}\bef r)^{\uparrow M}\quad.\label{eq:rigid-monad-choice-swap-short}
 \end{equation}
@@ -5089,12 +5088,12 @@ using flipped types of Kleisli morphisms and the flipped Kleisli composition
 for \lstinline!pure! and \lstinline!flatMap!, we begin by flipping
 the arguments of $\tilde{\text{pu}}_{R}$:
 \begin{align*}
-{\color{greenunder}\text{use Eq.~(\ref{eq:def-of-pure-for-exp-construction-h-a-a})}:}\quad & \text{pu}_{R}\triangleq\text{flip}(\tilde{\text{pu}}_{R})=\text{flip}(\_^{:H^{A}}\rightarrow a^{:A}\rightarrow a)=a^{:A}\rightarrow\_^{:H^{A}}\rightarrow a\quad.
+{\color{greenunder}\text{use Eq.~(\ref{eq:def-of-pure-for-exp-construction-h-a-a})}:}\quad & \text{pu}_{R}\triangleq\text{flip}\,(\tilde{\text{pu}}_{R})=\text{flip}\,(\_^{:H^{A}}\rightarrow a^{:A}\rightarrow a)=a^{:A}\rightarrow\_^{:H^{A}}\rightarrow a\quad.
 \end{align*}
 To recover the Kleisli composition ($\diamond_{_{R}}$), we need to
 flip both arguments of $\tilde{\diamond}_{_{R}}$:
 \begin{align*}
- & f^{:A\rightarrow H^{B}\rightarrow B}\diamond_{_{R}}g^{:B\rightarrow H^{C}\rightarrow C}\triangleq\text{flip}\big(\text{flip}(f)\,\tilde{\diamond}_{_{R}}\text{flip}(g)\big)\\
+ & f^{:A\rightarrow H^{B}\rightarrow B}\diamond_{_{R}}g^{:B\rightarrow H^{C}\rightarrow C}\triangleq\text{flip}\big(\text{flip}\,(f)\,\tilde{\diamond}_{_{R}}\text{flip}\,(g)\big)\\
 {\color{greenunder}\text{use Eq.~(\ref{eq:def-of-Kleisli-for-exp-construction-h-a-a})}:}\quad & =\text{flip}\big(k^{:H^{C}}\rightarrow\tilde{f}\big(k\triangleright(\tilde{g}(k))^{\downarrow H}\big)\bef\tilde{g}(k)\big)\\
 {\color{greenunder}\text{expand function}:}\quad & =\text{flip}\big(k^{:H^{C}}\rightarrow a^{:A}\rightarrow a\triangleright\tilde{f}\big(k\triangleright(\tilde{g}(k))^{\downarrow H}\big)\bef\tilde{g}(k)\big)\\
 {\color{greenunder}\text{definition of }\text{flip}:}\quad & =a^{:A}\rightarrow k^{:H^{C}}\rightarrow a\triangleright\tilde{f}\big(k\triangleright(\tilde{g}(k))^{\downarrow H}\big)\bef\tilde{g}(k)\quad,
@@ -5109,7 +5108,7 @@ Substituting these definitions, we compute:
 \begin{align*}
  & f\diamond_{_{R}}g=a^{:A}\rightarrow k^{:H^{C}}\rightarrow a\triangleright\tilde{f}\big(k\triangleright(\tilde{g}(k))^{\downarrow H}\big)\,\gunderline{\bef}\,\tilde{g}(k)\\
 {\color{greenunder}\triangleright\text{-notation}:}\quad & =a\rightarrow k\rightarrow a\triangleright\gunderline{\tilde{f}}\big(k\triangleright(\tilde{g}(k))^{\downarrow H}\big)\triangleright\tilde{g}(k)\\
- & =a\rightarrow k\rightarrow f(a)(k\,\gunderline{\triangleright(\tilde{g}(k)})^{\downarrow H})\,\gunderline{\triangleright\tilde{g}(k)}=a\rightarrow k\rightarrow g\big(f(a)(k\triangleright(b\rightarrow g(b)(k))^{\downarrow H})\big)(k)\quad.
+ & =a\rightarrow k\rightarrow f(a)(k\,\gunderline{\triangleright\,(\tilde{g}(k)})^{\downarrow H})\,\gunderline{\triangleright\,\tilde{g}(k)}=a\rightarrow k\rightarrow g\big(f(a)(k\triangleright(b\rightarrow g(b)(k))^{\downarrow H})\big)(k)\quad.
 \end{align*}
 This code can be shortened by defining a helper function $\gamma(g,k)$,
 also denoted $\gamma_{g,k}$ for brevity:
@@ -5119,7 +5118,7 @@ also denoted $\gamma_{g,k}$ for brevity:
 \end{align*}
 The next step is to derive the code for $\text{flm}_{R}$:
 \begin{align*}
- & \text{flm}_{R}(g^{:A\rightarrow R^{B}})\triangleq\text{id}^{:R^{A}\rightarrow R^{A}}\diamond_{_{R}}g=r^{:R^{A}}\rightarrow k^{:H^{B}}\rightarrow\text{id}(r)(k\triangleright\gamma_{g,k}^{\downarrow H})\triangleright\gamma_{g,k}\\
+ & \text{flm}_{R}(g^{:A\rightarrow R^{B}})\triangleq\text{id}^{:R^{A}\rightarrow R^{A}}\diamond_{_{R}}g=r^{:R^{A}}\rightarrow k^{:H^{B}}\rightarrow\text{id}\left(r\right)(k\triangleright\gamma_{g,k}^{\downarrow H})\triangleright\gamma_{g,k}\\
  & =r\rightarrow k\rightarrow r(k\triangleright\gamma_{g,k}^{\downarrow H})\triangleright\gamma_{g,k}=r\rightarrow k\rightarrow g\big(r(k\triangleright(b\rightarrow g(b)(k))^{\downarrow H})\big)(k)\quad.
 \end{align*}
 Finally, we find $\text{ftn}_{R}$ as
@@ -5184,7 +5183,7 @@ get:
 It is sometimes convenient to express the code of $\text{ftn}_{T}$
 in terms of $\text{flm}_{R}$:
 \[
-\text{ftn}_{T}=\text{flm}_{R}(\text{sw}\bef\text{ftn}_{M}^{\uparrow R})=\text{flm}_{R}\big(m\rightarrow q\rightarrow m\triangleright\text{flm}_{M}\left(r\rightarrow r(q)\right)\big)\quad.
+\text{ftn}_{T}=\text{flm}_{R}(\text{sw}\bef\text{ftn}_{M}^{\uparrow R})=\text{flm}_{R}\big(m\rightarrow q\rightarrow m\triangleright\text{flm}_{M}(r\rightarrow r(q))\big)\quad.
 \]
 
 
@@ -5192,9 +5191,9 @@ in terms of $\text{flm}_{R}$:
 
 We use the formula for $\text{ftn}_{T}$ just derived above:
 \begin{align*}
- & \text{flm}_{T}(g)=g^{\uparrow T}\bef\gunderline{\text{ftn}_{T}}=\gunderline{g^{\uparrow M\uparrow R}\bef\text{flm}_{R}}\big(m\rightarrow q\rightarrow m\triangleright\text{flm}_{M}\left(r\rightarrow r(q)\right)\big)\\
-{\color{greenunder}\text{left naturality law of }\text{flm}_{R}:}\quad & =\text{flm}_{R}\big(\gunderline{g^{\uparrow M}\bef(m}\rightarrow q\rightarrow m\triangleright\text{flm}_{M}\left(r\rightarrow r(q)\right))\big)\\
-{\color{greenunder}\text{compute composition}:}\quad & =\text{flm}_{R}\big(m\rightarrow q\rightarrow m\triangleright\gunderline{g^{\uparrow M}\triangleright\text{flm}_{M}}\left(r\rightarrow r(q)\right)\big)\\
+ & \text{flm}_{T}(g)=g^{\uparrow T}\bef\gunderline{\text{ftn}_{T}}=\gunderline{g^{\uparrow M\uparrow R}\bef\text{flm}_{R}}\big(m\rightarrow q\rightarrow m\triangleright\text{flm}_{M}(r\rightarrow r(q)\big)\\
+{\color{greenunder}\text{left naturality law of }\text{flm}_{R}:}\quad & =\text{flm}_{R}\big(\gunderline{g^{\uparrow M}\bef(m}\rightarrow q\rightarrow m\triangleright\text{flm}_{M}(r\rightarrow r(q)))\big)\\
+{\color{greenunder}\text{compute composition}:}\quad & =\text{flm}_{R}\big(m\rightarrow q\rightarrow m\triangleright\gunderline{g^{\uparrow M}\triangleright\text{flm}_{M}}(r\rightarrow r(q))\big)\\
 {\color{greenunder}\text{naturality law of }\text{flm}_{M}:}\quad & =\text{flm}_{R}\big(m\rightarrow q\rightarrow m\triangleright\text{flm}_{M}\big(\gunderline{g\bef(r\rightarrow r(q))}\big)\big)\\
 {\color{greenunder}\text{compute composition}:}\quad & =\text{flm}_{R}\big(m\rightarrow q\rightarrow m\triangleright\text{flm}_{M}\big(r\rightarrow g(r)(q))\big)\big)\\
 {\color{greenunder}\text{obtain Eq.~(\ref{eq:rigid-monad-def-flm-t-via-flm-r})}:}\quad & =\text{flm}_{R}\big(m\rightarrow q\rightarrow m\triangleright\text{flm}_{M}(\gamma_{g,q})\big)\quad.
@@ -5282,7 +5281,7 @@ from Eq.~(\ref{eq:rigid-monad-flm-R-def}):
 We first apply the left-hand side of the law~(\ref{eq:swap-law-3-formulation-R-M})
 to $m$ and $q$:
 \begin{align*}
- & q\triangleright\big(m\triangleright\text{ftn}_{R}^{\uparrow M}\gunderline{\bef}\text{sw}\big)=q\triangleright\big(m\triangleright\text{ftn}_{R}^{\uparrow M}\triangleright\gunderline{\text{sw}}\big)\\
+ & (\text{ftn}_{R}^{\uparrow M}\bef\text{sw})(m)(q)=q\triangleright\big(m\triangleright\text{ftn}_{R}^{\uparrow M}\gunderline{\bef}\text{sw}\big)=q\triangleright\big(m\triangleright\text{ftn}_{R}^{\uparrow M}\triangleright\gunderline{\text{sw}}\big)\\
 {\color{greenunder}\text{use Eq.~(\ref{eq:rigid-monad-choice-swap-short})}:}\quad & =m\triangleright\gunderline{\text{ftn}_{R}^{\uparrow M}\bef(r\rightarrow q\triangleright\text{pu}_{M}^{\downarrow H}\bef r)^{\uparrow M}}\\
 {\color{greenunder}\text{composition law of }M:}\quad & =m\triangleright\big(\text{ftn}_{R}\bef(r\rightarrow q\triangleright\text{pu}_{M}^{\downarrow H}\bef r)\big)^{\uparrow M}\quad.
 \end{align*}
@@ -5318,7 +5317,7 @@ by computing the function compositions:
 \end{align*}
 Using this formula, we can write, for any $z$ of a suitable type,
 \begin{align}
-q\triangleright(z\triangleright\text{sw}(m)\bef\text{sw}) & =m\triangleright\big(\big(r\rightarrow z\triangleright\text{pu}_{M}^{\downarrow H}\bef r\gunderline{\big)\bef\big(r\rightarrow}q\triangleright\text{pu}_{M}^{\downarrow H}\bef r\big)\big)^{\uparrow M}\nonumber \\
+q\triangleright(z\triangleright\text{sw}(m)\bef\text{sw}) & =m\triangleright\big(\big(r\rightarrow z\triangleright\text{pu}_{M}^{\downarrow H}\bef r\gunderline{\big)\bef\big(r\rightarrow}\,q\triangleright\text{pu}_{M}^{\downarrow H}\bef r\big)\big)^{\uparrow M}\nonumber \\
 {\color{greenunder}\text{compute composition}:}\quad & =m\triangleright\big(r\rightarrow q\triangleright\text{pu}_{M}^{\downarrow H}\bef(z\triangleright\text{pu}_{M}^{\downarrow H}\bef r)\big)^{\uparrow M}\quad.\label{eq:swap-law-3-derivation-1}
 \end{align}
 Now we can substitute this into Eq.~(\ref{eq:swap-laws-derivation2}):
@@ -5453,28 +5452,28 @@ We need to verify the laws:
 \[
 \text{pu}_{R}\bef\theta=\text{id}\quad,\quad\quad\text{ftn}_{R}\bef\theta=\theta^{\uparrow R}\bef\theta=\theta\bef\theta\quad.
 \]
-The identity law, after applying both sides to an arbitrary $x^{:A}$,
-has the form
+
+To verify the identity law, apply its both sides to an arbitrary $x^{:A}$
+and simplify:
 \begin{align*}
 {\color{greenunder}\text{expect to equal }x:}\quad & x\triangleright\text{pu}_{R}\bef\theta=(x\triangleright\text{pu}_{R}\gunderline{)\triangleright\theta}\\
 {\color{greenunder}\text{definition of }r\triangleright\theta:}\quad & =h_{1}\triangleright(\_\rightarrow1)^{\downarrow H}\triangleright(\gunderline{x\triangleright\text{pu}_{R}})\\
-{\color{greenunder}\text{definition of }x\triangleright\text{pu}_{R}:}\quad & =\big(h_{1}\triangleright(\_\rightarrow1)^{\downarrow H}\gunderline{\big)\triangleright(\_\rightarrow}x)\\
+{\color{greenunder}\text{definition of }x\triangleright\text{pu}_{R}:}\quad & =\big(h_{1}\triangleright(\_\rightarrow1)^{\downarrow H}\gunderline{\big)\triangleright(\_\rightarrow}\,x)\\
 {\color{greenunder}\text{compute composition}:}\quad & =x\quad.
 \end{align*}
-This verifies the identity law. 
 
-The composition law, applied to an arbitrary $r:R^{R^{A}}$, expands
-to
+The composition law, applied to an arbitrary $r:R^{R^{A}}$, simplifies
+to:
 \begin{align*}
- & r\triangleright\text{ftn}_{R}\bef\theta=\gunderline{r\triangleright\text{ftn}_{R}}\triangleright\theta\\
+ & r\triangleright\text{ftn}_{R}\bef\theta=\gunderline{r\triangleright\text{ftn}_{R}}\,\triangleright\theta\\
 {\color{greenunder}\text{definition of }\text{ftn}_{R}:}\quad & =\gunderline{r\triangleright\big(t\rightarrow}q\rightarrow q\triangleright\big(q\triangleright(x\rightarrow q\triangleright x)^{\downarrow H}\bef t\big)\big)\triangleright\theta\\
 {\color{greenunder}\text{apply to }r:}\quad & =\big(q\rightarrow q\triangleright\big(q\triangleright(x\rightarrow q\triangleright x)^{\downarrow H}\bef r\big)\gunderline{\big)\triangleright\theta}\\
-{\color{greenunder}\text{definition~(\ref{eq:rigid-monad-base-runner-1}) of }\theta:}\quad & =h_{1}\triangleright(\_\rightarrow1)^{\downarrow H}\triangleright\gunderline{\big(q\rightarrow}q\triangleright\big(q\triangleright(x\rightarrow q\triangleright x)^{\downarrow H}\bef r\big)\big)\\
+{\color{greenunder}\text{definition~(\ref{eq:rigid-monad-base-runner-1}) of }\theta:}\quad & =h_{1}\triangleright(\_\rightarrow1)^{\downarrow H}\triangleright\gunderline{\big(q\rightarrow}\,q\triangleright\big(q\triangleright(x\rightarrow q\triangleright x)^{\downarrow H}\bef r\big)\big)\\
 {\color{greenunder}\text{apply to }h_{1}\triangleright(\_\rightarrow1)^{\downarrow H}:}\quad & =h_{1}\triangleright(\_\rightarrow1)^{\downarrow H}\triangleright\big(h_{1}\triangleright\gunderline{(\_\rightarrow1)^{\downarrow H}\bef(x\rightarrow...)^{\downarrow H}}\bef r\big)\\
 {\color{greenunder}\text{composition under }^{\downarrow H}:}\quad & =\gunderline{h_{1}\triangleright(\_\rightarrow1)^{\downarrow H}}\triangleright\big(\gunderline{h_{1}\triangleright(\_\rightarrow1)^{\downarrow H}}\triangleright r\big)\\
 {\color{greenunder}\text{definition~(\ref{eq:rigid-monad-base-runner-1}) of }\theta:}\quad & =r\triangleright\theta\triangleright\theta=r\triangleright\theta\bef\theta\quad.
 \end{align*}
-This verifies the composition law; so $\theta$ is indeed a monad
+This verifies the composition law. So, $\theta$ is indeed a monad
 morphism.
 
 Using the code of $\theta$ defined in Eq.~(\ref{eq:rigid-monad-base-runner-1}),
@@ -5483,7 +5482,7 @@ we can now verify the monadic naturality law of $\text{sw}_{R,M}$
 side of the law is given by Eq.~(\ref{eq:rigid-monad-1-derivation7}):
 \begin{align*}
  & q\triangleright\big((q_{1}\rightarrow m\triangleright\big(r\rightarrow q_{1}\triangleright\text{pu}_{M}^{\downarrow H}\bef r\big)^{\uparrow M}\gunderline{)\triangleright\theta}\big)\\
-{\color{greenunder}\text{definition of }\theta:}\quad & =q\triangleright\big(h_{1}\triangleright(\_\rightarrow1)^{\downarrow H}\gunderline{\triangleright(q_{1}\rightarrow}m\triangleright\big(r\rightarrow q_{1}\triangleright\text{pu}_{M}^{\downarrow H}\bef r\big)^{\uparrow M})\big)\\
+{\color{greenunder}\text{definition of }\theta:}\quad & =q\triangleright\big(h_{1}\triangleright(\_\rightarrow1)^{\downarrow H}\,\gunderline{\triangleright\,(q_{1}\rightarrow}m\triangleright\big(r\rightarrow q_{1}\triangleright\text{pu}_{M}^{\downarrow H}\bef r\big)^{\uparrow M})\big)\\
 {\color{greenunder}\text{apply to argument}:}\quad & =q\triangleright\big(m\triangleright\big(r\rightarrow h_{1}\triangleright\gunderline{(\_\rightarrow1)^{\downarrow H}\triangleright\text{pu}_{M}^{\downarrow H}}\bef r\big)^{\uparrow M}\big)\\
 {\color{greenunder}\text{composition under }^{\downarrow H}:}\quad & =q\triangleright\big(m\triangleright\big(r\rightarrow h_{1}\triangleright(\gunderline{\text{pu}_{M}\bef(\_\rightarrow1)})^{\downarrow H}\bef r\big)^{\uparrow M}\big)\\
 {\color{greenunder}\text{compute composition}:}\quad & =q\triangleright\big(m\triangleright\big(r\rightarrow h_{1}\triangleright(\gunderline{\_\rightarrow1})^{\downarrow H}\triangleright r\big)^{\uparrow M}\big)\quad.
@@ -5585,7 +5584,7 @@ It is a monad morphism because it is a composition of a projection
 and a monad morphism $\text{brun}_{G}$. Function composition preserves
 monad morphisms (Statement~\ref{subsec:Statement-monadic-morphism-composition}).
 
-The non-degeneracy law holds because it holds for $\text{brun}_{G}$:
+The nondegeneracy law holds because it holds for $\text{brun}_{G}$:
 \[
 \text{flift}_{L}\bef\text{brun}_{L}=\Delta\bef\gunderline{(\text{flift}_{G}\boxtimes\text{flift}_{H})\bef\pi_{1}}\bef\text{brun}_{G}=\gunderline{\Delta\bef\pi_{1}}\bef\gunderline{\text{flift}_{G}\bef\text{brun}_{G}}=\text{id}\quad.
 \]
@@ -5602,11 +5601,11 @@ Define the base runner as:
 \text{brun}_{L}:T_{G}^{M}\times T_{H}^{M}\leadsto M\times M\quad,\quad\quad\text{brun}_{L}\triangleq\text{brun}_{G}\boxtimes\text{brun}_{H}\quad.
 \]
 This is a monad morphism due to Statement~\ref{subsec:Statement-pair-product-of-monadic-morphisms}.
-The non-degeneracy law has the form
+The nondegeneracy law has the form
 \[
 \text{flift}_{L}\bef\text{brun}_{L}=\Delta^{:M\leadsto M\times M}\quad,
 \]
-since the target monad is now $M\times M$. To verify the non-degeneracy
+since the target monad is now $M\times M$. To verify the nondegeneracy
 law:
 \begin{align*}
  & \text{flift}_{L}\bef\text{brun}_{L}=\Delta\bef(\text{flift}_{G}\boxtimes\text{flift}_{H})\bef(\text{brun}_{G}\boxtimes\text{brun}_{H})\\
@@ -5826,7 +5825,6 @@ has the following property:
 
 \begin{wrapfigure}{l}{0.26\columnwidth}%
 \vspace{-3\baselineskip}
-
 \[
 \xymatrix{\xyScaleY{1.8pc}\xyScaleX{3.5pc}N^{M^{M^{A}}}\ar[r]\sp(0.55){\text{merge}^{M^{A}}}\ar[d]\sb(0.45){\text{ftn}_{M}^{\uparrow N}} & N^{M^{A}}\ar[d]\sb(0.45){\text{merge}^{A}}\\
 N^{M^{A}}\ar[r]\sp(0.55){\text{merge}^{A}} & N^{A}
@@ -6086,7 +6084,6 @@ and $\text{sw}_{M^{\prime},P^{\prime}}$ as follows:
 
 \begin{wrapfigure}{l}{0.38\columnwidth}%
 \vspace{-2\baselineskip}
-
 \[
 \xymatrix{\xyScaleY{1.5pc}\xyScaleX{2.3pc}P^{M^{A}}\ar[d]\sb(0.45){\text{sw}_{M,P}}\ar[r]\sp(0.5){\phi^{\uparrow P}} & P^{M^{\prime A}}\ar[r]\sp(0.45){\psi} & P^{\prime M^{\prime A}}\ar[d]\sb(0.45){\,\text{sw}_{M^{\prime},P^{\prime}}}\\
 M^{P^{A}}\ar[r]\sp(0.5){\psi^{\uparrow M}} & M^{P^{\prime A}}\ar[r]\sp(0.45){\phi} & M^{\prime P^{\prime A}}
@@ -6367,7 +6364,7 @@ T_{K}^{M,A} & \text{brun}_{K}
 The runner $\text{brun}_{L}$ is not purely compositional since $L\triangleq M\circ P$
 contains the monad $P$ that again depends on $M$. So, we cannot
 use the proofs in Statement~\ref{subsec:Statement-monad-transformer-runner-laws-from-swap},
-and the monad morphism laws and the non-degeneracy law of $\text{brun}_{L}$
+and the monad morphism laws and the nondegeneracy law of $\text{brun}_{L}$
 need to be verified separately.
 
 Note that $\theta_{P}:P\leadsto M$ is a monad morphism by Exercise~\ref{par:Exercise-mt-3-2-1}.
@@ -6430,7 +6427,7 @@ equation:
 \end{align*}
 This concludes the proof of monad morphism laws of $\text{brun}_{L}$.
 
-To verify the non-degeneracy law, which is an equation between functions
+To verify the nondegeneracy law, which is an equation between functions
 of type $M^{A}\rightarrow M^{A}$:
 \begin{align*}
 {\color{greenunder}\text{expect to equal }\text{id}:}\quad & \text{flift}_{L}\bef\text{brun}_{L}=\text{pu}_{P}^{\uparrow M}\bef\text{brun}_{L}=\gunderline{\text{pu}_{P}^{\uparrow M}\bef\theta_{P}^{\uparrow M}}\bef\text{ftn}_{M}=\gunderline{\text{pu}_{M}^{\uparrow M}\bef\text{ftn}_{M}}=\text{id}\quad.
@@ -6513,7 +6510,7 @@ T_{K}^{M,A} & \text{brun}_{K}\bef\phi
  & M^{\prime A}\\
 \hline A & \text{pu}_{M}\bef\phi\\
 T_{K}^{M,A} & \text{brun}_{K}\bef\phi
-\end{array}=\,\begin{array}{|c||c|}
+\end{array}\,=\,\begin{array}{|c||c|}
  & M^{A}\\
 \hline A & \text{pu}_{M}\\
 T_{K}^{M,A} & \text{brun}_{K}
@@ -6966,7 +6963,7 @@ F^{M^{L^{M^{\prime A}}}} & \bbnum 0 & \overline{\psi}^{\uparrow M\uparrow F}\bef
  & M^{\prime A} & F^{M^{\prime L^{\prime M^{\prime A}}}}\\
 \hline M^{A} & \phi & \bbnum 0\\
 F^{M^{L^{M^{A}}}} & \bbnum 0 & \big(\phi^{\overline{\uparrow L}}\big)^{\uparrow M\uparrow F}\bef\overline{\psi}^{\uparrow M\uparrow F}\bef\phi^{\uparrow F}
-\end{array}\bef\,\begin{array}{|c||c|}
+\end{array}\,\bef\,\begin{array}{|c||c|}
  & M^{\prime A+\left(F\circ M^{\prime}\circ L^{\prime}\right)^{A}}\\
 \hline M^{\prime A} & \text{pu}_{L^{\prime}}^{\uparrow M^{\prime}}\\
 F^{M^{\prime L^{\prime M^{\prime A}}}} & \overline{\text{sw}}_{M^{\prime},L^{\prime}}^{\uparrow M^{\prime}\uparrow F}\bef\text{ftn}_{M^{\prime}}^{\uparrow F}\bef(p\rightarrow\bbnum 0^{:A}+p)\bef\text{pu}_{M^{\prime}}
@@ -7111,7 +7108,7 @@ due to naturality of $\phi_{1}$. This proves the law.
 
 \paragraph{Base runner laws}
 
-The base runner needs to satisfy the monad morphism laws and the non-degeneracy
+The base runner needs to satisfy the monad morphism laws and the nondegeneracy
 law. Let us temporarily denote by $K$ the base monad, $K\triangleq\text{Free}^{F}$,
 and by $\xi$ the function
 \[
@@ -7329,7 +7326,7 @@ Eq.~(\ref{eq:free-monad-transformer-swap-law-derivation2}).
 The requirements of Statement~\ref{subsec:Statement-monad-morphism-composition-theorem}
 are now satisfied, so $\text{brun}\,(\theta)$ is a monad morphism.
 
-The non-degeneracy law of \lstinline!brun! is an equation between
+The nondegeneracy law of \lstinline!brun! is an equation between
 functions of type $M^{A}\rightarrow M^{A}$:
 \begin{align*}
 {\color{greenunder}\text{expect to equal }\text{id}:}\quad & \text{flift}\bef\text{brun}\,(\theta)=\text{pu}_{L}^{\uparrow M}\bef\text{brun}\,(\theta)=\text{pu}_{L}^{\uparrow M}\bef\gunderline{\xi^{\uparrow M}\bef\theta^{\uparrow M}}\bef\text{ftn}_{M}=(\gunderline{\text{pu}_{L}\bef\phi})^{\uparrow M}\bef\text{ftn}_{M}\\
@@ -7384,7 +7381,7 @@ instead of $\xi\bef\theta$, we transform this equality to
  & \overset{?}{=}\,\begin{array}{||cc|}
 \text{id} & \bbnum 0\\
 \bbnum 0 & \overline{\psi}^{\uparrow M\uparrow F}\bef\phi^{\uparrow F}
-\end{array}\bef\,\begin{array}{||c|}
+\end{array}\,\bef\,\begin{array}{||c|}
 \text{pu}_{M^{\prime}}\\
 \overline{\xi}^{\uparrow M^{\prime}\uparrow F}\bef\theta^{\uparrow M^{\prime}\uparrow F}\bef\text{ftn}_{M^{\prime}}^{\uparrow F}\bef r
 \end{array}\,=\,\begin{array}{||c|}
@@ -7407,7 +7404,7 @@ other in the compositions above:
 \end{align*}
 The two sides are now equal.
 
-This concludes the proofs of the laws for the free monad transformer.
+This concludes the proofs of the laws for the free monad\textsf{'}s transformer.
 
 \subsection{Transformer for the \texttt{List} monad. Proofs}
 
@@ -7459,7 +7456,6 @@ The monad methods of $T_{\text{List}}$ are then defined by
 
 \begin{wrapfigure}{l}{0.4\columnwidth}%
 \vspace{-1\baselineskip}
-
 \[
 \xymatrix{\xyScaleY{1.5pc}\xyScaleX{3.5pc}T^{T^{A}}=M^{L^{M^{L^{A}}}}\ar[r]\sp(0.6){\text{prod}^{\uparrow M}}\ar[rd]\sb(0.5){\text{ftn}_{T}\triangleq\ } & M^{M^{L^{A}}}\ar[d]\sp(0.45){\ \text{ftn}_{M}}\\
  & M^{L^{A}}
@@ -7635,7 +7631,6 @@ property is expressed by the law analogous to Eq.~(\ref{eq:monadic-naturality-fr
 
 \begin{wrapfigure}{l}{0.43\columnwidth}%
 \vspace{-1.75\baselineskip}
-
 \[
 \xymatrix{\xyScaleY{1.2pc}\xyScaleX{1.6pc}L^{M^{L^{A}}}\ar[rd]\sb(0.45){\text{prod}_{M,L}}\ar[r]\sp(0.5){\psi^{\uparrow M\uparrow L}} & L^{M^{L^{\prime A}}}\ar[r]\sp(0.5){\phi^{\uparrow L}} & L^{M^{\prime L^{\prime A}}}\ar[r]\sp(0.5){\psi} & L^{\prime M^{\prime L^{\prime A}}}\ar[d]\sb(0.45){\,\text{prod}_{M^{\prime},L^{\prime}}}\\
  & M^{L^{A}}\ar[r]\sp(0.5){\psi^{\uparrow M}} & M^{L^{\prime A}}\ar[r]\sp(0.5){\phi} & M^{\prime L^{\prime A}}
@@ -7775,7 +7770,7 @@ by
 p^{:M^{R}}\oplus_{M}q^{:M^{R}}\triangleq p\triangleright\text{flm}_{M}\big(u^{:R}\rightarrow q\triangleright(v^{:R}\rightarrow u\oplus_{R}v)^{\uparrow M}\big)\quad.\label{eq:definition-of-oplus-M-monad-monoid-1}
 \end{equation}
 
-It can be shown that \lstinline!brun! satisfies the non-degeneracy
+It can be shown that \lstinline!brun! satisfies the nondegeneracy
 law:
 \begin{align*}
 {\color{greenunder}\text{expect to equal }\text{id}:}\quad & \text{flift}\bef\text{brun}=\text{pu}_{L}^{\uparrow M}\bef\text{flm}_{M}\bigg(\,\begin{array}{||c|}
@@ -7809,7 +7804,7 @@ The monad morphism identity law holds for \lstinline!brun!:
 1\rightarrow\text{pu}_{M}(e_{R})\\
 r\times t\rightarrow\text{pu}_{M}(r)\oplus_{M}\overline{\text{brun}}\,(t)
 \end{array}\,\bigg)\\
-{\color{greenunder}\text{identity law of }\text{flm}_{M}:}\quad & =\begin{array}{||cc|}
+{\color{greenunder}\text{identity law of }\text{flm}_{M}:}\quad & =\,\begin{array}{||cc|}
 \bbnum 0 & a^{:R}\rightarrow a\times(\text{Nil}\triangleright\text{pu}_{M})\end{array}\,\bef\,\begin{array}{||c|}
 1\rightarrow\text{pu}_{M}(e_{R})\\
 r\times t\rightarrow\text{pu}_{M}(r)\oplus_{M}\overline{\text{brun}}\,(t)
@@ -8083,8 +8078,8 @@ Since we have no matrix representation for $\text{flm}_{M}$, it is
 inconvenient to use matrices at this step. Instead, we substitute
 an arbitrary value of type $L^{T^{A}}\cong\bbnum 1+T^{A}\times T^{T^{A}}$
 into both sides of the equation above. A value of type $L^{T^{A}}$
-has two cases, $\text{Nil}$ and $h^{:T^{A}}\times t^{:T^{T^{A}}}\!$.
-Substitute $\text{Nil}$ into the left-hand side:
+has two cases, \lstinline!Nil! and $h^{:T^{A}}\times t^{:T^{T^{A}}}$.
+Substitute \lstinline!Nil! into the left-hand side:
 \begin{align*}
  & \gunderline{\text{Nil}\triangleright\text{prod}}\bef\text{flm}_{M}(q\triangleright\text{ftn}_{T}\triangleright\xi)=\text{Nil}\triangleright\gunderline{\text{pu}_{M}\bef\text{flm}_{M}}(q\triangleright\text{ftn}_{T}\triangleright\xi)\\
 {\color{greenunder}\text{identity law of }M:}\quad & =\text{Nil}\triangleright(q\triangleright\text{ftn}_{T}\triangleright\xi)\quad.
@@ -8101,7 +8096,7 @@ we can simplify
 \[
 \text{Nil}\triangleright(q\triangleright\text{ftn}_{T}\triangleright\xi)=q\triangleright\text{ftn}_{T}\quad.
 \]
-Substituting $\text{Nil}$ into the right-hand side yields:
+Substituting \lstinline!Nil! into the right-hand side yields:
 \[
 \gunderline{\text{Nil}\triangleright(q\triangleright\xi)}\triangleright\text{flm}_{M}(\text{prod})=q\triangleright\gunderline{\text{flm}_{M}(\text{prod})}=q\triangleright\text{ftn}_{T}\quad.
 \]
@@ -8321,7 +8316,7 @@ m\times p\rightarrow\text{comb}\,(m\triangleright\text{ftn}_{T})(p\triangleright
 \end{array}\quad.
 \end{align*}
 To transform the right-hand side of the associativity law, we need
-the lifting to $L$:
+the lifting of $\text{ftn}_{T}$ to $L$:
 \[
 \text{prod}^{\uparrow M\uparrow L}\bef\text{ftn}_{M}^{\uparrow L}=\text{ftn}_{T}^{\uparrow L}=\,\begin{array}{|c||cc|}
  & \bbnum 1 & T^{A}\times T^{T^{A}}\\
@@ -8345,7 +8340,7 @@ h\times t\rightarrow\text{comb}\,(h\triangleright\text{ftn}_{T})(t\triangleright
 \end{array}\quad.
 \end{align*}
 The two matrices differ only in the last rows. We rename $m$, $p$
-to $h$, $t$ and get 
+to $h$, $t$ and get:
 \[
 \text{comb}\,(h\triangleright\text{ftn}_{T})(t\triangleright\overline{\text{ftn}}_{T}\bef\text{ftn}_{T})\overset{?}{=}\text{comb}\,(h\triangleright\text{ftn}_{T})(t\triangleright\text{ftn}_{T}^{\overline{\uparrow L}\uparrow M}\triangleright\overline{\text{ftn}}_{T})\quad.
 \]
@@ -8464,30 +8459,29 @@ Now we can rewrite both sides to obtain the following expressions:
 \end{align*}
 Both sides are now equal.
 
-This completes the proof of the laws for the \lstinline!List! monad
+This completes the proof of the laws for the \lstinline!List! monad\textsf{'}s
 transformer.
 
 \section{Incomplete transformers}
 
-A \textbf{complete}\index{monad transformers!completeness} monad
-transformer must fully conform to the laws of a pointed and co-pointed
-functor in the category of monads (see Section~\ref{subsec:Category-theoretic-properties-of-lifts-and-runners-functors-in-category-of-monads}).
-These laws guarantee the existence of general forms of lifts and runners.
+A monad transformer that obeys the laws of a pointed and co-pointed
+functor in the category of monads (see Section~\ref{subsec:Category-theoretic-properties-of-lifts-and-runners-functors-in-category-of-monads})
+will give the programmer full flexibility of combining monadic effects.
+We may call such transformers \textbf{complete}.\index{monad transformers!completeness}
 The monad transformers for linear monads, rigid monads, product monads,
 free pointed monads, and recursive (tree-like and list-like) monads
 are \textsf{``}complete\textsf{''}, as we have proved in the previous sections. We
 now consider certain monads (state, continuation, choice, and codensity)
-whose transformers are incomplete. Those transformers are deficient
-in one or another way, and they do not correspond to lawful pointed
-and co-pointed functors in the category of monads. This leads to certain
-limitations in the practical use of the affected transformers.
+whose transformers are \textsf{``}incomplete\textsf{''}. Those transformers are deficient
+in one or another way, which leads to certain limitations in the practical
+use of the affected transformers.
 
 \subsection{Transformer for the state monad. Proofs}
 
-The transformer for the \lstinline!State! monad is not compositional;
-as shown in Examples~\ref{subsec:Example-state-monad-composition-fails-with-option}\textendash \ref{subsec:Example-state-monad-composition-fails-with-reader},
-the \lstinline!State! monad does not compose with arbitrary other
-monads. Instead, the transformer needs a custom definition (Section~\ref{subsec:Monad-transformers-for-standard-monads}).
+As shown in Examples~\ref{subsec:Example-state-monad-composition-fails-with-option}\textendash \ref{subsec:Example-state-monad-composition-fails-with-reader},
+the \lstinline!State! monad does not compose with several other monads.
+The \lstinline!State! monad\textsf{'}s transformer requires custom code (see
+Section~\ref{subsec:Monad-transformers-for-standard-monads}).
 
 \subsubsection{Statement \label{subsec:Statement-state-monad-transformer}\ref{subsec:Statement-state-monad-transformer}}
 
@@ -8542,7 +8536,7 @@ The type signature for a $T_{\text{State}}$-Kleisli function is
 \[
 A\rightarrow T_{\text{State}}^{M,B}=A\rightarrow S\rightarrow M^{B\times S}\quad.
 \]
-When we uncurry this type signature, we get the type $A\times S\rightarrow M^{B\times S}$.
+When we uncurry this type signature, we get $A\times S\rightarrow M^{B\times S}$.
 It is easy to define the Kleisli composition ($\tilde{\diamond}_{_{T}}$)
 for uncurried Kleisli functions because $\tilde{\diamond}_{_{T}}$
 is the same as the $M$-Kleisli composition ($\diamond_{_{M}}$) except
@@ -8551,16 +8545,17 @@ applied to types $A\times S$, $B\times S$, and $C\times S$:
 f^{:A\times S\rightarrow M^{B\times S}}\,\tilde{\diamond}_{_{T}}\,g^{:B\times S\rightarrow M^{C\times S}}\triangleq f\diamond_{_{M}}g\quad.
 \]
 The proper $T_{\text{State}}$-Kleisli composition ($\diamond_{_{T}}$)
-is then defined by
+is then defined by uncurrying:
 \[
 f^{:A\rightarrow S\rightarrow M^{B\times S}}\diamond_{_{T}}g^{:B\rightarrow S\rightarrow M^{C\times S}}\triangleq\text{uncu}\left(f\right)\diamond_{_{M}}\text{uncu}\left(g\right)\quad.
 \]
-The \textbf{uncurrying}\index{uncurrying} transformation 
+The \textbf{uncurrying}\index{uncurrying} transformation (\lstinline!uncu!)
+defined as
 \[
 \text{uncu}:\left(A\rightarrow B\rightarrow C\right)\rightarrow A\times B\rightarrow C\quad,\quad\quad\text{uncu}\left(f\right)\triangleq a^{:A}\times b^{:B}\rightarrow f(a)(b)\quad,
 \]
-is an isomorphism with the inverse (\textbf{currying}\index{currying})
-transformation
+is an isomorphism with the inverse \textbf{currying}\index{currying}
+transformation (\lstinline!cu!) defined as
 \[
 \text{cu}:\left(A\times B\rightarrow C\right)\rightarrow A\rightarrow B\rightarrow C\quad,\quad\quad\text{cu}\left(f\right)\triangleq a^{:A}\rightarrow b^{:B}\rightarrow f(a\times b)\quad.
 \]
@@ -8616,16 +8611,16 @@ of $\diamond_{_{T}}$:
  & =a\times s\rightarrow a\triangleright f\bef(b\rightarrow b\times s)^{\uparrow M}\quad.
 \end{align*}
 Using this formula, we get:
-\begin{align*}
- & \text{uncu}\,(f^{:A\rightarrow M^{B}}\bef\text{flift})\,\tilde{\diamond}_{_{T}}\,\text{uncu}\,(g^{:B\rightarrow M^{C}}\bef\text{flift})=\text{uncu}\,(f^{:A\rightarrow M^{B}}\bef\text{flift})\diamond_{_{M}}\text{uncu}\,(g^{:B\rightarrow M^{C}}\bef\text{flift})\\
- & =\big(a\times s\rightarrow a\triangleright f\bef(b\rightarrow b\times s)^{\uparrow M}\big)\diamond_{_{M}}\big(b\times s\rightarrow b\triangleright g\bef(c\rightarrow c\times s)^{\uparrow M}\big)\quad.
-\end{align*}
+\begin{align}
+ & \text{uncu}\,(f^{:A\rightarrow M^{B}}\bef\text{flift})\,\tilde{\diamond}_{_{T}}\,\text{uncu}\,(g^{:B\rightarrow M^{C}}\bef\text{flift})=\text{uncu}\,(f^{:A\rightarrow M^{B}}\bef\text{flift})\diamond_{_{M}}\text{uncu}\,(g^{:B\rightarrow M^{C}}\bef\text{flift})\nonumber \\
+ & =\big(a\times s\rightarrow a\triangleright f\bef(b\rightarrow b\times s)^{\uparrow M}\big)\diamond_{_{M}}\big(b\times s\rightarrow b\triangleright g\bef(c\rightarrow c\times s)^{\uparrow M}\big)\quad.\label{eq:uncurry-state-monad-derivation0}
+\end{align}
 We need somehow to move $(b\rightarrow b\times s)^{\uparrow M}$ to
 the right of $\diamond_{_{M}}$. However, the naturality law of $\diamond_{_{M}}$
-cannot be applied because $(b\rightarrow b\times s)^{\uparrow M}$
-contains the variable $s$, which is bound in the scope of the left
-argument of $\diamond_{_{M}}$. To proceed, let us apply the expression
-to an arbitrary value $a\times s$, which will enable us to move the
+cannot be used because $(b\rightarrow b\times s)^{\uparrow M}$ contains
+the variable $s$, which is bound in the scope of the left argument
+of $\diamond_{_{M}}$. To proceed, we apply the function in Eq.~(\ref{eq:uncurry-state-monad-derivation0})
+to an arbitrary value $a\times s$. This will enable us to move the
 rest of the expression ($\diamond_{_{M}}...$) into the scope of the
 left argument of $\diamond_{_{M}}$:
 \begin{align*}
@@ -8708,7 +8703,7 @@ The base runner is parameterized by an initial state value $s_{0}$:
 \text{brun}\,(s_{0})\triangleq p^{:S\rightarrow M^{A\times S}}\rightarrow p(s_{0})\triangleright\pi_{1}^{\uparrow M}\quad.
 \]
 
-We will check the laws for a fixed $s_{0}$. The non-degeneracy law
+We will check the laws for a fixed $s_{0}$. The nondegeneracy law
 holds:
 \begin{align*}
 {\color{greenunder}\text{expect to equal }m:}\quad & m\triangleright\text{flift}\triangleright\text{brun}\,(s_{0})=m\triangleright\text{flift}\triangleright(p\rightarrow p(s_{0})\triangleright\pi_{1}^{\uparrow M})=s_{0}\triangleright(\gunderline{m\triangleright\text{flift}})\triangleright\pi_{1}^{\uparrow M}\\
@@ -8894,10 +8889,10 @@ where we use the $L$-filterable contrafunctor $A\rightarrow L^{Q}$
 as $H^{A}$ (see Statement~\ref{subsec:Statement-examples-of-filterable-contrafunctors}).
 Similarly, we find that the monad laws hold for $T_{\text{Search}}^{M,A}$
 if we use the $T_{L}^{M}$-filterable contrafunctor $H^{A}\triangleq A\rightarrow T_{L}^{M,Q}$,
-where we may assume that $T_{L}^{M}$ is a lawful monad. We will use
-this definition of $H^{A}$ in the proof below. For brevity, let us
-also write simply $T$ instead of $T_{\text{Search}}^{M}$ (the foreign
-monad $M$ will be fixed throughout the derivations). 
+where we assume that $T_{L}^{M}$ is a lawful monad. We will use this
+definition of $H^{A}$ in the proof below. For brevity, we will write
+simply $T$ instead of $T_{\text{Search}}^{M}$ (the foreign monad
+$M$ is fixed throughout the derivations). 
 
 The monad methods of $T_{\text{Search}}^{M}\triangleq T$ are defined
 according to Statement~\ref{subsec:Statement-monad-construction-3}:
@@ -8948,7 +8943,7 @@ To verify that $p\bef q=\text{id}$, we use the assumption $r\bef s=\text{id}$:
 \begin{align*}
  & p\bef q=\big(u\rightarrow\gunderline{v\rightarrow(v\bef s)\triangleright u\bef r}\big)\bef\big(\gunderline t\rightarrow w\rightarrow(w\bef r)\triangleright\gunderline t\bef s\big)\\
 {\color{greenunder}\text{compute composition}:}\quad & =u\rightarrow w\rightarrow\gunderline{(w\bef r)\triangleright\big(v}\rightarrow(v\bef s)\triangleright u\bef r\big)\bef s\\
-{\color{greenunder}\text{apply function}:}\quad & =u\rightarrow w\rightarrow(w\bef\gunderline{r\bef s})\triangleright u\bef\gunderline{r\bef s}=u\rightarrow(\gunderline{w\rightarrow w\,\triangleright}\,u)=u\rightarrow u=\text{id}\quad.
+{\color{greenunder}\text{apply function}:}\quad & =u\rightarrow w\rightarrow(w\bef\,\gunderline{r\bef s})\triangleright u\bef\,\gunderline{r\bef s}=u\rightarrow(\gunderline{w\rightarrow w\,\triangleright}\,u)=u\rightarrow u=\text{id}\quad.
 \end{align*}
 A separate proof for $q\bef p=\text{id}$ is not needed.
 
@@ -8988,7 +8983,7 @@ Rewrite the left-hand side:
 \end{align*}
 Rewrite the right-hand side:
 \begin{align*}
- & \tilde{p}(f)\tilde{\diamond}_{_{S}}\tilde{p}(g)=\big(h\rightarrow f(h\bef s)\bef r\big)\tilde{\diamond}_{_{S}}\big(h\rightarrow g(h\bef s)\bef r\big)\\
+ & \tilde{p}\left(f\right)\tilde{\diamond}_{_{S}}\tilde{p}\left(g\right)=\big(h\rightarrow f(h\bef s)\bef r\big)\tilde{\diamond}_{_{S}}\big(h\rightarrow g(h\bef s)\bef r\big)\\
  & =h\rightarrow\big(h\rightarrow f(h\bef s)\bef r\big)(h\triangleright\text{lift}_{N,H}(\big(h\rightarrow g(h\bef s)\bef r\big)(h)))\diamond_{_{N}}\big(h\rightarrow g(h\bef s)\bef r\big)(h)\\
  & =h\rightarrow\big(f((h\triangleright\text{lift}_{N,H}(g(h\bef s)\bef r))\bef s)\bef r\big)\diamond_{_{N}}\big(g(h\bef s)\bef r\big)\quad.
 \end{align*}
@@ -9005,9 +9000,9 @@ and $\text{lift}_{N,H}$:
 Substituting the code of those functions into both sides of Eq.~(\ref{eq:identity-law-search-monad-transformer-derivation1}),
 we get:
 \begin{align*}
-{\color{greenunder}\text{left-hand side}:}\quad & (h\bef s)\triangleright\text{lift}_{L,H}(g(h\bef s))=g(h\bef s)\diamond_{_{L}}(h\bef s)\\
+{\color{greenunder}\text{left-hand side}:}\quad & (h\bef s)\triangleright\text{lift}_{L,H}(g(h\bef s))=g(h\bef s)\diamond_{_{L}}\!(h\bef s)\\
  & \overset{?}{=}\big(h\triangleright\text{lift}_{N,H}(g(h\bef s)\bef r)\big)\bef s=\big((g(h\bef s)\bef r)\,\gunderline{\diamond_{_{N}}}h\big)\gunderline{\bef s}\\
-{\color{greenunder}\text{composition law of }s:}\quad & =\quad\big(g(h\bef s)\bef\gunderline{r\bef s}\big)\diamond_{_{L}}(h\bef s)=g(h\bef s)\diamond_{_{L}}(h\bef s)\quad.
+{\color{greenunder}\text{composition law of }s:}\quad & =\big(g(h\bef s)\bef\,\gunderline{r\bef s}\big)\diamond_{_{L}}\!(h\bef s)=g(h\bef s)\diamond_{_{L}}\!(h\bef s)\quad.
 \end{align*}
 Both sides are now equal.
 
@@ -9064,7 +9059,7 @@ and for more references.} \textbf{on} $F$ is defined by
 \[
 \text{Cod}^{F,A}\triangleq\forall R.\,(A\rightarrow F^{R})\rightarrow F^{R}\quad.
 \]
-Before considering its transformer, we will establish some properties
+Before considering its transformer, we need to establish some properties
 of this monad.
 
 Note the similarity of $\text{Cod}^{F,A}$ with the continuation monad
@@ -9081,11 +9076,11 @@ monad laws:
 
 \subsubsection{Statement \label{subsec:Statement-monad-with-quantifier}\ref{subsec:Statement-monad-with-quantifier} }
 
-Assume a monad $K^{R,\bullet}$ with an extra type parameter $R$;
-so, $K^{R,A}$ is a lawful monad (with respect to the type parameter
-$A$ and with a fixed $R$). Then \textbf{(a)} $L^{A}\triangleq\forall R.\,K^{R,A}$
+Assume a monad $K^{R,\bullet}$ with an extra type parameter $R$.
+In other words, $K^{R,A}$ is a lawful monad with respect to the type
+parameter $A$ and with a fixed $R$. Then \textbf{(a)} $L^{A}\triangleq\forall R.\,K^{R,A}$
 is also a lawful monad, and \textbf{(b)} for any fixed $R$, there
-is a monad morphism $L^{\bullet}\leadsto K^{R,\bullet}$.
+is a monad morphism of type $L^{\bullet}\leadsto K^{R,\bullet}$.
 
 \subparagraph{Proof}
 
@@ -9096,7 +9091,7 @@ $K^{R,\bullet}$.) Begin with the method \lstinline!pure!:
 \[
 \text{pu}_{L}\triangleq\forall R.\,\text{pu}_{K^{R,\bullet}}=\forall R.\,a^{:A}\rightarrow\text{pu}_{K^{R,\bullet}}(a)=a^{:A}\rightarrow\forall R.\,\text{pu}_{K^{R,\bullet}}(a)\quad.
 \]
-Here, we may move the quantifier as $\forall R.a^{:A}\rightarrow(...)^{R}=a^{:A}\rightarrow\forall R.\,(...)^{R}$
+Here, we may move the quantifier as $\forall R.\,a^{:A}\rightarrow(...)^{R}=a^{:A}\rightarrow\forall R.\,(...)^{R}$
 because the type parameter $A$ does not depend on $R$.
 
 To define the \lstinline!flatMap! method for $L$, we add quantifiers
@@ -9193,7 +9188,7 @@ and \lstinline!outC!:
 Note that \lstinline!inC! is the same as $F$\textsf{'}s \lstinline!flatMap!,
 or $\text{flm}_{F}$ with flipped arguments.
 
-To verify the non-degeneracy law, compute:
+To verify the nondegeneracy law, compute:
 \begin{align*}
 {\color{greenunder}\text{expect to equal }f:}\quad & f^{:F^{A}}\triangleright\text{inC}\bef\text{outC}=(k\rightarrow f\triangleright\text{flm}_{F}(k))\triangleright\text{outC}\\
  & =(k\rightarrow f\triangleright\text{flm}_{F}(k))(\text{pu}_{F})=f\triangleright\gunderline{\text{flm}_{F}(\text{pu}_{F})}\\
@@ -9219,7 +9214,7 @@ results:
 \begin{align*}
 {\color{greenunder}\text{left-hand side}:}\quad & a^{:A}\triangleright(f\diamond_{_{F}}g)\bef\text{inC}=k\rightarrow a\triangleright(f\diamond_{_{F}}g)\bef\text{flm}_{F}(k)\\
 {\color{greenunder}\text{definition of }\diamond_{_{F}}:}\quad & \quad=k\rightarrow a\triangleright f\bef\text{flm}_{F}(g)\bef\text{flm}_{F}(k)\quad,\\
-{\color{greenunder}\text{right-hand side}:}\quad & a^{:A}\triangleright\big((f\bef\text{inC})\diamond_{_{\text{Cod}}}(g\bef\text{inC})\big)=k\rightarrow(f\bef\text{inC})^{T}(a)\big(b\rightarrow(g\bef\text{inC})^{T}(b)(k)\big)\quad.
+{\color{greenunder}\text{right-hand side}:}\quad & a^{:A}\triangleright\big((f\bef\text{inC})\diamond_{_{\text{Cod}}}\!(g\bef\text{inC})\big)=k\rightarrow(f\bef\text{inC})^{T}(a)\big(b\rightarrow(g\bef\text{inC})^{T}(b)(k)\big)\quad.
 \end{align*}
 For clarity, let us simplify the expression $(f\bef\text{inC})^{T}(a)(x)$
 separately:
@@ -9249,7 +9244,7 @@ results:
 \begin{align*}
 {\color{greenunder}\text{left-hand side}:}\quad & a\triangleright(f\diamond_{_{\text{Cod}}}g)\bef\text{outC}=\big(\forall T.\,k\rightarrow f^{T}(a)\big(b\rightarrow g^{T}(b)(k)\big)\big)\bef(d\rightarrow d(\text{pu}_{F}))\\
  & \quad=\big(\forall T.\,k\rightarrow f^{T}(a)\big(b\rightarrow g^{T}(b)(k)\big)\big)(\text{pu}_{F})=f(a)(b\rightarrow g(b)(\text{pu}_{F}))\quad.\\
-{\color{greenunder}\text{right-hand side}:}\quad & a\triangleright\big((f\bef\text{outC})\diamond_{_{F}}(g\bef\text{outC})\big)=a\triangleright(f\bef\text{outC})\bef\text{flm}_{F}(g\bef\text{outC})\\
+{\color{greenunder}\text{right-hand side}:}\quad & a\triangleright\big((f\bef\text{outC})\diamond_{_{F}}\!(g\bef\text{outC})\big)=a\triangleright(f\bef\text{outC})\bef\text{flm}_{F}(g\bef\text{outC})\\
  & \quad=a\triangleright f\triangleright\text{outC}\triangleright\text{flm}_{F}(g\bef\text{outC})=f(a)(\text{pu}_{F})\triangleright\text{flm}_{F}\big(b\rightarrow g(b)(\text{pu}_{F})\big)\quad.
 \end{align*}
 We find two different expressions that cannot be transformed into
@@ -9259,8 +9254,8 @@ f(a)(b\rightarrow g(b)(\text{pu}_{F}))\neq f(a)(\text{pu}_{F})\triangleright\tex
 \]
 There are no laws that would allow us to replace $\text{pu}_{F}$
 in the \emph{argument} of $f$ because $f$ is an arbitrary function.
-In part (c) of this proof, we will see an example that violates the
-composition law of \lstinline!outC!.
+In part \textbf{(c)} of this proof, we will see an example that violates
+the composition law of \lstinline!outC!.
 
 \textbf{(c)} The functions \lstinline!inC! and \lstinline!outC!
 are not isomorphisms because $\text{outC}\bef\text{inC}\not=\text{id}$.
@@ -9284,13 +9279,13 @@ are defined as
 (These type signatures admit no other fully parametric implementations.)
 The function \lstinline!outC! is a flipped version of the \lstinline!State!
 monad\textsf{'}s runner. That runner returns the result value of type $A$
-but discards the possibly changed state (of type $R$). The failure
-of the composition law for the \lstinline!State! monad\textsf{'}s runner has
-been already noted in the proof of Statement~\ref{subsec:Statement-state-monad-transformer}.
+but discards the possibly changed state (of type $R$). This makes
+the \lstinline!State! monad\textsf{'}s runner fail the composition law, as
+we already noted in the proof of Statement~\ref{subsec:Statement-state-monad-transformer}.
 
 To obtain a specific example showing that $\text{outC}\bef\text{inC}\neq\text{id}$,
-consider $R\triangleq\bbnum 1+P$ with some fixed type $P$ and define
-a monadic value $s:\text{State}^{R,R}$ by 
+choose the type $R\triangleq\bbnum 1+P$ with some fixed type $P$
+and define a monadic value $s:\text{State}^{R,R}$ by 
 \[
 s:\bbnum 1+P\rightarrow\left(\bbnum 1+P\right)\times\left(\bbnum 1+P\right)\quad,\quad\quad s\triangleq r^{:\bbnum 1+P}\rightarrow r\times\left(\bbnum 1+\bbnum 0\right)\quad.
 \]
@@ -9300,8 +9295,8 @@ check that the result is not equal to $s$:
  & s\triangleright\text{outC}=r^{:\bbnum 1+P}\rightarrow s(r)\triangleright\pi_{1}=r\rightarrow r=\text{id}\quad,\\
  & s\triangleright\text{outC}\triangleright\text{inC}=\text{id}\triangleright\text{inC}=r\rightarrow r\times r\neq s=r\rightarrow r\times\left(\bbnum 1+\bbnum 0\right)\quad.
 \end{align*}
-This proves directly that $\text{outC}\bef\text{inC}\neq\text{id}$
-for certain monads $F$. $\square$
+We conclude that $\text{outC}\bef\text{inC}\neq\text{id}$ for some
+monads $F$. $\square$
 
 This proof shows that $\text{Cod}^{F,\bullet}$ may support some additional
 effects not described by the monad $F$. So, $\text{Cod}^{F,\bullet}$
@@ -9330,7 +9325,7 @@ groups of laws.
 
 \paragraph{The monad laws}
 
-holds for $T_{\text{Cod}}^{M,A}$ due to Statement~\ref{subsec:Statement-codensity-monad-lawful},
+hold for $T_{\text{Cod}}^{M,A}$ due to Statement~\ref{subsec:Statement-codensity-monad-lawful},
 where we need to replace the type constructor $F$ by the composition
 $M^{F^{\bullet}}$.
 
@@ -9604,14 +9599,12 @@ precarious formatting
 
 \begin{wrapfigure}{l}{0.4\columnwidth}%
 \vspace{-2\baselineskip}
-
 \[
 \xymatrix{\xyScaleY{1.5pc}\xyScaleX{2pc}M^{S^{R^{A}}}\ar[d]\sb(0.45){\text{sw}_{S,M}}\ar[r]\sp(0.5){\text{sw}_{R,S}^{\uparrow M}} & M^{R^{S^{A}}}\ar[r]\sp(0.5){\text{sw}_{R,M}} & R^{M^{S^{A}}}\ar[d]\sp(0.4){\text{sw}_{S,M}^{\uparrow R}}\\
 S^{M^{R^{A}}}\ar[r]\sp(0.5){\text{sw}_{R,M}^{\uparrow S}} & S^{R^{M^{A}}}\ar[r]\sp(0.5){\text{sw}_{R,S}} & R^{S^{M^{A}}}
 }
 \]
-\vspace{-1.4\baselineskip}
-
+\vspace{-1\baselineskip}
 \[
 \xymatrix{\xyScaleY{1.5pc}\xyScaleX{3pc}M\circ R\circ S\ar[rd]\sb(0.45){\text{sw}_{T,M}\triangleq}\ar[r]\sp(0.5){\text{sw}_{R,M}} & R\circ M\circ S\ar[d]\sp(0.5){\text{sw}_{S,M}^{\uparrow R}}\\
  & R\circ S\circ M
@@ -9686,7 +9679,7 @@ since it is more complicated:
 \begin{align*}
  & \text{sw}_{T,M}\bef\text{sw}_{T,M}^{\uparrow T}\bef\text{ftn}_{T}\\
 {\color{greenunder}\text{definitions}:}\quad & =\text{sw}_{R,M}\bef\gunderline{\text{sw}_{S,M}^{\uparrow R}\bef\big(\text{sw}_{R,M}\bef\text{sw}_{S,M}^{\uparrow R}\big)^{\uparrow S\uparrow R}\bef\text{sw}_{R,S}^{\uparrow R}}\bef\text{ftn}_{R}\bef\text{ftn}_{S}^{\uparrow R}\\
-{\color{greenunder}^{\uparrow R}\text{-composition}:}\quad & =\text{sw}_{R,M}\bef\big(\text{sw}_{S,M}\bef\text{sw}_{R,M}^{\uparrow S}\bef\gunderline{\text{sw}_{S,M}^{\uparrow R\uparrow S}\bef\text{sw}_{R,S}}\big)^{\uparrow R}\bef\text{ftn}_{R}\bef\text{ftn}_{S}^{\uparrow R}\\
+{\color{greenunder}\text{composition under }^{\uparrow R}:}\quad & =\text{sw}_{R,M}\bef\big(\text{sw}_{S,M}\bef\text{sw}_{R,M}^{\uparrow S}\bef\gunderline{\text{sw}_{S,M}^{\uparrow R\uparrow S}\bef\text{sw}_{R,S}}\big)^{\uparrow R}\bef\text{ftn}_{R}\bef\text{ftn}_{S}^{\uparrow R}\\
 {\color{greenunder}\text{naturality law of }\text{sw}_{R,S}:}\quad & =\text{sw}_{R,M}\bef\big(\gunderline{\text{sw}_{S,M}\bef\text{sw}_{R,M}^{\uparrow S}\bef\text{sw}_{R,S}}\bef\text{sw}_{S,M}^{\uparrow S\uparrow R}\big)^{\uparrow R}\bef\text{ftn}_{R}\bef\text{ftn}_{S}^{\uparrow R}\\
 {\color{greenunder}\text{use Eq.~(\ref{eq:rigid-monad-3-swap-law})}:}\quad & =\text{sw}_{R,M}\bef\big(\gunderline{\text{sw}_{R,S}^{\uparrow M}\bef\text{sw}_{R,M}\bef\text{sw}_{S,M}^{\uparrow R}}\bef\text{sw}_{S,M}^{\uparrow S\uparrow R}\big)^{\uparrow R}\bef\text{ftn}_{R}\bef\text{ftn}_{S}^{\uparrow R}\quad.
 \end{align*}
@@ -9851,7 +9844,7 @@ with type signature
 \[
 \text{fi}_{R}:(A\rightarrow R^{B})\rightarrow R^{A\rightarrow B}
 \]
-satisfying the non-degeneracy law~(\ref{eq:rigid-non-degeneracy-law})
+satisfying the nondegeneracy law~(\ref{eq:rigid-non-degeneracy-law})
 shown below.
 
 Not all functors admit a natural transformation with the type signature
@@ -9860,8 +9853,9 @@ is not rigid because the required type signature
 \[
 \text{fi}:\left(A\rightarrow Z+B\right)\rightarrow Z+\left(A\rightarrow B\right)
 \]
-cannot be implemented. However, any functor $R$ admits the opposite
-natural transformation \lstinline!fuseOut! (denoted by $\text{fo}_{R}$):
+cannot be implemented as a natural transformation. However, any functor
+$R$ admits the opposite natural transformation \lstinline!fuseOut!
+(denoted by $\text{fo}_{R}$):
 \begin{equation}
 \text{fo}:R^{A\rightarrow B}\rightarrow A\rightarrow R^{B}\quad,\quad\quad\text{fo}\left(r\right)\triangleq a\rightarrow r\triangleright\big(f^{:A\rightarrow B}\rightarrow f\left(a\right)\big)^{\uparrow R}\quad.\label{eq:fuseOut-def}
 \end{equation}
@@ -9916,7 +9910,7 @@ After that, we can use $M$\textsf{'}s \lstinline!flatMap!:
 \[
 \text{rflm}_{M,R}\triangleq k^{:A\rightarrow R^{M^{B}}}\rightarrow m^{:M^{A}}\rightarrow k\triangleright\text{fi}_{R}\triangleright\big(q^{:A\rightarrow M^{B}}\rightarrow m\triangleright\text{flm}_{M}(q)\big)^{\uparrow R}\quad.
 \]
-This code does not assume that $R$ is a rigid monad. $\square$
+This code does not assume that $R$ is a monad. $\square$
 
 The second use case is a program transformation that introduces a
 wrapper into a given program. Assume that $p^{:C}$ is an expression
@@ -9972,12 +9966,11 @@ $T_{R}^{M}=R\circ M$ and the corresponding method $\text{ftn}_{T}$.
 We can define the transformation $\text{fi}_{R}$ in the same way
 as Eq.~(\ref{eq:define-swap-via-flatten}) defined the \lstinline!swap!
 method via $\text{ftn}_{T}$. To use that formula, we need to set
-the foreign monad $M$ to be the \lstinline!Reader! monad, $M^{B}\triangleq A\rightarrow B$,
-with a fixed environment type $A$:
+the foreign monad $M$ to be the \lstinline!Reader! monad, $M^{B}\triangleq A\rightarrow B$
+(with a fixed type $A$):
 
 \begin{wrapfigure}{l}{0.4\columnwidth}%
 \vspace{-1.9\baselineskip}
-
 \[
 \xymatrix{\xyScaleY{1.5pc}\xyScaleX{4pc}(A\rightarrow R^{B})\ar[r]\sp(0.5){\text{pu}_{M}^{\uparrow R\uparrow M}}\ar[d]\sb(0.5){\text{fi}_{R}\triangleq} & (A\rightarrow R^{A\rightarrow B})\ar[d]\sp(0.5){\text{pu}_{R}}\\
 R^{A\rightarrow B} & R^{A\rightarrow R^{A\rightarrow B}}\ar[l]\sb(0.5){\text{ftn}_{T}}
@@ -10054,7 +10047,7 @@ Consider the rigid monads $P^{A}\triangleq Z\rightarrow A$ and $R^{A}\triangleq\
 where $Q$ and $Z$ are fixed types. Since all rigid monads are rigid
 functors, it follows that the monads $P$ and $R$ have methods $\text{fi}_{P}$,
 $\text{fo}_{P}$, $\text{fi}_{R}$, $\text{fo}_{R}$ satisfying the
-non-degeneracy law~(\ref{eq:rigid-non-degeneracy-law}). It turns
+nondegeneracy law~(\ref{eq:rigid-non-degeneracy-law}). It turns
 out that additionally $\text{fo}_{P}\bef\text{fi}_{P}=\text{id}$,
 i.e., the methods $\text{fo}_{P}$ and $\text{fi}_{P}$ \emph{are}
 inverses of each other, but $\text{fo}_{R}\bef\text{fi}_{R}\neq\text{id}$.
@@ -10091,7 +10084,7 @@ The implementations are again derived uniquely from type signatures:
 We notice that the implementation of $\text{fi}_{R}$ uses a constant
 function, $\left(\_\rightarrow b\right)$, which is likely to lose
 information. Indeed, while $\text{fi}_{R}\bef\text{fo}_{R}=\text{id}$
-as it must be due to the rigid non-degeneracy law, we find:
+as it must be due to the rigid nondegeneracy law, we find:
 \begin{align*}
 {\color{greenunder}\text{expect \emph{not} to equal }g:}\quad & g\triangleright\text{fo}_{R}\bef\text{fi}_{R}=\left(g\triangleright\text{fo}_{R}\right)\triangleright\gunderline{\text{fi}_{R}}\\
 {\color{greenunder}\text{definition of }\text{fi}_{R}:}\quad & =x\rightarrow a\rightarrow\gunderline{\text{fo}_{R}}(g)(a)(b\rightarrow x(\_\rightarrow b))\\
@@ -10130,7 +10123,7 @@ is rigid when $H$ is any contrafunctor and $P$ is any rigid functor.
 \subparagraph{Proof}
 
 We assume that $\text{fi}_{P}$ and $\text{fo}_{P}$ are known and
-satisfy the non-degeneracy law~(\ref{eq:rigid-non-degeneracy-law}).
+satisfy the nondegeneracy law~(\ref{eq:rigid-non-degeneracy-law}).
 The function $\text{fi}_{S}$ is then defined by
 \begin{align*}
 \text{fi}_{S} & :\big(A\rightarrow H^{B}\rightarrow P^{B}\big)\rightarrow H^{A\rightarrow B}\rightarrow P^{A\rightarrow B}\quad,\\
@@ -10149,7 +10142,7 @@ or equivalently, using the pipe notation:
 \[
 \text{fo}_{S}(g)=a\triangleright\big(h\triangleright\left(p\rightarrow p(a)\right)^{\downarrow H}\bef g\bef\text{fo}_{P}\big)\quad.
 \]
-To verify the non-degeneracy law for $S$, apply both sides to some
+To verify the nondegeneracy law for $S$, apply both sides to some
 arguments; we expect $f\triangleright(\text{fi}_{S}\bef\text{fo}_{S})$
 to equal $f$ for an arbitrary $f:A\rightarrow H^{B}\rightarrow P^{B}$.
 To compare values, we need to apply both sides further to some arguments
@@ -10165,7 +10158,7 @@ Computing the function composition
 \[
 (b\rightarrow\_\rightarrow b)\bef(p\rightarrow p(a))=(b\rightarrow(\_\rightarrow b)(a))=(b\rightarrow b)=\text{id}
 \]
-and using the non-degeneracy law $\text{fi}_{P}\bef\text{fo}_{P}=\text{id}$,
+and using the nondegeneracy law $\text{fi}_{P}\bef\text{fo}_{P}=\text{id}$,
 we can simplify further:
 \begin{align*}
  & a\triangleright\big(\big(a\rightarrow h\triangleright\gunderline{\left((b\rightarrow\_\rightarrow b)\bef(p\rightarrow p(a))\right)^{\downarrow H}}\bef f(a)\big)\triangleright\text{fi}_{P}\,\gunderline{\triangleright}\,\text{fo}_{P}\big)\\
@@ -10244,7 +10237,7 @@ of several variants.
 
 \subsubsection{Statement \label{subsec:Statement-rigid-functor-wrapped-unit-is-unit}\ref{subsec:Statement-rigid-functor-wrapped-unit-is-unit}}
 
-If a functor $R$ has a method $\text{fi}_{R}$ satisfying the non-degeneracy
+If a functor $R$ has a method $\text{fi}_{R}$ satisfying the nondegeneracy
 law~(\ref{eq:rigid-non-degeneracy-law}) then the type $R^{\bbnum 1}$
 is equivalent to the unit type: $R^{\bbnum 1}\cong\bbnum 1$. The
 value $\text{wu}_{R}$ defined by Eq.~(\ref{eq:rigid-functor-def-of-wrapped-unit})
@@ -10253,7 +10246,7 @@ between $\bbnum 1$ and $R^{\bbnum 1}$ is the function $\left(1\rightarrow\text{w
 
 \paragraph{Proof}
 
-The trick is to apply both sides of the non-degeneracy law $\text{fi}_{R}\bef\text{fo}_{R}=\text{id}$
+The trick is to apply both sides of the nondegeneracy law $\text{fi}_{R}\bef\text{fo}_{R}=\text{id}$
 to the identity function of type $R^{\bbnum 1}\rightarrow R^{\bbnum 1}$.
 To adapt the type parameters, consider the type signature of $\text{fi}_{R}\bef\text{fo}_{R}$:
 \[
@@ -10268,9 +10261,9 @@ f_{1}:R^{\bbnum 1}\rightarrow R^{\bbnum 1}\quad,\quad\quad f_{1}\triangleq\text{
 \]
 We will show that $f_{1}$ is a constant function, $f_{1}=(\_\rightarrow\text{wu}_{R})$,
 always returning the same value $\text{wu}_{R}$ defined in Statement~\ref{subsec:Statement-rigid-functor-is-pointed}.
-However, the right-hand side of the non-degeneracy law applied to
-$\text{id}$ is the identity function of type $R^{\bbnum 1}\rightarrow R^{\bbnum 1}$.
-So, the non-degeneracy law means that $f_{1}=\text{id}$. If the identity
+However, the right-hand side of the nondegeneracy law applied to $\text{id}$
+is the identity function of type $R^{\bbnum 1}\rightarrow R^{\bbnum 1}$.
+So, the nondegeneracy law means that $f_{1}=\text{id}$. If the identity
 function of type $R^{\bbnum 1}\rightarrow R^{\bbnum 1}$ always returns
 the same value ($\text{wu}_{R}$), it will mean that $\text{wu}_{R}$
 is the only distinct value of the type $R^{\bbnum 1}$.
@@ -10328,7 +10321,7 @@ So, $\text{fo}_{R}(g)=\text{fo}_{R}(\text{fi}_{R}(\text{id}))$ is
 a function of type $R^{\bbnum 1}\rightarrow R^{\bbnum 1}$ that ignores
 its argument and always returns the same value $\text{wu}_{R}$.
 
-By virtue of the non-degeneracy law, $\text{fo}_{R}(g)=\text{id}$.
+By virtue of the nondegeneracy law, $\text{fo}_{R}(g)=\text{id}$.
 We see that the identity function $\text{id}:R^{\bbnum 1}\rightarrow R^{\bbnum 1}$
 always returns the same value $\text{wu}_{R}$. Applying this function
 to an arbitrary value $x:R^{\bbnum 1}$, we get
@@ -10346,7 +10339,7 @@ The product of rigid functors is a rigid functor.
 \subparagraph{Proof}
 
 We assume that two rigid functors $P$ and $Q$ are given, with their
-methods $\text{fi}_{P}$ and $\text{fi}_{Q}$ satisfying the non-degeneracy
+methods $\text{fi}_{P}$ and $\text{fi}_{Q}$ satisfying the nondegeneracy
 law. The functor product $R\triangleq P\times Q$ needs its own $\text{fi}_{R}$
 method, with the type signature
 \[
@@ -10360,11 +10353,10 @@ as
 \text{split}:\left(A\rightarrow B\times C\right)\rightarrow\left(A\rightarrow B\right)\times\left(A\rightarrow C\right)\quad,\quad\quad\text{split}\triangleq f^{:A\rightarrow B\times C}\rightarrow(f\bef\pi_{1})\times(f\bef\pi_{2})\quad.
 \]
 Then the method $\text{fi}_{R}$ is written more concisely:
-
 \[
 \text{fi}_{R}\triangleq\text{split}\bef(\text{fi}_{P}\boxtimes\text{fi}_{Q})\quad.
 \]
-To check the non-degeneracy law ($\text{fi}_{R}\bef\text{fo}_{R}=\text{id}$),
+To check the nondegeneracy law ($\text{fi}_{R}\bef\text{fo}_{R}=\text{id}$),
 we need the code of $\text{fo}_{R}$. It is convenient to define $\text{fo}_{R}$
 via a \lstinline!merge! function:
 \[
@@ -10375,7 +10367,7 @@ The code of $\text{fo}_{R}$ is then written as:
 \text{fo}_{R}:P^{A\rightarrow B}\times Q^{A\rightarrow B}\rightarrow A\rightarrow P^{B}\times Q^{B}\quad,\quad\quad\text{fo}_{R}\triangleq(\text{fo}_{P}\boxtimes\text{fo}_{Q})\bef\text{merge}\quad.
 \]
 The functions \lstinline!split! and \lstinline!merge! are mutual
-inverses. Now we can verify the non-degeneracy law:
+inverses. Now we can verify the nondegeneracy law:
 \begin{align*}
  & \text{fi}_{R}\bef\text{fo}_{R}=\text{split}\bef\gunderline{(\text{fi}_{P}\boxtimes\text{fi}_{Q})\bef(\text{fo}_{P}\boxtimes\text{fo}_{Q})}\bef\text{merge}\\
  & =\text{split}\bef\big((\gunderline{\text{fi}_{P}\bef\text{fo}_{P}})\boxtimes(\gunderline{\text{fi}_{Q}\bef\text{fo}_{Q}})\big)\bef\text{merge}=\text{split}\bef\gunderline{(\text{id}\boxtimes\text{id})}\bef\text{merge}=\text{split}\bef\text{merge}=\text{id}\quad.
@@ -10388,16 +10380,16 @@ The composition of rigid functors is a rigid functor.
 
 \subparagraph{Proof}
 
-We will show that the non-degeneracy law ($\text{fi}_{R}\bef\text{fo}_{R}=\text{id}$)
+We will show that the nondegeneracy law ($\text{fi}_{R}\bef\text{fo}_{R}=\text{id}$)
 holds for the functor $R^{\bullet}\triangleq P^{Q^{\bullet}}$ as
 long as $P$, $Q$ are rigid. Begin by defining the methods $\text{fi}_{R}$
 and $\text{fo}_{R}$, assuming that the corresponding methods of $P$,
-$Q$ are known and satisfy the non-degeneracy law. We write:
+$Q$ are known and satisfy the nondegeneracy law. We write:
 \begin{align*}
  & \text{fi}_{R}:(A\rightarrow P^{Q^{B}})\rightarrow P^{Q^{A\rightarrow B}}\quad,\quad\quad\text{fi}_{R}\triangleq\text{fi}_{P}\bef\text{fi}_{Q}^{\uparrow P}\quad,\\
  & \text{fo}_{R}:P^{Q^{A\rightarrow B}}\rightarrow A\rightarrow P^{Q^{B}}\quad,\quad\quad\text{fo}_{R}\triangleq\text{fo}_{Q}^{\uparrow P}\bef\text{fo}_{P}\quad.
 \end{align*}
-To verify the non-degeneracy law for $R$:
+To verify the nondegeneracy law for $R$:
 \[
 \text{fi}_{R}\bef\text{fo}_{R}=\text{fi}_{P}\bef\text{fi}_{Q}^{\uparrow P}\bef\text{fo}_{Q}^{\uparrow P}\bef\text{fo}_{P}=\text{fi}_{P}\bef(\gunderline{\text{fi}_{Q}\bef\text{fo}_{Q}})^{\uparrow P}\bef\text{fo}_{P}=\gunderline{\text{fi}_{P}\bef\text{fo}_{P}}=\text{id}\quad.
 \]
@@ -10413,7 +10405,7 @@ $\text{fi}_{M}$:
 \tilde{\text{fo}}_{T} & :\left(H^{M^{A\rightarrow B}}\rightarrow M^{A\rightarrow B}\right)\rightarrow H^{M^{B}}\rightarrow A\rightarrow M^{B}\\
 \tilde{\text{fo}}_{T} & =g\rightarrow h\rightarrow a\rightarrow\text{fo}_{M}\left(g\big(\left(p^{:A\rightarrow B}\rightarrow p\,a\right)^{\uparrow M\downarrow H}h\big)\right)a
 \end{align*}
-To show the non-degeneracy law for $T$, compute
+To show the nondegeneracy law for $T$, compute
 \begin{align*}
  & \tilde{\text{fo}}_{T}\left(\tilde{\text{fi}}_{T}f\right)h^{:H^{M^{B}}}a^{:A}\\
 \text{insert the definition of }\tilde{\text{fo}}_{T}\text{: }\quad & =\text{fo}_{M}\left(\left(\tilde{\text{fi}}_{T}f\right)\big(\left(p\rightarrow p\,a\right)^{\uparrow M\downarrow H}h\big)\right)a\\
@@ -10424,12 +10416,12 @@ To show the non-degeneracy law for $T$, compute
 \text{identity laws for }M,H\text{: }\quad & =f\,h\,a\quad.
 \end{align*}
 We obtained $\tilde{\text{fo}}_{T}\left(\tilde{\text{fi}}_{T}\,f\right)h\,a=f\,h\,a$.
-Therefore the non-degeneracy law $\tilde{\text{fi}}_{T}\bef\tilde{\text{fo}}_{T}=\text{id}$
+Therefore the nondegeneracy law $\tilde{\text{fi}}_{T}\bef\tilde{\text{fo}}_{T}=\text{id}$
 holds.
 \end{comment}
 
 
-\subsection{Monadically natural lifting of MTL operations (Jaskelioff\textsf{'}s \textsf{``}\texttt{Monatron}\textsf{''})}
+\subsection{Monadically natural lifting of MTL operations (Jaskelioff\textsf{'}s \textsf{``}\texttt{Monatron}\textsf{''})\label{subsec:Monatron}}
 
 Section~\ref{subsec:Combining-monads-via-mtl-style} showed that
 MTL-style programming requires custom code for lifting monad operations
@@ -10440,7 +10432,7 @@ to most monad stacks, including stacks that contain a single monad
 with an incomplete or missing transformer (such as \lstinline!Cont!
 or \lstinline!IO!) located at the deep end of the stack. This section,
 based on the methods and results explained in a paper by M.~Jaskelioff,\footnote{\textsf{``}Modular monad transformers\textsf{''}, see \texttt{\href{https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.219.5365}{https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.219.5365}}}
-will show how \texttt{Monatron}\textsf{'}s lifting works. 
+will show how \texttt{Monatron}\textsf{'}s liftings work. 
 
 \paragraph{Common type signatures for operations}
 
@@ -10634,7 +10626,7 @@ now focus on the methods for lifting \textsf{``}simple\textsf{''} and \textsf{``
 operations to monad stacks.
 
 The goal is to lift a \textsf{``}standard\textsf{''} operation $\text{op}_{M}:F^{M}\leadsto M$
-from a monad $M$ to a monad stack $P$ containing $M$. We assume
+from a monad $M$ to any monad stack $P$ containing $M$. We assume
 that a lawful monad morphism $p:M\leadsto P$ is given. We expect
 that the new operation, $\text{op}_{P}:F^{P}\leadsto P$, should correctly
 perform the functionality of the operation $\text{op}_{M}$ in the
@@ -11495,7 +11487,7 @@ type parameter $B$ appears under the universal quantifier ($\forall B$)
 and is in a covariant position. So, we can set $B=\bbnum 0$ in the
 type of \lstinline!callcc! and obtain an equivalent type:
 \[
-A\rightarrow(\bbnum 0\rightarrow R)\rightarrow R\cong A\rightarrow\bbnum 1\rightarrow R\cong A\rightarrow R\quad.
+\gunderline{\forall B.}\,A\rightarrow(\gunderline B\rightarrow R)\rightarrow R\cong A\rightarrow(\gunderline{\bbnum 0\rightarrow R})\rightarrow R\cong A\rightarrow\gunderline{\bbnum 1\rightarrow}\,R\cong A\rightarrow R\quad.
 \]
 The type $A\rightarrow R$ can be seen as equivalent to a function
 of type $A\rightarrow(B\rightarrow R)\rightarrow R$ that ignores
@@ -11899,7 +11891,8 @@ is \emph{not} a monad morphism $\text{Sel}^{\bbnum 1+P,\bullet}\leadsto\text{Sea
 
 \subsubsection{Exercise \label{subsec:Exercise-selector-and-continuation-monads}\ref{subsec:Exercise-selector-and-continuation-monads}{*}}
 
-Show that the following function scc is a monad morphism $\text{Sel}^{P,\bullet}\leadsto\text{Cont}^{P,\bullet}$:
+Show that the following function (\lstinline!scc!) is a monad morphism
+$\text{Sel}^{P,\bullet}\leadsto\text{Cont}^{P,\bullet}$:
 \begin{lstlisting}
 def scc[P, A](s: (A => P) => A): (A => P) => P = { f: (A => P) => f(s(f)) }
 \end{lstlisting}
@@ -11964,10 +11957,10 @@ are both natural transformations.
 
 For a given monad $K$, define $L$ as the free pointed monad $L^{A}\triangleq A+K^{A}$. 
 
-\textbf{(a)} Show that the monad transformer $T_{L}^{M}$ for $L$
-cannot be defined as the monad $P^{A}\triangleq A+T_{K}^{M,A}$ because
-(at least for some monads $K$ and $M$) there is no monad morphism
-$\text{flift}:M\leadsto P$.
+\textbf{(a)} Show that the monad transformer for $L$ \emph{cannot}
+be defined as the monad $T_{L}^{M,A}\triangleq A+T_{K}^{M,A}$ because
+then (at least for some monads $K$ and $M$) there is no monad morphism
+$\text{flift}:M\leadsto T_{L}^{M,A}$.
 
 \textbf{(b)} Given a runner $\theta_{K}:K\leadsto M$, where $M$
 is an arbitrary (but fixed) target monad, implement a runner $\theta_{L}:L\leadsto M$
@@ -12026,10 +12019,10 @@ in \textbf{(b)}, because a lawful \lstinline!flift! function with
 type $M^{A}\rightarrow L^{A}$ cannot be implemented.
 
 
-\subsubsection{Exercise \label{par:Exercise-combined-codensity-monad}\ref{par:Exercise-combined-codensity-monad}{*}}
+\subsubsection{Exercise \label{subsec:Exercise-combined-codensity-monad}\ref{subsec:Exercise-combined-codensity-monad}{*}}
 
-\textbf{(a)} The \textbf{composed} \index{codensity monad!composed}\textbf{codensity
-monad} $\text{Cod}_{F}^{M,A}$ is defined by
+\textbf{(a)} The\index{monads!composed codensity monad} \textbf{composed}
+\textbf{codensity monad} $\text{Cod}_{F}^{M,A}$ is defined by
 \[
 \text{Cod}_{F}^{M,A}\triangleq\forall X.\,(A\rightarrow F^{X})\rightarrow F^{M^{X}}\quad,
 \]
@@ -12048,9 +12041,9 @@ that satisfy an appropriate naturality law.
 
 \textbf{(b)} Show that the quantifier $\forall X$ cannot be removed
 from the definition of $\text{Cod}_{F}^{M,A}$ even if $F^{A}\triangleq A$:
-show that for a fixed type $X$ and for some $M^{\bullet}$, the type
-constructor $L^{A}\triangleq(A\rightarrow X)\rightarrow M^{X}$ is
-\emph{not} a monad.
+for a fixed type $X$ and for some $M^{\bullet}$, the type constructor
+$L^{A}\triangleq(A\rightarrow X)\rightarrow M^{X}$ is \emph{not}
+a monad.
 
 \subsubsection{Exercise \label{subsec:Exercise-pair-functor-is-rigid}\ref{subsec:Exercise-pair-functor-is-rigid}}
 
