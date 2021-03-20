@@ -106,7 +106,7 @@ function assemble_sources {
 	rm -rf "$srcbase"
 	mkdir "$srcbase"
 	# Copy the required source files to "$srcbase"/. Include graphics files referenced as images.
-	cp ../README.md excluded_words $name*lyx $name*tex $name*dvi `grep -o 'includegraphics[^}]*}' $name*tex | sed -e 's,[^{]*{\([^}]*\)}.*,\1.*,' |while read f; do ls $f ; done` *.sh "$srcbase"/
+	cp monads_evil_face.jpg ../README.md excluded_words $name*lyx $name*tex $name*dvi `grep -o 'includegraphics[^}]*}' $name*tex | sed -e 's,[^{]*{\([^}]*\)}.*,\1.*,' |while read f; do ls $f ; done` *.sh "$srcbase"/
 	tar jcf "$name-src.tar.bz2" "$srcbase"/*
 	rm -rf "$srcbase"/
 }
