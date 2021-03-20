@@ -151,7 +151,7 @@ LC_ALL=C sed -i.bak -e " s| +//IGNORETHIS.*||" $name*.tex
 
 for f in  sofp-back-cover-no-bg sofp-cover-parameters; do cp book_cover/$f.tex.src book_cover/$f.tex; done
 insert_examples_exercises_count $name book_cover/sofp-back-cover-no-bg.tex
-for f in sofp-cover-page-no-bg.tex sofp-cover-page.tex sofp-back-cover.tex sofp-back-cover-page.tex sofp-back-cover-no-bg.tex cover-background.jpg cover-background-2.jpg zloe-lico-monad.jpg; do cp book_cover/"$f" .; done
+for f in sofp-cover-page-no-bg.tex sofp-cover-page.tex sofp-back-cover.tex sofp-back-cover-page.tex sofp-back-cover-no-bg.tex cover-background.jpg cover-background-2.jpg monads_evil_face.jpg; do cp book_cover/"$f" .; done
 
 # Check whether the sources have changed. If so, create a new sources archive and a new PDF file.
 add_source_hashes $name.tex
