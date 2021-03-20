@@ -141,7 +141,8 @@ LC_ALL=C sed -i.bak -e " s|'s|\\\\textsf{'}s|g; s|O'|O\\\\textsf{'}|g; s|s'|s\\\
 for f in $name*tex; do add_color "$f"; done
 
 # Export Scala code snippets.
-for f in $name-*tex; do g=`basename "$f" .tex`; cat $g.pre.md <(perl extract_scala_snippets.pl < $f) > ../mdoc/$g.md; done
+rm -rf mdoc; mkdir mdoc
+for f in $name-*tex; do g=`basename "$f" .tex`; cat $g.pre.md <(perl extract_scala_snippets.pl < $f) > mdoc/$g.md; done
 
 # Remove control annotations for Scala code snippets.
 LC_ALL=C sed -i.bak -e " s| +//IGNORETHIS.*||" $name*.tex
