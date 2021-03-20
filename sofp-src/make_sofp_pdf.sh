@@ -106,7 +106,7 @@ function assemble_sources {
 	rm -rf "$srcbase"
 	mkdir "$srcbase"
 	# Copy the required source files to "$srcbase"/. Include graphics files referenced as images.
-	cp monads_evil_face.jpg ../README.md excluded_words $name*lyx $name*tex $name*dvi `grep -o 'includegraphics[^}]*}' $name*tex | sed -e 's,[^{]*{\([^}]*\)}.*,\1.*,' |while read f; do ls $f ; done` *.sh "$srcbase"/
+	cp ../README.md excluded_words $name*lyx $name*tex `grep -o 'includegraphics[^}]*}' $name*tex | sed -e 's,[^{]*{\([^}]*\)}.*,\1.*,' |while read f; do ls $f ; done` *.sh "$srcbase"/
 	tar jcf "$name-src.tar.bz2" "$srcbase"/*
 	rm -rf "$srcbase"/
 }
@@ -119,7 +119,7 @@ lyx=`which lyx`
 
 echo "Info: Using pdftk from '$pdftk' and lyx from '$lyx', lyx directory $lyxdir"
 
-rm -f $name*tex $name*log $name*ilg $name*idx $name*toc
+rm -f $name*tex $name*log $name*ilg $name*idx $name*toc $name.pdf
 
 echo "Exporting LyX files $name.lyx and its child documents into LaTeX..."
 "$lyx" $lyxdir -f all --export pdflatex $name.lyx # Exports LaTeX for all child documents as well.
