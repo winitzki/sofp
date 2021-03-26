@@ -1,7 +1,135 @@
 
-\chapter{Applicative functors and contrafunctors\label{chap:8-Applicative-functors,-contrafunc}}
+\chapter{Applicative functors and contrafunctors\label{chap:8-Applicative-functors,-contrafunctors}}
 
-\section{Motivation: monadic programs with independent effects}
+\global\long\def\gunderline#1{\mathunderline{greenunder}{#1}}%
+\global\long\def\bef{\forwardcompose}%
+\global\long\def\bbnum#1{\custombb{#1}}%
+\global\long\def\pplus{{\displaystyle }{+\negmedspace+}}%
+
+
+\section{Motivation for applicative functors}
+
+Applicative functors are less often used than monads or filterable
+functors, and are less well known. One motivation for applicative
+functors comes from studying the properties of the \lstinline!zip!
+operation.
+
+\subsection{Generalizing the \texttt{zip} method to other types}
+
+Chapter~\ref{chap:2-Mathematical-induction} showed the use of the
+\lstinline!zip! operation for sequences and other collections. For
+lists, the \lstinline!zip! method is equivalent to a function with
+the following type signature:
+
+\begin{wrapfigure}{l}{0.55\columnwidth}%
+\vspace{-0.85\baselineskip}
+\begin{lstlisting}
+def zip[A, B](la: List[A], lb: List[B]): List[(A, B)]
+\end{lstlisting}
+
+\vspace{-0.25\baselineskip}
+\end{wrapfigure}%
+
+\noindent \vspace{-0.5\baselineskip}
+\[
+\text{zip}:\text{List}^{A}\times\text{List}^{B}\rightarrow\text{List}^{A\times B}
+\]
+It turns out that a broad class of type constructors $L$ can have
+a similar \lstinline!zip! method,
+\[
+\text{zip}:L^{A}\times L^{B}\rightarrow L^{A\times B}\quad.
+\]
+Using this type signature, the \lstinline!zip! operation may be defined
+for types that have no resemblance to collections. In order to ensure
+that this generalization is meaningful and safe, we will establish
+and verify the laws of the \lstinline!zip! operation later in this
+chapter. For now, let us look at some possible uses of a general \lstinline!zip!
+operation.
+
+As a first example, consider the type \lstinline!Either[E, A]! where
+the type \lstinline!E! is a semigroup with a combine operation (\lstinline!|+|!),
+representing error messages that can be combined. We may implement
+\lstinline!zip! like this:
+\begin{lstlisting}
+def zip[A, B](x: Either[String, A], y: Either[String, B]): Either[String, (A, B)] = (x, y) match {
+  case (Left(e1), Left(e2))   => Left(e1 + e2)
+  case (Right(a), Left(e2))   => Left(e2)
+  case (Left(e1), Right(b))   => Left(e1)
+  case (Right(a), Right(b))   => Right((a, b))
+}
+\end{lstlisting}
+To write this function in the code notation, let us replace \lstinline!String!
+by a monoid type $E$:
+\[
+\text{zip}:(E+A)\times(E+B)\rightarrow E+A\times B\quad,\quad\quad\text{zip}\triangleq\,\begin{array}{|c||cc|}
+ & E & A\times B\\
+\hline E\times E & e_{1}\times e_{2}\rightarrow e_{1}\oplus e_{2} & \bbnum 0\\
+A\times E & a\times e_{2}\rightarrow e_{2} & \bbnum 0\\
+E\times B & e_{1}\times b\rightarrow e_{2} & \bbnum 0\\
+A\times B & \bbnum 0 & a\times b\rightarrow a\times b
+\end{array}\quad.
+\]
+When both arguments of \lstinline!zip! have error messages, the code
+could have dropped one of the errors and returned \lstinline!Left(e1)!,
+say, while still conforming to the same type signature. Instead, the
+code attempts to preserve information by combining both error messages.
+
+Sometimes, the \lstinline!zip! operation is defined even for type
+constructors that are not covariant. Consider, for example, the following
+type constructor:
+
+\begin{wrapfigure}{l}{0.55\columnwidth}%
+\vspace{-0.85\baselineskip}
+\begin{lstlisting}
+type L[A] = (A, (A, A) => A)
+\end{lstlisting}
+
+\vspace{-0.25\baselineskip}
+\end{wrapfigure}%
+
+\noindent \vspace{-0.5\baselineskip}
+\[
+L^{A}\triangleq A\times\left(A\times A\rightarrow A\right)\quad.
+\]
+
+\noindent The type $L^{A}$ represents a monoid typeclass instance
+(Section~\ref{subsec:tc-Example-Monoids}), and its \lstinline!zip!
+operation constructs a monoid instance for the $A\times B$ if $A$
+and $B$ are monoids (the product construction in Section~\ref{subsec:Monoids-constructions}).
+
+In a programmer\textsf{'}s view, \textbf{applicative} type constructors are
+those having a suitable \lstinline!zip! method.
+
+\subsection{Monadic programs with independent effects}
+
+Another motivation for applicative functors comes from considering
+monadic programs where some source lines do not depend on previous
+results. As an example, consider the following monadic program involving
+\lstinline!Future!:
+
+\begin{wrapfigure}{l}{0.35\columnwidth}%
+\vspace{-0.85\baselineskip}
+\begin{lstlisting}
+val result: Future[Int] = for {
+  x <- Future { func1() }
+  y <- Future { func2() }
+  z <- Future { func3() }
+} yield x + y + z
+\end{lstlisting}
+
+\vspace{-0.25\baselineskip}
+\end{wrapfigure}%
+
+\noindent Note that Scala\textsf{'}s \lstinline!Future! will automatically
+schedule and start the computations inside it. So, this program will
+schedule the computation func2() only after first run the computation
+\lstinline!func1()! on a separate thread,. The computations in func1(),
+func2(), and func3() do not depend on the previously computed values
+x and y. Nevertheless, a monadic program 
+
+{*}{*}{*} independent effects.
+
+\subsection{Programs that accumulate errors}
 
 \section{Slides, Part I}
 
@@ -155,7 +283,7 @@ Consider 1, 2, 3, ... commutative and independent \textsf{``}effects\textsf{''}
 \end{lyxcode}
 %
 \end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\hfill{}\medskip{}
-}}\hruleNote that the map2 function defined via flatMap will have
+}}\hrule Note that the map2 function defined via flatMap will have
 the right type signature and will work. But sometimes we need a different
 implementation, not equivalent to an implementation via flatMap.\texttt{\textcolor{blue}{\footnotesize{}\medskip{}
 }}{\footnotesize\par}
