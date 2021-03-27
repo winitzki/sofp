@@ -43,13 +43,163 @@ Using this type signature, the \lstinline!zip! operation may be defined
 for types that have no resemblance to collections. In order to ensure
 that this generalization is meaningful and safe, we will establish
 and verify the laws of the \lstinline!zip! operation later in this
-chapter. For now, let us look at some possible uses of a general \lstinline!zip!
-operation.
+chapter. For now, let us look at some examples of using a general
+\lstinline!zip! operation.
 
-As a first example, consider the type \lstinline!Either[E, A]! where
-the type \lstinline!E! is a semigroup with a combine operation (\lstinline!|+|!),
-representing error messages that can be combined. We may implement
-\lstinline!zip! like this:
+\subsubsection{Example \label{subsec:Example-applicative-not-monad}\ref{subsec:Example-applicative-not-monad}}
+
+A \lstinline!zip! method can be implemented for the type constructor
+$L^{A}\triangleq\bbnum 1+A\times A$:
+\begin{lstlisting}
+type L[A] = Option[(A, A)]
+def zip[A, B](la: L[A], lb: L[B]): L[(A, B)] = (la, lb) match {
+  case (None, _) | (_, None)              => None
+  case (Some((a1, a2)), Some((b1, b2)))   => Some(((a1, b1), (a2, b2)))
+}
+
+scala> zip(Some((123, 456)), Some(("abc", "def")))
+res0: L[(Int, String)] = Some(((123, "abc"), (456, "def")))
+\end{lstlisting}
+Note that the type constructor $L$ is \emph{not} a monad (see Exercise~\ref{subsec:Exercise-1-monads-7-not-a-monad}).
+$\square$
+
+The \lstinline!zip! operation is sometimes defined even for type
+constructors that are \emph{not} functors (i.e., not covariant in
+the type parameter).
+
+\subsubsection{Example \label{subsec:Example-applicative-profunctor}\ref{subsec:Example-applicative-profunctor}}
+
+A \lstinline!zip! method can be implemented for the following type
+constructor:
+
+\begin{wrapfigure}{l}{0.55\columnwidth}%
+\vspace{-0.85\baselineskip}
+\begin{lstlisting}
+type L[A] = (A, (A, A) => A)
+\end{lstlisting}
+
+\vspace{-0.25\baselineskip}
+\end{wrapfigure}%
+
+\noindent \vspace{-0.5\baselineskip}
+\[
+L^{A}\triangleq A\times\left(A\times A\rightarrow A\right)\quad.
+\]
+\begin{lstlisting}
+def zip[A, B](la: L[A], lb: L[B]): L[(A, B)] = ( (la._1, lb._1),   // The result has type ((A, B),
+  { case ((a1, b1), (a2, b2)) => (la._2(a1, a2), lb._2(b1, b2)) }  // ((A, B), (A, B)) => (A, B)).
+)
+\end{lstlisting}
+
+The type $L^{A}$ represents a monoid typeclass instance (Example~\ref{subsec:tc-Example-Monoids})
+whose \lstinline!zip! operation constructs a monoid instance for
+the $A\times B$ if $A$ and $B$ are monoids (the product construction
+of Section~\ref{subsec:Monoids-constructions}).
+
+In a programmer\textsf{'}s view, \textbf{applicative} type constructors are
+those having a suitable \lstinline!zip! method.
+
+\subsection{Monadic programs with independent effects}
+
+Another motivation for applicative functors comes from considering
+monadic programs where some source lines do not depend on previous
+results. As an example, consider the following monadic program involving
+\lstinline!Future!:
+
+\begin{wrapfigure}{l}{0.54\columnwidth}%
+\vspace{-0.05\baselineskip}
+\begin{lstlisting}
+val result: Future[Int] = for {
+  x <- Future { func1() }  // func1() returns an Int.
+  y <- Future { func2() }  // Similarly for func2().
+  z <- Future { func3() }  // Similarly for func3().
+} yield x + y + z
+\end{lstlisting}
+
+\vspace{-1\baselineskip}
+\end{wrapfigure}%
+
+\noindent Note that Scala\textsf{'}s \lstinline!Future! values represent computations
+that have been already scheduled (on other threads). In this example,
+the computations in \lstinline!func1()!, \lstinline!func2()!, and
+\lstinline!func3()! do not depend on the previously computed values
+(\lstinline!x! and \lstinline!y!). So, it would be desirable to
+run those computations in parallel. However, the monadic program will
+create a second \lstinline!Future! value and schedule the computation
+\lstinline!func2()! only after the computation \lstinline!func1()!
+is finished. Similarly, \lstinline!func3()! will not start until
+\lstinline!func2()! is finished. Indeed, the functor block is translated
+into \lstinline!flatMap! and \lstinline!map! methods:
+
+\begin{wrapfigure}{l}{0.54\columnwidth}%
+\vspace{-0.55\baselineskip}
+\begin{lstlisting}
+val result: Future[Int] =
+  Future { func1() }.flatMap { x =>
+    Future { func2() }.flatMap { y =>
+      Future { func3() }.map { z => x + y + z } } }
+\end{lstlisting}
+
+\vspace{-0.65\baselineskip}
+\end{wrapfigure}%
+
+\noindent The problem is that the \lstinline!flatMap! and \lstinline!map!
+methods are general and must wait until previous values are computed.
+The code of \lstinline!flatMap! and \lstinline!map! cannot use the
+fact that the next computations are independent of the previous values.
+We need a new function that will explicitly assume independence of
+effects. A possible type signature for that function (combining three
+computations that return \lstinline!Future[Int]!) is
+\begin{lstlisting}
+def map3(f1: Future[Int], f2: Future[Int], f3: Future[Int], f: (Int, Int, Int) => Int): Future[Int] 
+\end{lstlisting}
+Generalizing this type signature to arbitrary types, we obtain the
+following \lstinline!map3! method:
+\begin{lstlisting}
+def map3[F[_], A, B, C, D](f1: F[A], f2: F[B], f3: F[C])(f: (A, B, C) => D): F[D]
+\end{lstlisting}
+It is straightforward to implement this method for \lstinline!F = Future!:
+\begin{lstlisting}
+def map3[A, B, C, D](f1: Future[A], f2: Future[B], f3: Future[C])(f: (A, B, C) => D): Future[D] =
+  for { x <- f1; y <- f2; z <- f3 } yield f(x, y, z)
+\end{lstlisting}
+This will run the three \lstinline!Future! computations in parallel
+because the arguments of \lstinline!map3! must be evaluated before
+map3 is called, and evaluating a \lstinline!Future! will schedule
+the computation immediately. For other type constructors, we will
+implement \lstinline!map3! (and similar functions such as \lstinline!map2!,
+\lstinline!map4!, etc.) later in this chapter.
+
+It is not obvious that \lstinline!map2! is in any way related to
+\lstinline!zip!. Once we study the properties of these functions
+in more detail, we will find that defining \lstinline!map! and \lstinline!map2!
+is equivalent to defining \lstinline!zip!, assuming that certain
+laws hold for these functions.
+
+\subsection{Programs that accumulate errors during computations}
+
+A monadic program using pass/fail monads will stop at the first failure:
+the code \lstinline!flatMap(x => expr)! cannot start evaluating \lstinline!expr!
+if a previous computation failed to produce a value for \lstinline!x!.
+However, if some pass/fail computations are independent of each other\textsf{'}s
+results, we may wish to run all those computations and gather all
+errors.
+
+As an example, consider the task of implementing \textsf{``}safe arithmetic\textsf{''}
+where a division by zero or square root of a negative number will
+give error messages (see Example~\ref{subsec:disj-Example-resultA}).
+To be specific, let us implement the computation \lstinline!(1 / 0) + (2 / 0)!
+in the \textsf{``}safe arithmetic\textsf{''}: {*}{*}{*}
+
+A monadic implementation (see Section~\ref{subsec:Pass/fail-monads})
+will stop the computation after the first error. , the two errors
+implement A monadic We have seen implementations of this 
+
+{*}{*}{*}As a further example, consider the type \lstinline!Either[E, A]!
+where the type \lstinline!E! is a semigroup with a combine operation
+(\lstinline!|+|!), representing error messages that can be combined.
+We may implement the \lstinline!zip! method that gathers all error
+messages:
 \begin{lstlisting}
 def zip[A, B](x: Either[String, A], y: Either[String, B]): Either[String, (A, B)] = (x, y) match {
   case (Left(e1), Left(e2))   => Left(e1 + e2)
@@ -73,63 +223,6 @@ When both arguments of \lstinline!zip! have error messages, the code
 could have dropped one of the errors and returned \lstinline!Left(e1)!,
 say, while still conforming to the same type signature. Instead, the
 code attempts to preserve information by combining both error messages.
-
-Sometimes, the \lstinline!zip! operation is defined even for type
-constructors that are not covariant. Consider, for example, the following
-type constructor:
-
-\begin{wrapfigure}{l}{0.55\columnwidth}%
-\vspace{-0.85\baselineskip}
-\begin{lstlisting}
-type L[A] = (A, (A, A) => A)
-\end{lstlisting}
-
-\vspace{-0.25\baselineskip}
-\end{wrapfigure}%
-
-\noindent \vspace{-0.5\baselineskip}
-\[
-L^{A}\triangleq A\times\left(A\times A\rightarrow A\right)\quad.
-\]
-
-\noindent The type $L^{A}$ represents a monoid typeclass instance
-(Section~\ref{subsec:tc-Example-Monoids}), and its \lstinline!zip!
-operation constructs a monoid instance for the $A\times B$ if $A$
-and $B$ are monoids (the product construction in Section~\ref{subsec:Monoids-constructions}).
-
-In a programmer\textsf{'}s view, \textbf{applicative} type constructors are
-those having a suitable \lstinline!zip! method.
-
-\subsection{Monadic programs with independent effects}
-
-Another motivation for applicative functors comes from considering
-monadic programs where some source lines do not depend on previous
-results. As an example, consider the following monadic program involving
-\lstinline!Future!:
-
-\begin{wrapfigure}{l}{0.35\columnwidth}%
-\vspace{-0.85\baselineskip}
-\begin{lstlisting}
-val result: Future[Int] = for {
-  x <- Future { func1() }
-  y <- Future { func2() }
-  z <- Future { func3() }
-} yield x + y + z
-\end{lstlisting}
-
-\vspace{-0.25\baselineskip}
-\end{wrapfigure}%
-
-\noindent Note that Scala\textsf{'}s \lstinline!Future! will automatically
-schedule and start the computations inside it. So, this program will
-schedule the computation func2() only after first run the computation
-\lstinline!func1()! on a separate thread,. The computations in func1(),
-func2(), and func3() do not depend on the previously computed values
-x and y. Nevertheless, a monadic program 
-
-{*}{*}{*} independent effects.
-
-\subsection{Programs that accumulate errors}
 
 \section{Slides, Part I}
 
