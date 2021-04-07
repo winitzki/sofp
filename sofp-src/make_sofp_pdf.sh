@@ -187,9 +187,10 @@ total_pages=`pdfPages "$name".pdf`
 
 echo Result is "$name.pdf", size `kbSize "$name.pdf"` bytes, with $total_pages pages.
 
-# Create the lulu.com draft file by selecting the chapters that have been proofread.
+# Create the "clean draft" pdf file by selecting the chapters that have been proofread.
 # Check page counts in the draft file and in individual chapters.
 bash check_and_make_draft.sh
+draft_pages=`pdfPages "$draft".pdf`
 bash check-consistent-labels.sh
 bash check-lines_with_displaymath_in_new_paragraph.sh
 
@@ -221,7 +222,7 @@ fi
 bash spelling_check.sh
 
 # Prepare the full 3-page book covers.
-sed -i.bak -e "s|TOTALPAGES|$total_pages|" book_cover/sofp-cover-parameters.tex
+sed -i.bak -e "s|TOTALPAGES|$draft_pages|" book_cover/sofp-cover-parameters.tex
 (cd book_cover; bash sofp-make-cover.sh)
 
 # Cleanup?

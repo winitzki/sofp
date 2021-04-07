@@ -7,14 +7,18 @@
 \global\long\def\pplus{{\displaystyle }{+\negmedspace+}}%
 
 
-\section{Motivation for applicative functors}
+\section{Motivation and first examples}
 
-Applicative functors are less often used than monads or filterable
-functors, and are less well known. One motivation for applicative
-functors comes from studying the properties of the \lstinline!zip!
-operation.
+In previous chapters, we generalized methods such as \lstinline!map!,
+\lstinline!filter!, and \lstinline!flatMap! from sequences to all
+other type constructors that support such methods satisfying suitable
+laws. Following the same path, we will now turn to the \lstinline!zip!
+operation. Although the \lstinline!zip! method is often used with
+sequences, it is less well known that many other type constructors
+can also have a suitable \lstinline!zip! method. Those type constructors
+are known as\textbf{ applicative}.
 
-\subsection{Generalizing the \texttt{zip} method to other types}
+\subsection{Generalizing the \texttt{zip} method to other type constructors}
 
 Chapter~\ref{chap:2-Mathematical-induction} showed the use of the
 \lstinline!zip! operation for sequences and other collections. For
@@ -39,12 +43,12 @@ a similar \lstinline!zip! method,
 \[
 \text{zip}:L^{A}\times L^{B}\rightarrow L^{A\times B}\quad.
 \]
-Using this type signature, the \lstinline!zip! operation may be defined
+Using this type signature, the \lstinline!zip! operation may be implemented
 for types that have no resemblance to collections. In order to ensure
-that this generalization is meaningful and safe, we will establish
-and verify the laws of the \lstinline!zip! operation later in this
-chapter. For now, let us look at some examples of using a general
-\lstinline!zip! operation.
+that the implementation of \lstinline!zip! is useful and safe, we
+will establish and verify the laws of the \lstinline!zip! operation
+later in this chapter. For now, let us look at some examples of using
+a \lstinline!zip! operation.
 
 \subsubsection{Example \label{subsec:Example-applicative-not-monad}\ref{subsec:Example-applicative-not-monad}}
 
@@ -60,7 +64,87 @@ def zip[A, B](la: L[A], lb: L[B]): L[(A, B)] = (la, lb) match {
 scala> zip(Some((123, 456)), Some(("abc", "def")))
 res0: L[(Int, String)] = Some(((123, "abc"), (456, "def")))
 \end{lstlisting}
-Note that the type constructor $L$ is \emph{not} a monad (see Exercise~\ref{subsec:Exercise-1-monads-7-not-a-monad}).
+
+
+\subsubsection{Example \label{subsec:Example-applicative-tree}\ref{subsec:Example-applicative-tree}}
+
+The task is to implement a \lstinline!zip! operation for a binary
+tree. The type constructor \lstinline!BTree[A]! may be defined by
+this code:
+\begin{lstlisting}
+sealed trait BTree[A]
+final case class Leaf[A](a: A) extends BTree[A]
+final case class Branch[A](left: BTree[A], right: BTree[A]) extends BTree[A]
+\end{lstlisting}
+The \lstinline!zip! operation should have the following type signature:
+\begin{lstlisting}
+def zip[A, B](ta: BTree[A], tb: BTree[B]): BTree[(A, B)] = ???
+\end{lstlisting}
+We would like to preserve the tree structure of \lstinline!ta! and
+\lstinline!tb! as much as possible, zipping together subtrees of
+equal shape without adding any new branchings. For instance, the result
+of evaluating {\tiny{}}zip({\tiny{} \Tree[ [ [ $a$ ] [ $b$ ] ]  [ $c$ ] ] }, {\tiny{} \Tree[ [ [ $d$ ] [ $e$ ] ]  [ $f$ ] ] })
+should be the tree {\tiny{}}{\tiny{} \Tree[ [ [ $a\times d$ ] [ $b\times e$ ] ]  [ $c\times f$ ] ] }.
+But if a subtree of \lstinline!ta! is a leaf value \lstinline!Leaf(x)!
+while the corresponding subtree of \lstinline!tb! is a \lstinline!Branch!,
+the value \lstinline!x! must be replicated to match the subtree of
+\lstinline!tb!. So, the result of evaluating {\tiny{}}zip({\tiny{} \Tree[ [ $a$ ] [ $b$ ] ] }, {\tiny{} \Tree[ [ [ $c$ ] [ [ $d$ ] [ $e$ ] ] ]  [ $f$ ] ] })
+should be {\tiny{}}{\tiny{} \Tree[ [ [ $a\times c$ ] [ [ $a\times d$ ] [ $a\times e$ ] ] ]  [ $b\times f$ ] ] }.
+
+\subparagraph{Solution}
+
+Begin writing the pattern-matching code: 
+\begin{lstlisting}
+def zip[A, B](ta: BTree[A], tb: BTree[B]): BTree[(A, B)] = (ta, tb) match {
+  case (Leaf(x), Leaf(y))                 => Leaf((x, y))
+  case (Branch(lx, rx), Leaf(y))          => ???
+  case (Leaf(x), Branch(ly, ry))          => ???
+  case (Branch(lx, rx), Branch(ly, ry))   => ???
+}
+\end{lstlisting}
+The type constructor \lstinline!BTree! is a functor, and we will
+need its \lstinline!map! method:
+\begin{lstlisting}
+def map[A, B](ta: BTree[A])(f: A => B): BTree[B] = ta match {
+  case Leaf(a)          => Leaf(f(a))
+  case Branch(ta, tb)   => Branch(map(ta)(f), map(tb)(f))
+}
+\end{lstlisting}
+To \textsf{``}zip\textsf{''} a \lstinline!Leaf! with a \lstinline!Branch!, we use
+the \lstinline!map! method to replicate the value from the leaf:
+\begin{lstlisting}
+  case (Branch(lx, rx), Leaf(y))  => map(Branch(lx, rx))(x => (x, y))
+  case (Leaf(x), Branch(ly, ry))  => map(Branch(ly, ry))(y => (x, y)) 
+\end{lstlisting}
+Finally, we can just use recursive calls to \lstinline!zip! for the
+case of two \lstinline!Branch! values:
+\begin{lstlisting}
+  case (Branch(ax, ay), Branch(bx, by))   => Branch(zip(ax, bx), zip(ay, by))
+\end{lstlisting}
+The final code of the \lstinline!zip! method, after some simplifications,
+becomes:
+
+\begin{lstlisting}
+def zip[A, B](ta: BTree[A], tb: BTree[B]): BTree[(A, B)] = (ta, tb) match {
+  case (Leaf(x), Leaf(y))                 => Leaf((x, y))
+  case (xa, Leaf(b))                      => map(xa)(a => (a, b))
+  case (Leaf(a), xb)                      => map(xb)(b => (a, b))
+  case (Branch(ax, ay), Branch(bx, by))   => Branch(zip(ax, bx), zip(ay, by))
+}
+\end{lstlisting}
+To check our code, let us run the given examples and verify that we
+get the required results:
+\begin{lstlisting}
+val ta: BTree[Int] = Branch(Branch(Leaf(1), Leaf(2)), Leaf(3))
+val tb: BTree[String] = Branch(Leaf("a"), Leaf("b"))
+val tc: BTree[String] = Branch(Branch(Leaf("c"), Branch(Leaf("d"), Leaf("e"))), Leaf("f")) 
+
+scala> zip(ta, ta)
+res0: BTree[(Int, Int)] = Branch(Branch(Leaf((1, 1)), Leaf((2, 2))), Leaf((3, 3)))
+
+scala> zip(tb, tc)
+res1: BTree[(String, String)] = Branch(Branch(Leaf(("a", "c")), Branch(Leaf(("a", "d")), Leaf(("a", "e")))), Leaf(("b", "f"))) 
+\end{lstlisting}
 $\square$
 
 The \lstinline!zip! operation is sometimes defined even for type
@@ -93,11 +177,105 @@ def zip[A, B](la: L[A], lb: L[B]): L[(A, B)] = ( (la._1, lb._1),   // The result
 
 The type $L^{A}$ represents a monoid typeclass instance (Example~\ref{subsec:tc-Example-Monoids})
 whose \lstinline!zip! operation constructs a monoid instance for
-the $A\times B$ if $A$ and $B$ are monoids (the product construction
-of Section~\ref{subsec:Monoids-constructions}).
+the $A\times B$ if $A$ and $B$ are monoids (the \textsf{``}products\textsf{''}
+construction of Section~\ref{subsec:Monoids-constructions}). We
+usually do not view typeclass instances as data to be manipulated.
+But if we do, we will find that many typeclasses are represented by
+type constructors such as $L^{A}$ that are neither covariant nor
+contravariant yet support a suitable \lstinline!zip! method. Implementing
+the \lstinline!zip! method will then enable automatic typeclass derivation
+for product types (such as case classes).
 
-In a programmer\textsf{'}s view, \textbf{applicative} type constructors are
-those having a suitable \lstinline!zip! method.
+\subsection{Programs that accumulate errors during computations}
+
+A monadic program using pass/fail monads will stop at the first failure:
+the code \lstinline!flatMap(x => expr)! cannot start evaluating \lstinline!expr!
+if a previous computation failed to produce a value for \lstinline!x!.
+However, if some pass/fail computations are independent of each other\textsf{'}s
+results, we may wish to run all those computations and gather all
+errors.
+
+As an example, consider the task of implementing \textsf{``}safe arithmetic\textsf{''}
+where a division by zero or square root of a negative number will
+give error messages (see Example~\ref{subsec:disj-Example-resultA}).
+To be specific, let us perform the computation \lstinline!(1 / 0) + (2 / 0)!
+in the \textsf{``}safe arithmetic\textsf{''}. A monadic implementation (see Section~\ref{subsec:Pass/fail-monads})
+will stop the computation after the first error:
+\begin{lstlisting}
+type Result[A] = Either[String, A]
+def add(x: Int, y: Int): Result[Int] = Right(x + y)
+def div(x: Int, y: Int): Result[Int] = if (y == 0) Left(s"error: $x / $y\n") else Right(x / y)
+
+scala> for {
+         x <- div(1, 0)
+         y <- div(2, 0)
+         z <- add(x, y)
+       } yield z
+res0: Either[String, Int] = Left(error: 1 / 0
+)
+\end{lstlisting}
+We notice that the two \lstinline!div! operations do not depend on
+each other and may be computed separately. To achieve this, we need
+to define a \lstinline!map2! function for the type constructor \lstinline!Result!:
+\begin{lstlisting}
+def map2[A, B, C](ra: Result[A], rb: Result[B])(f: (A, B) => C): Result[C] = (ra, rb) match {
+  case (Left(e1), Left(e2))     => Left(e1 + e2)
+  case (Left(e1), _)            => Left(e1)
+  case (_, Left(e2))            => Left(e2)
+  case (Right(a), Right(b))     => Right(f(a, b))
+}
+\end{lstlisting}
+ We can now use the \lstinline!map2! function to compute the two
+\lstinline!div! operations and gather the errors:
+\begin{lstlisting}
+scala> for {
+         p <- map2(div(1,0), div(2,0)){ (x, y) => (x, y) }
+         z <- add(p._1, p._2)
+       } yield z
+res1: Either[String, Int] = Left(error: 1 / 0
+error: 2 / 0
+)
+\end{lstlisting}
+Here, the result of \lstinline!map2! is used in further monadic computations.
+In this way, we can combine code that gathers many errors with ordinary
+pass/fail monadic code (that needs to stop at the first error).
+
+This example can be generalized to the type \lstinline!Either[E, A]!,
+where the type \lstinline!E! is a semigroup with a combine operation
+(\lstinline!|+|!), representing error messages that can be combined.
+Let us implement a \lstinline!zip! method that works similarly to
+\lstinline!map2! by gathering all error messages:
+\begin{lstlisting}
+def zip[A, B, E: Semigroup](x: Either[E, A], y: Either[E, B]): Either[E, (A, B)] = (x, y) match {
+  case (Left(e1), Left(e2))   => Left(e1 |+| e2)
+  case (Right(a), Left(e2))   => Left(e2)
+  case (Left(e1), Right(b))   => Left(e1)
+  case (Right(a), Right(b))   => Right((a, b))
+}
+\end{lstlisting}
+In the code notation, this \lstinline!zip! function is written like
+this:
+\[
+\text{zip}:(E+A)\times(E+B)\rightarrow E+A\times B\quad,\quad\quad\text{zip}\triangleq\,\begin{array}{|c||cc|}
+ & E & A\times B\\
+\hline E\times E & e_{1}\times e_{2}\rightarrow e_{1}\oplus e_{2} & \bbnum 0\\
+A\times E & a\times e_{2}\rightarrow e_{2} & \bbnum 0\\
+E\times B & e_{1}\times b\rightarrow e_{2} & \bbnum 0\\
+A\times B & \bbnum 0 & a\times b\rightarrow a\times b
+\end{array}\quad.
+\]
+
+When both arguments of \lstinline!zip! have error messages, the code
+could have dropped one of the errors and returned \lstinline!Left(e1)!,
+say, while still conforming to the same type signature. Instead, the
+code attempts to preserve information by combining both error messages.
+
+We find that the \lstinline!map2! and \lstinline!zip! functions
+are implemented by almost identical code. The code of the \lstinline!zip!
+function can be obtained from the code of \lstinline!map2! if we
+replace \lstinline!f! by an identity function. We will see later
+that this indeed creates an equivalence between \lstinline!zip! and
+\lstinline!map2! in general.
 
 \subsection{Monadic programs with independent effects}
 
@@ -106,8 +284,8 @@ monadic programs where some source lines do not depend on previous
 results. As an example, consider the following monadic program involving
 \lstinline!Future!:
 
-\begin{wrapfigure}{l}{0.54\columnwidth}%
-\vspace{-0.05\baselineskip}
+\begin{wrapfigure}{l}{0.535\columnwidth}%
+\vspace{-0.85\baselineskip}
 \begin{lstlisting}
 val result: Future[Int] = for {
   x <- Future { func1() }  // func1() returns an Int.
@@ -119,20 +297,21 @@ val result: Future[Int] = for {
 \vspace{-1\baselineskip}
 \end{wrapfigure}%
 
-\noindent Note that Scala\textsf{'}s \lstinline!Future! values represent computations
-that have been already scheduled (on other threads). In this example,
-the computations in \lstinline!func1()!, \lstinline!func2()!, and
-\lstinline!func3()! do not depend on the previously computed values
-(\lstinline!x! and \lstinline!y!). So, it would be desirable to
-run those computations in parallel. However, the monadic program will
-create a second \lstinline!Future! value and schedule the computation
-\lstinline!func2()! only after the computation \lstinline!func1()!
-is finished. Similarly, \lstinline!func3()! will not start until
-\lstinline!func2()! is finished. Indeed, the functor block is translated
-into \lstinline!flatMap! and \lstinline!map! methods:
+\noindent Recall that Scala\textsf{'}s \lstinline!Future! values are computations
+that have been scheduled to run on some other threads (and may be
+already running). In this example, the computations in \lstinline!func1()!,
+\lstinline!func2()!, and \lstinline!func3()! do not depend on the
+previously computed values (\lstinline!x! and \lstinline!y!). So,
+we would like to run those computations in parallel. However, the
+monadic program will create a second \lstinline!Future! value and
+schedule the computation \lstinline!func2()! only after the computation
+\lstinline!func1()! is finished. Similarly, \lstinline!func3()!
+will not start until \lstinline!func2()! is finished. Indeed, the
+functor block shown above is translated into \lstinline!flatMap!
+and \lstinline!map! methods:
 
-\begin{wrapfigure}{l}{0.54\columnwidth}%
-\vspace{-0.55\baselineskip}
+\begin{wrapfigure}{l}{0.535\columnwidth}%
+\vspace{-1.05\baselineskip}
 \begin{lstlisting}
 val result: Future[Int] =
   Future { func1() }.flatMap { x =>
@@ -140,16 +319,15 @@ val result: Future[Int] =
       Future { func3() }.map { z => x + y + z } } }
 \end{lstlisting}
 
-\vspace{-0.65\baselineskip}
+\vspace{-1.05\baselineskip}
 \end{wrapfigure}%
 
-\noindent The problem is that the \lstinline!flatMap! and \lstinline!map!
-methods are general and must wait until previous values are computed.
-The code of \lstinline!flatMap! and \lstinline!map! cannot use the
-fact that the next computations are independent of the previous values.
-We need a new function that will explicitly assume independence of
-effects. A possible type signature for that function (combining three
-computations that return \lstinline!Future[Int]!) is
+\noindent The implementations of \lstinline!flatMap! and \lstinline!map!
+are general and cannot detect whether the next computations actually
+depend on the previous values. So, the \lstinline!flatMap! and \lstinline!map!
+methods \emph{must} wait until all previous values are computed. We
+need a new function that will explicitly assume independence of effects.
+A possible type signature for that function is:
 \begin{lstlisting}
 def map3(f1: Future[Int], f2: Future[Int], f3: Future[Int], f: (Int, Int, Int) => Int): Future[Int] 
 \end{lstlisting}
@@ -165,158 +343,118 @@ def map3[A, B, C, D](f1: Future[A], f2: Future[B], f3: Future[C])(f: (A, B, C) =
 \end{lstlisting}
 This will run the three \lstinline!Future! computations in parallel
 because the arguments of \lstinline!map3! must be evaluated before
-map3 is called, and evaluating a \lstinline!Future! will schedule
-the computation immediately. For other type constructors, we will
-implement \lstinline!map3! (and similar functions such as \lstinline!map2!,
-\lstinline!map4!, etc.) later in this chapter.
+\lstinline!map3! is called, and evaluating a \lstinline!Future!
+will schedule the computation immediately. For a different number
+of arguments, we can implement similar functions \lstinline!map2!,
+\lstinline!map4!, etc.
 
-It is not obvious that \lstinline!map2! is in any way related to
-\lstinline!zip!. Once we study the properties of these functions
-in more detail, we will find that defining \lstinline!map! and \lstinline!map2!
-is equivalent to defining \lstinline!zip!, assuming that certain
-laws hold for these functions.
+It is not obvious that the functions \lstinline!map2! or \lstinline!map3!
+are in any way related to \lstinline!zip!. However, once we study
+the properties of these functions in more detail, we will find that
+defining \lstinline!map! and \lstinline!map2! is equivalent to defining
+\lstinline!zip!, assuming that certain laws hold for these functions.
+So, applicative functors can be viewed as those having a \lstinline!map2!
+method in addition to \lstinline!map!.
 
-\subsection{Programs that accumulate errors during computations}
+\section{Practical use of applicative functors}
 
-A monadic program using pass/fail monads will stop at the first failure:
-the code \lstinline!flatMap(x => expr)! cannot start evaluating \lstinline!expr!
-if a previous computation failed to produce a value for \lstinline!x!.
-However, if some pass/fail computations are independent of each other\textsf{'}s
-results, we may wish to run all those computations and gather all
-errors.
+Applicative functors appear whenever it is useful to have a \lstinline!zip!
+method or a \lstinline!map2! method. We will now focus on a few specific
+situations where applicative functors help write better code.
 
-As an example, consider the task of implementing \textsf{``}safe arithmetic\textsf{''}
-where a division by zero or square root of a negative number will
-give error messages (see Example~\ref{subsec:disj-Example-resultA}).
-To be specific, let us implement the computation \lstinline!(1 / 0) + (2 / 0)!
-in the \textsf{``}safe arithmetic\textsf{''}: {*}{*}{*}
+\subsection{Data validation with error reporting}
 
-A monadic implementation (see Section~\ref{subsec:Pass/fail-monads})
-will stop the computation after the first error. , the two errors
-implement A monadic We have seen implementations of this 
+Suppose we need to create a data structure with \textsf{``}validated\textsf{''} parts
+(the data type could be a simple tuple, a case class, a list, a tree,
+etc.). While validating each part of the data structure, we may get
+an error instead of a valid value. It is desirable to report all errors
+to the user, not stopping at the first error. This situation happens
+when validating Web input data, reading a set of command-line options,
+or parsing formatted text (such as JSON).
 
-{*}{*}{*}As a further example, consider the type \lstinline!Either[E, A]!
-where the type \lstinline!E! is a semigroup with a combine operation
-(\lstinline!|+|!), representing error messages that can be combined.
-We may implement the \lstinline!zip! method that gathers all error
-messages:
+To simplify the reasoning, assume that the required data structure
+is a case class, such as
 \begin{lstlisting}
-def zip[A, B](x: Either[String, A], y: Either[String, B]): Either[String, (A, B)] = (x, y) match {
-  case (Left(e1), Left(e2))   => Left(e1 + e2)
-  case (Right(a), Left(e2))   => Left(e2)
-  case (Left(e1), Right(b))   => Left(e1)
-  case (Right(a), Right(b))   => Right((a, b))
-}
+final case class MyData(userId: Long, userName: String, userEmails: List[String])
 \end{lstlisting}
-To write this function in the code notation, let us replace \lstinline!String!
-by a monoid type $E$:
+More generally, consider the type $A\times B\times C$ containing
+values of some chosen types $A$, $B$, and $C$:
+\begin{lstlisting}
+final case class MyData[A, B, C](a: A, b: B, c: C)
+\end{lstlisting}
+
+We assume that the validation functions will return values of types
+\lstinline!F[A]! defined by 
+\begin{lstlisting}
+type F[A] = Either[Z, A]
+\end{lstlisting}
+(or, in the type notation, $F^{A}\triangleq E+A$), where \lstinline!A!
+is the type of a successfully validated value, while the fixed type
+\lstinline!Z! describes the error information. We will assume that
+$Z$ is a semigroup, so that different pieces of error information
+can be combined into a larger value of the same type $Z$.
+
+If some of the validations fail, the result should be a value of type
+$E$. So, we can now formulate our task as trying to create a value
+of type $E+A\times B\times C$ given values of types $E+A$, $E+B$,
+and $E+C$. Using the type constructor $F$ and the parameterized
+type \lstinline!MyData!, we write the requirements as the following
+type signature:
+\begin{lstlisting}
+def validated[A, B, C](a: F[A], b: F[B], c: F[C]): F[MyData[A, B, C]] = ???
+\end{lstlisting}
+In the type notation, this is written as:
 \[
-\text{zip}:(E+A)\times(E+B)\rightarrow E+A\times B\quad,\quad\quad\text{zip}\triangleq\,\begin{array}{|c||cc|}
- & E & A\times B\\
-\hline E\times E & e_{1}\times e_{2}\rightarrow e_{1}\oplus e_{2} & \bbnum 0\\
-A\times E & a\times e_{2}\rightarrow e_{2} & \bbnum 0\\
-E\times B & e_{1}\times b\rightarrow e_{2} & \bbnum 0\\
-A\times B & \bbnum 0 & a\times b\rightarrow a\times b
-\end{array}\quad.
+\text{validated}:F^{A}\times F^{B}\times F^{C}\rightarrow F^{A\times B\times C}\quad.
 \]
-When both arguments of \lstinline!zip! have error messages, the code
-could have dropped one of the errors and returned \lstinline!Left(e1)!,
-say, while still conforming to the same type signature. Instead, the
-code attempts to preserve information by combining both error messages.
+If we implement this type signature, we will be able to perform data
+validation while collecting all errors. Note that the type signature
+of \lstinline!validated! is quite similar to that of \lstinline!zip!
+except for using \emph{three} different types rather than two. To
+implement that, we may define a function \lstinline!zip3! by using
+the ordinary \lstinline!zip! method:
+\begin{lstlisting}
+def zip3[A, B, C](fa: F[A], fb: F[B], fc: F[C]): F[(A, B, C)] =
+  zip(fa, zip(fb, fc)).map { case (a, (b, c)) => (a, b, c) }
+\end{lstlisting}
+Also, \lstinline!validated! inserts a \lstinline!MyData! type constructor,
+returning a value of type \lstinline!F[MyData[A, B, C]]! rather than
+\lstinline!F[(A, B, C)]!. So, we may implement \lstinline!validated!
+as:
+\begin{lstlisting}
+def validated[A, B, C](a: F[A], b: F[B], c: F[C]): F[MyData[A, B, C]] =
+  zip(fa, zip(fb, fc)).map { case (a, (b, c)) => MyData(a, b, c) }
+\end{lstlisting}
 
-\section{Slides, Part I}
-
-\paragraph{Motivation for applicative functors}
-
-We would like to parallelize independent computations
-
-Monads are inconvenient for expressing \emph{independent} effects
-
-Monads perform effects \emph{sequentially} even if effects are independent:\texttt{\textcolor{blue}{\footnotesize{}\medskip{}
-}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}}}%
-\begin{minipage}[c][1\totalheight][t]{0.4\columnwidth}%
-\begin{lyxcode}
-\textcolor{blue}{\footnotesize{}x~$\leftarrow$~Future~\{~c1~\}}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}y~$\leftarrow$~Future~\{~c2~\}}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}z~$\leftarrow$~Future~\{~c3~\}}{\footnotesize\par}
-\end{lyxcode}
-%
-\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\hfill{}}}%
-\begin{minipage}[c][1\totalheight][t]{0.4\columnwidth}%
-\begin{lyxcode}
-\textcolor{blue}{\footnotesize{}Future~\{~c1~\}.flatMap~\{~x~$\rightarrow$}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~Future~\{~c2~\}.flatMap~\{~y~$\rightarrow$}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~~~Future~\{~c3~\}.map~\{~z~$\rightarrow$~...\}}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}\}~\}}{\footnotesize\par}
-\end{lyxcode}
-%
-\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\hfill{}\medskip{}
-}}{\footnotesize\par}
-
-We would like to accumulate \emph{all} errors, rather than stop at
-the first one
-
-Changing the order of monad\textsf{'}s effects will (generally) change the
-result:\texttt{\textcolor{blue}{\footnotesize{}\medskip{}
-}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}}}%
-\begin{minipage}[c][1\totalheight][t]{0.49\columnwidth}%
-\begin{lyxcode}
-\textcolor{blue}{\footnotesize{}for~\{}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~x~$\leftarrow$~List(1,~2)}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~y~$\leftarrow$~List(10,~20)}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}\}~yield~f(x,~y)}{\footnotesize\par}
-
-\textrm{\textcolor{gray}{\footnotesize{}//~f(1,~10),~f(1,~20),~f(2,~10),~f(2,~20)}}{\footnotesize\par}
-\end{lyxcode}
-%
-\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\hfill{}}}%
-\begin{minipage}[c][1\totalheight][t]{0.49\columnwidth}%
-\begin{lyxcode}
-\textcolor{blue}{\footnotesize{}for~\{}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~y~$\leftarrow$~List(10,~20)}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~x~$\leftarrow$~List(1,~2)}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}\}~yield~f(x,~y)}{\footnotesize\par}
-
-\textrm{\textcolor{gray}{\footnotesize{}//~f(1,~10),~f(2,~10),~f(1,~20),~f(2,~20)}}{\footnotesize\par}
-\end{lyxcode}
-%
-\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\hfill{}\medskip{}
-}}{\footnotesize\par}
-
-We would like to express a computation where effects are unordered
-and / or do not depend on previous results. flatMap cannot express
-independent effects even if we use flatMap(\_ => ...)
-
-This can be done using a method \texttt{\textcolor{blue}{\footnotesize{}map2}},
-\emph{not} defined via \texttt{\textcolor{blue}{\footnotesize{}flatMap}}:
-the desired type signature is {\footnotesize{}$\text{map2}:F^{A}\times F^{B}\rightarrow\left(A\times B\rightarrow C\right)\rightarrow F^{C}$} 
-
-\textbf{Applicative functor} has \texttt{\textcolor{blue}{\footnotesize{}map2}}
-and \texttt{\textcolor{blue}{\footnotesize{}pure}} but is not necessarily
-a monad
+The difference between \lstinline!zip3! and \lstinline!validated!
+is only in the function used in the last \lstinline!map! step. So,
+we can make that last function a parameter and define the operation
+\lstinline!map3! like this:
+\begin{lstlisting}
+def map3[A, B, C, D](fa: F[A], fb: F[B], fc: F[C])(f: (A, B, C) => D): F[D] =
+  zip(fa, zip(fb, fc)).map { case (a, (b, c)) => f(a, b, c) }
+\end{lstlisting}
+Now the validation function can be implemented via \lstinline!map3!
+as 
+\begin{lstlisting}
+def validated[A, B, C](a: F[A], b: F[B], c: F[C]): F[MyData[A, B, C]] =
+  map3(fa, fb, fc)(MyData.apply)
+\end{lstlisting}
 
 
-\paragraph{Defining \texttt{\textcolor{blue}{\footnotesize{}map2}}, \texttt{\textcolor{blue}{\footnotesize{}map3}},
-etc.}
+\subsection{Implementing the functions \texttt{map2}, \texttt{map3}, etc.}
+
+Generalize from \texttt{\textcolor{blue}{\footnotesize{}map}}, \texttt{\textcolor{blue}{\footnotesize{}map2}},
+\texttt{\textcolor{blue}{\footnotesize{}map3}} to \texttt{\textcolor{blue}{\footnotesize{}mapN}}:
+\begin{align*}
+\text{map}_{1} & :F^{A}\rightarrow\left(A\rightarrow Z\right)\rightarrow F^{Z}\\
+\text{map}_{2} & :F^{A}\times F^{B}\rightarrow\left(A\times B\rightarrow Z\right)\rightarrow F^{Z}\\
+\text{map}_{3} & :F^{A}\times F^{B}\times F^{C}\rightarrow\left(A\times B\times C\rightarrow Z\right)\rightarrow F^{Z}
+\end{align*}
 
 Consider 1, 2, 3, ... commutative and independent \textsf{``}effects\textsf{''}
 
-\texttt{\textcolor{blue}{\footnotesize{}\hrule\medskip{}
+\texttt{\textcolor{blue}{\footnotesize{}\medskip{}
 }}%
 \begin{minipage}[c][1\totalheight][t]{0.4\columnwidth}%
 \begin{lyxcode}
@@ -334,7 +472,7 @@ Consider 1, 2, 3, ... commutative and independent \textsf{``}effects\textsf{''}
 \end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\hfill{}\medskip{}
 }}{\footnotesize\par}
 
-\texttt{\textcolor{blue}{\footnotesize{}\hrule\medskip{}
+\texttt{\textcolor{blue}{\footnotesize{}\medskip{}
 }}{\footnotesize\par}
 
 \texttt{\textcolor{blue}{\footnotesize{}}}%
@@ -354,7 +492,7 @@ Consider 1, 2, 3, ... commutative and independent \textsf{``}effects\textsf{''}
 \end{lyxcode}
 %
 \end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\hfill{}\medskip{}
-\hrule\medskip{}
+\medskip{}
 }}{\footnotesize\par}
 
 \texttt{\textcolor{blue}{\footnotesize{}}}%
@@ -376,36 +514,28 @@ Consider 1, 2, 3, ... commutative and independent \textsf{``}effects\textsf{''}
 \end{lyxcode}
 %
 \end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\hfill{}\medskip{}
-}}\hrule Note that the map2 function defined via flatMap will have
-the right type signature and will work. But sometimes we need a different
-implementation, not equivalent to an implementation via flatMap.\texttt{\textcolor{blue}{\footnotesize{}\medskip{}
+}}Note that the map2 function defined via flatMap will have the right
+type signature and will work. But sometimes we need a different implementation,
+not equivalent to an implementation via flatMap.\texttt{\textcolor{blue}{\footnotesize{}\medskip{}
 }}{\footnotesize\par}
 
-Generalize from \texttt{\textcolor{blue}{\footnotesize{}map}}, \texttt{\textcolor{blue}{\footnotesize{}map2}},
-\texttt{\textcolor{blue}{\footnotesize{}map3}} to \texttt{\textcolor{blue}{\footnotesize{}mapN}}:
-\begin{align*}
-\text{map}_{1} & :F^{A}\rightarrow\left(A\rightarrow Z\right)\rightarrow F^{Z}\\
-\text{map}_{2} & :F^{A}\times F^{B}\rightarrow\left(A\times B\rightarrow Z\right)\rightarrow F^{Z}\\
-\text{map}_{3} & :F^{A}\times F^{B}\times F^{C}\rightarrow\left(A\times B\times C\rightarrow Z\right)\rightarrow F^{Z}
-\end{align*}
+\begin{comment}
+monads, applicatives, arrows paper: (Lindley, Wadler, Yallop)
+
+mumbo-jumbo, clap-trap, abra-cadabra, algebra-cadalgebra, gobbledy-gook
+\end{comment}
 
 
-\paragraph{Practical examples of using \texttt{\textcolor{blue}{\footnotesize{}mapN}} }
-
-\vspace{-0.2cm}$F^{A}\triangleq Z+A$ where $Z$ is a monoid: collect
-all errors
-
-$F^{A}=Z+A$: Create a validated case class out of validated parts
-
-$F^{A}\triangleq$ \texttt{\textcolor{blue}{\footnotesize{}Future{[}A{]}}}:
-perform several computations concurrently
+\subsection{The applicative \texttt{Reader} functor}
 
 $F^{A}\triangleq E\rightarrow A$: pass standard arguments to functions
 more easily
 
+\subsection{Transposing a matrix in parallel via \lstinline!map2!}
+
 $F^{A}\triangleq\text{List}^{A}$: transposing a matrix by using \texttt{\textcolor{blue}{\footnotesize{}map2}} 
 
-Applicative contrafunctors and applicative profunctors
+\subsection{Applicative contrafunctors and applicative profunctors}
 
 defining an instance of \texttt{\textcolor{blue}{\footnotesize{}Semigroup}}
 type class from \texttt{\textcolor{blue}{\footnotesize{}Semigroup}}
@@ -413,6 +543,8 @@ parts
 
 implement \texttt{\textcolor{blue}{\footnotesize{}imap2}} for non-disjunctive
 profunctors, e.g.\ $Z\times A\rightarrow A\times A$
+
+\subsection{Merging several \texttt{fold} operations into one}
 
 \textsf{``}Fused \texttt{\textcolor{blue}{\footnotesize{}fold}}\textsf{''}: automatically
 merge several \texttt{\textcolor{blue}{\footnotesize{}fold}}s into
@@ -428,23 +560,22 @@ compute running averages that depend on previous running averages
 
 do not confuse this with \emph{monad-valued} folds (\href{https://github.com/atnos-org/origami}{origami})!
 
+\subsection{Parsing with applicative functors}
+
 applicative parsers vs.\ monadic parsers
 
 applicative: parse independent data, collecting all errors
 
 monadic: parse depends on previous results, stops on errors
 
-monads, applicatives, arrows paper: (Lindley, Wadler, Yallop) 
-
-mumbo-jumbo, clap-trap, abra-cadabra, algebra-cadalgebra, gobbledy-gook
-
+\section{Slides, Part I }
 
 \subsection{Exercises I }
 
 Implement \texttt{\textcolor{blue}{\footnotesize{}map2}}, or \texttt{\textcolor{blue}{\footnotesize{}imap2}}
 if appropriate, for these type constructors $F^{A}$:
 
-$F^{A}\triangleq1+A+A\times A$
+$F^{A}\triangleq\bbnum 1+A+A\times A$
 
 $F^{A}\triangleq E\rightarrow A\times A$
 
@@ -452,7 +583,7 @@ $F^{A}\triangleq Z\times A\rightarrow A$
 
 $F^{A}\triangleq A\rightarrow A\times Z$ where $Z$ is a \texttt{\textcolor{blue}{\footnotesize{}Monoid}} 
 
-Write a function that defines an instance of the \texttt{\textcolor{blue}{\footnotesize{}Monoid}}
+Write a zip function that defines an instance of the \texttt{\textcolor{blue}{\footnotesize{}Monoid}}
 type class for a tuple $\left(A,B\right)$ whose parts already have
 a \texttt{\textcolor{blue}{\footnotesize{}Monoid}} instance.
 
@@ -462,13 +593,14 @@ for the type $F^{S}$ where $F$ is an applicative functor that has
 while $S$ is itself a monoid type.
 
 Define a \textsf{``}regexp extractor\textsf{''} as a type constructor $R^{A}$ describing
-extraction of various data from strings; the extracted data is converted
-to a value of type \texttt{\textcolor{blue}{\footnotesize{}Option{[}A{]}}}.
-Implement \texttt{\textcolor{blue}{\footnotesize{}zip}} and \texttt{\textcolor{blue}{\footnotesize{}map2}}
+extraction of various data from strings; the extracted data has type
+\texttt{\textcolor{blue}{\footnotesize{}Option{[}A{]}}}. Implement
+\texttt{\textcolor{blue}{\footnotesize{}zip}} and \texttt{\textcolor{blue}{\footnotesize{}map2}}
 for $R^{A}$.
 
 Use parser combinators to implement an evaluator for arithmetic language
 containing only decimal digits and $+$ symbols, for example $1+321+20$.
+Add parentheses to the language.
 
 Use folding combinators to implement a \texttt{\textcolor{blue}{\footnotesize{}Fold}}
 that computes the standard deviation of a sequence in one traversal.
@@ -1127,7 +1259,8 @@ $Z$
 \item $F^{A}\triangleq G^{H^{A}}$ when both $G$ and $H$ are applicative
 \end{enumerate}
 \begin{itemize}
-\item Applicative that disagrees with its monad: $F^{A}\triangleq1+\left(1\rightarrow A\times F^{A}\right)$ 
+\item Applicative that disagrees with its monad: $F^{A}\triangleq1+\left(1\rightarrow A\times F^{A}\right)$
+(lazy list, non-standard applicative)
 \item Examples of non-applicative functors: $F^{A}\triangleq\left(P\rightarrow A\right)+\left(Q\rightarrow A\right)$,
 $F^{A}\triangleq\left(A\rightarrow P\right)\rightarrow Q$,\  $F^{A}\triangleq\left(A\rightarrow P\right)\rightarrow1+A$
 \end{itemize}
@@ -1274,8 +1407,31 @@ are commutative applicative functors
 \end{itemize}
 \end{itemize}
 
+\section{Laws and structure}
 
-\paragraph{Categorical overview of \textsf{``}regular\textsf{''} functor classes}
+Example~\ref{subsec:Example-applicative-not-monad} shows that some
+applicative functors are not monads: the type constructor $L^{A}\triangleq\bbnum 1+A\times A$
+is applicative but \emph{not} a monad (see Exercise~\ref{subsec:Exercise-1-monads-7-not-a-monad}).
+
+{*}{*}{*}
+
+\section{Discussion}
+
+\subsection{Relationships between monads and applicative functors}
+
+Any lawful monad is at the same time an applicative functor: we may
+define the \lstinline!map2! method via \lstinline!map! and \lstinline!flatMap!.
+However, we may need to define the \lstinline!map2! method in a different
+way, because defining \lstinline!map2! via \lstinline!flatMap! would
+not give us the required functionality.{*}{*}{*}
+
+Some applicative functors, however, are not monads (cannot have a
+monad implementation). In addition, the \lstinline!zip! and \lstinline!map2!
+operations exist for some type constructors that are not covariant.
+
+{*}{*}{*}
+
+\subsection{Categorical overview of \textsf{``}regular\textsf{''} functor classes}
 
 The \textsf{``}liftings\textsf{''} show the types of category\textsf{'}s morphisms
 \begin{center}
@@ -1318,11 +1474,8 @@ work out
 \end{itemize}
 \end{itemize}
 
-
 \subsection{Exercises}
 \begin{enumerate}
-\item Show that \lstinline!pure! will be automatically a natural transformation
-when it is defined using \lstinline!wu! as shown in Section{*}{*}{*}.
 \item Use naturality of \lstinline!pure! to show that $\text{pu}_{L}(f)\odot\text{pu}_{L}(g)=\text{pu}_{L}\left(f\bef g\right)$
 for an applicative functor $L$.
 \item Show that $F^{A}\triangleq\left(A\rightarrow Z\right)\rightarrow\bbnum 1+A$
@@ -1348,11 +1501,6 @@ where $G^{A}$ is a given applicative profunctor and $Z$ is a monoid.
 of type $A\rightarrow P^{B}\rightarrow P^{A\times B}$ but not of
 type $A\rightarrow P^{B}\rightarrow P^{A}$. 
 \end{enumerate}
-
-\section{Practical use}
-
-\paragraph{Discussion}
-
 \begin{comment}
 this is chapter eight devoted to applicative hunters and pro functors
 the first part will be practical examples main motivation for applicati
@@ -2797,9 +2945,6 @@ which is combined in a very flexible way combine all of the divisions
 we have a commune specific language of sorts and then you run it all
 right well we're out of time thank you very much 
 \end{comment}
-
-
-\section{Laws and structure}
 
 \begin{comment}
 this is part 2 of chapter 8 continuing applicative functors and pro
