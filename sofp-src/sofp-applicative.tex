@@ -82,14 +82,14 @@ def zip[A, B](ta: BTree[A], tb: BTree[B]): BTree[(A, B)] = ???
 \end{lstlisting}
 We would like to preserve the tree structure of \lstinline!ta! and
 \lstinline!tb! as much as possible, zipping together subtrees of
-equal shape without adding any new branchings. For instance, the result
-of evaluating {\tiny{}}zip({\tiny{} \Tree[ [ [ $a$ ] [ $b$ ] ]  [ $c$ ] ] }, {\tiny{} \Tree[ [ [ $d$ ] [ $e$ ] ]  [ $f$ ] ] })
-should be the tree {\tiny{}}{\tiny{} \Tree[ [ [ $a\times d$ ] [ $b\times e$ ] ]  [ $c\times f$ ] ] }.
-But if a subtree of \lstinline!ta! is a leaf value \lstinline!Leaf(x)!
-while the corresponding subtree of \lstinline!tb! is a \lstinline!Branch!,
+equal shape without adding any new branchings. For example, {\tiny{}}zip({\tiny{} \Tree[ [ [ $a$ ] [ $b$ ] ]  [ $c$ ] ] }, {\tiny{} \Tree[ [ [ $d$ ] [ $e$ ] ]  [ $f$ ] ] })
+should evaluate to the tree {\tiny{}}{\tiny{} \Tree[ [ [ $a\times d$ ] [ $b\times e$ ] ]  [ $c\times f$ ] ] }.
+If a subtree of \lstinline!ta! is a \lstinline!Leaf(x)! while the
+corresponding subtree of \lstinline!tb! is a \lstinline!Branch!,
 the value \lstinline!x! must be replicated to match the subtree of
-\lstinline!tb!. So, the result of evaluating {\tiny{}}zip({\tiny{} \Tree[ [ $a$ ] [ $b$ ] ] }, {\tiny{} \Tree[ [ [ $c$ ] [ [ $d$ ] [ $e$ ] ] ]  [ $f$ ] ] })
-should be {\tiny{}}{\tiny{} \Tree[ [ [ $a\times c$ ] [ [ $a\times d$ ] [ $a\times e$ ] ] ]  [ $b\times f$ ] ] }.
+\lstinline!tb!. So, the result of evaluating {\tiny{}}zip({\tiny{} \Tree[ [ $b$ ] [ $c$ ] ] }, {\tiny{} \Tree[ [ [ $a$ ] [ [ $d$ ] [ $e$ ] ] ]  [ $f$ ] ] })
+should be {\tiny{}}{\tiny{} \Tree[ [ [ $b\times a$ ] [ [ $b\times d$ ] [ $b\times e$ ] ] ]  [ $c\times f$ ] ] }
+with replicated $b$.
 
 \subparagraph{Solution}
 
@@ -136,14 +136,14 @@ To check our code, let us run the given examples and verify that we
 get the required results:
 \begin{lstlisting}
 val ta: BTree[Int] = Branch(Branch(Leaf(1), Leaf(2)), Leaf(3))
-val tb: BTree[String] = Branch(Leaf("a"), Leaf("b"))
-val tc: BTree[String] = Branch(Branch(Leaf("c"), Branch(Leaf("d"), Leaf("e"))), Leaf("f")) 
+val tb: BTree[String] = Branch(Leaf("b"), Leaf("c"))
+val tc: BTree[String] = Branch(Branch(Leaf("a"), Branch(Leaf("d"), Leaf("e"))), Leaf("f")) 
 
 scala> zip(ta, ta)
 res0: BTree[(Int, Int)] = Branch(Branch(Leaf((1, 1)), Leaf((2, 2))), Leaf((3, 3)))
 
 scala> zip(tb, tc)
-res1: BTree[(String, String)] = Branch(Branch(Leaf(("a", "c")), Branch(Leaf(("a", "d")), Leaf(("a", "e")))), Leaf(("b", "f"))) 
+res1: BTree[(String, String)] = Branch(Branch(Leaf(("b", "a")), Branch(Leaf(("b", "d")), Leaf(("b", "e")))), Leaf(("c", "f"))) 
 \end{lstlisting}
 $\square$
 
@@ -182,11 +182,11 @@ construction of Section~\ref{subsec:Monoids-constructions}). We
 usually do not view typeclass instances as data to be manipulated.
 But if we do, we will find that many typeclasses are represented by
 type constructors such as $L^{A}$ that are neither covariant nor
-contravariant yet support a suitable \lstinline!zip! method. Implementing
-the \lstinline!zip! method will then enable automatic typeclass derivation
-for product types (such as case classes).
+contravariant yet support a \lstinline!zip! method. If we implement
+a \lstinline!zip! method for the typeclass instances, we will obtain
+automatic typeclass derivation for product types (such as case classes).
 
-\subsection{Programs that accumulate errors during computations}
+\subsection{Programs that accumulate errors during computations\label{subsec:Programs-that-accumulate-errors}}
 
 A monadic program using pass/fail monads will stop at the first failure:
 the code \lstinline!flatMap(x => expr)! cannot start evaluating \lstinline!expr!
@@ -442,94 +442,177 @@ def validated[A, B, C](a: F[A], b: F[B], c: F[C]): F[MyData[A, B, C]] =
 \end{lstlisting}
 
 
-\subsection{Implementing the functions \texttt{map2}, \texttt{map3}, etc.}
+\subsection{Implementing the functions \texttt{map2}, \texttt{map3}, etc. The
+\texttt{ap} method}
 
-Generalize from \texttt{\textcolor{blue}{\footnotesize{}map}}, \texttt{\textcolor{blue}{\footnotesize{}map2}},
-\texttt{\textcolor{blue}{\footnotesize{}map3}} to \texttt{\textcolor{blue}{\footnotesize{}mapN}}:
+Working with applicative functors involves using methods such as \lstinline!map2!,
+\lstinline!map3!, and so on. The code of \lstinline!map2! for the
+functor $L^{A}\triangleq\text{String}+A$ contains a pattern match
+with four cases (see Section~\ref{subsec:Programs-that-accumulate-errors}).
+Writing similar code for \lstinline!map3! requires \emph{eight} cases
+(to match a triple of \lstinline!Either! values), and \lstinline!map4!
+would require $16$ cases. How can we implement all these functions
+without writing a lot of code?
+
+One idea is to use the \lstinline!zip! method repeatedly, as we saw
+in the previous section. We would then implement \lstinline!map2!
+through \lstinline!zip!, \lstinline!map3! through \lstinline!zip3!,
+and so on. For the purposes of illustration, let us make the types
+of all elements the same, so that the type signatures become:
+\[
+\text{zip}:L^{A}\times L^{A}\rightarrow L^{A\times A}\quad,\quad\quad\text{zip}_{3}:L^{A}\times L^{A}\times L^{A}\rightarrow L^{A\times A\times A}\quad.
+\]
+We can now implement a general function ($\text{zip}_{n}$) that uses
+a list of values of type $L^{A}$:
+\begin{lstlisting}
+def zipN[A](xs: List[Either[String, A]]): Either[String, List[A]] = xs match {
+  case Nil            => Right(Nil)
+  case head :: tail   => zip(head, zipN(tail)).map { case (h, t) => h :: t }
+}
+\end{lstlisting}
+The corresponding function \lstinline!mapN! is then defined by
+\begin{lstlisting}
+def mapN[A, Z](xs: List[Either[String, A]])(f: List[A] => Z): Either[String, Z] = zipN(xs).map(f)
+\end{lstlisting}
+
+If we wanted to define general functions \lstinline!zipN! and \lstinline!mapN!
+that could take $N$ arguments of arbitrary types (and not all of
+type $A$), we would need to use techniques of dependent-type programming,
+which is beyond the scope of this book. We will now describe a simpler
+solution that implements \lstinline!mapN! via a helper function (\lstinline!ap!)
+that (in a sense that we will make precise) performs a recursion step
+that reduces $\text{map}_{N}$ to $\text{map}_{N-1}$.
+
+If the \lstinline!ap! method can do that, it can also reduce \lstinline!map2!
+to \lstinline!map!. So, let us determine the functionality that is
+present in \lstinline!map2! but missing from \lstinline!map!. That
+missing functionality is what \lstinline!ap! must implement.
+
+To compare \lstinline!map! and \lstinline!map2! functions more easily,
+consider their curried versions \lstinline!fmap! and \lstinline!fmap2!:
+
+\begin{wrapfigure}{l}{0.543\columnwidth}%
+\vspace{-0.6\baselineskip}
+\begin{lstlisting}
+def fmap[A,B](f: A => B): L[A] => L[B]
+def fmap2[A,B,C](f: A => B => C): L[A] => L[B] => L[C]
+\end{lstlisting}
+
+\vspace{-1.05\baselineskip}
+\end{wrapfigure}%
+
+~\vspace{-1.5\baselineskip}
 \begin{align*}
-\text{map}_{1} & :F^{A}\rightarrow\left(A\rightarrow Z\right)\rightarrow F^{Z}\\
-\text{map}_{2} & :F^{A}\times F^{B}\rightarrow\left(A\times B\rightarrow Z\right)\rightarrow F^{Z}\\
-\text{map}_{3} & :F^{A}\times F^{B}\times F^{C}\rightarrow\left(A\times B\times C\rightarrow Z\right)\rightarrow F^{Z}
+ & \text{fmap}:\left(A\rightarrow B\right)\rightarrow L^{A}\rightarrow L^{B}\quad,\\
+ & \text{fmap}_{2}:\left(A\rightarrow B\rightarrow C\right)\rightarrow L^{A}\rightarrow L^{B}\rightarrow L^{C}\quad.
 \end{align*}
 
-Consider 1, 2, 3, ... commutative and independent \textsf{``}effects\textsf{''}
+If we try implementing \lstinline!fmap2! via \lstinline!fmap!, we
+get stuck:
+\begin{lstlisting}
+def fmap2[A, B, C](f: A => B => C): L[A] => L[B] => L[C] = { la: L[A] => la.map(f) } // ??? 
+\end{lstlisting}
+The value \lstinline!la.map(f)! has type \lstinline!L[B => C]! instead
+of the required type \lstinline!L[B] => L[C]!. So, we need a function
+that transforms between those types. The new function is called \lstinline!ap!
+and has the type signature:
 
-\texttt{\textcolor{blue}{\footnotesize{}\medskip{}
-}}%
-\begin{minipage}[c][1\totalheight][t]{0.4\columnwidth}%
-\begin{lyxcode}
-\textcolor{blue}{\footnotesize{}for~\{~x1~$\leftarrow$~c1}{\footnotesize\par}
+\begin{wrapfigure}{l}{0.543\columnwidth}%
+\vspace{-0.6\baselineskip}
+\begin{lstlisting}
+def ap[B, C](lf: L[B => C]): L[B] => L[C]
+\end{lstlisting}
 
-\textcolor{blue}{\footnotesize{}\}~yield~f(x1)}{\footnotesize\par}
-\end{lyxcode}
-%
-\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\hfill{}}}%
-\begin{minipage}[c][1\totalheight][t]{0.4\columnwidth}%
-\begin{lyxcode}
-\textcolor{blue}{\footnotesize{}c1.map(f)}
-\end{lyxcode}
-%
-\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\hfill{}\medskip{}
-}}{\footnotesize\par}
+\vspace{-0.5\baselineskip}
+\end{wrapfigure}%
 
-\texttt{\textcolor{blue}{\footnotesize{}\medskip{}
-}}{\footnotesize\par}
+~\vspace{-0.5\baselineskip}
+\[
+\text{ap}_{L}:L^{A\rightarrow B}\rightarrow L^{A}\rightarrow L^{B}\quad.
+\]
 
-\texttt{\textcolor{blue}{\footnotesize{}}}%
-\begin{minipage}[c][1\totalheight][t]{0.4\columnwidth}%
-\begin{lyxcode}
-\textcolor{blue}{\footnotesize{}for~\{~x1~$\leftarrow$~c1}{\footnotesize\par}
+If we have an implementation of \lstinline!ap! for a functor $L$,
+we can write the code for \lstinline!fmap2! as:
+\begin{lstlisting}
+def fmap2[A, B, C](f: A => B => C): L[A] => L[B] => L[C] = { la: L[A] => ap[B, C](la.map(f)) }
+\end{lstlisting}
+Using the code notation and the point-free style, this definition
+looks like this:
+\[
+\text{fmap}_{2}(f)\triangleq f^{\uparrow L}\bef\text{ap}_{L}\quad.
+\]
+Taking into account the curried type signature of \lstinline!fmap2!,
+we may rewrite this as \lstinline!fmap2(f)(la)(lb) == ap(la.map(f))(lb)!.
+This expression can be made clearer if we implement infix syntax for
+\lstinline!fmap! and \lstinline!ap!:
+\begin{lstlisting}
+implicit class FmapSyntax[A, B](f: A => B) {
+  def <@>[F[_] : Functor](fa: F[A]): F[B] = fa.map(f)
+} 
+implicit class ApSyntax[A, B](lab: L[A => B]) {
+  def <*>(la: L[A]): L[B] = ap(lab)(la)
+}
+\end{lstlisting}
+Then we rewrite \lstinline!fmap2(f)(la)(lb)! as \lstinline!f <@> la <*> lb!.
 
-\textcolor{blue}{\footnotesize{}~~x2~$\leftarrow$~c2}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}\}~yield~f(x1,~x2)}{\footnotesize\par}
-\end{lyxcode}
-%
-\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\hfill{}}}%
-\begin{minipage}[c][1\totalheight][t]{0.4\columnwidth}%
-\begin{lyxcode}
-\textcolor{blue}{\footnotesize{}(c1,~c2).map2(f)}
-\end{lyxcode}
-%
-\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\hfill{}\medskip{}
-\medskip{}
-}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}}}%
-\begin{minipage}[c][1\totalheight][t]{0.4\columnwidth}%
-\begin{lyxcode}
-\textcolor{blue}{\footnotesize{}for~\{~x~$\leftarrow$~c1}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~x2~$\leftarrow$~c2}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~x3~$\leftarrow$~c3}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}\}~yield~f(x1,~x2,~x3)}{\footnotesize\par}
-\end{lyxcode}
-%
-\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\hfill{}}}%
-\begin{minipage}[c][1\totalheight][t]{0.4\columnwidth}%
-\begin{lyxcode}
-\textcolor{blue}{\footnotesize{}(c1,~c2,~c3).map3(f)}
-\end{lyxcode}
-%
-\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\hfill{}\medskip{}
-}}Note that the map2 function defined via flatMap will have the right
-type signature and will work. But sometimes we need a different implementation,
-not equivalent to an implementation via flatMap.\texttt{\textcolor{blue}{\footnotesize{}\medskip{}
-}}{\footnotesize\par}
-
-\begin{comment}
-monads, applicatives, arrows paper: (Lindley, Wadler, Yallop)
-
-mumbo-jumbo, clap-trap, abra-cadabra, algebra-cadalgebra, gobbledy-gook
-\end{comment}
-
+The main advantage of this new syntax is in making it easier to implement
+\lstinline!fmap3!, \lstinline!fmap4!, etc. Let us see how we can
+use the \lstinline!ap! method to implement \lstinline!fmap3! via
+\lstinline!fmap2!:
+\begin{lstlisting}
+def fmap3[A, B, C, D](f: A => B => C => D): L[A] => L[B] => L[C] => L[D] = { la: L[A] =>
+  ap[B, C => D](la.map(f)) andThen ap[C, D] }
+\end{lstlisting}
+\[
+\text{fmap}_{3}(f)\triangleq f^{\uparrow L}\bef\text{ap}_{L}\bef\left(g\rightarrow g\bef\text{ap}_{L}\right)\quad.
+\]
+It is harder to write and to understand the code of \lstinline!fmap3!
+than that of \lstinline!fmap2!. An implementation of \lstinline!fmap4!
+via \lstinline!ap! will be even more complicated. But with the infix
+syntax shown above, we can write:
+\begin{lstlisting}
+def fmap3[A, B, C, D](f: A => B => C => D)(a: L[A])(b: L[B])(c: L[C]): L[D] = f <@> a <*> b <*> c
+def fmap4[A, B, C, D, E](f: A => B => C => D => E)(a: L[A])(b: L[B])(c: L[C])(d: L[D]): L[E] =
+  f <@> a <*> b <*> c <*> d
+\end{lstlisting}
+Now it becomes clear how to implement the functions $\text{fmap}_{N}$
+for any $N$ and any argument types.
 
 \subsection{The applicative \texttt{Reader} functor}
 
-$F^{A}\triangleq E\rightarrow A$: pass standard arguments to functions
-more easily
+So far, most of our examples of applicative functors were limited
+to polynomial functors. The \lstinline!Reader! functor, $L^{A}\triangleq E\rightarrow A$,
+is applicative and supports a \lstinline!zip! method as well:
+\begin{lstlisting}
+type Reader[A] = E => A    // The fixed type E must be already defined.
+def zip[A, B](ra: Reader[A], rb: Reader[B]): Reader[(A, B)] = { e => (ra(e), rb(e)) }
+\end{lstlisting}
+The \lstinline!map2! method is implemented similarly:
+\begin{lstlisting}
+def map2[A, B, C](ra: Reader[A], rb: Reader[B])(f: A => B => C): Reader[C] = { e => f(ra(e))(rb(e)) }
+\end{lstlisting}
+These are the only fully parametric implementations of the type signatures
+of \lstinline!zip! and \lstinline!map2! for \lstinline!Reader!.
+
+Since \lstinline!Reader! is also a monad (see Section~\ref{subsec:The-Reader-monad}),
+we may implement the type signature of \lstinline!map2! as:
+\begin{lstlisting}
+def map2[A, B, C](ra: Reader[A], rb: Reader[B])(f: A => B => C): Reader[C] = for {
+  x <- ra
+  y <- rb
+} yield f(x)(y)
+\end{lstlisting}
+This code is fully parametric. So, this \lstinline!map2! must be
+equal to the direct implementation shown above.
+
+It is noteworthy that the \lstinline!Reader!\textsf{'}s applicative and monad
+instances agree on the implementation of \lstinline!map2!. We can
+understand this if we consider that \lstinline!Reader!\textsf{'}s effect is
+a dependency on a constant environment (a value of type $E$). All
+\lstinline!Reader! computations in a given functor block will read
+the same environment value. So, the \lstinline!Reader! effects are
+always independent, and a \lstinline!map2! function does not need
+to be implemented separately for the applicative use.
 
 \subsection{Transposing a matrix in parallel via \lstinline!map2!}
 
@@ -1421,15 +1504,25 @@ is applicative but \emph{not} a monad (see Exercise~\ref{subsec:Exercise-1-monad
 
 Any lawful monad is at the same time an applicative functor: we may
 define the \lstinline!map2! method via \lstinline!map! and \lstinline!flatMap!.
-However, we may need to define the \lstinline!map2! method in a different
+We can also define \lstinline!zip! via \lstinline!map! and \lstinline!flatMap!.
+The map2 and zip methods defined in this way will have the right type
+signature and will satisfy the laws of applicative functors. However,
+we may need to define the \lstinline!map2! method in a different
 way, because defining \lstinline!map2! via \lstinline!flatMap! would
-not give us the required functionality.{*}{*}{*}
+not give us the required functionality.{*}{*}{*} Examples are lists,
+trees, and Either.
 
 Some applicative functors, however, are not monads (cannot have a
 monad implementation). In addition, the \lstinline!zip! and \lstinline!map2!
 operations exist for some type constructors that are not covariant.
 
-{*}{*}{*}
+{*}{*}{*}%
+\begin{comment}
+monads, applicatives, arrows paper: (Lindley, Wadler, Yallop)
+
+mumbo-jumbo, clap-trap, abra-cadabra, algebra-cadalgebra, gobbledy-gook
+\end{comment}
+
 
 \subsection{Categorical overview of \textsf{``}regular\textsf{''} functor classes}
 

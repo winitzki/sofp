@@ -9,7 +9,7 @@ name="sofp"
 draft_pages=672
 
 # The number of pages in each chapter:
-pagecounts=(3 17 42 34 24 49 43 12 63 54 63 10 6 24 148 4 5 6 3 6 6 3 5 48 17 1 2 1 1 6)
+pagecounts=(3 17 42 34 24 49 43 12 63 54 63 16 6 27 148 4 5 6 3 6 6 3 5 48 17 1 2 1 1 6)
 
 # To create the draft version that contains only proofread chapters:
 # cut out from here, including:

@@ -6,283 +6,349 @@
 
 \chapter{\textsf{``}Free\textsf{''} type constructions\label{chap:Free-type-constructions}}
 
-\section{Slides}
-
-\paragraph{The interpreter pattern I. Expression trees}
-
-Main idea: Represent a program as a data structure, run it later
-
-Example: a simple DSL for complex numbers
-
-\begin{minipage}[t]{0.35\columnwidth}%
-\begin{lyxcode}
-\textcolor{blue}{\footnotesize{}val~a~=~\textquotedbl 1+2{*}i\textquotedbl .toComplex}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}val~b~=~a~{*}~\textquotedbl 3-4{*}i\textquotedbl .toComplex}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}b.conj}{\footnotesize\par}
-\end{lyxcode}
-%
-\end{minipage}\hspace*{\fill}%
-\begin{minipage}[t]{0.45\columnwidth}%
-\begin{lyxcode}
-\textcolor{blue}{\footnotesize{}Conj(}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~Mul(}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~~Str(\textquotedbl 1+2{*}i\textquotedbl ),~Str(\textquotedbl 3-4{*}i\textquotedbl )}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}))}{\footnotesize\par}
-\end{lyxcode}
-%
-\end{minipage}\hspace*{\fill}
-
-\emph{Unevaluated} operations \texttt{\textcolor{blue}{\footnotesize{}Str}},
-\texttt{\textcolor{blue}{\footnotesize{}Mul}}, \texttt{\textcolor{blue}{\footnotesize{}Conj}}
-are defined as case classes:
-
-\texttt{\textcolor{blue}{\footnotesize{}sealed trait Prg}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}case class Str(s: String)
-extends Prg}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}case class Mul(p1: Prg, p2: Prg)
-extends Prg}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}case class Conj(p: Prg) extends
-Prg}}{\footnotesize\par}
-
-An \emph{interpreter} will \textsf{``}run\textsf{''} the program and return a complex
-number
-
-\texttt{\textcolor{blue}{\footnotesize{}def run(prg: Prg): (Double,
-Double) = ...}}{\footnotesize\par}
-
-Benefits: programs are data, can compose \& transform before running
-
-Shortcomings: this DSL works only with simple expressions
-
-Cannot represent variable binding and conditional computations
-
-Cannot use any non-DSL code (e.g.~a numerical algorithms library)
-
-
-\paragraph{The interpreter pattern II. Variable binding}
-
-A DSL with variable binding and conditional computations
-
-Example: imperative API for reading and writing files
-
-Need to bind a \emph{non-DSL variable} to a value computed by DSL
-
-Later, need to use that non-DSL variable in DSL expressions
-
-The rest of the DSL program is a (Scala) function of that variable
-
-\begin{minipage}[t]{0.35\columnwidth}%
-\begin{lyxcode}
-\textcolor{blue}{\footnotesize{}val~p~=~path(\textquotedbl /file\textquotedbl )}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}val~str:~String~=~read(p)}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}if~(str.nonEmpty)}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~read(path(str))}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}else~\textquotedbl Error:~empty~path\textquotedbl}{\footnotesize\par}
-\end{lyxcode}
-%
-\end{minipage}\hspace*{\fill}%
-\begin{minipage}[t]{0.45\columnwidth}%
-\begin{lyxcode}
-\textcolor{blue}{\footnotesize{}Bind(}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~Read(Path(Literal(\textquotedbl /file\textquotedbl ))),}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~\{~str~$\rightarrow$}\textcolor{darkgray}{\footnotesize{}~//~read~value~`str`}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~~~if~(str.nonEmpty)}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~~~~~Read(Path(Literal(str)))}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~~~else~Literal(\textquotedbl Error:~empty~path\textquotedbl )}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~\})}{\footnotesize\par}
-\end{lyxcode}
-%
-\end{minipage}\hspace*{\fill}
-
-Unevaluated operations are implemented via case classes:
-
-\texttt{\textcolor{blue}{\footnotesize{}sealed trait Prg}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}case class Bind(p: Prg, f: String
-$\rightarrow$ Prg) extends Prg }}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}case class Literal(s: String)
-extends Prg }}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}case class Path(s: Prg) extends
-Prg}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}case class Read(p: Prg) extends
-Prg}}{\footnotesize\par}
-
-Interpreter: \texttt{\textcolor{blue}{\footnotesize{}def run(prg: Prg): String
-= ...}} 
-
-
-\paragraph{The interpreter pattern III. Type safety}
-
-So far, the DSL has no type safety: every value is a \texttt{\textcolor{blue}{\footnotesize{}Prg}} 
-
-We want to avoid errors, e.g. \texttt{\textcolor{blue}{\footnotesize{}Read(Read(...))}}
-should not compile
-
-Let \texttt{\textcolor{blue}{\footnotesize{}Prg{[}A{]}}} denote a
-DSL program returning value of type \texttt{\textcolor{blue}{\footnotesize{}A}}
-\emph{when run}:
-
-\texttt{\textcolor{blue}{\footnotesize{}sealed trait Prg{[}A{]}}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}case class Bind(p: Prg{[}String{]},
-f: String $\rightarrow$ Prg{[}String{]})}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}  extends Prg{[}String{]}}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}case class Literal(s: String)
-extends Prg{[}String{]} }}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}case class Path(s: Prg{[}String{]})
-extends Prg{[}nio.file.Path{]}}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}case class Read(p: Prg{[}nio.file.Path{]})
-extends Prg{[}String{]}}}{\footnotesize\par}
-
-Interpreter: \texttt{\textcolor{blue}{\footnotesize{}def run(prg: Prg{[}String{]}): String
-= ...}}{\footnotesize\par}
-
-Our example DSL program is type-safe now:
-
-\textcolor{blue}{\footnotesize{}val prg: Prg{[}String{]} = Bind(}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}  Read(Path(Literal(\textquotedbl /file\textquotedbl ))),}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}     \{ str: String $\rightarrow$}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}    if (str.nonEmpty)}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}      Read(Path(Literal(str)))}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}    else Literal(\textquotedbl Error:
-empty path\textquotedbl )}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}  \})}{\footnotesize\par}
-
-
-\paragraph{The interpreter pattern IV. Cleaning up the DSL}
-
-Our DSL so far:
-
-\texttt{\textcolor{blue}{\footnotesize{}sealed trait Prg{[}A{]}}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}case class Bind(p: Prg{[}String{]},
-f: String $\rightarrow$ Prg{[}String{]})}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}  extends Prg{[}String{]}}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}case class Literal(s: String)
-extends Prg{[}String{]}}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}case class Path(s: Prg{[}String{]})
-extends Prg{[}nio.file.Path{]}}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}case class Read(p: Prg{[}nio.file.Path{]})
-extends Prg{[}String{]}}}{\footnotesize\par}
-
-Problems with this DSL:
-
-Cannot use \texttt{\textcolor{blue}{\footnotesize{}Read(p: nio.file.Path)}},
-only \texttt{\textcolor{blue}{\footnotesize{}Read(p: Prg{[}nio.file.Path{]})}} 
-
-Cannot bind variables or return values other than \texttt{\textcolor{blue}{\footnotesize{}String}} 
-
-To fix these problems, make \texttt{\textcolor{blue}{\footnotesize{}Literal}}
-a fully parameterized operation and replace \texttt{\textcolor{blue}{\footnotesize{}Prg{[}A{]}}}
-by \texttt{\textcolor{blue}{\footnotesize{}A}} in case class arguments
-
-\texttt{\textcolor{blue}{\footnotesize{}sealed trait Prg{[}A{]}}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}case class Bind{[}A, B{]}(p: Prg{[}A{]},
-f: A$\rightarrow$Prg{[}B{]}) extends Prg{[}B{]}}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}case class Literal{[}A{]}(a: A)
-extends Prg{[}A{]}}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}case class Path(s: String)
-extends Prg{[}nio.file.Path{]}}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}case class Read(p: nio.file.Path)
-extends Prg{[}String{]}}}{\footnotesize\par}
-
-The type signatures of \texttt{\textcolor{blue}{\footnotesize{}Bind}}
-and \texttt{\textcolor{blue}{\footnotesize{}Literal}} are like \texttt{\textcolor{blue}{\footnotesize{}flatMap}}
-and \texttt{\textcolor{blue}{\footnotesize{}pure}} 
-
-
-\paragraph{The interpreter pattern V. Define \texttt{Monad}-like methods}
-
-We can actually define the methods \texttt{\textcolor{blue}{\footnotesize{}map}},
-\texttt{\textcolor{blue}{\footnotesize{}flatMap}}, \texttt{\textcolor{blue}{\footnotesize{}pure}}:
-
-\texttt{\textcolor{blue}{\footnotesize{}sealed trait Prg{[}A{]} \{}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}  def flatMap{[}B{]}(f: A
-$\rightarrow$ Prg{[}B{]}): Prg{[}B{]} = Bind(this, f)}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}  def map{[}B{]}(f: A $\rightarrow$
-B): Prg{[}B{]} = flatMap(this, f andThen Prg.pure)}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}\}}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}object Prg \{ def pure{[}A{]}(a: A): Prg{[}A{]}
-= Literal(a) \}}}{\footnotesize\par}
-
-These methods don't run anything, only create unevaluated structures
-
-DSL programs can now be written as functor blocks and composed:
-
-\textcolor{blue}{\footnotesize{}def readPath(p: String): Prg{[}String{]}
-= for \{}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}  path $\leftarrow$ Path(p)}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}  str  $\leftarrow$ Read(path)}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}\} yield str}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{} }{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}val prg: Prg{[}String{]} = for \{}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}  str $\leftarrow$ readPath(\textquotedbl /file\textquotedbl )}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}  result $\leftarrow$  if (str.nonEmpty)}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}      readPath(str)}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}    else Prg.pure(\textquotedbl Error:
-empty path\textquotedbl )}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}\} yield result}{\footnotesize\par}
-
-Interpreter: \texttt{\textcolor{blue}{\footnotesize{}def run{[}A{]}(prg: Prg{[}A{]}): A
-= ...}} 
-
-
-\paragraph{The interpreter pattern VI. Refactoring to an abstract DSL}
-
-Write a DSL for complex numbers in a similar way:
+\section{Motivation for the free monad: refining a DSL in five steps}
+
+A domain-specific language (DSL) is a design pattern that separates
+the computations from the process of their evaluation. A simple way
+of implementing a DSL is to write a library of functions in an already
+existing programming language (e.g., Scala). First, the programmer
+defines a data structure that represents a DSL program and helper
+functions for creating such programs. Then, a separate method is used
+to interpret (or \textsf{``}run\textsf{''}) DSL programs. The result is known as an
+\textsf{``}embedded\textsf{''} DSL.
+
+As first examples, we will consider a DSL for complex numbers and
+a DSL for file operations. We will refine and refactor our DSLs step
+by step to make them more powerful and safer to use. In this way,
+we will obtain the construction known as the \textsf{``}free monad\textsf{''}.
+
+\subsection{Step 1: unevaluated expression trees}
+
+Suppose we need to perform calculations with complex numbers. We could
+begin by implementing a simple data structure (\lstinline!case class Complex!)
+with some operations: 
+\begin{lstlisting}[mathescape=true]
+final case class Complex(x: Double, y: Double) {
+  def +(other: Complex): Complex = Complex(x + other.x, y + other.y)
+  def *(other: Complex): Complex =
+      Complex(x * other.x - y * other.y, x * other.y + y * other.x)
+  def conj: Complex = Complex(x, -y)
+}
+val a = Complex(1, 2)          // $\color{dkgreen}a = 1 + 2 i$
+val b = a * Complex(3, -4)     // $\color{dkgreen}b = (1 + 2 i)(3 - 4 i) = 11 + 2 i$
+val c = b.conj                 // $\color{dkgreen}c = 11 - 2 i$
+
+scala> c
+res0: Complex = Complex(11.0, -2.0)
+\end{lstlisting}
+
+Instead of running the complex-number programs directly, a DSL will
+first create data structures that contain an \emph{unevaluated} expression
+tree of the program. Separate case classes are used for addition,
+multiplication, and conjugation, as well as for inserting a literal
+\lstinline!Complex! value into the program:
+\begin{lstlisting}
+sealed trait PrgComplex
+final case class Add(p1: PrgComplex, p2: PrgComplex) extends PrgComplex
+final case class Mul(p1: PrgComplex, p2: PrgComplex) extends PrgComplex
+final case class Conj(p: PrgComplex) extends PrgComplex
+final case class Literal(c: Complex) extends PrgComplex
+
+val prgComplex: PrgComplex = Conj(
+  Mul(
+    Literal(Complex(1, 2)), Literal(Complex(3, -4))
+))
+\end{lstlisting}
+
+A simple interpreter for the complex-number DSL programs can be written
+like this:
+\begin{lstlisting}
+def run: PrgComplex => Complex = {
+  case Literal(c)    => c
+  case Add(p1, p2)   => run(p1) + run(p2)
+  case Mul(p1, p2)   => run(p1) * run(p2)
+  case Conj(p)       => run(p).conj
+}
+\end{lstlisting}
+We can now use \lstinline!run! to perform the computation \lstinline!prgComplex!
+and get the result as a complex number:
+\begin{lstlisting}
+scala> run(prgComplex)
+res1: Complex = Complex(11.0, -2.0)
+\end{lstlisting}
+
+Although the DSL is simple, it already gives us several benefits.
+By representing complex-number calculations as DSL program data, which
+are values of type \lstinline!PrgComplex!, we can freely compose,
+optimize, or transform those DSL programs before running them. We
+may also implement several runners in order to run the same computation
+in different ways (say, with logging, debugging, benchmarking, etc.)
+or in different environments (say, on GPUs or on a remote machine).
+
+As a second example, consider a DSL for file operations, such as reading
+and writing files at a given file path. Direct Scala code for such
+operations may look like this:
+\begin{lstlisting}
+import java.nio.file.{Files, Paths}
+val p = Paths.get("config_location.txt")
+val configLocation = Paths.get(new String(Files.readAllBytes(p)))
+val config = new String(Files.readAllBytes(configLocation))
+\end{lstlisting}
+The DSL will represent these operations by the case classes \lstinline!Literal!,
+\lstinline!Path!, and \lstinline!Read!:
+\begin{lstlisting}
+sealed trait PrgFile
+final case class Literal(s: String) extends PrgFile
+final case class Path(p: PrgFile) extends PrgFile
+final case class Read(p: PrgFile) extends PrgFile
+
+val prgFile: PrgFile = Read(Path(Read(Path(Literal("config_location.txt")))))
+\end{lstlisting}
+As before, a DSL program contains an unevaluated expression tree describing
+the operations that need to be run. A separate interpreter (or \textsf{``}runner\textsf{''})
+is needed to extract values from a DSL program:
+\begin{lstlisting}
+def run: PrgFile => String = {
+  case Literal(s)      => s
+  case Path(p)         => "path=" + run(p)                // For debugging.
+  case Read(Path(p))   => new String(Files.readAllBytes(Paths.get(run(p))))
+  case x => throw new Exception(s"Illegal PrgFile operation: $x")
+}
+\end{lstlisting}
+As a test, prepare a file \lstinline!config.txt! containing the text
+\lstinline!version = 1! and a file \lstinline!config_location.txt!
+containing the text \lstinline!config.txt!. Then we can run the DSL
+program and get the result:
+\begin{lstlisting}
+scala> run(prgFile)
+res2: String = "version = 1"
+\end{lstlisting}
+
+
+\subsection{Step 2: implementing type safety in the DSLs}
+
+The two DSLs defined in the previous section have an important shortcoming:
+they are not type-checked at compile time. This becomes clear by looking
+at the DSL program \lstinline!prgFile! shown above. The \lstinline!run!
+function assumes that the \lstinline!Read! operation is always applied
+to a \lstinline!Path!, but this is not enforced by the DSL. By mistake,
+one could create an invalid DSL program such as \lstinline!Read(Read(Literal("file")))!
+where the \lstinline!Read! operation is used incorrectly. Such mistakes
+could be made when combining a larger DSL program from separately
+defined parts. Running this program causes a run-time error:
+\begin{lstlisting}
+scala> run(Read(Read(Literal("file"))))
+java.lang.Exception: Illegal PrgFile operation: Read(Read(Literal(file)))
+\end{lstlisting}
+The Scala compiler cannot check that we are using the DSL correctly,
+because all DSL values are of the same type (\lstinline!PrgFile!)
+regardless of their intended meaning. It would be better if the DSL
+program \lstinline!Read(Read(Literal("file")))! failed to compile.
+To achieve that, we need to have different Scala types for DSL programs
+returning a \lstinline!String! and a \lstinline!Path!. So, let us
+replace the type \lstinline!PrgFile! by the type constructor \lstinline!PrgFile[A]!,
+representing a DSL program that returns a value of type \lstinline!A!
+when we run it:
+\begin{lstlisting}
+import java.nio.file.{Path => JPath}
+import java.nio.file.{Files, Paths}
+sealed trait PrgFile[A]
+final case class Literal(s: String) extends PrgFile[String]
+final case class Path(p: PrgFile[String]) extends PrgFile[JPath]
+final case class Read(p: PrgFile[JPath]) extends PrgFile[String]
+
+def run[A]: PrgFile[A] => A = {
+  case Literal(s) => s
+  case Path(p) => Paths.get(run(p))
+  case Read(p) => new String(Files.readAllBytes(run(p)))
+}
+\end{lstlisting}
+Our example DSL is type-safe now, and invalid programs are rejected
+at compile time:
+\begin{lstlisting}
+val prgFile: PrgFile[String] = Read(Path(Read(Path(Literal("config_location.txt")))))
+
+scala> run(prgFile)
+res2: String = "version = 1"
+
+scala> run(Read(Read(Literal("file"))))
+type mismatch;
+ found   : Literal
+ required: PrgFile[java.nio.file.Path]
+val res3 = run(Read(Read(Literal("file"))))
+                                ^
+Compilation Failed 
+\end{lstlisting}
+
+
+\subsection{Step 3: implementing bound variables}
+
+Another limitation of our DSLs is that they cannot define and use
+new variables within a DSL program. We also cannot use any non-DSL
+code (such as a numerical algorithms library for complex numbers,
+a library for file manipulation, or any other Scala code). 
+
+Both of these limitations would be removed if the DSL could support
+defining a \emph{new Scala variable} and setting it to a value computed
+within the DSL. Let us see how this feature may be implemented.
+
+As an example, consider the task of reading a file if it exists, and
+reporting an error otherwise. A direct code for this computation would
+look like this:
+\begin{lstlisting}
+val p = Paths.get("config.txt")
+val result = if (Files.exists(p)) new String(Files.readAllBytes(p)) else "File not found"
+\end{lstlisting}
+Trying to translate the above code to the \lstinline!PrgFile! DSL,
+we find that we need to set the Scala variable \lstinline!p! to the
+path computed by a previous operation. Here is a first attempt:
+\begin{lstlisting}
+val p: JPath = run(Path(Literal("config.txt")))
+val prg: PrgFile[String] = if (Files.exists(p)) Read(p) else Literal("File not found")
+\end{lstlisting}
+There are two problems with this code. First, the code \lstinline!Read(p)!
+does not compile because the argument of \lstinline!Read! should
+be a \lstinline!PrgFile[JPath]! rather than just a \lstinline!JPath!.
+Second, we use \lstinline!run! in the middle of the program. We cannot
+translate that into the DSL because the \lstinline!run! function
+needs to be kept out of the DSL. (For instance, we should be able
+to run the same code through different \lstinline!run! functions.)
+
+The first problem is solved if we generalize the \lstinline!Literal!
+class to hold values of arbitrary type:
+\begin{lstlisting}
+final case class Literal[A](a: A) extends PrgFile[A]
+\end{lstlisting}
+We replace \lstinline!Read(p)! by \lstinline!Read(Literal(p))! in
+the code above. The code of \lstinline!run! remains unchanged.
+
+To solve the second problem, we need to introduce a new DSL command
+that binds Scala variables. A standard way of creating \index{bound variable}bound
+variables is by using those variables as arguments of nameless functions.
+So, let us consider the nameless function
+\begin{lstlisting}
+p => if (Files.exists(p)) Read(Literal(p)) else Literal("File not found")
+\end{lstlisting}
+This function binds the variable \lstinline!p! and uses it directly
+in an expression of type \lstinline!PrgFile[String]!. We can call
+this function at the time when the entire DSL program is run. So,
+we can postpone the \lstinline!run! call in the code \lstinline!val p = run(...)!
+and instead introduce a new DSL operation that we will call \lstinline!Bind!.
+The above code (that computed \lstinline!p! and \lstinline!prg!)
+is replaced by:
+\begin{lstlisting}
+val q: PrgFile[JPath] = Path(Literal("config.txt"))
+val prg: PrgFile[String] = Bind(q, p => if (Files.exists(p)) Read(p) else Literal("File not found"))
+\end{lstlisting}
+Here, the case class \lstinline!Bind! has two parts: a value of type
+\lstinline!PrgFile[JPath]! and a function of type \lstinline!JPath => PrgFile[String]!.
+In a different DSL program, we may need different types instead of
+\lstinline!JPath! and \lstinline!String!. So, let us replace those
+types by type parameters \lstinline!A! and \lstinline!B!. Note that
+the resulting type is \lstinline!PrgFile[B]!:
+\begin{lstlisting}
+final case class Bind[A, B](pa: PrgFile[A], f: A => PrgFile[B]) extends PrgFile[B]
+\end{lstlisting}
+
+After adding some code to the runner to handle \lstinline!Bind!,
+the implementation of the DSL becomes:
+\begin{lstlisting}
+sealed trait PrgFile[A]
+final case class Literal[A](a: A) extends PrgFile[A]
+final case class Bind[A, B](pa: PrgFile[A], f: A => PrgFile[B]) extends PrgFile[B]
+final case class Path(p: PrgFile[String]) extends PrgFile[JPath]
+final case class Read(p: PrgFile[JPath]) extends PrgFile[String]
+
+def run[A]: PrgFile[A] => A = {
+  case Literal(a)    => a
+  case Bind(pa, f)   => f(run(pa))
+  case Path(p)       => Paths.get(run(p))
+  case Read(p)       => new String(Files.readAllBytes(run(p)))
+}
+\end{lstlisting}
+
+The new \lstinline!Bind! operation allows us to implement a part
+of the DSL program as a Scala function that depends on the result
+computed by another part of the DSL program. Since \lstinline!Bind!
+contains an arbitrary Scala function (of type \lstinline!A => PrgFile[B]!),
+we can now use non-DSL code as part of a DSL program, as long as it
+is enclosed inside a \lstinline!Bind!.
+
+\subsection{Step 4: arriving at a monadic DSL}
+
+The type signatures of \lstinline!Bind! and \lstinline!Literal!
+are the same as those of \lstinline!flatMap! and \lstinline!pure!
+methods of a monad. For convenience, let us define those methods for
+the \lstinline!PrgFile! class:
+\begin{lstlisting}
+sealed trait PrgFile[A] {
+  def flatMap[B](f: A => Prg[B]): Prg[B] = Bind(this, f)
+  def map[B](f: A => B): PrgFile[B] = Bind(this, f andThen PrgFile.pure)
+}
+object PrgFile {
+  def pure[A]: A => PrgFile[A] = Literal.apply 
+}
+\end{lstlisting}
+Here, we defined the \lstinline!map! method through \lstinline!flatMap!
+by analogy with the right identity law of monads.
+
+Just like other DSL operations, the \lstinline!flatMap! and \lstinline!pure!
+methods do not run or evaluate any parts of the DSL program. They
+merely create some nested data structures containing not-yet-called
+functions. The necessary logic will be executed only when the \lstinline!run!
+method is invoked to convert the entire DSL program to a result value.
+
+Nevertheless, DSL programs can now be written as functor blocks:
+\begin{lstlisting}
+val prg: PrgFile[String] = for {
+  p <- Path(Literal("config.txt"))
+  r <- if (Files.exists(p)) Read(p) else Literal("File not found")
+} yield r
+\end{lstlisting}
+Longer DSL programs may be composed from shorter ones:
+\begin{lstlisting}
+def readPath(filename: String): PrgFile[String] = for {
+  path <- Path(Literal(filename))
+  text <- if (Files.exists(path)) Read(path) else Literal("File not found")
+} yield text
+
+val prg2: PrgFile[String] = for {
+  str <- readPath("config.txt")
+  result <- if (str.nonEmpty) readPath(str) else PrgFile.pure("Error: empty filename")
+} yield result
+\end{lstlisting}
+
+
+\subsection{Step 5: refactoring to reuse common code}
+
+Let us recall our first example (a DSL for complex numbers) and rewrite
+it in a similar way:
+\begin{lstlisting}
+sealed trait PrgComplex[A]
+final case class Literal[A](a: A) extends PrgComplex[A]
+final case class Bind[A, B](pa: PrgComplex[A], f: A => PrgComplex[B]) extends PrgComplex[B]
+final case class Add(x: PrgComplex[Complex], y: PrgComplex[Complex]) extends PrgComplex[Complex]
+final case class Mul(x: PrgComplex[Complex], y: PrgComplex[Complex]) extends PrgComplex[Complex]
+final case class Conj(x: PrgComplex[Complex]) extends PrgComplex[Complex]
+
+def run[A]: PrgComplex[A] => A = {
+  case Literal(a)    => a
+  case Bind(pa, f)   => f(run(pa))
+  case Add(p1, p2)   => run(p1) + run(p2)
+  case Mul(p1, p2)   => run(p1) * run(p2)
+  case Conj(p)       => run(p).conj
+}
+\end{lstlisting}
+
+Comparing the code of \lstinline!PrgFile! and \lstinline!PrgComplex!,
+we notice that the the \lstinline!Literal! and \lstinline!Bind!
+operations are implemented in the same way. The differences are in
+the code for file-specific and complex number-specific operations.
+So, let us refactor the code so that the domain-specific operations
+are separated in a
+
+{*}{*}{*}is it Ops(f: F{[}A{]}) and why not Ops(f: F{[}Prg{[}A{]}{]})???
+What about the complex-numbers example?
 
 \texttt{\textcolor{blue}{\footnotesize{}sealed trait Prg{[}A{]} \{
 def flatMap ... \}}}\textcolor{darkgray}{\footnotesize{} // no code
@@ -333,8 +399,7 @@ A{]}): A = ...}}{\footnotesize\par}
 The constructor \texttt{\textcolor{blue}{\footnotesize{}DSL{[}F{[}\_{]},
 A{]}}} is called a \textbf{free monad} over \texttt{\textcolor{blue}{\footnotesize{}F}} 
 
-
-\paragraph{The interpreter pattern VII. Handling errors}
+\subsection{Interpreting a DSL: handling errors}
 
 To handle errors, we want to evaluate \texttt{\textcolor{blue}{\footnotesize{}DSL{[}F{[}\_{]},
 A{]}}} to \texttt{\textcolor{blue}{\footnotesize{}Either{[}Err, A{]}}} 
@@ -385,6 +450,7 @@ $\text{ex}^{X}:F^{X}\rightarrow M^{X}$
 Run the program with the extractor: \texttt{\textcolor{blue}{\footnotesize{}run(ex)(prg)}};
 get a value $M^{A}$
 
+\section{Slides}
 
 \paragraph{The interpreter pattern VIII. Monadic DSLs: summary}
 
@@ -472,6 +538,7 @@ Peyton Jones.)}
 
 \paragraph{Free constructions in mathematics: Example I}
 
+\begin{comment}
 Consider the Russian letter \foreignlanguage{russian}{\textcyr{\cyrc}}
 (ts\`{e}) and the Chinese word \shui~(shu\textipa{\v i})
 
@@ -510,6 +577,7 @@ Implement the operation $a\cdot b$ as pair constructor (easy)
 \textbf{Reduced encoding}, as a \textsf{``}smart\textsf{''} structure: List(\shui,\shui,\foreignlanguage{russian}{\textcyr{\cyrc}},\shui,\foreignlanguage{russian}{\textcyr{\cyrc}})
 
 Implement $a\cdot b$ by concatenating the lists (more expensive)
+\end{comment}
 
 
 \paragraph{Free constructions in mathematics: Example II}
@@ -1575,19 +1643,27 @@ branch, each \texttt{\textcolor{blue}{\footnotesize{}flatMap}} creates
 sequential chain
 
 
-\subsection{Exercises\index{exercises}}
+\subsection{Exercises}
 
 \subsubsection{Exercise \label{subsec:Exercise-free-monad-example}\ref{subsec:Exercise-free-monad-example}\index{exercises}}
 
 The \textbf{interactive input-output}\index{monads!interactive input-output monad}
 monad is defined recursively by
+\begin{lstlisting}
+sealed trait TIO[A]
+final case class Pure[A](a: A) extends TIO[A]
+final case class Read[A](read: P => TIO[A]) extends TIO[A]
+final case class Write[A](output: Q, next: TIO[A]) extends TIO[A]
+\end{lstlisting}
+or, in the type notation:
 \[
 T^{A}\triangleq A+(P\rightarrow T^{A})+Q\times T^{A}\quad,
 \]
 where $P$ and $Q$ are fixed types. (The monad $T$ represents computations
 that may consume an input value of type $P$ or produce an output
 value of type $Q$.) Show that $T$ is a lawful monad by reducing
-$T$ to a free monad construction.
+$T$ to a free monad construction. Implement a monad instance for
+\lstinline!TIO[A]!.
 
 \subsubsection{Exercise \label{subsec:Exercise-free-type-1}\ref{subsec:Exercise-free-type-1}}
 
