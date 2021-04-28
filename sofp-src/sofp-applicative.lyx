@@ -7023,6 +7023,84 @@ fold fusion
 \end_layout
 
 \begin_layout Standard
+The 
+\begin_inset Quotes eld
+\end_inset
+
+applicative fold fusion
+\begin_inset Quotes erd
+\end_inset
+
+ as defined in the previous section works by combining the results of independen
+t folding operations.
+ For instance, the definition 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+average = sum / length
+\end_layout
+
+\end_inset
+
+ uses 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+sum
+\end_layout
+
+\end_inset
+
+ and 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+length
+\end_layout
+
+\end_inset
+
+ as independent folding operations (the results computed by 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+sum
+\end_layout
+
+\end_inset
+
+ do not depend on the results of 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+length
+\end_layout
+
+\end_inset
+
+).
+ The independence of effects is a defining feature of applicative composition.
+ In contrast, monadic composition supports effects that may depend on previously
+ computed values.
+ To illustrate this contrast, let us implement monadic fold fusion.
+\end_layout
+
+\begin_layout Standard
 The type constructor 
 \begin_inset listings
 inline true
@@ -7035,7 +7113,8 @@ FoldOp[Z, R, A]
 
 \end_inset
 
- also supports a 
+ can be a monad only if it is covariant.
+ So, a 
 \begin_inset listings
 inline true
 status open
@@ -7047,7 +7126,7 @@ flatMap
 
 \end_inset
 
- method with respect to the type parameter 
+ method must operate on the type parameter 
 \begin_inset listings
 inline true
 status open
@@ -7060,7 +7139,70 @@ A
 \end_inset
 
 .
- The type signature of 
+ We begin writing the type signature as:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+def flatMap[Z, R, S, A, B](op: FoldOp[Z, R, A])(f: A => FoldOp[Z, S, B]):
+ FoldOp[Z, ???]
+\end_layout
+
+\end_inset
+
+One folding operation (
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+op
+\end_layout
+
+\end_inset
+
+) will compute values of type 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+A
+\end_layout
+
+\end_inset
+
+.
+ At each step, we will apply the given function 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+f
+\end_layout
+
+\end_inset
+
+ to that value and obtain a new folding operation (of type 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+FoldOp[Z, S, B]
+\end_layout
+
+\end_inset
+
+) that also needs to be evaluated.
+ Since 
 \begin_inset listings
 inline true
 status open
@@ -7072,7 +7214,8 @@ flatMap
 
 \end_inset
 
- needs to have a combined accumulated state type 
+ will need to run two folding operations in one traversal, it must maintain
+ a combined accumulated state of type 
 \begin_inset listings
 inline true
 status open
@@ -7084,7 +7227,34 @@ status open
 
 \end_inset
 
-:
+.
+ So, the type signature of 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+flatMap
+\end_layout
+
+\end_inset
+
+ needs to accommodate the change of that type (just as the type signature
+ of map2 as we have seen in the previous section).
+ For convenience, we define 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+flatMap
+\end_layout
+
+\end_inset
+
+ as an extension method: 
 \begin_inset listings
 inline false
 status open
@@ -7118,7 +7288,7 @@ op1.flatMap(x => op2(x))
 
 \end_inset
 
- is a folding operation that combines 
+ must be a folding operation that combines 
 \begin_inset listings
 inline true
 status open
@@ -7142,7 +7312,7 @@ op2
 
 \end_inset
 
-, taking into account that the definition of 
+ and supports having a definition of 
 \begin_inset listings
 inline true
 status open
@@ -7154,14 +7324,14 @@ op2(x)
 
 \end_inset
 
- may depend in some way on the intermediate results (
+ that depends on the intermediate result (
 \begin_inset listings
 inline true
 status open
 
 \begin_layout Plain Layout
 
-x
+x: A
 \end_layout
 
 \end_inset
@@ -7288,8 +7458,12 @@ implicit class FoldFlatMap[Z, R, A](op: FoldOp[Z, R, A]) {
 
 \end_inset
 
-In line 7 of this code, we have a choice of using the old accumulated value
- (
+
+\end_layout
+
+\begin_layout Standard
+In line 7 of the code above, we have a choice of using the old accumulated
+ value (
 \begin_inset listings
 inline true
 status open
@@ -7379,7 +7553,7 @@ status open
 
 \begin_layout Plain Layout
 
-def sum(x: Double) = FoldOp[Double, Double, Double](0, (a, _) => a + x,
+def add(x: Double) = FoldOp[Double, Double, Double](0, (a, _) => a + x,
  identity)
 \end_layout
 
@@ -7389,7 +7563,7 @@ def sum(x: Double) = FoldOp[Double, Double, Double](0, (a, _) => a + x,
 
 \begin_layout Plain Layout
 
-scala> (0 to 10).toList.map(_.toDouble).runScan(average.flatMap(x => sum(x) /
+scala> (0 to 10).toList.map(_.toDouble).runScan(average.flatMap(x => add(x) /
  length))
 \end_layout
 
@@ -7400,7 +7574,7 @@ res4: List[Double] = List(1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, 3.25)
 
 \end_inset
 
-The code can be written as a functor block, making it more visually clear:
+The code can be rewritten as a functor block, making it more visually clear:
 \begin_inset listings
 inline false
 status open
@@ -7417,7 +7591,7 @@ val average2a = for {
 
 \begin_layout Plain Layout
 
-      accum <- sum(x)
+      accum <- add(x)
 \end_layout
 
 \begin_layout Plain Layout
@@ -7446,36 +7620,295 @@ res5: List[Double] = List(1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, 3.25)
 
 \end_inset
 
+We get the same result as when applying 
+\begin_inset listings
+inline true
+status open
 
+\begin_layout Plain Layout
+
+runScan(average)
+\end_layout
+
+\end_inset
+
+ twice.
+ The result would not be the same if we used the old value (
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+r
+\end_layout
+
+\end_inset
+
+) in line 7 in the definition of 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+flatMap
+\end_layout
+
+\end_inset
+
+ above.
 \end_layout
 
 \begin_layout Standard
-define monadic folds using the 
+The 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+flatMap
+\end_layout
+
+\end_inset
+
+ function implements a monadic fusion of folding operations.
+\begin_inset Foot
+status open
+
+\begin_layout Plain Layout
+The 
 \begin_inset Quotes eld
 \end_inset
 
-free functor
+
+\family typewriter
+origami
+\family default
+
 \begin_inset Quotes erd
 \end_inset
 
- construction
-\end_layout
+ library (see 
+\family typewriter
 
-\begin_layout Standard
-do not confuse this with 
-\emph on
-monad-valued
-\emph default
- folds (
 \begin_inset CommandInset href
 LatexCommand href
-name "origami"
 target "https://github.com/atnos-org/origami"
 literal "false"
 
 \end_inset
 
-)!
+
+\family default
+) implements a more general functionality: the values computed by its folding
+ operations are themselves of monadic type.
+ This is similar to using 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+FoldOp[Z, R, M[A]]
+\end_layout
+
+\end_inset
+
+ where 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+M
+\end_layout
+
+\end_inset
+
+ is a monad and the updater function has type 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+(R, Z) => M[R]
+\end_layout
+
+\end_inset
+
+.
+\end_layout
+
+\end_inset
+
+ It is interesting to note that the monadic fold fusion is compatible with
+ the applicative fold fusion.
+ For instance, one could define 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+average
+\end_layout
+
+\end_inset
+
+ equivalently as:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+val average = for {
+\end_layout
+
+\begin_layout Plain Layout
+
+  acc <- sum
+\end_layout
+
+\begin_layout Plain Layout
+
+  n <- length
+\end_layout
+
+\begin_layout Plain Layout
+
+} yield acc / n
+\end_layout
+
+\end_inset
+
+This equivalence comes from the fact that the case class 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+FoldOp[Z, R, A]
+\end_layout
+
+\end_inset
+
+ depends on 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+A
+\end_layout
+
+\end_inset
+
+ only through the 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+transform
+\end_layout
+
+\end_inset
+
+ value, which is of type 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+R => A
+\end_layout
+
+\end_inset
+
+.
+ So, the monadic behavior of 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+FoldOp[Z, R, A]
+\end_layout
+
+\end_inset
+
+ with respect to 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+A
+\end_layout
+
+\end_inset
+
+ is similar to that of the 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Reader
+\end_layout
+
+\end_inset
+
+ monad of type 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+R => A
+\end_layout
+
+\end_inset
+
+.
+ As in the 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Reader
+\end_layout
+
+\end_inset
+
+ monad, the effects of the 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+FoldOp
+\end_layout
+
+\end_inset
+
+ monad are independent.
 \end_layout
 
 \begin_layout Subsection
