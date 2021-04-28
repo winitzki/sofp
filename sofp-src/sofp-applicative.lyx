@@ -5452,7 +5452,7 @@ Single-traversal
 \family typewriter
 fold
 \family default
- operations.
+ operations II.
  Applicative 
 \begin_inset Quotes eld
 \end_inset
@@ -6348,10 +6348,6 @@ val length = ...
 
 \begin_layout Plain Layout
 
-\end_layout
-
-\begin_layout Plain Layout
-
 Seq(1.0, 2.0, 3.0).runFold(sum / length)    // Should return `2.0` here.
 \end_layout
 
@@ -6678,7 +6674,7 @@ other)(_ / _)
 \end_layout
 
 \begin_layout Standard
-After these definitions, the code shown above will work:
+After these definitions, the following code will work:
 \begin_inset listings
 inline false
 status open
@@ -6737,7 +6733,7 @@ map2
 
 \end_inset
 
- are more complicated than usual: the accumulated state's type (
+ are different from the usual ones: the accumulated state's type (
 \begin_inset listings
 inline true
 status open
@@ -6762,8 +6758,251 @@ status open
 \end_inset
 
 .
- However, these type transformations are automatic.
- The programmer's code does not need to annotate those types.
+ However, these types are automatically inferred by the Scala compiler,
+ and the programmer's code does not need to annotate those types.
+\end_layout
+
+\begin_layout Standard
+The standard 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+scanLeft
+\end_layout
+
+\end_inset
+
+ method is similar to 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+foldLeft
+\end_layout
+
+\end_inset
+
+ except it outputs all intermediate accumulated states (while 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+foldLeft
+\end_layout
+
+\end_inset
+
+ outputs only the last one).
+ Can we merge several 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+scanLeft
+\end_layout
+
+\end_inset
+
+ operations into a single traversal? Since the type signature of 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+scanLeft
+\end_layout
+
+\end_inset
+
+ is the same as that of 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+foldLeft
+\end_layout
+
+\end_inset
+
+ except for the return type, the 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+FoldOp
+\end_layout
+
+\end_inset
+
+ data structure already stores the information needed to run 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+scanLeft
+\end_layout
+
+\end_inset
+
+.
+ The code for a corresponding runner is:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+implicit class FoldOpScan[Z](zs: Seq[Z]) {
+\end_layout
+
+\begin_layout Plain Layout
+
+ def runScan[R,A](op: FoldOp[Z,R,A]): Seq[A] = zs.scanLeft(op.init)(op.update).map(o
+p.transform).tail
+\end_layout
+
+\begin_layout Plain Layout
+
+}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+As an example of using the new functionality, consider the task of computing
+ the running average of a sequence.
+ A running average could be computed from the beginning of the sequence:
+\begin_inset Formula 
+\[
+\text{ave}_{k}\triangleq\frac{1}{k}\sum_{i=0}^{k-1}s_{i}\quad.
+\]
+
+\end_inset
+
+The folding operation for this average is defined by
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+val average = sum / length
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Another task is to compute the average over a sliding window of a fixed
+ size (
+\begin_inset Formula $n$
+\end_inset
+
+):
+\begin_inset Formula 
+\[
+\text{ave}_{n,k}\triangleq\frac{1}{n}\sum_{i=k-n}^{k-1}s_{i}\quad.
+\]
+
+\end_inset
+
+To implement this, we first create a sliding window as a folding operation
+ and then apply averaging:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+def window[A](n: Int): FoldOp[A, IndexedSeq[A], IndexedSeq[A]] = FoldOp(init
+ = Vector(),
+\end_layout
+
+\begin_layout Plain Layout
+
+  update = { (window, x) => (if (window.size < n) window else window.drop(1))
+ :+ x }, identity)
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+def window_average(n: Int) = window[Double](n).map(_.sum / n)
+\end_layout
+
+\end_inset
+
+To test that the averaging operations work as expected:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+scala> (0 to 10).map(_.toDouble).runFold(average)
+\end_layout
+
+\begin_layout Plain Layout
+
+res0: Double = 5.0
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+scala> (0 to 10).map(_.toDouble).runScan(average)
+\end_layout
+
+\begin_layout Plain Layout
+
+res1: Vector[Double] = Vector(0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0)
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+scala> (0 to 10).map(_.toDouble).runScan(window_average(3))
+\end_layout
+
+\begin_layout Plain Layout
+
+res2: Vector[Double] = Vector(0.0, 0.3333333333333333, 1.0, 2.0, 3.0, 4.0, 5.0,
+ 6.0, 7.0, 8.0, 9.0)
+\end_layout
+
+\end_inset
+
+
 \end_layout
 
 \begin_layout Subsection
@@ -6771,7 +7010,7 @@ Single-traversal
 \family typewriter
 fold
 \family default
- operations.
+ operations II.
  Monadic 
 \begin_inset Quotes eld
 \end_inset
@@ -6833,14 +7072,14 @@ flatMap
 
 \end_inset
 
- needs to be modified and becomes similar to that of 
+ needs to have a combined accumulated state type 
 \begin_inset listings
 inline true
 status open
 
 \begin_layout Plain Layout
 
-map2
+(R, S)
 \end_layout
 
 \end_inset
@@ -6852,17 +7091,362 @@ status open
 
 \begin_layout Plain Layout
 
-a
+implicit class FoldFlatMap[Z, R, A](op: FoldOp[Z, R, A]) {
+\end_layout
+
+\begin_layout Plain Layout
+
+  def flatMap[S, B](f: A => FoldOp[Z, S, B]): FoldOp[Z, (R, S), B] = ???
+\end_layout
+
+\begin_layout Plain Layout
+
+}
 \end_layout
 
 \end_inset
 
- and .
- ***
+The result of 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+op1.flatMap(x => op2(x))
+\end_layout
+
+\end_inset
+
+ is a folding operation that combines 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+op1
+\end_layout
+
+\end_inset
+
+ and 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+op2
+\end_layout
+
+\end_inset
+
+, taking into account that the definition of 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+op2(x)
+\end_layout
+
+\end_inset
+
+ may depend in some way on the intermediate results (
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+x
+\end_layout
+
+\end_inset
+
+) of running 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+op1
+\end_layout
+
+\end_inset
+
+.
+ To achieve that, we impement 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+flatMap
+\end_layout
+
+\end_inset
+
+ like this:
+\begin_inset listings
+lstparams "numbers=left"
+inline false
+status open
+
+\begin_layout Plain Layout
+
+implicit class FoldFlatMap[Z, R, A](op: FoldOp[Z, R, A]) {
+\end_layout
+
+\begin_layout Plain Layout
+
+   def flatMap[S, B](f: A => FoldOp[Z, S, B]): FoldOp[Z, (R, S), B] = {
+\end_layout
+
+\begin_layout Plain Layout
+
+      // Create a new `FoldOp()` value.
+ We need `init`, `update`, and `transform`.
+\end_layout
+
+\begin_layout Plain Layout
+
+      val init: (R, S) = (op.init, f(op.transform(op.init)).init) // Use `init`
+ from both operations.
+\end_layout
+
+\begin_layout Plain Layout
+
+      val update: ((R, S), Z) => (R, S) = { case ((r, s), z) =>   // Run
+ both `update` functions.
+\end_layout
+
+\begin_layout Plain Layout
+
+          val newR = op.update(r, z)
+\end_layout
+
+\begin_layout Plain Layout
+
+          val newOp: FoldOp[Z, S, B] = f(op.transform(newR))      // We may
+ use `newR` or `r` here!
+\end_layout
+
+\begin_layout Plain Layout
+
+          val newS = newOp.update(s, z)
+\end_layout
+
+\begin_layout Plain Layout
+
+          (newR, newS)
+\end_layout
+
+\begin_layout Plain Layout
+
+      }
+\end_layout
+
+\begin_layout Plain Layout
+
+      val transform: ((R, S)) => B = { case (r, s) =>
+\end_layout
+
+\begin_layout Plain Layout
+
+          val newOp: FoldOp[Z, S, B] = f(op.transform(r))
+\end_layout
+
+\begin_layout Plain Layout
+
+          newOp.transform(s)
+\end_layout
+
+\begin_layout Plain Layout
+
+      }
+\end_layout
+
+\begin_layout Plain Layout
+
+      FoldOp(init, update, transform)
+\end_layout
+
+\begin_layout Plain Layout
+
+  }
+\end_layout
+
+\begin_layout Plain Layout
+
+}
+\end_layout
+
+\end_inset
+
+In line 7 of this code, we have a choice of using the old accumulated value
+ (
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+r
+\end_layout
+
+\end_inset
+
+) or the updated value (
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+newR
+\end_layout
+
+\end_inset
+
+) inside 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+op.transform(...)
+\end_layout
+
+\end_inset
+
+.
+ It appears to be better to use the updated value (
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+newR
+\end_layout
+
+\end_inset
+
+).
+ 
 \end_layout
 
 \begin_layout Standard
-The difference between applicative and monadic functors
+To motivate this choice, consider a running average operation applied twice:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+scala> (0 to 10).toList.map(_.toDouble).runScan(average).runScan(average)
+\end_layout
+
+\begin_layout Plain Layout
+
+res3: List[Double] = List(1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, 3.25)
+\end_layout
+
+\end_inset
+
+Using 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+flatMap
+\end_layout
+
+\end_inset
+
+, we can express the same computation as a single folding operation:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+def sum(x: Double) = FoldOp[Double, Double, Double](0, (a, _) => a + x,
+ identity)
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+scala> (0 to 10).toList.map(_.toDouble).runScan(average.flatMap(x => sum(x) /
+ length))
+\end_layout
+
+\begin_layout Plain Layout
+
+res4: List[Double] = List(1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, 3.25)
+\end_layout
+
+\end_inset
+
+The code can be written as a functor block, making it more visually clear:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+val average2a = for {
+\end_layout
+
+\begin_layout Plain Layout
+
+      x <- average
+\end_layout
+
+\begin_layout Plain Layout
+
+      accum <- sum(x)
+\end_layout
+
+\begin_layout Plain Layout
+
+      n <- length
+\end_layout
+
+\begin_layout Plain Layout
+
+} yield accum / n
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+scala> (0 to 10).toList.map(_.toDouble).runScan(average2a)
+\end_layout
+
+\begin_layout Plain Layout
+
+res5: List[Double] = List(1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, 3.25)
+\end_layout
+
+\end_inset
+
+
 \end_layout
 
 \begin_layout Standard
@@ -6875,10 +7459,6 @@ free functor
 \end_inset
 
  construction
-\end_layout
-
-\begin_layout Standard
-compute running averages that depend on previous running averages
 \end_layout
 
 \begin_layout Standard
