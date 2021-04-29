@@ -6898,9 +6898,9 @@ As an example of using the new functionality, consider the task of computing
 
 \end_inset
 
-The folding operation for this average is defined by
+The code 
 \begin_inset listings
-inline false
+inline true
 status open
 
 \begin_layout Plain Layout
@@ -6910,7 +6910,7 @@ val average = sum / length
 
 \end_inset
 
-
+ implements a folding operation computing this average.
 \end_layout
 
 \begin_layout Standard
@@ -7896,7 +7896,7 @@ Reader
 
 \end_inset
 
- monad, the effects of the 
+ monad, the effects in the 
 \begin_inset listings
 inline true
 status open
@@ -7912,15 +7912,261 @@ FoldOp
 \end_layout
 
 \begin_layout Subsection
-Parsing with applicative functors
+Parsing with applicative and monadic functors
 \end_layout
 
 \begin_layout Standard
-applicative parsers vs.
-\begin_inset space \space{}
+Applicative functors are used for implementing parsers via the 
+\begin_inset Quotes eld
 \end_inset
 
-monadic parsers
+parser combinator
+\begin_inset Quotes erd
+\end_inset
+
+ technique.
+ In this technique, the programmer creates a large parser out of smaller
+ ones by using different functions that combine small parsers repeatedly.
+ We will now look at applicative parser combinators and compare them with
+ monadic ones.
+\end_layout
+
+\begin_layout Standard
+The running example in this section is a toy language that encodes positive
+ integers and square roots in an XML-like format.
+ Valid strings in this language are 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+123
+\end_layout
+
+\end_inset
+
+, 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+<sqrt>121</sqrt>
+\end_layout
+
+\end_inset
+
+, and 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+<sqrt><sqrt>10000</sqrt></sqrt>
+\end_layout
+
+\end_inset
+
+.
+ The result of parsing must be the resulting number.
+ Examples of invalid strings are 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+<sqrt>121<sqrt>
+\end_layout
+
+\end_inset
+
+ (tag not closed), 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+</sqrt>10</sqrt>
+\end_layout
+
+\end_inset
+
+ (tag not opened), and 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+<sqrt>100</sqrt></sqrt>
+\end_layout
+
+\end_inset
+
+ (junk at end of text).
+ We would like the parser to output the corresponding error messages.
+\end_layout
+
+\begin_layout Standard
+To simplify the code, we define a parser as a function taking an input string
+ and returning either a value of some type (the value 
+\begin_inset Quotes eld
+\end_inset
+
+parsed out
+\begin_inset Quotes erd
+\end_inset
+
+ of the input) or some error information.
+ The parser also returns the unused part of the input string.
+ So, we define the type constructor 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+P[A]
+\end_layout
+
+\end_inset
+
+ by:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+type P[A] = String => (Either[Err, A], String) // A parser that may extract
+ values of type A.
+\end_layout
+
+\begin_layout Plain Layout
+
+type Err = List[String]  // A list of error messages.
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+In order to parse the toy language, we need to be able to parse integers,
+ opening tags, closing tags, and detect whether the end of input occurs
+ at a point where all tags are balanced.
+ The parser combinator technique begins by defining the simplest necessary
+ parsers.
+ These are: a parser for integers; a parser that consumes a given prefix
+ in the input string; a parser that succeeds only if the input string is
+ empty; and a parser that succeeds only if the input string is 
+\emph on
+non
+\emph default
+-empty but otherwise does not consume any input:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+val intP: P[Int] = { 
+\end_layout
+
+\begin_layout Plain Layout
+
+  val numRegex = "^([0-9]+)(.*)$".r
+\end_layout
+
+\begin_layout Plain Layout
+
+  s => s match {
+\end_layout
+
+\begin_layout Plain Layout
+
+    case numRegex(num, rest) => (Right(num.toInt), rest)
+\end_layout
+
+\begin_layout Plain Layout
+
+    case s => (Left(NoNumber), s)
+\end_layout
+
+\begin_layout Plain Layout
+
+  } 
+\end_layout
+
+\begin_layout Plain Layout
+
+}
+\end_layout
+
+\begin_layout Plain Layout
+
+def constP(prefix: String): P[String] = { s =>
+\end_layout
+
+\begin_layout Plain Layout
+
+  if (s startsWith prefix) (Right(prefix), s.stripPrefix(prefix)) else (Left(
+\begin_inset Quotes eld
+\end_inset
+
+no prefix
+\begin_inset Quotes erd
+\end_inset
+
+), s)
+\end_layout
+
+\begin_layout Plain Layout
+
+}
+\end_layout
+
+\begin_layout Plain Layout
+
+val emptyP: P[Unit] = { s => if (s.isEmpty) (Right(()), s) else (Left(
+\begin_inset Quotes eld
+\end_inset
+
+junk at end
+\begin_inset Quotes erd
+\end_inset
+
+), s) }
+\end_layout
+
+\begin_layout Plain Layout
+
+val nonemptyP: P[Unit] = { s => if (s.isEmpty) (Left(
+\begin_inset Quotes eld
+\end_inset
+
+no input
+\begin_inset Quotes erd
+\end_inset
+
+), s) else (Right(()), s) }
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+After tnis, we define combinators that produce larger parsers from smaller
+ ones.
+ ***
 \end_layout
 
 \begin_layout Standard
