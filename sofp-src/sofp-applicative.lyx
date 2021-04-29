@@ -7404,12 +7404,13 @@ implicit class FoldFlatMap[Z, R, A](op: FoldOp[Z, R, A]) {
 \begin_layout Plain Layout
 
       val update: ((R, S), Z) => (R, S) = { case ((r, s), z) =>   // Run
- both `update` functions.
+ both `update` functions:
 \end_layout
 
 \begin_layout Plain Layout
 
-          val newR = op.update(r, z)
+          val newR = op.update(r, z)                              // First
+ `update` function.
 \end_layout
 
 \begin_layout Plain Layout
@@ -7420,7 +7421,8 @@ implicit class FoldFlatMap[Z, R, A](op: FoldOp[Z, R, A]) {
 
 \begin_layout Plain Layout
 
-          val newS = newOp.update(s, z)
+          val newS = newOp.update(s, z)                           // Second
+ `update` function.
 \end_layout
 
 \begin_layout Plain Layout
@@ -7956,7 +7958,7 @@ FoldOp
 \end_layout
 
 \begin_layout Subsection
-Parsing with applicative and monadic functors
+Parsing with applicative and monadic combinators
 \end_layout
 
 \begin_layout Standard
@@ -7976,9 +7978,11 @@ parser combinator
 \end_layout
 
 \begin_layout Standard
-In this section, we will parse a toy language that encodes positive integers
- and square roots in an XML-like format.
- Valid strings in this language are 
+In this section, we will illustrate the parsing techniques on several toy
+ languages.
+ The first language encodes square roots of positive integers in an XML-like
+ format.
+ In this language, strings 
 \begin_inset listings
 inline true
 status open
@@ -8014,7 +8018,7 @@ status open
 
 \end_inset
 
-.
+ are valid.
  Examples of 
 \emph on
 invalid
@@ -8068,13 +8072,24 @@ status open
 \end_inset
 
  (not an integer).
- We would like the parser to output either an integer result or an error
- message.
+ The parser should output an integer result or an error message.
 \end_layout
 
 \begin_layout Standard
 To simplify the code, we define a parser as a function taking an input string
- and returning either a value of some type (the value 
+ and returning either a value of some type 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+A
+\end_layout
+
+\end_inset
+
+ (the value 
 \begin_inset Quotes eld
 \end_inset
 
@@ -8103,8 +8118,7 @@ status open
 
 \begin_layout Plain Layout
 
-type P[A] = String => (Either[Err, A], String) // A parser that may extract
- values of type A.
+final case class P[A](run: String => (Either[Err, A], String))
 \end_layout
 
 \begin_layout Plain Layout
@@ -8136,7 +8150,7 @@ status open
 
 \begin_layout Plain Layout
 
-val intP: P[Int] = { 
+val intP: P[Int] = P { 
 \end_layout
 
 \begin_layout Plain Layout
@@ -8151,12 +8165,20 @@ val intP: P[Int] = {
 
 \begin_layout Plain Layout
 
-    case numRegex(num, rest) => (Right(num.toInt), rest)
+    case numRegex(num, rest)   => (Right(num.toInt), rest)
 \end_layout
 
 \begin_layout Plain Layout
 
-    case s => (Left(NoNumber), s)
+    case s                     => (Left(List(
+\begin_inset Quotes eld
+\end_inset
+
+no number
+\begin_inset Quotes erd
+\end_inset
+
+)), s)
 \end_layout
 
 \begin_layout Plain Layout
@@ -8171,12 +8193,7 @@ val intP: P[Int] = {
 
 \begin_layout Plain Layout
 
-def constP(prefix: String): P[String] = { s =>
-\end_layout
-
-\begin_layout Plain Layout
-
-  if (s startsWith prefix) (Right(prefix), s.stripPrefix(prefix)) else (Left(
+def constP(prefix: String, error: String = 
 \begin_inset Quotes eld
 \end_inset
 
@@ -8184,7 +8201,13 @@ no prefix
 \begin_inset Quotes erd
 \end_inset
 
-), s)
+): P[String] = P { s =>
+\end_layout
+
+\begin_layout Plain Layout
+
+  if (s startsWith prefix) (Right(prefix), s.stripPrefix(prefix)) else (Left(List
+(error)), s)
 \end_layout
 
 \begin_layout Plain Layout
@@ -8194,7 +8217,7 @@ no prefix
 
 \begin_layout Plain Layout
 
-val emptyP: P[Unit] = { s => if (s.isEmpty) (Right(()), s) else (Left(
+val emptyP: P[Unit] = P { s => if (s.isEmpty) (Right(()), s) else (Left(List(
 \begin_inset Quotes eld
 \end_inset
 
@@ -8202,12 +8225,12 @@ junk at end
 \begin_inset Quotes erd
 \end_inset
 
-), s) }
+)), s) }
 \end_layout
 
 \begin_layout Plain Layout
 
-val nonemptyP: P[Unit] = { s => if (s.isEmpty) (Left(
+val nonemptyP: P[Unit] = P { s => if (s.isEmpty) (Left(List(
 \begin_inset Quotes eld
 \end_inset
 
@@ -8215,7 +8238,106 @@ no input
 \begin_inset Quotes erd
 \end_inset
 
-), s) else (Right(()), s) }
+)), s) else (Right(()), s) }
+\end_layout
+
+\end_inset
+
+Let us test that these parsers work as expected:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+scala> intP.run(
+\begin_inset Quotes eld
+\end_inset
+
+123xyz
+\begin_inset Quotes erd
+\end_inset
+
+)
+\end_layout
+
+\begin_layout Plain Layout
+
+res0: (Either[Err, Int], String) = (Right(123), "xyz")
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+scala> constP(
+\begin_inset Quotes eld
+\end_inset
+
+<sqrt>
+\begin_inset Quotes erd
+\end_inset
+
+).run(
+\begin_inset Quotes eld
+\end_inset
+
+<sqrt>1</sqrt>
+\begin_inset Quotes erd
+\end_inset
+
+)
+\end_layout
+
+\begin_layout Plain Layout
+
+res1: (Either[Err, String], String) = (Right("<sqrt>"), "1</sqrt>")
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+scala> emptyP.run(
+\begin_inset Quotes eld
+\end_inset
+
+abc
+\begin_inset Quotes erd
+\end_inset
+
+)
+\end_layout
+
+\begin_layout Plain Layout
+
+res2: (Either[Err, Unit], String) = (Left(List("junk at end")), "abc")
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+scala> nonemptyP.run(
+\begin_inset Quotes eld
+\end_inset
+
+abc
+\begin_inset Quotes erd
+\end_inset
+
+)
+\end_layout
+
+\begin_layout Plain Layout
+
+res3: (Either[Err, Unit], String) = (Right(()), "abc")
 \end_layout
 
 \end_inset
@@ -8224,17 +8346,588 @@ no input
 \end_layout
 
 \begin_layout Standard
-After this, we define combinators that produce larger parsers from smaller
- ones.
+The next step is to define combinators that produce larger parsers from
+ smaller ones.
+ We will define three different combinators, corresponding to an applicative
+ 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+zip
+\end_layout
+
+\end_inset
+
+, a monoid's 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+combine
+\end_layout
+
+\end_inset
+
+, and a monad's 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+flatMap
+\end_layout
+
+\end_inset
+
+ methods.
+ For convenience, we implement the combinators as extension methods on 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+P
+\end_layout
+
+\end_inset
+
+.
+ Start with the 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+zip
+\end_layout
+
+\end_inset
+
+ method: 
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+implicit class ParserZipOps[A](parserA: P[A]) {
+\end_layout
+
+\begin_layout Plain Layout
+
+   def zip[B](parserB: P[B]): P[(A, B)] = P { s =>
+\end_layout
+
+\begin_layout Plain Layout
+
+      val (resultA, rest) = parserA.run(s)
+\end_layout
+
+\begin_layout Plain Layout
+
+      val (resultB, restB) = parserB.run(rest)
+\end_layout
+
+\begin_layout Plain Layout
+
+      val result = (resultA, resultB) match {
+\end_layout
+
+\begin_layout Plain Layout
+
+        case (Right(x), Right(y))   => Right((x, y))
+\end_layout
+
+\begin_layout Plain Layout
+
+        case (Left(x), Right(_))    => Left(x)
+\end_layout
+
+\begin_layout Plain Layout
+
+        case (Right(_), Left(y))    => Left(y)
+\end_layout
+
+\begin_layout Plain Layout
+
+        case (Left(x), Left(y))     => Left(x ++ y)
+\end_layout
+
+\begin_layout Plain Layout
+
+      }
+\end_layout
+
+\begin_layout Plain Layout
+
+      (result, restB)
+\end_layout
+
+\begin_layout Plain Layout
+
+    }
+\end_layout
+
+\begin_layout Plain Layout
+
+}
+\end_layout
+
+\end_inset
+
+To test this, let us define a parser 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+p1
+\end_layout
+
+\end_inset
+
+ for strings of the form 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+<sqrt>123</sqrt>
+\end_layout
+
+\end_inset
+
+:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+val p1 = constP("<sqrt>", "tag must be open") zip intP zip constP("</sqrt>",
+ "tag must be closed")
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+scala> p1.run("<sqrt>123</sqrt>")
+\end_layout
+
+\begin_layout Plain Layout
+
+res4: (Either[Err, ((String, Int), String)], String) = (Right((("<sqrt>",
+ 123), "</sqrt>")), "")
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+scala> p1.run("<sqrt></sqrt>")
+\end_layout
+
+\begin_layout Plain Layout
+
+res5: (Either[Err, ((String, Int), String)], String) = (Left(List("no number")),
+ "")
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+scala> p1.run("abc")
+\end_layout
+
+\begin_layout Plain Layout
+
+res6: (Either[Err, ((String, Int), String)], String) = (Left(List("tag must
+ be open", "no number", "tag must be closed")), "abc")
+\end_layout
+
+\end_inset
+
+Because the parser 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+p1
+\end_layout
+
+\end_inset
+
+ is defined via a 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+zip
+\end_layout
+
+\end_inset
+
+ method, the code is able to report several errors at once.
+ With suitable definitions, parsers combined via 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+zip
+\end_layout
+
+\end_inset
+
+ could skip some invalid text and attempt to parse further data, possibly
+ reporting more errors.
+\end_layout
+
+\begin_layout Standard
+The next parser to be implemented is 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+combine
+\end_layout
+
+\end_inset
+
+.
+ The result of 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+(p1 combine p2)
+\end_layout
+
+\end_inset
+
+ is a parser that succeeds if either 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+p1
+\end_layout
+
+\end_inset
+
+ or 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+p2
+\end_layout
+
+\end_inset
+
+ succeed and returns the corresponding result:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+implicit class ParserZipOps[A](parserA: P[A]) {
+\end_layout
+
+\begin_layout Plain Layout
+
+   def combine(parserB: P[A]): P[A] = P { s =>
+\end_layout
+
+\begin_layout Plain Layout
+
+   val (result, rest) = parserA.run(s)
+\end_layout
+
+\begin_layout Plain Layout
+
+   result match {
+\end_layout
+
+\begin_layout Plain Layout
+
+     case Left(err) => parserB.run(s)
+\end_layout
+
+\begin_layout Plain Layout
+
+     case Right(x) => Right(x)
+\end_layout
+
+\begin_layout Plain Layout
+
+   }
+\end_layout
+
+\begin_layout Plain Layout
+
+}    
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+We are able to parse these toy languages with the applicative combinators
+ because the languages are sufficiently simple.
+ Now consider a language that requires monadic combinators to be parsed
+ correctly.
+ This language represents equations between integers, such as 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+1=1
+\end_layout
+
+\end_inset
+
+ or 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+123=123
+\end_layout
+
+\end_inset
+
+, but does not admit 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+1=2
+\end_layout
+
+\end_inset
+
+.
+ To parse this language, we need to parse the first integer, skip the equals
+ sign, and then parse the integer that must be equal to the first one.
+ So, we need to use a parser that depends on a previous result.
+ We would like to define the parser using this straightforward code:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+val p3: P[Int] = for {
+\end_layout
+
+\begin_layout Plain Layout
+
+  x <- intP
+\end_layout
+
+\begin_layout Plain Layout
+
+  _ <- constP(
+\begin_inset Quotes eld
+\end_inset
+
+=
+\begin_inset Quotes erd
+\end_inset
+
+)
+\end_layout
+
+\begin_layout Plain Layout
+
+  _ <- constP(x.toString)
+\end_layout
+
+\begin_layout Plain Layout
+
+  _ <- emptyP
+\end_layout
+
+\begin_layout Plain Layout
+
+} yield x 
+\end_layout
+
+\end_inset
+
  ***
 \end_layout
 
 \begin_layout Standard
-applicative: parse independent data, collecting all errors
+The last combinator is the monadic 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+flatMap
+\end_layout
+
+\end_inset
+
+.
+ We will also define 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+map
+\end_layout
+
+\end_inset
+
+ and 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+withFilter
+\end_layout
+
+\end_inset
+
+:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+implicit class ParserMonadOps[A](parserA: P[A]) {
+\end_layout
+
+\begin_layout Plain Layout
+
+   def flatMap[B](f: A => P[B]): P[B] = P { s =>
+\end_layout
+
+\begin_layout Plain Layout
+
+      val (result, rest) = parserA.run(s)
+\end_layout
+
+\begin_layout Plain Layout
+
+      result match {
+\end_layout
+
+\begin_layout Plain Layout
+
+        case Left(err)   => (Left(err), rest)
+\end_layout
+
+\begin_layout Plain Layout
+
+        case Right(x)    => f(x).run(rest)
+\end_layout
+
+\begin_layout Plain Layout
+
+      }
+\end_layout
+
+\begin_layout Plain Layout
+
+   }
+\end_layout
+
+\begin_layout Plain Layout
+
+   def map[B](f: A => B): P[B] = P { s =>
+\end_layout
+
+\begin_layout Plain Layout
+
+      val (result, rest) = parserA.run(s)
+\end_layout
+
+\begin_layout Plain Layout
+
+      (result.map(f), rest)
+\end_layout
+
+\begin_layout Plain Layout
+
+   }
+\end_layout
+
+\begin_layout Plain Layout
+
+}
+\end_layout
+
+\end_inset
+
+To illustrate the use of the monadic parser combinator, consider a language
+ that The language admits strings of the form
 \end_layout
 
 \begin_layout Standard
-monadic: parse depends on previous results, stops on errors
+Using the monadic combinator, we obtained a parser that stops at the first
+ error:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+***
+\end_layout
+
+\end_inset
+
+
 \end_layout
 
 \begin_layout Section
