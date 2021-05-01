@@ -5462,6 +5462,13 @@ fold fusion
 \end_inset
 
 
+\begin_inset CommandInset label
+LatexCommand label
+name "subsec:Single-traversal-fold-operations-applicative-fold-fusion"
+
+\end_inset
+
+
 \end_layout
 
 \begin_layout Standard
@@ -7785,7 +7792,7 @@ width "28col%"
 status open
 
 \begin_layout Plain Layout
-\begin_inset VSpace -115baselineskip%
+\begin_inset VSpace -100baselineskip%
 \end_inset
 
 
@@ -7959,6 +7966,13 @@ FoldOp
 
 \begin_layout Subsection
 Parsing with applicative and monadic combinators
+\begin_inset CommandInset label
+LatexCommand label
+name "subsec:Parsing-with-applicative-and-monadic-parsers"
+
+\end_inset
+
+
 \end_layout
 
 \begin_layout Standard
@@ -8123,7 +8137,7 @@ final case class P[A](run: String => (Either[Err, A], String))
 
 \begin_layout Plain Layout
 
-type Err = List[String]  // A list of error messages.
+type Err = List[String]           // A list of error messages.
 \end_layout
 
 \end_inset
@@ -8137,13 +8151,13 @@ In order to parse the toy language, we need to be able to parse integers,
  at a point where all tags are balanced.
  The parser combinator technique begins by defining the simplest necessary
  parsers.
- These are: a parser for integers; a parser that consumes a given prefix
- in the input string; a parser that succeeds only if the input string is
- empty; and a parser that succeeds only if the input string is 
+ These are: a parser for integers; a parser that looks for a fixed string;
+ a parser that succeeds only if the input is empty; and a parser that succeeds
+ only if the input is 
 \emph on
 non
 \emph default
--empty but otherwise does not consume any input:
+-empty but does not consume any input:
 \begin_inset listings
 inline false
 status open
@@ -8514,8 +8528,17 @@ status open
 
 \begin_layout Plain Layout
 
-val p1 = constP("<sqrt>", "tag must be open") zip intP zip constP("</sqrt>",
- "tag must be closed")
+val openTag = constP("<sqrt>", "tag must be open")
+\end_layout
+
+\begin_layout Plain Layout
+
+val closeTag = constP("</sqrt>", "tag must be closed")
+\end_layout
+
+\begin_layout Plain Layout
+
+val p1 = openTag zip intP zip closeTag
 \end_layout
 
 \begin_layout Plain Layout
@@ -8577,7 +8600,7 @@ p1
 
 \end_inset
 
- is defined via a 
+ is defined via the applicative 
 \begin_inset listings
 inline true
 status open
@@ -8607,7 +8630,109 @@ zip
 \end_layout
 
 \begin_layout Standard
-The next parser to be implemented is 
+It is inconvenient that a 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+zip
+\end_layout
+
+\end_inset
+
+-combined parser returns a deeply nested tuple structure, while we are only
+ interested in reading one value inside that structure.
+ We would like 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+p1.run("<sqrt>123</sqrt>")
+\end_layout
+
+\end_inset
+
+ to return just 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Right(123, 
+\begin_inset Quotes eld
+\end_inset
+
+
+\begin_inset Quotes erd
+\end_inset
+
+)
+\end_layout
+
+\end_inset
+
+ instead of the value shown above.
+ To achieve this, we define helper methods 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+zipLeft
+\end_layout
+
+\end_inset
+
+ and 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+zipRight
+\end_layout
+
+\end_inset
+
+, indicating which side's value is returned:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+implicit class ParserMoreZipOps[A](parserA: P[A]) {
+\end_layout
+
+\begin_layout Plain Layout
+
+   def zipLeft[B](parserB: P[B]): P[A] = (parserA zip parserB).map(_._1)
+\end_layout
+
+\begin_layout Plain Layout
+
+   def zipRight[B](parserB: P[B]): P[B] = (parserA zip parserB).map(_._2)
+\end_layout
+
+\begin_layout Plain Layout
+
+}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+The next parser combinator corresponds to a monoid's 
 \begin_inset listings
 inline true
 status open
@@ -8619,7 +8744,27 @@ combine
 
 \end_inset
 
-.
+, but we will call it 
+\begin_inset Quotes eld
+\end_inset
+
+
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+or
+\end_layout
+
+\end_inset
+
+
+\begin_inset Quotes erd
+\end_inset
+
+ for convenience.
  The result of 
 \begin_inset listings
 inline true
@@ -8627,7 +8772,7 @@ status open
 
 \begin_layout Plain Layout
 
-(p1 combine p2)
+(p1 or p2)
 \end_layout
 
 \end_inset
@@ -8663,12 +8808,13 @@ status open
 
 \begin_layout Plain Layout
 
-implicit class ParserZipOps[A](parserA: P[A]) {
+implicit class ParserCombineOps[A](parserA: P[A]) {
 \end_layout
 
 \begin_layout Plain Layout
 
-   def combine(parserB: P[A]): P[A] = P { s =>
+   def or(parserB: => P[A]): P[A] = P { s =>  // The argument `parserB`
+ is lazy.
 \end_layout
 
 \begin_layout Plain Layout
@@ -8678,17 +8824,20 @@ implicit class ParserZipOps[A](parserA: P[A]) {
 
 \begin_layout Plain Layout
 
-   result match {
+   result match {                             // If `parserA` failed to
+ parse the string `s`,
 \end_layout
 
 \begin_layout Plain Layout
 
-     case Left(err) => parserB.run(s)
+     case Left(err)   => parserB.run(s)       // ignore the error from `parserA`
+ and run `parserB`.
 \end_layout
 
 \begin_layout Plain Layout
 
-     case Right(x) => Right(x)
+     case Right(x)    => (Right(x), rest)     // Otherwise, use the result
+ of running `parserA`.
 \end_layout
 
 \begin_layout Plain Layout
@@ -8703,15 +8852,133 @@ implicit class ParserZipOps[A](parserA: P[A]) {
 
 \end_inset
 
+We implement 
+\begin_inset listings
+inline true
+status open
 
+\begin_layout Plain Layout
+
+parserB
+\end_layout
+
+\end_inset
+
+ as a lazy argument because we do not need it when 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+parserA
+\end_layout
+
+\end_inset
+
+ succeeds.
 \end_layout
 
 \begin_layout Standard
-We are able to parse these toy languages with the applicative combinators
- because the languages are sufficiently simple.
- Now consider a language that requires monadic combinators to be parsed
- correctly.
- This language represents equations between integers, such as 
+Using these combinators, we write a first attempt at parsing the toy language.
+ Since the language allows us to have arbitrarily deep nesting of the tags
+ 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+<sqrt>...</sqrt>
+\end_layout
+
+\end_inset
+
+, we need to define the parser as a recursive function (called 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+p2
+\end_layout
+
+\end_inset
+
+):
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+def p2: P[Int] = intP or (openTag zipRight p2 zipLeft closeTag).map { x =>
+ math.sqrt(x).toInt }
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+scala> p2.run("121")._1.right.get
+\end_layout
+
+\begin_layout Plain Layout
+
+res7: Int = 121
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+scala> p2.run("<sqrt>121</sqrt>")._1.right.get
+\end_layout
+
+\begin_layout Plain Layout
+
+res8: Int = 11
+\end_layout
+
+\end_inset
+
+The recursion stops only because the operation 
+\begin_inset Quotes eld
+\end_inset
+
+
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+or
+\end_layout
+
+\end_inset
+
+
+\begin_inset Quotes erd
+\end_inset
+
+ does not evaluate its second parser when the first parser succeeds.
+ Otherwise the code would go into an infinite loop.
+\end_layout
+
+\begin_layout Standard
+We are able to parse the toy language using only applicative combinators.
+ Let us now consider a more complicated language that 
+\emph on
+requires
+\emph default
+ monadic combinators to be parsed correctly.
+ The language represents equations between integers, such as 
 \begin_inset listings
 inline true
 status open
@@ -8748,9 +9015,10 @@ status open
 \end_inset
 
 .
- To parse this language, we need to parse the first integer, skip the equals
- sign, and then parse the integer that must be equal to the first one.
- So, we need to use a parser that depends on a previous result.
+ To parse this language, we need to get the first integer, skip the equals
+ sign, and then check that the second integer is equal to the first one.
+ So, we need to use a parser that depends on the result of parsing a previous
+ substring.
  We would like to define the parser using this straightforward code:
 \begin_inset listings
 inline false
@@ -8781,7 +9049,8 @@ val p3: P[Int] = for {
 
 \begin_layout Plain Layout
 
-  _ <- constP(x.toString)
+  _ <- constP(x.toString)  // Expect a string corresponding to the previously
+ parsed integer `x`.
 \end_layout
 
 \begin_layout Plain Layout
@@ -8796,11 +9065,7 @@ val p3: P[Int] = for {
 
 \end_inset
 
- ***
-\end_layout
-
-\begin_layout Standard
-The last combinator is the monadic 
+To make this code work, we need to define 
 \begin_inset listings
 inline true
 status open
@@ -8812,8 +9077,7 @@ flatMap
 
 \end_inset
 
-.
- We will also define 
+ and 
 \begin_inset listings
 inline true
 status open
@@ -8825,14 +9089,14 @@ map
 
 \end_inset
 
- and 
+ as extension methods on 
 \begin_inset listings
 inline true
 status open
 
 \begin_layout Plain Layout
 
-withFilter
+P
 \end_layout
 
 \end_inset
@@ -8909,20 +9173,62 @@ implicit class ParserMonadOps[A](parserA: P[A]) {
 
 \end_inset
 
-To illustrate the use of the monadic parser combinator, consider a language
- that The language admits strings of the form
+The result is a parser 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+p3
 \end_layout
 
-\begin_layout Standard
-Using the monadic combinator, we obtained a parser that stops at the first
- error:
+\end_inset
+
+ that that stops at the first error:
 \begin_inset listings
 inline false
 status open
 
 \begin_layout Plain Layout
 
-***
+scala> p3.run("123=123")
+\end_layout
+
+\begin_layout Plain Layout
+
+res9: (Either[Err, Int], String) = (Right(123), 
+\begin_inset Quotes eld
+\end_inset
+
+
+\begin_inset Quotes erd
+\end_inset
+
+)
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+scala> p3.run(
+\begin_inset Quotes eld
+\end_inset
+
+1=2
+\begin_inset Quotes erd
+\end_inset
+
+)
+\end_layout
+
+\begin_layout Plain Layout
+
+res10: (Either[Err, Int], String) = (Left(List("integer 1 not found")),
+ "2")
 \end_layout
 
 \end_inset
@@ -8930,8 +9236,59 @@ status open
 
 \end_layout
 
-\begin_layout Section
-Slides, Part I 
+\begin_layout Standard
+For better error reporting, use both monadic and applicative combinators
+ in the same code:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+val p4: P[Int] = for {
+\end_layout
+
+\begin_layout Plain Layout
+
+   x <- intP zipLeft constP("=")
+\end_layout
+
+\begin_layout Plain Layout
+
+   _ <- constP(x.toString, s"integer $x not found") zip emptyP
+\end_layout
+
+\begin_layout Plain Layout
+
+} yield x
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+scala> p3.run(
+\begin_inset Quotes eld
+\end_inset
+
+1=2
+\begin_inset Quotes erd
+\end_inset
+
+)
+\end_layout
+
+\begin_layout Plain Layout
+
+res11: (Either[Err, Int], String) = (Left(List("integer 1 not found", "junk
+ at end")), "2")
+\end_layout
+
+\end_inset
+
+
 \end_layout
 
 \begin_layout Subsection
@@ -8982,7 +9339,7 @@ map2
 
 \end_inset
 
-, or 
+ (or 
 \begin_inset listings
 inline true
 status open
@@ -8994,7 +9351,7 @@ xmap2
 
 \end_inset
 
- if appropriate, for these type constructors 
+ if appropriate) for the following type constructors 
 \begin_inset Formula $F^{A}$
 \end_inset
 
@@ -9002,27 +9359,47 @@ xmap2
 \end_layout
 
 \begin_layout Standard
+
+\series bold
+(a)
+\series default
+ 
 \begin_inset Formula $F^{A}\triangleq\bbnum 1+A+A\times A$
 \end_inset
 
-
+.
 \end_layout
 
 \begin_layout Standard
+
+\series bold
+(b)
+\series default
+ 
 \begin_inset Formula $F^{A}\triangleq E\rightarrow A\times A$
 \end_inset
 
-
+.
 \end_layout
 
 \begin_layout Standard
+
+\series bold
+(c)
+\series default
+ 
 \begin_inset Formula $F^{A}\triangleq Z\times A\rightarrow A$
 \end_inset
 
- 
+.
 \end_layout
 
 \begin_layout Standard
+
+\series bold
+(d)
+\series default
+ 
 \begin_inset Formula $F^{A}\triangleq A\rightarrow A\times Z$
 \end_inset
 
@@ -9042,7 +9419,7 @@ Monoid
 
 \end_inset
 
- 
+.
 \end_layout
 
 \begin_layout Subsubsection
@@ -9067,7 +9444,19 @@ noprefix "false"
 \end_layout
 
 \begin_layout Standard
-Write a zip function that defines an instance of the 
+Write a 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+zip
+\end_layout
+
+\end_inset
+
+ function that defines an instance of the 
 \begin_inset listings
 inline true
 status open
@@ -9080,15 +9469,39 @@ Semigroup
 \end_inset
 
  type class for a tuple 
-\begin_inset Formula $\left(A,B\right)$
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+(A, B)
+\end_layout
+
 \end_inset
 
  where the types 
-\begin_inset Formula $A$
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+A
+\end_layout
+
 \end_inset
 
  and 
-\begin_inset Formula $B$
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+B
+\end_layout
+
 \end_inset
 
  are assumed to already have a 
@@ -9116,7 +9529,31 @@ Semigroup
 
 \end_inset
 
- instances for A = Int and B = String.
+ instances for 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+A = Int
+\end_layout
+
+\end_inset
+
+ and 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+B = String
+\end_layout
+
+\end_inset
+
+.
 \end_layout
 
 \begin_layout Subsubsection
@@ -9275,41 +9712,6 @@ map2
 Exercise 
 \begin_inset CommandInset label
 LatexCommand label
-name "subsec:Exercise-applicative-I-4"
-
-\end_inset
-
-
-\begin_inset CommandInset ref
-LatexCommand ref
-reference "subsec:Exercise-applicative-I-4"
-plural "false"
-caps "false"
-noprefix "false"
-
-\end_inset
-
-
-\end_layout
-
-\begin_layout Standard
-Use parser combinators to implement an evaluator for arithmetic language
- containing only decimal digits and 
-\begin_inset Formula $+$
-\end_inset
-
- symbols, for example 
-\begin_inset Formula $1+321+20$
-\end_inset
-
-.
- Add parentheses to the language.
-\end_layout
-
-\begin_layout Subsubsection
-Exercise 
-\begin_inset CommandInset label
-LatexCommand label
 name "subsec:Exercise-applicative-I-5"
 
 \end_inset
@@ -9328,7 +9730,21 @@ noprefix "false"
 \end_layout
 
 \begin_layout Standard
-Use folding combinators to implement a 
+Use folding combinators (Section
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "subsec:Single-traversal-fold-operations-applicative-fold-fusion"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+) to implement a 
 \begin_inset listings
 inline true
 status open
@@ -9341,6 +9757,163 @@ Fold
 \end_inset
 
  that computes the standard deviation of a sequence in one traversal.
+\end_layout
+
+\begin_layout Subsubsection
+Exercise 
+\begin_inset CommandInset label
+LatexCommand label
+name "subsec:Exercise-applicative-I-5-1"
+
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "subsec:Exercise-applicative-I-5-1"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Use parser combinators (Section
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "subsec:Parsing-with-applicative-and-monadic-parsers"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+) to implement a parser for a toy language that contains a single integer
+ in a sequence of arbitrary nested tags, such as 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+<a><b>123</b></a>
+\end_layout
+
+\end_inset
+
+.
+ Tag names are restricted to lowercase Latin letters.
+ The parser should return that integer or fail if tags are incorrectly nested.
+\end_layout
+
+\begin_layout Subsubsection
+Exercise 
+\begin_inset CommandInset label
+LatexCommand label
+name "subsec:Exercise-applicative-I-4"
+
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "subsec:Exercise-applicative-I-4"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+
+\series bold
+(a)
+\series default
+ Use parser combinators to parse a toy arithmetic language containing decimal
+ digits and 
+\begin_inset Quotes eld
+\end_inset
+
+
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
++
+\end_layout
+
+\end_inset
+
+
+\begin_inset Quotes erd
+\end_inset
+
+ symbols, for example 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+1+321+20
+\end_layout
+
+\end_inset
+
+.
+ The parser should return the resulting integer.
+\end_layout
+
+\begin_layout Standard
+
+\series bold
+(b)
+\series default
+ Extend the parser to support parentheses and 
+\begin_inset Quotes eld
+\end_inset
+
+
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+-
+\end_layout
+
+\end_inset
+
+
+\begin_inset Quotes erd
+\end_inset
+
+ symbols, for example 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+10-(2+3)
+\end_layout
+
+\end_inset
+
+.
 \end_layout
 
 \begin_layout Section
