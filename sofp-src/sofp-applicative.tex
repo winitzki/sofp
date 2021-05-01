@@ -733,7 +733,7 @@ always independent, and a \lstinline!map2! function does not need
 to be implemented separately for the applicative use.
 
 \subsection{Single-traversal \texttt{fold} operations II. Applicative \textsf{``}fold
-fusion\textsf{''}}
+fusion\textsf{''}\label{subsec:Single-traversal-fold-operations-applicative-fold-fusion}}
 
 We have seen various \textsf{``}folding\textsf{''} operations (such as \lstinline!foldLeft!,
 \lstinline!foldRight!, or \lstinline!reduce!) that iterate over
@@ -999,8 +999,8 @@ that also needs to be evaluated. Since \lstinline!flatMap! will need
 to run two folding operations in one traversal, it must maintain a
 combined accumulated state of type \lstinline!(R, S)!. So, the type
 signature of \lstinline!flatMap! needs to accommodate the change
-of that type (just as the type signature of map2 as we have seen in
-the previous section). For convenience, we define \lstinline!flatMap!
+of that type (just as the type signature of \lstinline!map2! as we
+have seen in the previous section). For convenience, we define \lstinline!flatMap!
 as an extension method: 
 \begin{lstlisting}
 implicit class FoldFlatMap[Z, R, A](op: FoldOp[Z, R, A]) {
@@ -1011,16 +1011,16 @@ The result of \lstinline!op1.flatMap(x => op2(x))! must be a folding
 operation that combines \lstinline!op1! and \lstinline!op2! and
 supports having a definition of \lstinline!op2(x)! that depends on
 the intermediate result (\lstinline!x: A!) of running \lstinline!op1!.
-To achieve that, we impement \lstinline!flatMap! like this:
+To achieve that, we implement \lstinline!flatMap! like this:
 \begin{lstlisting}[numbers=left]
 implicit class FoldFlatMap[Z, R, A](op: FoldOp[Z, R, A]) {
    def flatMap[S, B](f: A => FoldOp[Z, S, B]): FoldOp[Z, (R, S), B] = {
       // Create a new `FoldOp()` value. We need `init`, `update`, and `transform`.
       val init: (R, S) = (op.init, f(op.transform(op.init)).init) // Use `init` from both operations.
-      val update: ((R, S), Z) => (R, S) = { case ((r, s), z) =>   // Run both `update` functions.
-          val newR = op.update(r, z)
+      val update: ((R, S), Z) => (R, S) = { case ((r, s), z) =>   // Run both `update` functions:
+          val newR = op.update(r, z)                              // First `update` function.
           val newOp: FoldOp[Z, S, B] = f(op.transform(newR))      // We may use `newR` or `r` here!
-          val newS = newOp.update(s, z)
+          val newS = newOp.update(s, z)                           // Second `update` function.
           (newR, newS)
       }
       val transform: ((R, S)) => B = { case (r, s) =>
@@ -1077,7 +1077,7 @@ with the applicative fold fusion. For instance, one could define \lstinline!aver
 equivalently as:
 
 \begin{wrapfigure}{l}{0.28\columnwidth}%
-\vspace{-1.15\baselineskip}
+\vspace{-1\baselineskip}
 \begin{lstlisting}
 val average = for {
   acc <- sum
@@ -1096,7 +1096,7 @@ to \lstinline!A! is similar to that of the \lstinline!Reader! monad
 of type \lstinline!R => A!. As in the \lstinline!Reader! monad,
 the effects in the \lstinline!FoldOp! monad are independent.
 
-\subsection{Parsing with applicative and monadic functors}
+\subsection{Parsing with applicative and monadic combinators\label{subsec:Parsing-with-applicative-and-monadic-parsers}}
 
 Applicative functors are used for implementing parsers via the \textsf{``}parser
 combinator\textsf{''} technique. In this technique, the programmer creates
@@ -1104,79 +1104,232 @@ a large parser out of smaller ones by using different functions that
 combine small parsers repeatedly. We will now look at applicative
 parser combinators and compare them with monadic ones.
 
-In this section, we will parse a toy language that encodes positive
-integers and square roots in an XML-like format. Valid strings in
-this language are \lstinline!<sqrt>121</sqrt>!, \lstinline!<sqrt><sqrt>10000</sqrt></sqrt>!,
-and \lstinline!123!. Examples of \emph{invalid} strings are \lstinline!<sqrt>100</sqrt></sqrt>!
+In this section, we will illustrate the parsing techniques on several
+toy languages. The first language encodes square roots of positive
+integers in an XML-like format. In this language, strings \lstinline!<sqrt>121</sqrt>!,
+\lstinline!<sqrt><sqrt>10000</sqrt></sqrt>!, and \lstinline!123!
+are valid. Examples of \emph{invalid} strings are \lstinline!<sqrt>100</sqrt></sqrt>!
 (junk at end of text), \lstinline!<sqrt>121<sqrt>! (tag not closed),
 \lstinline!</sqrt>10</sqrt>! (tag not opened), and \lstinline!1.0!
-(not an integer). We would like the parser to output either an integer
-result or an error message.
+(not an integer). The parser should output an integer result or an
+error message.
 
 To simplify the code, we define a parser as a function taking an input
-string and returning either a value of some type (the value \textsf{``}parsed
-out\textsf{''} of the input) or some error information. The parser also returns
-the unused part of the input string. So, we define the type constructor
-\lstinline!P[A]! by:
+string and returning either a value of some type \lstinline!A! (the
+value \textsf{``}parsed out\textsf{''} of the input) or some error information. The
+parser also returns the unused part of the input string. So, we define
+the type constructor \lstinline!P[A]! by:
 \begin{lstlisting}
-type P[A] = String => (Either[Err, A], String) // A parser that may extract values of type A.
-type Err = List[String]  // A list of error messages.
+final case class P[A](run: String => (Either[Err, A], String))
+type Err = List[String]           // A list of error messages.
 \end{lstlisting}
 
 In order to parse the toy language, we need to be able to parse integers,
 opening tags, closing tags, and detect whether the end of input occurs
 at a point where all tags are balanced. The parser combinator technique
 begins by defining the simplest necessary parsers. These are: a parser
-for integers; a parser that consumes a given prefix in the input string;
-a parser that succeeds only if the input string is empty; and a parser
-that succeeds only if the input string is \emph{non}-empty but otherwise
-does not consume any input:
+for integers; a parser that looks for a fixed string; a parser that
+succeeds only if the input is empty; and a parser that succeeds only
+if the input is \emph{non}-empty but does not consume any input:
 \begin{lstlisting}
-val intP: P[Int] = { 
+val intP: P[Int] = P { 
   val numRegex = "^([0-9]+)(.*)$".r
   s => s match {
-    case numRegex(num, rest) => (Right(num.toInt), rest)
-    case s => (Left(NoNumber), s)
+    case numRegex(num, rest)   => (Right(num.toInt), rest)
+    case s                     => (Left(List("no number")), s)
   } 
 }
-def constP(prefix: String): P[String] = { s =>
-  if (s startsWith prefix) (Right(prefix), s.stripPrefix(prefix)) else (Left("no prefix"), s)
+def constP(prefix: String, error: String = "no prefix"): P[String] = P { s =>
+  if (s startsWith prefix) (Right(prefix), s.stripPrefix(prefix)) else (Left(List(error)), s)
 }
-val emptyP: P[Unit] = { s => if (s.isEmpty) (Right(()), s) else (Left("junk at end"), s) }
-val nonemptyP: P[Unit] = { s => if (s.isEmpty) (Left("no input"), s) else (Right(()), s) }
+val emptyP: P[Unit] = P { s => if (s.isEmpty) (Right(()), s) else (Left(List("junk at end")), s) }
+val nonemptyP: P[Unit] = P { s => if (s.isEmpty) (Left(List("no input")), s) else (Right(()), s) }
+\end{lstlisting}
+Let us test that these parsers work as expected:
+\begin{lstlisting}
+scala> intP.run("123xyz")
+res0: (Either[Err, Int], String) = (Right(123), "xyz")
+
+scala> constP("<sqrt>").run("<sqrt>1</sqrt>")
+res1: (Either[Err, String], String) = (Right("<sqrt>"), "1</sqrt>")
+
+scala> emptyP.run("abc")
+res2: (Either[Err, Unit], String) = (Left(List("junk at end")), "abc")
+
+scala> nonemptyP.run("abc")
+res3: (Either[Err, Unit], String) = (Right(()), "abc")
 \end{lstlisting}
 
-After this, we define combinators that produce larger parsers from
-smaller ones. {*}{*}{*}
+The next step is to define combinators that produce larger parsers
+from smaller ones. We will define three different combinators, corresponding
+to an applicative \lstinline!zip!, a monoid\textsf{'}s \lstinline!combine!,
+and a monad\textsf{'}s \lstinline!flatMap! methods. For convenience, we implement
+the combinators as extension methods on \lstinline!P!. Start with
+the \lstinline!zip! method: 
+\begin{lstlisting}
+implicit class ParserZipOps[A](parserA: P[A]) {
+   def zip[B](parserB: P[B]): P[(A, B)] = P { s =>
+      val (resultA, rest) = parserA.run(s)
+      val (resultB, restB) = parserB.run(rest)
+      val result = (resultA, resultB) match {
+        case (Right(x), Right(y))   => Right((x, y))
+        case (Left(x), Right(_))    => Left(x)
+        case (Right(_), Left(y))    => Left(y)
+        case (Left(x), Left(y))     => Left(x ++ y)
+      }
+      (result, restB)
+    }
+}
+\end{lstlisting}
+To test this, let us define a parser \lstinline!p1! for strings of
+the form \lstinline!<sqrt>123</sqrt>!:
+\begin{lstlisting}
+val openTag = constP("<sqrt>", "tag must be open")
+val closeTag = constP("</sqrt>", "tag must be closed")
+val p1 = openTag zip intP zip closeTag
 
-applicative: parse independent data, collecting all errors
+scala> p1.run("<sqrt>123</sqrt>")
+res4: (Either[Err, ((String, Int), String)], String) = (Right((("<sqrt>", 123), "</sqrt>")), "")
 
-monadic: parse depends on previous results, stops on errors
+scala> p1.run("<sqrt></sqrt>")
+res5: (Either[Err, ((String, Int), String)], String) = (Left(List("no number")), "")
 
-\section{Slides, Part I }
+scala> p1.run("abc")
+res6: (Either[Err, ((String, Int), String)], String) = (Left(List("tag must be open", "no number", "tag must be closed")), "abc")
+\end{lstlisting}
+Because the parser \lstinline!p1! is defined via the applicative
+\lstinline!zip! method, the code is able to report several errors
+at once. With suitable definitions, parsers combined via \lstinline!zip!
+could skip some invalid text and attempt to parse further data, possibly
+reporting more errors.
+
+It is inconvenient that a \lstinline!zip!-combined parser returns
+a deeply nested tuple structure, while we are only interested in reading
+one value inside that structure. We would like \lstinline!p1.run("<sqrt>123</sqrt>")!
+to return just \lstinline!Right(123, "")! instead of the value shown
+above. To achieve this, we define helper methods \lstinline!zipLeft!
+and \lstinline!zipRight!, indicating which side\textsf{'}s value is returned:
+\begin{lstlisting}
+implicit class ParserMoreZipOps[A](parserA: P[A]) {
+   def zipLeft[B](parserB: P[B]): P[A] = (parserA zip parserB).map(_._1)
+   def zipRight[B](parserB: P[B]): P[B] = (parserA zip parserB).map(_._2)
+}
+\end{lstlisting}
+
+The next parser combinator corresponds to a monoid\textsf{'}s \lstinline!combine!,
+but we will call it \textsf{``}\lstinline!or!\textsf{''} for convenience. The result
+of \lstinline!(p1 or p2)! is a parser that succeeds if either \lstinline!p1!
+or \lstinline!p2! succeed and returns the corresponding result:
+\begin{lstlisting}
+implicit class ParserCombineOps[A](parserA: P[A]) {
+   def or(parserB: => P[A]): P[A] = P { s =>  // The argument `parserB` is lazy.
+   val (result, rest) = parserA.run(s)
+   result match {                             // If `parserA` failed to parse the string `s`,
+     case Left(err)   => parserB.run(s)       // ignore the error from `parserA` and run `parserB`.
+     case Right(x)    => (Right(x), rest)     // Otherwise, use the result of running `parserA`.
+   }
+}    
+\end{lstlisting}
+We implement \lstinline!parserB! as a lazy argument because we do
+not need it when \lstinline!parserA! succeeds.
+
+Using these combinators, we write a first attempt at parsing the toy
+language. Since the language allows us to have arbitrarily deep nesting
+of the tags \lstinline!<sqrt>...</sqrt>!, we need to define the parser
+as a recursive function (called \lstinline!p2!):
+\begin{lstlisting}
+def p2: P[Int] = intP or (openTag zipRight p2 zipLeft closeTag).map { x => math.sqrt(x).toInt }
+
+scala> p2.run("121")._1.right.get
+res7: Int = 121
+
+scala> p2.run("<sqrt>121</sqrt>")._1.right.get
+res8: Int = 11
+\end{lstlisting}
+The recursion stops only because the operation \textsf{``}\lstinline!or!\textsf{''}
+does not evaluate its second parser when the first parser succeeds.
+Otherwise the code would go into an infinite loop.
+
+We are able to parse the toy language using only applicative combinators.
+Let us now consider a more complicated language that \emph{requires}
+monadic combinators to be parsed correctly. The language represents
+equations between integers, such as \lstinline!1=1! or \lstinline!123=123!,
+but does not admit \lstinline!1=2!. To parse this language, we need
+to get the first integer, skip the equals sign, and then check that
+the second integer is equal to the first one. So, we need to use a
+parser that depends on the result of parsing a previous substring.
+We would like to define the parser using this straightforward code:
+\begin{lstlisting}
+val p3: P[Int] = for {
+  x <- intP
+  _ <- constP("=")
+  _ <- constP(x.toString)  // Expect a string corresponding to the previously parsed integer `x`.
+  _ <- emptyP
+} yield x 
+\end{lstlisting}
+To make this code work, we need to define \lstinline!flatMap! and
+\lstinline!map! as extension methods on \lstinline!P!:
+\begin{lstlisting}
+implicit class ParserMonadOps[A](parserA: P[A]) {
+   def flatMap[B](f: A => P[B]): P[B] = P { s =>
+      val (result, rest) = parserA.run(s)
+      result match {
+        case Left(err)   => (Left(err), rest)
+        case Right(x)    => f(x).run(rest)
+      }
+   }
+   def map[B](f: A => B): P[B] = P { s =>
+      val (result, rest) = parserA.run(s)
+      (result.map(f), rest)
+   }
+}
+\end{lstlisting}
+The result is a parser \lstinline!p3! that that stops at the first
+error:
+\begin{lstlisting}
+scala> p3.run("123=123")
+res9: (Either[Err, Int], String) = (Right(123), "")
+
+scala> p3.run("1=2")
+res10: (Either[Err, Int], String) = (Left(List("integer 1 not found")), "2")
+\end{lstlisting}
+
+For better error reporting, use both monadic and applicative combinators
+in the same code:
+\begin{lstlisting}
+val p4: P[Int] = for {
+   x <- intP zipLeft constP("=")
+   _ <- constP(x.toString, s"integer $x not found") zip emptyP
+} yield x
+
+scala> p3.run("1=2")
+res11: (Either[Err, Int], String) = (Left(List("integer 1 not found", "junk at end")), "2")
+\end{lstlisting}
+
 
 \subsection{Exercises\index{exercises}}
 
 \subsubsection{Exercise \label{subsec:Exercise-applicative-I}\ref{subsec:Exercise-applicative-I}}
 
-Implement \lstinline!map2!, or \lstinline!xmap2! if appropriate,
-for these type constructors $F^{A}$:
+Implement \lstinline!map2! (or \lstinline!xmap2! if appropriate)
+for the following type constructors $F^{A}$:
 
-$F^{A}\triangleq\bbnum 1+A+A\times A$
+\textbf{(a)} $F^{A}\triangleq\bbnum 1+A+A\times A$.
 
-$F^{A}\triangleq E\rightarrow A\times A$
+\textbf{(b)} $F^{A}\triangleq E\rightarrow A\times A$.
 
-$F^{A}\triangleq Z\times A\rightarrow A$ 
+\textbf{(c)} $F^{A}\triangleq Z\times A\rightarrow A$.
 
-$F^{A}\triangleq A\rightarrow A\times Z$ where $Z$ is a \lstinline!Monoid! 
+\textbf{(d)} $F^{A}\triangleq A\rightarrow A\times Z$ where $Z$
+is a \lstinline!Monoid!.
 
 \subsubsection{Exercise \label{subsec:Exercise-applicative-I-1}\ref{subsec:Exercise-applicative-I-1}}
 
-Write a zip function that defines an instance of the \lstinline!Semigroup!
-type class for a tuple $\left(A,B\right)$ where the types $A$ and
-$B$ are assumed to already have a \lstinline!Semigroup! instance.
-Test on an example with \lstinline!Semigroup! instances for A = Int
-and B = String.
+Write a \lstinline!zip! function that defines an instance of the
+\lstinline!Semigroup! type class for a tuple \lstinline!(A, B)!
+where the types \lstinline!A! and \lstinline!B! are assumed to already
+have a \lstinline!Semigroup! instance. Test on an example with \lstinline!Semigroup!
+instances for \lstinline!A = Int! and \lstinline!B = String!.
 
 \subsubsection{Exercise \label{subsec:Exercise-applicative-I-2}\ref{subsec:Exercise-applicative-I-2}}
 
@@ -1191,16 +1344,28 @@ extraction of various data from strings; the extracted data has type
 \lstinline!Option[A]!. Implement \lstinline!zip! and \lstinline!map2!
 for $R^{A}$.
 
-\subsubsection{Exercise \label{subsec:Exercise-applicative-I-4}\ref{subsec:Exercise-applicative-I-4}}
-
-Use parser combinators to implement an evaluator for arithmetic language
-containing only decimal digits and $+$ symbols, for example $1+321+20$.
-Add parentheses to the language.
-
 \subsubsection{Exercise \label{subsec:Exercise-applicative-I-5}\ref{subsec:Exercise-applicative-I-5}}
 
-Use folding combinators to implement a \lstinline!Fold! that computes
-the standard deviation of a sequence in one traversal.
+Use folding combinators (Section~\ref{subsec:Single-traversal-fold-operations-applicative-fold-fusion})
+to implement a \lstinline!Fold! that computes the standard deviation
+of a sequence in one traversal.
+
+\subsubsection{Exercise \label{subsec:Exercise-applicative-I-5-1}\ref{subsec:Exercise-applicative-I-5-1}}
+
+Use parser combinators (Section~\ref{subsec:Parsing-with-applicative-and-monadic-parsers})
+to implement a parser for a toy language that contains a single integer
+in a sequence of arbitrary nested tags, such as \lstinline!<a><b>123</b></a>!.
+Tag names are restricted to lowercase Latin letters. The parser should
+return that integer or fail if tags are incorrectly nested.
+
+\subsubsection{Exercise \label{subsec:Exercise-applicative-I-4}\ref{subsec:Exercise-applicative-I-4}}
+
+\textbf{(a)} Use parser combinators to parse a toy arithmetic language
+containing decimal digits and \textsf{``}\lstinline!+!\textsf{''} symbols, for example
+\lstinline!1+321+20!. The parser should return the resulting integer.
+
+\textbf{(b)} Extend the parser to support parentheses and \textsf{``}\lstinline!-!\textsf{''}
+symbols, for example \lstinline!10-(2+3)!.
 
 \section{Slides, Part II}
 
