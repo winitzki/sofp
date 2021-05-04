@@ -1321,6 +1321,10 @@ scala> p3.run("1=2")
 res12: (Either[Err, Int], String) = (Left(List("integer 1 not found", "junk at end")), "2")
 \end{lstlisting}
 
+Several parser combinator libraries\footnote{See, for example, the \textsf{``}\texttt{fastparse}\textsf{''} library: \texttt{\href{https://com-lihaoyi.github.io/fastparse}{https://com-lihaoyi.github.io/fastparse}}}
+are organized along these principles and provide applicative, monadic,
+filterable, monoidal, and other functionality for building up large
+parsers from parts.
 
 \subsection{Exercises\index{exercises}}
 
@@ -1384,102 +1388,194 @@ symbols, for example \lstinline!10-(2+3)!.
 
 \section{Laws and structure of applicative functors}
 
+\subsection{Equivalence of \texttt{map2}, \texttt{zip}, and \texttt{ap}}
+
+We have seen in Section~\ref{subsec:Programs-that-accumulate-errors}
+that the implementations of \lstinline!map2! and \lstinline!zip!
+for \lstinline!Either[E, A]! are quite similar. This similarity still
+holds in the general case: \lstinline!map2! and \lstinline!zip!
+are equivalent assuming a suitable naturality law of \lstinline!map2!.
+(Naturality laws will always hold if the code is fully parametric.)
+
+\subsubsection{Statement \label{subsec:Statement-map2-zip-equivalence}\ref{subsec:Statement-map2-zip-equivalence}
+(equivalence of \lstinline!map2! and \lstinline!zip!)}
+
+For any functor $L$ for which \lstinline!map2! or \lstinline!zip!
+can be implemented, the type of functions \lstinline!zip! (type signature
+$\text{zip}:L^{A}\times L^{B}\rightarrow L^{A\times B}$) is equivalent
+to the type of functions \lstinline!map2! (type signature $L^{A}\times L^{B}\rightarrow\left(A\times B\rightarrow C\right)\rightarrow L^{C}$),
+assuming that the functions \lstinline!map2! satisfy the naturality
+law with respect to the type parameter $C$.
+
+\subparagraph{Proof}
+
+We need to show equivalence in two directions (from \lstinline!map2!
+to \lstinline!zip! and back).
+
+\textbf{(1)} Given any function $\text{map}_{2}:L^{A}\times L^{B}\rightarrow\left(A\times B\rightarrow C\right)\rightarrow L^{C}$
+satisfying the naturality law:
+\[
+\text{map}_{2}\,(p^{:L^{A}}\times q^{:L^{B}})(f)\triangleright g^{\uparrow L}=\text{map}_{2}\,(p\times q)(f\bef g)\quad,
+\]
+we first define a \lstinline!zip! method:
+\[
+\text{zip}:L^{A}\times L^{B}\rightarrow L^{A\times B}\quad,\quad\quad\text{zip}\,(p^{:L^{A}}\times q^{:L^{B}})\triangleq\text{map}_{2}\,(p\times q)(\text{id}^{:A\times B\rightarrow A\times B})\quad,
+\]
+and then define a new \lstinline!map2!$^{\prime}$ function through
+that \lstinline!zip! method:
+\[
+\text{map}_{2}^{\prime}\,(p^{:L^{A}}\times q^{:L^{B}})(f^{:A\times B\rightarrow C})\triangleq(p\times q)\triangleright\text{zip}\triangleright f^{\uparrow L}\quad.
+\]
+Then we need to show that $\text{map}_{2}^{\prime}=\text{map}_{2}$.
+We apply $\text{map}_{2}^{\prime}$ to arbitrary arguments and write:
+\begin{align*}
+ & \text{map}_{2}^{\prime}\,(p\times q)(f)=(p\times q)\triangleright\text{zip}\triangleright f^{\uparrow L}=\text{map}_{2}\,(p\times q)(\text{id})\,\gunderline{\triangleright\,f^{\uparrow L}}\\
+{\color{greenunder}\text{naturality law of }\text{map}_{2}:}\quad & =\text{map}_{2}\,(p\times q)(\text{id}\bef f)=\text{map}_{2}\,(p\times q)(f)\quad.
+\end{align*}
+
+\textbf{(2)} Given any function $\text{zip}:L^{A}\times L^{B}\rightarrow L^{A\times B}$,
+we first define a \lstinline!map2! method:
+\[
+\text{map}_{2}\,(p^{:L^{A}}\times q^{:L^{B}})(f^{:A\times B\rightarrow C})\triangleq(p\times q)\triangleright\text{zip}\triangleright f^{\uparrow L}\quad,
+\]
+and then define a new \lstinline!zip!$^{\prime}$ function through
+that \lstinline!map2! method:
+\[
+\text{zip}^{\prime}\,(p^{:L^{A}}\times q^{:L^{B}})\triangleq\text{map}_{2}\,(p\times q)(\text{id}^{:A\times B\rightarrow A\times B})\quad.
+\]
+Then we need to show that $\text{zip}^{\prime}=\text{zip}$. We write:
+\[
+\text{zip}^{\prime}\,(p^{:L^{A}}\times q^{:L^{B}})=\text{map}_{2}\,(p\times q)(\text{id}^{:A\times B\rightarrow A\times B})=(p\times q)\triangleright\text{zip}\triangleright\text{id}^{\uparrow L}=(p\times q)\triangleright\text{zip}=\text{zip}\,(p\times q)\quad.
+\]
+
+It remains to show that the \lstinline!map2! method will satisfy
+the naturality law if defined via \lstinline!zip!:
+\begin{align*}
+ & \gunderline{\text{map}_{2}\,(p\times q)(f)}\triangleright g^{\uparrow L}=(p\times q)\triangleright\text{zip}\triangleright f^{\uparrow L}\triangleright g^{\uparrow L}=(p\times q)\triangleright\text{zip}\triangleright(f\bef g)^{\uparrow L}\\
+{\color{greenunder}\text{definition of }\text{map}_{2}\text{ via }\text{zip}:}\quad & =\text{map}_{2}\,(p\times q)(f\bef g)\quad.
+\end{align*}
+$\square$
+
+The equivalence of \lstinline!map2! and \lstinline!zip! follows
+a pattern similar to one shown in Section~\ref{subsec:Equivalence-of-a-natural-transformation-and-lifting}:
+a function with one type parameter (a natural transformation) is equivalent
+to a function with two type parameters if a naturality law holds (with
+respect to one of those type parameters). Here, \lstinline!zip! is
+playing the role of the natural transformation, and \lstinline!map2!
+is a function obeying a naturality law. The proof of Statement~\ref{subsec:Statement-map2-zip-equivalence}
+is similar to the proof of Statement~\ref{subsec:Statement-tr-equivalent-to-ftr}.
+
+However, \lstinline!map2! is not a \textsf{``}lifting\textsf{''} in the sense of
+Section~\ref{subsec:Equivalence-of-a-natural-transformation-and-lifting}.
+The method \textsf{``}\lstinline!ap!\textsf{''} better fits the role of a lifting
+since its type signature, $\text{ap}:L^{A\rightarrow B}\rightarrow L^{A}\rightarrow L^{B}$,
+transforms functions wrapped under $L$ (i.e., functions of type $L^{A\rightarrow B}$)
+to functions of type $L^{A}\rightarrow L^{B}$. So, let us prove that
+\lstinline!ap! is equivalent to \lstinline!map2!. Since the type
+signature of \lstinline!ap! is curried, it is more convenient to
+use the curried version (\lstinline!fmap2!) instead of \lstinline!map2!.
+Let us write the relationship between \lstinline!ap! and \lstinline!fmap2!
+in the code notation:
+
+\begin{wrapfigure}{l}{0.34\columnwidth}%
+\vspace{-1.7\baselineskip}
+\[
+\xymatrix{\xyScaleY{0.4pc}\xyScaleX{2pc} & F^{B\rightarrow C}\ar[rd]\sp(0.5){\text{ap}^{B,C}}\\
+F^{A}\ar[ru]\sp(0.45){f^{\uparrow L}}\ar[rr]\sb(0.5){\text{fmap}_{2}\,(f^{:A\rightarrow B\rightarrow C})} &  & \left(F^{B}\rightarrow F^{C}\right)
+}
+\]
+\vspace{-2\baselineskip}
+\end{wrapfigure}%
+
+~\vspace{-0.8\baselineskip}
+\begin{align*}
+ & \text{fmap}_{2}\,(f^{:A\rightarrow B\rightarrow C})=f^{\uparrow L}\bef\text{ap}^{B,C}\quad,\\
+ & \text{ap}^{A,B}=\text{fmap}_{2}\,(\text{id}^{:\left(A\rightarrow B\right)\rightarrow A\rightarrow B})\quad.
+\end{align*}
+
+We are now ready to prove the equivalence of \lstinline!fmap2! and
+\lstinline!ap!:
+
+\subsubsection{Statement \label{subsec:Statement-fmap2-equivalence-to-ap}\ref{subsec:Statement-fmap2-equivalence-to-ap}}
+
+For any functor $L$ for which \lstinline!fmap2! or \lstinline!ap!
+can be implemented, the type of functions \lstinline!ap! (type signature
+$\text{ap}:L^{A\rightarrow B}\rightarrow L^{A}\rightarrow L^{B}$)
+is equivalent to the type of functions \lstinline!fmap2! (type signature
+$\left(A\rightarrow B\rightarrow C\right)\rightarrow L^{A}\rightarrow L^{B}\rightarrow L^{C}$),
+assuming that the functions \lstinline!fmap2! satisfy the naturality
+law with respect to the type parameter $C$.
+
+\subparagraph{Proof}
+
+We need to show equivalence in two directions (from \lstinline!fmap2!
+to \lstinline!ap! and back).
+
+\textbf{(1)} Given any function $\text{fmap}_{2}:\left(A\rightarrow B\rightarrow C\right)\rightarrow L^{A}\rightarrow L^{B}\rightarrow L^{C}$
+satisfying the naturality law:
+\[
+\text{fmap}_{2}\,(g^{:X\rightarrow A}\bef f^{:A\rightarrow B\rightarrow C})(p^{:L^{X}})=\text{fmap}_{2}\,(f)(p\triangleright g^{\uparrow L})\quad,
+\]
+we first define an \lstinline!ap! method:
+\[
+\text{ap}:L^{A\rightarrow B}\rightarrow L^{A}\rightarrow L^{B}\quad,\quad\quad\text{ap}\,(r^{:L^{A\rightarrow B}})\triangleq\text{fmap}_{2}\,(\text{id}^{:(A\rightarrow B)\rightarrow A\rightarrow B})(r)\quad,
+\]
+and then define a new \lstinline!fmap2!$^{\prime}$ function through
+that \lstinline!ap! method:
+\[
+\text{fmap}_{2}^{\prime}\,(f^{:A\rightarrow B\rightarrow C})(p^{:L^{A}})\triangleq p\triangleright f^{\uparrow L}\triangleright\text{ap}\quad.
+\]
+Then we need to show that $\text{fmap}_{2}^{\prime}=\text{fmap}_{2}$.
+We apply $\text{fmap}_{2}^{\prime}$ to arbitrary arguments and write:
+\begin{align*}
+ & \text{fmap}_{2}^{\prime}\,(f^{:A\rightarrow B\rightarrow C})(p^{:L^{A}})=p\triangleright f^{\uparrow L}\triangleright\text{ap}=\text{fmap}_{2}\,(\text{id})(p\triangleright f^{\uparrow L})\\
+{\color{greenunder}\text{naturality law of }\text{fmap}_{2}:}\quad & =\text{fmap}_{2}\,(f\bef\text{id})(p)=\text{fmap}_{2}\,(f)(p)\quad.
+\end{align*}
+
+\textbf{(2)} Given any function $\text{ap}:L^{A\rightarrow B}\rightarrow L^{A}\rightarrow L^{A}$,
+we first define \lstinline!fmap2!:
+\[
+\text{fmap}_{2}\,(f^{:A\rightarrow B\rightarrow C})\triangleq f^{\uparrow L}\bef\text{ap}\quad,
+\]
+and then define a new \lstinline!ap!$^{\prime}$ function through
+that \lstinline!fmap2! method:
+\[
+\text{ap}^{\prime}\triangleq\text{fmap}_{2}\,(\text{id})\quad.
+\]
+Then we need to show that $\text{ap}^{\prime}=\text{ap}$. We write:
+\[
+\text{ap}^{\prime}=\text{fmap}_{2}\,(\text{id})=\text{id}^{\uparrow L}\bef\text{ap}=\text{ap}\quad.
+\]
+
+It remains to show that the \lstinline!fmap2! method will satisfy
+the naturality law if defined via \lstinline!ap!:
+\begin{align*}
+ & \text{fmap}_{2}\,(g\bef f)(p)=p\triangleright(g\bef f)^{\uparrow L}\bef\text{ap}=p\triangleright g^{\uparrow L}\triangleright\gunderline{f^{\uparrow L}\bef\text{ap}}\\
+{\color{greenunder}\text{definition of }\text{fmap}_{2}\text{ via }\text{ap}:}\quad & =(p\triangleright g^{\uparrow L})\triangleright\text{fmap}_{2}\,(f)=\text{fmap}_{2}\,(f)(p\triangleright g^{\uparrow L})\quad.
+\end{align*}
+$\square$
+
+\subsection{Motivation for the laws of \texttt{map2}}
+
+\subsection{Deriving the laws of \texttt{zip} and \texttt{ap}}
+
+\subsection{Similarity between the laws of \texttt{zip} and monoid laws}
+
+\subsection{Constructions of applicative functors}
+
+\subsection{Laws of \texttt{ap} in view of category theory}
+
 \section{Applicative contrafunctors and profunctors}
 
+\subsection{Applicative contrafunctors: Laws and constructions}
+
+\subsection{Applicative profunctors: Laws and constructions}
+
 \section{Slides, Part II}
-
-\paragraph{Deriving the \texttt{\textcolor{blue}{\footnotesize{}ap}} operation
-from \texttt{\textcolor{blue}{\footnotesize{}map2}} }
-
-\vspace{-0.1cm}Can we avoid having to define $\text{map}_{n}$ separately
-for each $n$?
-\begin{itemize}
-\item Use curried arguments, $\text{fmap}_{2}:(A\rightarrow B\rightarrow Z)\rightarrow F^{A}\rightarrow F^{B}\rightarrow F^{Z}$
-\begin{itemize}
-\item Set $A\triangleq\left(B\rightarrow Z\right)$ and apply $\text{fmap}_{2}$
-to the identity $\text{id}^{\left(B\rightarrow Z\right)\rightarrow\left(B\rightarrow Z\right)}$:
-obtain $\text{ap}^{[B,Z]}:F^{B\rightarrow Z}\rightarrow F^{B}\rightarrow F^{Z}\triangleq\text{fmap}_{2}\left(\text{id}\right)$
-\item The functions \texttt{\textcolor{blue}{\footnotesize{}fmap$_{2}$}}
-and \texttt{\textcolor{blue}{\footnotesize{}ap}} are computationally
-equivalent:{\footnotesize{}
-\[
-\text{fmap}_{2}\,f^{A\rightarrow B\rightarrow Z}=\text{fmap}\,f\bef\text{ap}
-\]
-\[
-\xymatrix{\xyScaleY{0.2pc}\xyScaleX{3pc} & F^{B\rightarrow Z}\ar[rd]\sp(0.45){\text{ap}}\\
-F^{A}\ar[ru]\sp(0.45){\text{fmap}\,f}\ar[rr]\sb(0.45){\text{fmap}_{2}\,(f^{A\rightarrow B\rightarrow Z})} &  & \left(F^{B}\rightarrow F^{Z}\right)
-}
-\]
-}{\footnotesize\par}
-\item The functions \texttt{\textcolor{blue}{\footnotesize{}fmap$_{3}$}},
-\texttt{\textcolor{blue}{\footnotesize{}fmap$_{4}$}} etc.\ can be
-defined similarly:{\footnotesize{}
-\[
-\text{fmap}_{3}\,f^{A\rightarrow B\rightarrow C\rightarrow Z}=\text{fmap}\,f\bef\text{ap}\bef\text{fmap}_{F^{B}\rightarrow?}\text{ap}
-\]
-\[
-\xymatrix{\xyScaleY{0.2pc}\xyScaleX{3pc} & F^{B\rightarrow C\rightarrow Z}\ar[r]\sp(0.45){\text{ap}^{[B,C\rightarrow Z]}} & \left(F^{B}\rightarrow F^{C\rightarrow Z}\right)\ar[rd]\sp(0.55){\text{fmap}_{F^{B}\rightarrow?}\text{ap}^{[C,Z]}}\\
-F^{A}\ar[ru]\sp(0.45){\text{fmap}\,f}\ar[rrr]\sb(0.45){\text{fmap}_{3}\,(f^{A\rightarrow B\rightarrow C\rightarrow Z})} &  &  & \left(F^{B}\rightarrow F^{C}\rightarrow F^{Z}\right)
-}
-\]
-}{\footnotesize\par}
-\item Using the infix syntax will get rid of {\footnotesize{}$\text{fmap}_{F^{B}\rightarrow?}\text{ap}$}
-(see example code)
-\begin{itemize}
-\item Note the pattern: a natural transformation is equivalent to a lifting
-\end{itemize}
-\end{itemize}
-\end{itemize}
-
-
-\paragraph{Deriving the \texttt{\textcolor{blue}{\footnotesize{}zip}} operation
-from \texttt{\textcolor{blue}{\footnotesize{}map2}} }
-\begin{itemize}
-\item The types $A\rightarrow B\rightarrow C$ and $A\times B\rightarrow C$
-are equivalent (curry/uncurry)
-\begin{itemize}
-\item Uncurry $\text{fmap}_{2}$ to $\text{fmap2}:\left(A\times B\rightarrow C\right)\rightarrow F^{A}\times F^{B}\rightarrow F^{C}$ 
-\item Compute $\text{fmap2}\left(f\right)$ with $f=\text{id}^{A\times B\rightarrow A\times B}$,
-expecting to obtain a simpler natural transformation: 
-\[
-\text{zip}:F^{A}\times F^{B}\rightarrow F^{A\times B}
-\]
- 
-\item This is quite similar to \texttt{\textcolor{blue}{\footnotesize{}zip}}
-for lists:
-\end{itemize}
-\begin{lyxcode}
-\textcolor{blue}{\footnotesize{}List(1,~2).zip(List(10,~20))~=~List((1,~10),~(2,~20))}~
-\end{lyxcode}
-\begin{itemize}
-\item The functions \texttt{\textcolor{blue}{\footnotesize{}zip}} and \texttt{\textcolor{blue}{\footnotesize{}fmap2}}
-are computationally equivalent:{\footnotesize{}
-\begin{align*}
-\text{zip} & =\text{fmap2}\left(\text{id}\right)\\
-\text{fmap2}\,(f^{A\times B\rightarrow C}) & =\text{zip}\bef\text{fmap}\,f
-\end{align*}
-\[
-\xymatrix{\xyScaleY{0.2pc}\xyScaleX{3pc} & F^{A\times B}\ar[rd]\sp(0.65){\ \ \text{fmap}\,f^{A\times B\rightarrow C}}\\
-F^{A}\times F^{B}\ar[ru]\sp(0.5){\text{zip}}\ar[rr]\sb(0.6){\text{fmap2}\,(f^{A\times B\rightarrow C})} &  & F^{C}
-}
-\]
-}{\footnotesize\par}
-\item The functor $F$ is \textbf{zippable} if such a \texttt{\textcolor{blue}{\footnotesize{}zip}}
-exists (with appropriate laws)
-\begin{itemize}
-\item The same pattern: a natural transformation is equivalent to a lifting
-\end{itemize}
-\end{itemize}
-\end{itemize}
-
-
-\paragraph{{*} Equivalence of the operations \texttt{\textcolor{blue}{\footnotesize{}ap}}
-and \texttt{\textcolor{blue}{\footnotesize{}zip}} }
-\begin{itemize}
-\item \vspace{-0.2cm}Set $A\triangleq B\rightarrow C$, get $\text{zip}^{[B\rightarrow C,B]}:F^{B\rightarrow C}\times F^{B}\rightarrow F^{(B\rightarrow C)\times B}$
 \begin{itemize}
 \item Use \texttt{\textcolor{blue}{\footnotesize{}eval}} $:\left(B\rightarrow C\right)\times B\rightarrow C$
 and $\text{fmap}\left(\text{eval}\right):F^{(B\rightarrow C)\times B}\rightarrow F^{C}$
+\begin{itemize}
 \item Uncurry: \texttt{\textcolor{blue}{\footnotesize{}app}}$\text{}^{[B,C]}:F^{B\rightarrow C}\times F^{B}\rightarrow F^{C}\triangleq\text{zip}\bef\text{fmap}\left(\text{eval}\right)$ 
 \item The functions \texttt{\textcolor{blue}{\footnotesize{}zip}} and \texttt{\textcolor{blue}{\footnotesize{}app}}
 are computationally equivalent:
@@ -2039,30 +2135,6 @@ Constructions that do not correspond to monadic ones:
 $Z$
 \item $F^{A}\triangleq G^{H^{A}}$ when both $G$ and $H$ are applicative
 \end{enumerate}
-\begin{itemize}
-\item Applicative that disagrees with its monad: $F^{A}\triangleq1+\left(1\rightarrow A\times F^{A}\right)$
-(lazy list, non-standard applicative)
-\item Examples of non-applicative functors: $F^{A}\triangleq\left(P\rightarrow A\right)+\left(Q\rightarrow A\right)$,
-$F^{A}\triangleq\left(A\rightarrow P\right)\rightarrow Q$,\  $F^{A}\triangleq\left(A\rightarrow P\right)\rightarrow1+A$
-\end{itemize}
-\end{itemize}
-
-
-\paragraph{All non-parameterized exp-poly types are monoids}
-\begin{itemize}
-\item \vspace{-0.1cm}Using known monoid constructions (Chapter\ 7), we
-can implement $X+Y$, $X\times Y$, $X\rightarrow Y$ as monoids when
-$X$ and $Y$ are monoids
-
-By constructions 1, 2, 6, 7, \emph{all} polynomial $F^{A}$ with monoidal
-coefficients are applicative: write $F^{A}=Z_{1}+A\times\left(Z_{2}+A\times...\right)$
-with some monoids $Z_{i}$
-\begin{itemize}
-\item Examples: $F^{A}=1+A\times A$ (this $F^{A}$ cannot be a monad!)
-\item $F^{A}=A+A\times A\times Z$ where $Z$ is a monoid (this $F^{A}$
-is a monad)
-\end{itemize}
-Previous examples of non-applicative functors are all \emph{non-polynomial}
 \end{itemize}
 
 
@@ -2188,7 +2260,7 @@ are commutative applicative functors
 \end{itemize}
 \end{itemize}
 
-\section{Discussion}
+\section{Discussion and further developments}
 
 \subsection{Relationships between monads and applicative functors}
 
@@ -2210,13 +2282,36 @@ Example~\ref{subsec:Example-applicative-not-monad} shows that some
 applicative functors are not monads: the type constructor $L^{A}\triangleq\bbnum 1+A\times A$
 is applicative but \emph{not} a monad (see Exercise~\ref{subsec:Exercise-1-monads-7-not-a-monad}).
 
-{*}{*}{*}%
+{*}{*}{*}
+\begin{itemize}
+\item Applicative that disagrees with its monad: $F^{A}\triangleq1+\left(1\rightarrow A\times F^{A}\right)$
+(lazy list, non-standard applicative)
+\item Examples of non-applicative functors: $F^{A}\triangleq\left(P\rightarrow A\right)+\left(Q\rightarrow A\right)$,
+$F^{A}\triangleq\left(A\rightarrow P\right)\rightarrow Q$,\  $F^{A}\triangleq\left(A\rightarrow P\right)\rightarrow1+A$
+\end{itemize}
 \begin{comment}
 monads, applicatives, arrows paper: (Lindley, Wadler, Yallop)
 
 mumbo-jumbo, clap-trap, abra-cadabra, algebra-cadalgebra, gobbledy-gook
 \end{comment}
 
+
+\paragraph{All polynomial functors with monoidal coefficients are applicative}
+\begin{itemize}
+\item \vspace{-0.1cm}Using known monoid constructions (Chapter\ 7), we
+can implement $X+Y$, $X\times Y$, $X\rightarrow Y$ as monoids when
+$X$ and $Y$ are monoids
+
+By constructions 1, 2, 6, 7, \emph{all} polynomial $F^{A}$ with monoidal
+coefficients are applicative: write $F^{A}=Z_{1}+A\times\left(Z_{2}+A\times...\right)$
+with some monoids $Z_{i}$
+\begin{itemize}
+\item Examples: $F^{A}=1+A\times A$ (this $F^{A}$ cannot be a monad!)
+\item $F^{A}=A+A\times A\times Z$ where $Z$ is a monoid (this $F^{A}$
+is a monad)
+\end{itemize}
+Previous examples of non-applicative functors are all \emph{non-polynomial}
+\end{itemize}
 
 \subsection{Commutative applicative functors and parallel computation}
 
@@ -2324,9 +2419,11 @@ where $G^{A}$ is a given applicative profunctor and $Z$ is a monoid.
 
 \subsubsection{Exercise \label{subsec:Exercise-applicative-II-11}\ref{subsec:Exercise-applicative-II-11}}
 
-Show that, for any profunctor $P^{A}$, one can implement a function
-of type $A\rightarrow P^{B}\rightarrow P^{A\times B}$ but not of
-type $A\rightarrow P^{B}\rightarrow P^{A}$. 
+\textbf{(a)} Show that, for any profunctor $P^{A}$, one can implement
+a function of type $A\times P^{B}\rightarrow P^{A\times B}$. 
+
+\textbf{(b)} Show that, for some profunctors $P^{A}$, one \emph{cannot}
+implement a function of type $A\times P^{B}\rightarrow P^{A}$. 
 
 \begin{comment}
 this is chapter eight devoted to applicative hunters and pro functors
