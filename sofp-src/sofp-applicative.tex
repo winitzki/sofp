@@ -1493,10 +1493,10 @@ F^{A}\ar[ru]\sp(0.45){f^{\uparrow L}}\ar[rr]\sb(0.5){\text{fmap}_{2}\,(f^{:A\rig
  & \text{ap}^{A,B}=\text{fmap}_{2}\,(\text{id}^{:\left(A\rightarrow B\right)\rightarrow A\rightarrow B})\quad.
 \end{align*}
 
-We are now ready to prove the equivalence of \lstinline!fmap2! and
-\lstinline!ap!:
+We are now ready to prove the equivalence of \lstinline!ap! and \lstinline!fmap2!:
 
-\subsubsection{Statement \label{subsec:Statement-fmap2-equivalence-to-ap}\ref{subsec:Statement-fmap2-equivalence-to-ap}}
+\subsubsection{Statement \label{subsec:Statement-fmap2-equivalence-to-ap}\ref{subsec:Statement-fmap2-equivalence-to-ap}
+(equivalence of \lstinline!ap! and \lstinline!fmap2!)}
 
 For any functor $L$ for which \lstinline!fmap2! or \lstinline!ap!
 can be implemented, the type of functions \lstinline!ap! (type signature
@@ -1561,14 +1561,14 @@ laws) that \lstinline!zip! is equivalent to \lstinline!ap!. In Scala,
 the relationship between \lstinline!zip! and \lstinline!ap! is:
 \begin{lstlisting}
 def zip[A, B](la: L[A], lb: L[B]): L[(A, B)] =    // Assuming that `ap` is already defined.
-  ap(la.map {a => (b: B) => (a, b)} )(lb)
+  ap[B, (A, B)](la.map {a => (b: B) => (a, b)} )(lb)
 
 def ap[A, B](lf: L[A => B])(la: L[A]): L[B] =     // Assuming that `zip` is already defined.
   zip(lf, la).map { case (f, a) => f(a) }
 \end{lstlisting}
 
 
-\subsubsection{Statement \label{subsec:Statement-zip-ap-equivalence}\ref{subsec:Statement-zip-ap-equivalence}{*}}
+\subsubsection{Statement \label{subsec:Statement-zip-ap-equivalence}\ref{subsec:Statement-zip-ap-equivalence}}
 
 The functions \lstinline!zip! and \lstinline!ap! are equivalent
 assuming the following naturality laws:
@@ -1695,8 +1695,9 @@ and \lstinline!ap! are equivalent to each other, assuming that the
 required naturality laws hold. (In practice, implementations of these
 methods always satisfy the naturality laws with respect to each type
 parameter.) We can encapsulate the functionality of these methods
-into a \textsf{``}zippable functor\textsf{''} typeclass, where the \lstinline!map2!
-and \lstinline!ap! methods are defined via \lstinline!zip!:
+into a \textsf{``}zippable functor\textsf{''} typeclass,\footnote{This typeclass is called \textsf{``}\lstinline!Zip!\textsf{''} in \texttt{scalaz}
+and \textsf{``}\lstinline!Semigroupal!\textsf{''} in \texttt{cats}. } where the \lstinline!map2! and \lstinline!ap! methods are defined
+via \lstinline!zip!:
 \begin{lstlisting}
 abstract class Zippable[L[_]: Functor] {
   def zip[A, B](la: L[A], lb: L[B]): L[(A, B)]
@@ -1708,11 +1709,10 @@ Instead of using \lstinline!zip!, either \lstinline!map2! or \lstinline!ap!
 could be used to implement the other methods.
 
 In addition to these methods, it is helpful to require a \lstinline!pure!
-method to exist for the functor \lstinline!L!. The resulting typeclass
-is known as \lstinline!Applicative!. The \lstinline!pure! method
-is equivalent to a \textsf{``}wrapped unit\textsf{''} (denoted \lstinline!wu!, see
-Section~\ref{subsec:Pointed-functors-motivation-equivalence}). So,
-the simplest definition of the \lstinline!Applicative! typeclass
+method for the functor \lstinline!L!. The resulting typeclass is
+known as \lstinline!Applicative!. The \lstinline!pure! method is
+equivalent to a \textsf{``}wrapped unit\textsf{''} (denoted \lstinline!wu!, see Section~\ref{subsec:Pointed-functors-motivation-equivalence}).
+So, the simplest definition of the \lstinline!Applicative! typeclass
 contains just these two methods:
 \begin{lstlisting}
 trait Applicative[L[_]] {
@@ -1735,25 +1735,199 @@ must satisfy.
 The motivation for those laws comes from treating \lstinline!map2(la, lb)(f)!
 as a replacement for this code:
 \begin{lstlisting}
-val monadicMap2(la: L[A], lb: L[B])(f: (A, B) => C): L[C] = for {
+def monadicMap2(la: L[A], lb: L[B])(f: (A, B) => C): L[C] = for {
   x <- la
   y <- lb
 } yield f(x, y)
 \end{lstlisting}
-Unlike the functor block code, \lstinline!map2(la, lb)! assumes that
-the effects in \lstinline!la! and \lstinline!lb! are independent.
-However, the types of \lstinline!monadicMap2! and \lstinline!map2(la, lb)(f)!
+Unlike the functor block code of \lstinline!monadicMap2!, which uses
+the monad\textsf{'}s methods, \lstinline!map2(la, lb)! assumes that the effects
+in \lstinline!la! and \lstinline!lb! are independent. However, the
+types of \lstinline!monadicMap2! and \lstinline!map2(la, lb)(f)!
 are the same, and for some type constructors (such as the \lstinline!Reader!
 monad) the results are the same. So, we will require that \lstinline!map2!
 should obey the same laws as the code in \lstinline!monadicMap2!.
 
-\subsection{Deriving the laws of \texttt{zip} and \texttt{ap}}
+To derive the laws of \lstinline!map2!, we will specialize the laws
+of monads (which are imposed on \lstinline!flatMap! and \lstinline!pure!)
+to code of the form of \lstinline!monadicMap2! and express the laws
+in terms of \lstinline!map2! and \lstinline!pure!.
 
-\subsection{Similarity between the laws of \texttt{zip} and monoid laws}
+We begin with the associativity law of monads, which says that these
+three expressions are equal:
+
+\noindent \texttt{\textcolor{blue}{\footnotesize{}}}%
+\begin{minipage}[c][1\totalheight][t]{0.3\columnwidth}%
+\texttt{\textcolor{blue}{\footnotesize{}}}
+\begin{lstlisting}
+for {
+  x <- la
+  y <- lb
+  z <- lc
+} yield g(x, y, z)
+\end{lstlisting}
+%
+\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\hfill{}}}%
+\begin{minipage}[c][1\totalheight][t]{0.3\columnwidth}%
+\texttt{\textcolor{blue}{\footnotesize{}}}
+\begin{lstlisting}
+for {
+  x <- la
+  (y, z) <- for {
+         yy <- lb
+         zz <- lc
+       } yield (yy, zz)
+} yield g(x, y, z)
+\end{lstlisting}
+%
+\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\hfill{}}}%
+\begin{minipage}[c][1\totalheight][t]{0.3\columnwidth}%
+\texttt{\textcolor{blue}{\footnotesize{}}}
+\begin{lstlisting}
+for {
+  (x, y) <- for {
+              xx <- la
+              yy <- lb
+            } yield (xx, yy)
+   z <- lc
+} yield g(x, y, z)
+\end{lstlisting}
+%
+\end{minipage}{\footnotesize\par}
+
+Expressed through \lstinline!map2!, this law gives an equation between
+the following function calls:
+\begin{lstlisting}
+map3(la, lb, lc) { (a, b, c) => g(a, b, c) }
+  == map2(la, map2(lb, lc) { (b, c) => (b, c) } { case (x, (y, z)) => g(x, y, z) }
+  == map2(map2(la, lb) { (a, b) => (a, b) }, lc) { case ((x, y), z)) => g(x, y, z) } 
+\end{lstlisting}
+So, the associativity law of \lstinline!map2! guarantees that \lstinline!map3!
+can be expressed unambiguously through \lstinline!map2!, regardless
+of the order in which we group the arguments.
+
+Next, we consider the monadic left identity law. That law says that
+the following codes are equal:
+
+\noindent \texttt{\textcolor{blue}{\footnotesize{}}}%
+\begin{minipage}[c][1\totalheight][t]{0.4\columnwidth}%
+\texttt{\textcolor{blue}{\footnotesize{}}}
+\begin{lstlisting}
+for {
+  x <- pure(a)
+  y <- lb
+} yield g(x, y)
+\end{lstlisting}
+%
+\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\hfill{}}}%
+\begin{minipage}[c][1\totalheight][t]{0.4\columnwidth}%
+\texttt{\textcolor{blue}{\footnotesize{}}}
+\begin{lstlisting}
+for {
+  // No need to define x. 
+  y <- lb
+} yield g(a, y)
+\end{lstlisting}
+%
+\end{minipage}{\footnotesize\par}
+
+Writing this in terms of \lstinline!map2!, we obtain the equation:
+\begin{lstlisting}
+map2(pure(a), lb)(g) == lb.map { y => g(a, y) } 
+\end{lstlisting}
+
+The monadic right identity law says that the following two expressions
+are equal:
+
+\noindent \texttt{\textcolor{blue}{\footnotesize{}}}%
+\begin{minipage}[c][1\totalheight][t]{0.4\columnwidth}%
+\texttt{\textcolor{blue}{\footnotesize{}}}
+\begin{lstlisting}
+for {
+  x <- la
+  y <- pure(b)
+} yield g(x, y)
+\end{lstlisting}
+%
+\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\hfill{}}}%
+\begin{minipage}[c][1\totalheight][t]{0.4\columnwidth}%
+\texttt{\textcolor{blue}{\footnotesize{}}}
+\begin{lstlisting}
+for {
+  x <- la
+  // No need to define y. 
+} yield g(x, b)
+\end{lstlisting}
+%
+\end{minipage}{\footnotesize\par}
+
+Writing this in terms of \lstinline!map2!, we obtain the equation:
+\begin{lstlisting}
+map2(la, pure(b))(g) == la.map { x => g(x, b) } 
+\end{lstlisting}
+
+To simplify and analyze the laws of \lstinline!map2!, we will now
+derive the laws of \lstinline!zip! and \lstinline!ap! that will
+follow once we express \lstinline!zip! and \lstinline!ap! via \lstinline!map2!.
+\begin{align*}
+\\
+ & \text{map}_{2}(\text{pu}\left(a\right)\times q)(g)=q\triangleright(b\rightarrow g(a,b))^{\uparrow L}\quad,\quad\text{map}_{2}(p\times\text{pu}\left(b\right))(g)=p\triangleright(a\rightarrow g(a,b))^{\uparrow L}
+\end{align*}
+
+
+\subsection{Deriving the laws of \texttt{zip}}
+
+To derive the laws of \lstinline!zip! that follow from the identity
+and associativity laws of \lstinline!map2!, we express \lstinline!map2!
+via \lstinline!zip! and substitute into those laws.
+
+Begin with the associativity law and write its two sides separately:
+\begin{align*}
+{\color{greenunder}\text{left-hand side}:}\quad & \text{map}_{2}\,(p^{:L^{A}}\times\text{map}_{2}\,(q^{:L^{B}}\times r^{:L^{C}})(\text{id}^{:B\times C\rightarrow B\times C}))(a^{:A}\times(b^{:B}\times c^{:C})\rightarrow g(a\times b\times c))\\
+ & \quad=\text{zip}\,(p\times\text{zip}\,(q\times r))\triangleright(a\times(b\times c)\rightarrow g(a\times b\times c))^{\uparrow L}\quad,\\
+{\color{greenunder}\text{right-hand side}:}\quad & \text{map}_{2}\,(\text{map}_{2}\,(p\times q)(\text{id})\times r)((a^{:A}\times b^{:B})\times c^{:C}\rightarrow g(a\times b\times c))\\
+ & \quad=\text{zip}\,(\text{zip}\,(p\times q)\times r)\triangleright((a\times b)\times c)\rightarrow g(a\times b\times c))^{\uparrow L}\quad.
+\end{align*}
+Both sides now depend on an arbitrary function $g^{:A\times B\times C\rightarrow D}$
+in almost the same way, except for a rearrangement of the nested products.
+We can refactor the code to remove the dependency on $g$. Define
+two functions $\varepsilon_{1,23}$ and $\varepsilon_{12,3}$ that
+rearrange the tuples:
+\[
+\varepsilon_{1,23}\triangleq a^{:A}\times(b^{:B}\times c^{:C})\rightarrow a\times b\times c\quad,\quad\quad\varepsilon_{12,3}\triangleq(a^{:A}\times b^{:B})\times c\rightarrow a\times b\times c\quad.
+\]
+Then we can rewrite the two sides of the associativity law as:
+\begin{align*}
+{\color{greenunder}\text{left-hand side}:}\quad & \text{zip}\,(p\times\text{zip}\,(q\times r))\triangleright\varepsilon_{1,23}^{\uparrow L}\bef g^{\uparrow L}\\
+{\color{greenunder}\text{right-hand side}:}\quad & =\text{zip}\,(\text{zip}\,(p\times q)\times r)\triangleright\varepsilon_{12,3}^{\uparrow L}\bef g^{\uparrow L}\quad.
+\end{align*}
+We can now omit $g$ and obtain an equivalent law:
+\[
+\text{zip}\,(p\times\text{zip}\,(q\times r))\triangleright\varepsilon_{1,23}^{\uparrow L}=\text{zip}\,(\text{zip}\,(p\times q)\times r)\triangleright\varepsilon_{12,3}^{\uparrow L}\quad.
+\]
+A type diagram illustrating this law is shown below: 
+
+\[
+\xymatrix{\xyScaleY{1.4pc}\xyScaleX{3pc}L^{\left(A\times B\right)\times C}\ar[r]{\text{zip}} & L^{A\times B\times C} & L^{A\times\left(B\times C\right)}\ar[l]{\text{zip}}\\
+F^{A\times B}\times F^{C}\ar[u]\sp(0.6){\text{zip}} & F^{A}\ar[ldd]\ar[r] & F^{A}\times F^{B\times C}\ar[u]\sb(0.6){\text{zip}}\\
+F^{A\times B}\ar[u] & F^{C}\ar[rd]\ar[lu] & F^{B\times C}\ar[u]\\
+F^{A}\times F^{B}\ar[u]\sp(0.6){\text{zip}} & F^{B}\ar[r]\ar[l] & F^{B}\times F^{C}\ar[u]\sb(0.6){\text{zip}}
+}
+\]
+
+The functions $\varepsilon_{1,23}$ and $\varepsilon_{12,3}$ implement
+the equivalence of the types $(A\times B)\times C$, $A\times(B\times C)$,
+and $A\times B\times C$. Since $L$ is a functor, lifting $\varepsilon_{1,23}$
+and $\varepsilon_{12,3}$ to $L$ will produce the equivalence between
+$L^{(A\times B)\times C}$, $L^{A\times(B\times C)}$, and $L^{A\times B\times C}$.
+
+{*}{*}{*} 
+
+\subsection{Similarity between the laws of \texttt{zip} and the monoid laws}
 
 \subsection{Constructions of applicative functors}
 
-\subsection{Laws of \texttt{ap} in view of category theory}
+\subsection{Deriving the laws of \texttt{ap}}
 
 \section{Applicative contrafunctors and profunctors}
 
@@ -1762,184 +1936,6 @@ should obey the same laws as the code in \lstinline!monadicMap2!.
 \subsection{Applicative profunctors: Laws and constructions}
 
 \section{Slides, Part II}
-
-
-\paragraph{Motivation for applicative laws. Naturality laws for \texttt{\textcolor{blue}{\footnotesize{}map2}} }
-
-Treat \texttt{\textcolor{blue}{\footnotesize{}map2}} as a replacement
-for a monadic block with independent effects:\texttt{\textcolor{blue}{\footnotesize{}\smallskip{}
-}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}}}%
-\begin{minipage}[c][1\totalheight][t]{0.49\columnwidth}%
-\begin{lyxcode}
-\textcolor{blue}{\footnotesize{}for~\{}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~x~$\leftarrow$~cont1}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~y~$\leftarrow$~cont2}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}\}~yield~g(x,~y)}{\footnotesize\par}
-\end{lyxcode}
-%
-\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\hfill{}}}%
-\begin{minipage}[c][1\totalheight][t]{0.49\columnwidth}%
-\begin{lyxcode}
-\textcolor{blue}{\footnotesize{}map2~(}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~cont1,}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~cont2}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{})~\{~(x,~y)~$\rightarrow$~g(x,~y)~\}}{\footnotesize\par}
-\end{lyxcode}
-%
-\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\hfill{}\medskip{}
-}}{\footnotesize\par}
-\begin{itemize}
-\item Main idea: Formulate the monad laws in terms of \texttt{\textcolor{blue}{\footnotesize{}map2}}
-and \texttt{\textcolor{blue}{\footnotesize{}pure}} 
-
-Naturality laws: Manipulate data in one of the containers\texttt{\textcolor{blue}{\footnotesize{}\smallskip{}
-}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}}}%
-\begin{minipage}[c][1\totalheight][t]{0.49\columnwidth}%
-\begin{lyxcode}
-\textcolor{blue}{\footnotesize{}for~\{}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~x~$\leftarrow$~cont1.map(f)}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~y~$\leftarrow$~cont2}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}\}~yield~g(x,~y)}{\footnotesize\par}
-\end{lyxcode}
-%
-\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\hfill{}}}%
-\begin{minipage}[c][1\totalheight][t]{0.49\columnwidth}%
-\begin{lyxcode}
-\textcolor{blue}{\footnotesize{}for~\{}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~x~$\leftarrow$~cont1}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~y~$\leftarrow$~cont2}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}\}~yield~g(f(x),~y)}{\footnotesize\par}
-\end{lyxcode}
-%
-\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\hfill{}\medskip{}
-}}{\footnotesize\par}
-
-and similarly for \texttt{\textcolor{blue}{\footnotesize{}cont2}}
-instead of \texttt{\textcolor{blue}{\footnotesize{}cont1}}; now rewrite
-in terms of for \texttt{\textcolor{blue}{\footnotesize{}map2}}:
-\begin{itemize}
-\item \textbf{Left naturality} for \texttt{\textcolor{blue}{\footnotesize{}map2}}:
-\end{itemize}
-\begin{lyxcode}
-\textcolor{blue}{\footnotesize{}map2(cont1.map(f),~cont2)(g)}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~=~map2(cont1,~cont2)\{~(x,~y)~$\rightarrow$~g(f(x),~y)~\}}{\footnotesize\par}
-\end{lyxcode}
-\begin{itemize}
-\item \textbf{Right naturality} for \texttt{\textcolor{blue}{\footnotesize{}map2}}:
-\end{itemize}
-\begin{lyxcode}
-\textcolor{blue}{\footnotesize{}map2(cont1,~cont2.map(f))(g)}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~=~map2(cont1,~cont2)\{~(x,~y)~$\rightarrow$~g(x,~f(y))~\}}{\footnotesize\par}
-\end{lyxcode}
-\end{itemize}
-
-
-\paragraph{Associativity and identity laws for \texttt{\textcolor{blue}{\footnotesize{}map2}} }
-
-\vspace{-0.1cm}Inline two generators out of three, in two different
-ways:\texttt{\textcolor{blue}{\footnotesize{}\smallskip{}
-}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}}}%
-\begin{minipage}[c][1\totalheight][t]{0.49\columnwidth}%
-\begin{lyxcode}
-\textcolor{blue}{\footnotesize{}for~\{}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~x~$\leftarrow$~cont1}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~(y,~z)~$\leftarrow$~for~\{}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~~~~~~~~yy~$\leftarrow$~cont2}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~~~~~~~~zz~$\leftarrow$~cont3}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~~~~~~\}~yield~(yy,~zz)}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}\}~yield~g(x,~y,~z)}{\footnotesize\par}
-\end{lyxcode}
-%
-\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\hfill{}}}%
-\begin{minipage}[c][1\totalheight][t]{0.49\columnwidth}%
-\begin{lyxcode}
-\textcolor{blue}{\footnotesize{}for~\{}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~(x,~y)~$\leftarrow$~for~\{}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~~~~~~~~~~~~~xx~$\leftarrow$~cont1}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~~~~~~~~~~~~~yy~$\leftarrow$~cont2}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~~~~~~~~~~~\}~yield~(xx,~yy)}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~~z~$\leftarrow$~cont3}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}\}~yield~g(x,~y,~z)}{\footnotesize\par}
-\end{lyxcode}
-%
-\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\hfill{}\medskip{}
-}}{\footnotesize\par}
-
-Write this in terms of \texttt{\textcolor{blue}{\footnotesize{}map2}}
-to obtain the \textbf{associativity law} for \texttt{\textcolor{blue}{\footnotesize{}map2}}:
-\begin{lyxcode}
-\vspace{-0.1cm}\textcolor{blue}{\footnotesize{}map2(cont1,~map2(cont2,~cont3)((\_,\_))\{~case(x,(y,z))$\rightarrow$g(x,y,z)\}}{\footnotesize\par}
-\begin{lyxcode}
-\textcolor{blue}{\footnotesize{}~~=~map2(map2(cont1,~cont2)((\_,\_)),~cont3)\{~case((x,y),z))$\rightarrow$g(x,y,z)\}}~
-\end{lyxcode}
-Empty context precedes a generator, or follows a generator:\textcolor{blue}{\footnotesize{}\smallskip{}
-}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}}%
-\begin{minipage}[c][1\totalheight][t]{0.49\columnwidth}%
-\begin{lyxcode}
-\textcolor{blue}{\footnotesize{}for~\{~x~$\leftarrow$~pure(a)}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~~~~~y~$\leftarrow$~cont}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}\}~yield~g(x,~y)}{\footnotesize\par}
-\end{lyxcode}
-%
-\end{minipage}\textcolor{blue}{\footnotesize{}\hfill{}}%
-\begin{minipage}[c][1\totalheight][t]{0.49\columnwidth}%
-\begin{lyxcode}
-\textcolor{blue}{\footnotesize{}for~\{}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~y~$\leftarrow$~cont}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}\}~yield~g(a,~y)}{\footnotesize\par}
-\end{lyxcode}
-%
-\end{minipage}\textcolor{blue}{\footnotesize{}\hfill{}\medskip{}
-}{\footnotesize\par}
-
-Write this in terms of \textcolor{blue}{\footnotesize{}map2} to obtain
-the \textbf{identity laws} for \textcolor{blue}{\footnotesize{}map2}
-and \textcolor{blue}{\footnotesize{}pure}:
-\begin{lyxcode}
-\vspace{-0.1cm}\textcolor{blue}{\footnotesize{}map2(pure(a),~cont)(g)~=~cont.map~\{~y~$\rightarrow$~g(a,~y)~\}}~
-
-\textcolor{blue}{\footnotesize{}map2(cont,~pure(b))(g)~=~cont.map~\{~x~$\rightarrow$~g(x,~b)~\}}~
-\end{lyxcode}
-\end{lyxcode}
-
 
 \paragraph{Deriving the laws for \texttt{\textcolor{blue}{\footnotesize{}zip}}:
 associativity law}
@@ -1964,13 +1960,6 @@ more concisely:{\footnotesize{}
 \text{zip}\left(\text{zip}\left(q_{1}\times q_{2}\right)\times q_{3}\right)\cong\text{zip}\left(q_{1}\times\text{zip}\left(q_{2}\times q_{3}\right)\right)
 \]
 }\vspace{-0.2cm}
-\[
-\xymatrix{\xyScaleY{1.4pc}\xyScaleX{3pc}F^{\left(A\times B\right)\times C}\ar[r] & F^{A\times B\times C}\ar[r]\ar[l] & F^{A\times\left(B\times C\right)}\ar[l]\\
-F^{A\times B}\times F^{C}\ar[u]\sp(0.6){\text{zip}} & F^{A}\ar[ldd]\ar[r] & F^{A}\times F^{B\times C}\ar[u]\sb(0.6){\text{zip}}\\
-F^{A\times B}\ar[u] & F^{C}\ar[rd]\ar[lu] & F^{B\times C}\ar[u]\\
-F^{A}\times F^{B}\ar[u]\sp(0.6){\text{zip}} & F^{B}\ar[r]\ar[l] & F^{B}\times F^{C}\ar[u]\sb(0.6){\text{zip}}
-}
-\]
 \end{itemize}
 \end{itemize}
 
@@ -2063,65 +2052,6 @@ laws
 \item There are applicative functors that \emph{cannot} be monads
 \item Applicative functor implementation may disagree with the monad
 \end{itemize}
-\end{itemize}
-\end{itemize}
-
-
-\paragraph{A third naturality law for \texttt{\textcolor{blue}{\footnotesize{}map2}} }
-\begin{itemize}
-\item \vspace{-0.1cm}There must be one more naturality law for \texttt{\textcolor{blue}{\footnotesize{}map2}} 
-\begin{itemize}
-\item Transform the result of a \texttt{\textcolor{blue}{\footnotesize{}map2}}:\texttt{\textcolor{blue}{\footnotesize{}\smallskip{}
-}}{\footnotesize\par}
-\end{itemize}
-\texttt{\textcolor{blue}{\footnotesize{}}}%
-\begin{minipage}[c][1\totalheight][t]{0.49\columnwidth}%
-\begin{lyxcode}
-\textcolor{blue}{\footnotesize{}(~for~\{}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~x~$\leftarrow$~cont1}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~y~$\leftarrow$~cont2}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}\}~yield~g(x,~y)~~).map(f)}{\footnotesize\par}
-\end{lyxcode}
-%
-\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\hfill{}}}%
-\begin{minipage}[c][1\totalheight][t]{0.49\columnwidth}%
-\begin{lyxcode}
-\textcolor{blue}{\footnotesize{}for~\{}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~x~$\leftarrow$~cont1}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~y~$\leftarrow$~cont2}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}\}~yield~f(~g(x,~y)~)}{\footnotesize\par}
-\end{lyxcode}
-%
-\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\hfill{}\medskip{}
-}}{\footnotesize\par}
-\begin{itemize}
-\item Write this in terms of \texttt{\textcolor{blue}{\footnotesize{}map2}},
-obtain a third naturality law:
-\end{itemize}
-\begin{lyxcode}
-\textcolor{blue}{\footnotesize{}map2(cont1,~cont2)(g).map(f)}{\footnotesize\par}
-
-\textcolor{blue}{\footnotesize{}~~=~map2(cont1,~cont2)(g~andThen~f)}{\footnotesize{}
-\begin{align*}
-\text{fmap}2\left(g\right)\bef f^{\uparrow} & =\text{fmap2}\left(g\bef f\right)\\
-f^{\uparrow}\left(\text{fmap}2\left(g\right)\left(p\times q\right)\right) & =\text{fmap2}\left(g\bef f\right)\left(p\times q\right)
-\end{align*}
-}{\footnotesize\par}
-\end{lyxcode}
-\begin{itemize}
-\item This law automatically follows if we define \texttt{\textcolor{blue}{\footnotesize{}map2}}
-through \texttt{\textcolor{blue}{\footnotesize{}zip}}:{\footnotesize{}
-\[
-\text{fmap}2\left(g\right)\bef f^{\uparrow}=\text{zip}\bef g^{\uparrow}\bef f^{\uparrow}=\text{zip}\bef\left(g\bef f\right)^{\uparrow}
-\]
-}{\footnotesize\par}
-\item Note: We always have one naturality law per type parameter
 \end{itemize}
 \end{itemize}
 
@@ -2413,17 +2343,17 @@ find a rigorous formulation of that equivalence.
 
 In each case seen so far, we have two functions with two different
 type signatures (usually with type parameters), and it is assumed
-that certain naturality laws hold. Where do these naturality laws
-come from?
-
-Keep in mind that naturality laws are equations whose form automatically
-follows from type signatures. Given a type signature with a type parameter,
-we can immediately derive the corresponding naturality law. So, we
-always have one naturality law per type parameter. (See Section~\ref{subsec:Naturality-laws-and-natural-transformations} and
-Appendix~\ref{app:Proofs-of-naturality-parametricity} for full details.)
-For example, the type signature \lstinline!pure[A]: A => F[A]! (in
-the type notation, $\text{pu}_{F}:\forall A.\,A\rightarrow F^{A}$)
-gives rise to the naturality law $f\bef\text{pu}_{F}=\text{pu}_{F}\bef f^{\uparrow F}$.
+that certain naturality laws hold. These naturality laws are equations
+whose form automatically follows from type signatures. Given a type
+signature with a type parameter, we can immediately derive the corresponding
+naturality law. If the type signature has more than one type parameter,
+there is one naturality law per type parameter (the full details are
+in Section~\ref{subsec:Naturality-laws-and-natural-transformations} and
+Appendix~\ref{app:Proofs-of-naturality-parametricity}). For example,
+the type signature \lstinline!pure[A]: A => F[A]! (in the type notation,
+$\text{pu}_{F}:\forall A.\,A\rightarrow F^{A}$) gives rise to the
+naturality law $f\bef\text{pu}_{F}=\text{pu}_{F}\bef f^{\uparrow F}$.
+In Scala code, this law is written as \lstinline!pure(f(x)) == pure(x).map(f)!.
 
 What we have proved in Section~\ref{subsec:Pointed-functors-motivation-equivalence}
 is a one-to-one correspondence between two \emph{sets}: the set of
@@ -2437,21 +2367,31 @@ that do \emph{not} satisfy the naturality law. For instance, we proved
 that if \lstinline!pure! is defined via \lstinline!wu!, the naturality
 law will hold.
 
-So, we have assured that if \lstinline!wu: F[Unit]! is defined in
-some way for a type constructor \lstinline!F!, we will always have
-a corresponding definition of \lstinline!pure! that satisfies the
-naturality law; and vice versa.
+This means that if \lstinline!wu: F[Unit]! is defined in some way
+for a type constructor \lstinline!F!, we will always have a corresponding
+definition of \lstinline!pure! that satisfies the naturality law.
+Conversely, for any given definition of \lstinline!pure! we will
+have a corresponding value \lstinline!wu!.
 
 The same pattern was used in the proofs of equivalence in other chapters.
 Let us formulate this pattern in a more abstract way. We would like
 to prove that the typeclass methods $p$ (of type $P^{A,B,...}$)
 and $q$ (of type $Q^{A,B,...}$) are equivalent when suitable naturality
-laws hold. We allow those typeclass methods to have any number of
-type parameters ($A$, $B$, etc.). First, we write some code that
-expresses $p$ through $q$ and back. This code can be seen as two
-functions: $f:P^{A,B,...}\rightarrow Q^{A,B,...}$ and $g:Q^{A,B,...}\rightarrow P^{A,B,...}$.
-This gives us mappings (in both directions) between the set of all
-functions $p$ and the set of all functions $q$ of the corresponding
+laws hold. Those typeclass methods may have any number of type parameters
+($A$, $B$, etc.). More explicitly, the types of $p$ and $q$ are:
+\[
+p:\forall(A,B,...).\,P^{A,B,...}\quad,\quad\quad q:\forall(A,B,...).\,Q^{A,B,...}\quad.
+\]
+We treat the type $\forall(A,B,...).\,P^{A,B,...}$ as a set of all
+functions $p$ (implementable in Scala) with this code:
+\begin{lstlisting}
+def p[A, B, ...]: P[A, B, ...] = { ... }
+\end{lstlisting}
+and similarly for $q$. To establish the equivalence, we first write
+some code that expresses $p$ through $q$ and back. This requires
+two functions, $f:P^{A,B,...}\rightarrow Q^{A,B,...}$ and $g:Q^{A,B,...}\rightarrow P^{A,B,...}$.
+These functions are mappings (in both directions) between the set
+of all functions $p$ and the set of all functions $q$ of the corresponding
 types. Then we prove that the mappings are one-to-one: for any $p$
 and $q$ we have $g(f(p))=p$ and $f(g(q))=q$. Finally, we check
 that the required naturality laws still hold after the mappings are
@@ -2459,19 +2399,79 @@ used. So, for any $p$ satisfying its naturality law, we prove that
 the function $f(p)$ of type $Q^{A,B,...}$ will satisfy \emph{its}
 naturality law; and similarly for $q$ and $g(q)$.
 
-Note that the types $P^{A,B,...}$ and $Q^{A,B,...}$ are not themselves
-equivalent (without imposing the naturality laws). One of these types
-often has one more type parameter than the other, so a direct type
-equivalence is impossible. However, the naturality laws exclude many
-functions that would not satisfy the laws. It is only after imposing
-naturality laws that the function types become equivalent.
+Without the naturality laws, the types $\forall(A,B,...).\,P^{A,B,...}$
+and $\forall(A,B,...).\,Q^{A,B,...}$ are usually \emph{not} equivalent
+(i.e., there is no one-to-one correspondence between functions $p$
+and functions $q$ of those types). Imposing a naturality law means
+that we no longer admit functions $p$ of type $\forall(A,B,...).\,P^{A,B,...}$
+that do not satisfy the naturality law. This gives us a smaller set
+of all admissible functions $p$ (and similarly for $q$). The equivalence
+is between those smaller sets of functions.
 
-The Scala compiler is not able to check automatically that some naturality
-laws hold for a function $p$ of type $P^{A,B,...}$ because the laws
-cannot be enforced in the type signature of $p$. So, after writing
-some Scala code for a typeclass, we need to verify that the naturality
-laws hold. (This verification can be omitted if the code is fully
-parametric, as shown in Appendix~\ref{app:Proofs-of-naturality-parametricity}.)
+To see this in a simple example, consider the equivalence of $p$=\lstinline!pure!
+and $q$=\lstinline!wu! for the identity functor ($L^{A}\triangleq A$).
+The method \lstinline!pure! has type $\forall A.\,A\rightarrow A$,
+while \lstinline!wu! has the \lstinline!Unit! type ($L^{\bbnum 1}=\bbnum 1$).
+There is only one value \lstinline!wu!, but there are many possible
+functions $p$ of type $\forall A.\,A\rightarrow A$. For instance,
+we could define a function $p$ like this:
+
+\begin{wrapfigure}{l}{0.3\columnwidth}%
+\vspace{-0.8\baselineskip}
+\begin{lstlisting}
+def p[A]: A => A = {
+  case a: Int => a + 123
+  case a => a
+}
+\end{lstlisting}
+
+\vspace{-0.8\baselineskip}
+\end{wrapfigure}%
+
+\noindent This function fits the type $\forall A.\,A\rightarrow A$
+because it is defined for all types $A$. The set of all functions
+of type $\forall A.\,A\rightarrow A$ contains a large number of similarly
+defined functions. For example, we may add a different number instead
+of \lstinline!123! or select a different type instead of \lstinline!Int!.
+However, all those functions fail to satisfy the naturality law, which
+has the form $f^{:A\rightarrow B}\bef p^{B}=p^{A}\bef f$. The only
+function $p$ that satisfies the naturality law is the identity function,
+$p^{A}=\text{id}^{A}\triangleq a^{:A}\rightarrow a$ (see Exercise~\ref{subsec:Exercise-hof-composition-1}).
+So, imposing the naturality law removes all functions except one from
+the set of functions $p:\text{\ensuremath{\forall A.\,A\rightarrow A}}$.
+There remains a set containing a single element ($\text{id}$), which
+has a one-to-one correspondence with the set of values of type $\bbnum 1$.
+
+So, the rigorous meaning of an \textsf{``}equivalence between functions $p^{:P}$
+and $q^{:Q}$ assuming some laws\textsf{''} is a one-to-one correspondence
+between the set of all functions $p:\forall(A,B,...).\,P^{A,B,...}$
+that satisfy the given laws of $p$, and the set of all functions
+$q:\forall(A,B,...).\,Q^{A,B,...}$ that satisfy the given laws of
+$q$.
+
+It is worth noting that the Scala compiler is unable to check automatically
+that some naturality laws hold for a function $p$ of type $P^{A,B,...}$.
+Indeed, laws are equations for $p$ that involve arbitrary functions
+$f^{:A\rightarrow B}$ with arbitrary types $A$ and $B$. Such equations
+cannot be enforced in the type signature of $p$. Neither can naturality
+laws be verified by testing: tests must use specific types instead
+of the type parameters, while the purpose of naturality laws is to
+verify that the function works in the same way for \emph{all} types.
+So, after writing some Scala code for a typeclass, we need to use
+symbolic reasoning to verify that the naturality laws hold. (This
+verification can be omitted if the code is fully parametric, as shown
+in Appendix~\ref{app:Proofs-of-naturality-parametricity}.)
+
+The Scala compiler also cannot verify the laws specific to a given
+typeclass (e.g., the identity and composition laws of filterable functors,
+or the identity and associativity laws of monads and applicative functors).
+It is often easier to verify laws if the type signature of the method
+has fewer type parameters. For instance, the \lstinline!zip! method
+has two type parameters while \lstinline!map2! has three; \lstinline!flatten!
+has one type parameter while \lstinline!flatMap! has two. For this
+reason, we have systematically derived the laws of all the equivalent
+typeclass methods. In many cases, we found a formulation of the laws
+that was either conceptually simpler or more straightforward to verify. 
 
 \subsection{Relationships between monads and applicative functors}
 
@@ -2528,6 +2528,8 @@ Previous examples of non-applicative functors are all \emph{non-polynomial}
 
 Spark\textsf{'}s \lstinline!RDD! is a commutative applicative functor but
 not a monad.
+
+\subsection{Laws of \texttt{ap} in view of category theory}
 
 \subsection{Categorical overview of \textsf{``}regular\textsf{''} functor classes}
 
