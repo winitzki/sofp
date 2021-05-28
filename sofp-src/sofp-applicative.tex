@@ -281,7 +281,7 @@ replace \lstinline!f! by an identity function. We will see later
 that this correspondence between \lstinline!zip! and \lstinline!map2!
 works for all applicative functors.
 
-\subsection{Monadic programs with independent effects}
+\subsection{Monadic programs with independent effects\label{subsec:Monadic-programs-with-independent-effects-future-applicative}}
 
 Another motivation for applicative functors comes from considering
 monadic programs where some source lines do not depend on previous
@@ -742,8 +742,8 @@ the same environment value. So, the \lstinline!Reader! effects are
 always independent, and a \lstinline!map2! function does not need
 to be implemented separately (it can be expressed via \lstinline!flatMap!).
 
-\subsection{Single-traversal \texttt{fold} operations I. Applicative \textsf{``}fold
-fusion\textsf{''}\label{subsec:Single-traversal-fold-operations-applicative-fold-fusion}}
+\subsection{Single-traversal \texttt{fold} operations I. Applicative \textquotedblleft fold
+fusion\textquotedblright\label{subsec:Single-traversal-fold-operations-applicative-fold-fusion}}
 
 We have seen various \textsf{``}\lstinline!fold!-like\textsf{''} operations (such
 as \lstinline!foldLeft!, \lstinline!foldRight!, or \lstinline!reduce!)
@@ -986,7 +986,8 @@ res2: Vector[Double] = Vector(0.0, 0.3333333333333333, 1.0, 2.0, 3.0, 4.0, 5.0, 
 \end{lstlisting}
 
 
-\subsection{Single-traversal \texttt{fold} operations II. Monadic \textsf{``}fold fusion\textsf{''}}
+\subsection{Single-traversal \texttt{fold} operations II. Monadic \textquotedblleft fold
+fusion\textquotedblright}
 
 The applicative fold fusion as defined in the previous section works
 by combining the results of independent \lstinline!fold!-like operations.
@@ -2029,13 +2030,84 @@ of applicative functors are similar to the laws of a \emph{monoid}\index{monoid}
 (see Example~\ref{subsec:tc-Example-Monoids}): the binary operation
 is \lstinline!zip! and the empty value is \lstinline!wu!. 
 
+\subsection{Commutative applicative functors and parallel computations}
+
+The main feature of applicative functors is that the operation \lstinline!zip(p, q)!
+can use the independence of effects expressed by \lstinline!p! and
+\lstinline!q!. For some applicative functors, the effects of \lstinline!p!
+and \lstinline!q! may be computed \emph{in parallel} without affecting
+the result of \lstinline!zip!. Assume that \lstinline!p! and \lstinline!q!
+represent processes that compute values. Then \lstinline!zip(p, q)!
+is a combined process that computes two values in parallel. We have
+seen an implementation of this idea using the \lstinline!Future!
+functor in Section~\ref{subsec:Monadic-programs-with-independent-effects-future-applicative}.
+The same property may hold for other applicative functors as long
+as \lstinline!zip(p, q)! does not depend on the order in which the
+effects of \lstinline!p! and \lstinline!q! are combined. The precise
+condition is that an applicative functor must be \textsf{``}commutative\textsf{''}:
+
+\subsubsection{Definition \label{subsec:Definition-commutative-applicative}\ref{subsec:Definition-commutative-applicative}}
+
+An applicative functor $L^{\bullet}$ is \textbf{commutative}\index{applicative functor!commutative}
+if its \lstinline!zip! operation (in addition to the standard applicative
+laws) satisfies the commutativity law\index{commutativity law!of zip@of \texttt{zip}}:
+\begin{equation}
+\text{zip}\,(p^{:L^{A}}\times q^{:L^{B}})=\text{zip}\,(q\times p)\triangleright(b^{:B}\times a^{:A}\rightarrow a\times b)^{\uparrow L}\quad\text{or equivalently}:\quad\text{swap}\bef\text{zip}=\text{zip}\bef\text{swap}^{\uparrow L}\quad.\label{eq:commutativity-law-of-zip}
+\end{equation}
+Here we used the standard Scala function \lstinline!swap! defined
+by $\text{swap}\triangleq a\times b\rightarrow b\times a$. The commutativity
+law says that \lstinline!zip! commutes with \lstinline!swap!.
+
+This definition agrees with that of the commutative monad (Exercise~\ref{subsec:Exercise-1-monads-9-1}).
+To see this, note that a monad\textsf{'}s commutativity is defined in Exercise~\ref{subsec:Exercise-1-monads-9-1}
+via code that is equivalent to the \lstinline!map2! operation:\texttt{\textcolor{blue}{\footnotesize{}}}
+\begin{lstlisting}
+map2(p, q)(f) == for { // Assume p: M[A], q: M[B], and f: (A, B) => C.
+    x <- p
+    y <- q
+} yield f(x, y)
+\end{lstlisting}
+ So, the definition of a commutative monad is that the corresponding
+\lstinline!map2! operation (defined via \lstinline!map! and \lstinline!flatMap!)
+must satisfy the following commutativity property: 
+\[
+\text{map}_{2}(p\times q)(f)=\text{map}_{2}(q\times p)\big(b\times a\rightarrow f(a\times b)\big)\quad.
+\]
+Expressing \lstinline!map2! through \lstinline!zip! as $\text{map}_{2}(p\times q)(f)=\text{zip}\,(p\times q)\triangleright f^{\uparrow L}$,
+we obtain Eq.~(\ref{eq:commutativity-law-of-zip}).
+
+Most monads are not commutative (an exception is the \lstinline!Reader!
+monad). So, it is not possible to parallelize monadic code automatically.
+In contrast, most applicative functors turn out to be commutative,
+and their \lstinline!zip! method could (in principle) have a parallel
+implementation. An exception is the parsing functor considered in
+Section~\ref{subsec:Parsing-with-applicative-and-monadic-parsers}.
+One does not expect to be able to parse different pieces of a file
+in parallel, because the results of parsing of a previous portion
+of the file are often required for correct parsing of further portions.
+
+A well-known example of a data structure that can automatically parallelize
+computations is Apache Spark\textsf{'}s \lstinline!RDD! class. It is important
+to realize that \lstinline!RDD! is a commutative applicative functor
+but \emph{not} a monad. This agrees with the intuition that monadic
+programs are not automatically parallelizable.\footnote{The RDD class\textsf{'}s \lstinline!cartesian! method has the type signature
+of \lstinline!zip!. A method called \lstinline!flatMap! exists,
+but its type signature is not suitable for a monad. See \texttt{\href{https://spark.apache.org/docs/latest/rdd-programming-guide.html}{https://spark.apache.org/docs/latest/rdd-programming-guide.html}}}
+
+In many cases, a commutative applicative functor will also be a \emph{non-commutative}
+monad. Some examples are \lstinline!Option!, \lstinline!Either!,
+and \lstinline!List! functors. For these and other functors, the
+\lstinline!map2! and \lstinline!zip! methods must be defined separately
+and not derived from the monadic methods.
+
 \subsection{Constructions of applicative functors}
 
 We will now perform structural analysis of applicative functors, going
 through all possible type constructions. In each case, we will implement
 the \lstinline!zip! and \lstinline!wu! operations and verify their
-laws. We will also compare the applicative functor constructions to
-the corresponding constructions for monads (Section~\ref{subsec:Structural-analysis-of-monads}).
+laws, indicating whether the commutativity law also holds. We will
+also compare the applicative functor constructions to the corresponding
+constructions for monads (Section~\ref{subsec:Structural-analysis-of-monads}).
 
 \paragraph{Type parameters}
 
@@ -2048,17 +2120,18 @@ is applicative. To see this, consider the operation \lstinline!zip!
 of type $L^{A}\times L^{B}\rightarrow L^{A\times B}$, which in this
 case becomes just $Z\times Z\rightarrow Z$. We also need a value
 \lstinline!wu! of type $L^{1}=Z$. The laws of \lstinline!zip! reduce
-to the monoid laws of $Z$. 
+to the monoid laws of $Z$. For this reason, the applicative functor
+$L^{A}\triangleq Z$ will be commutative if the monoid $Z$ is commutative.
 
 Comparing this with the corresponding monad construction, we note
 that $L^{A}\triangleq Z$ is not a monad unless $Z=\bbnum 1$. For
 an arbitrary monoid type $Z$, the functor $L^{A}\triangleq Z$ is
 only a semimonad.
 
-The identity functor $L^{A}\triangleq A$ is applicative: the \lstinline!zip!
-operation is the identity function of type $A\times B\rightarrow A\times B$,
-and the wrapped unit (\lstinline!wu!) is just the unit value. The
-laws hold for the identity function.
+The identity functor $L^{A}\triangleq A$ is applicative and commutative:
+the \lstinline!zip! operation is the identity function of type $A\times B\rightarrow A\times B$,
+and the wrapped unit (\lstinline!wu!) is just the unit value. All
+required laws hold for the identity function.
 
 The functor composition $L\triangleq F\circ G$ of two applicative
 functors $F$, $G$ is again applicative:
@@ -2073,7 +2146,8 @@ are lawful when defined by:
  & \text{zip}_{L}:F^{G^{A}}\times F^{G^{B}}\rightarrow F^{G^{A\times B}}\quad,\quad\quad\text{zip}_{L}\triangleq\text{zip}_{F}\bef\text{zip}_{G}^{\uparrow F}\quad,\\
  & \text{pu}_{L}:A\rightarrow F^{G^{A}}\quad,\quad\quad\text{pu}_{L}\triangleq\text{pu}_{G}\bef\text{pu}_{F}\quad,\quad\quad\text{wu}_{L}\triangleq\text{pu}_{F}(\text{wu}_{G})\quad.
 \end{align*}
-
+If $F$ and $G$ are commutative applicative functors, then so is
+$L$.
 
 \subparagraph{Proof}
 
@@ -2116,6 +2190,14 @@ and $\text{zip}_{G}$:
  & \text{zip}_{F}\big(p\times\text{zip}_{F}(q\times r)\big)\triangleright\varepsilon_{1,23}^{\uparrow F}=\text{zip}_{F}\big(\text{zip}_{F}(p\times q)\times r\big)\triangleright\varepsilon_{12,3}^{\uparrow F}\quad,\\
  & \text{zip}_{G}(g\times\text{zip}_{G}(h\times j))\triangleright\varepsilon_{1,23}^{\uparrow G}=\text{zip}_{G}(\text{zip}_{G}(g\times h)\times j)\triangleright\varepsilon_{12,3}^{\uparrow G}\quad.
 \end{align*}
+
+To verify the commutativity law~(\ref{eq:commutativity-law-of-zip})
+for $L$, we assume that the law holds for $F$ and $G$:
+\begin{align*}
+{\color{greenunder}\text{expect to equal }(\text{zip}_{L}\bef\text{swap}^{\uparrow L}):}\quad & \text{swap}\bef\text{zip}_{L}=\gunderline{\text{swap}\bef\text{zip}_{F}}\bef\text{zip}_{G}^{\uparrow F}\\
+{\color{greenunder}\text{commutativity law of }F:}\quad & =\text{zip}_{F}\bef\gunderline{\text{swap}^{\uparrow F}\bef\text{zip}_{G}^{\uparrow F}}\\
+{\color{greenunder}\text{commutativity law of }G:}\quad & =\text{zip}_{F}\bef\text{zip}_{G}^{\uparrow F}\bef\text{swap}^{\uparrow G\uparrow F}=\text{zip}_{L}\bef\text{swap}^{\uparrow L}\quad.
+\end{align*}
 $\square$
 
 \paragraph{Products}
@@ -2134,7 +2216,8 @@ are lawful when defined by:
  & \text{zip}_{L}\big((m^{:F^{A}}\times n^{:G^{A}})\times(p^{:F^{B}}\times q^{:G^{B}})\big)\triangleq\text{zip}_{F}(m\times p)\times\text{zip}_{G}(n\times q)\quad,\\
  & \text{wu}_{L}:F^{\bbnum 1}\times G^{\bbnum 1}\quad,\quad\quad\text{wu}_{L}\triangleq\text{wu}_{F}\times\text{wu}_{G}\quad.
 \end{align*}
-
+If $F$ and $G$ are commutative applicative functors, then so is
+$L$.
 
 \subparagraph{Proof}
 
@@ -2170,7 +2253,17 @@ The right-hand side is rewritten in a similar way:
  & =\big(\gunderline{\text{zip}_{F}\big(\text{zip}_{F}(p_{1}\times q_{1})\times r_{1}\big)\triangleright\varepsilon_{12,3}^{\uparrow F}}\big)\times\big(\gunderline{\text{zip}_{G}\big(\text{zip}_{G}(p_{2}\times q_{2})\times r_{2}\big)\triangleright\varepsilon_{12,3}^{\uparrow G}}\big)\quad.
 \end{align*}
 The underlined expressions in both sides are equal due to associativity
-laws of $\text{zip}_{F}$ and $\text{zip}_{G}$. $\square$
+laws of $\text{zip}_{F}$ and $\text{zip}_{G}$.
+
+To verify the commutativity law of $L$ assuming it holds for $F$
+and $G$:
+\begin{align*}
+{\color{greenunder}\text{expect to equal }\text{zip}_{L}\big((p\times q)\times(m\times n)\big):}\quad & \text{zip}_{L}\big((m\times n)\times(p\times q)\big)\triangleright\text{swap}^{\uparrow L}\\
+{\color{greenunder}\text{definitions of }\text{zip}_{L}\text{ and }^{\uparrow L}:}\quad & =\big(\text{zip}_{F}(m\times p)\times\text{zip}_{G}(n\times q)\big)\triangleright(\text{swap}^{\uparrow F}\boxtimes\text{swap}^{\uparrow G})\\
+{\color{greenunder}\text{definition of }\boxtimes:}\quad & =\big(\text{zip}_{F}(m\times p)\triangleright\text{swap}^{\uparrow F}\big)\times\big(\text{zip}_{G}(n\times q)\triangleright\text{swap}^{\uparrow G}\big)\\
+{\color{greenunder}\text{commutativity laws of }F\text{ and }G:}\quad & =\text{zip}_{F}(p\times m)\times\text{zip}_{G}(q\times n)=\text{zip}_{L}\big((p\times q)\times(m\times n)\big)\quad.
+\end{align*}
+$\square$
 
 \paragraph{Co-products}
 
@@ -2197,10 +2290,11 @@ $L^{A}\triangleq Z+F^{A}$ is applicative:
 F^{A}\times Z & \_^{:F^{A}}\times z\rightarrow z & \bbnum 0\\
 Z\times F^{B} & z\times\_^{:F^{B}}\rightarrow z & \bbnum 0\\
 F^{A}\times F^{B} & \bbnum 0 & \text{zip}_{F}
-\end{array}\quad,\\
+\end{array}\quad;\\
  & \text{wu}_{L}:Z+F^{\bbnum 1}\quad,\quad\quad\text{wu}_{L}\triangleq\bbnum 0^{:Z}+\text{wu}_{F}\quad.
 \end{align*}
-
+If $Z$ is a commutative monoid and $F^{\bullet}$ is commutative
+then $L^{\bullet}$ is also commutative.
 
 \subparagraph{Proof}
 
@@ -2209,7 +2303,7 @@ that $F$ is a lawful applicative.
 
 We will use the lifting to $L$ defined in the standard way:
 \[
-(f^{:A\rightarrow B})^{\uparrow L}=\,\begin{array}{|c||cc|}
+(f^{:A\rightarrow B})^{\uparrow L}\triangleq\,\begin{array}{|c||cc|}
  & Z & F^{B}\\
 \hline Z & \text{id} & \bbnum 0\\
 F^{A} & \bbnum 0 & f^{\uparrow F}
@@ -2252,7 +2346,7 @@ F^{A} & \bbnum 0 & k\rightarrow k\triangleright\text{iru}^{\uparrow F}
 \end{array}\,=p\triangleright\text{iru}^{\uparrow L}\quad.
 \end{align*}
 
-To verify the associativity law, we use a trick to avoid long calculations.
+To verify the associativity law, we use a trick to avoid long derivations.
 The two sides of the associativity law are expressions of type $Z+F^{A\times B\times C}$:
 \begin{align*}
 {\color{greenunder}\text{left-hand side}:}\quad & \text{zip}_{L}\big(p^{:Z+F^{A}}\times\text{zip}_{L}(q^{:Z+F^{B}}\times r^{:Z+F^{C}})\big)\triangleright\varepsilon_{1,23}^{\uparrow L}\quad,\\
@@ -2290,12 +2384,58 @@ for which the associativity law holds by assumption.%
 
 \textbf{(2)} All of $p$, $q$, $r$ are of type $\bbnum 0+F^{\bullet}$.
 In this case, the function $\text{zip}_{L}$ reduces to $\text{zip}_{F}$,
-which satisfies the associativity law by assumption. $\square$
+which satisfies the associativity law by assumption.
+
+To verify the commutativity law of $L$, use the code matrix for \lstinline!swap!
+with the relevant types:
+\begin{align*}
+ & \text{swap}\bef\text{zip}_{L}=\,\begin{array}{|c||cccc|}
+ & Z\times Z & F^{B}\times Z & Z\times F^{A} & F^{B}\times F^{A}\\
+\hline Z\times Z & \text{swap} & \bbnum 0 & \bbnum 0 & \bbnum 0\\
+F^{A}\times Z & \bbnum 0 & \bbnum 0 & \text{swap} & \bbnum 0\\
+Z\times F^{B} & \bbnum 0 & \text{swap} & \bbnum 0 & \bbnum 0\\
+F^{A}\times F^{B} & \bbnum 0 & \bbnum 0 & \bbnum 0 & \text{swap}
+\end{array}\,\bef\,\begin{array}{|c||cc|}
+ & Z & F^{B\times A}\\
+\hline Z\times Z & z_{1}\times z_{2}\rightarrow z_{1}\oplus z_{2} & \bbnum 0\\
+F^{B}\times Z & \_\times z\rightarrow z & \bbnum 0\\
+Z\times F^{A} & z\times\_\rightarrow z & \bbnum 0\\
+F^{B}\times F^{A} & \bbnum 0 & \text{zip}_{F}
+\end{array}\\
+ & =\,\begin{array}{|c||cc|}
+ & Z & F^{B\times A}\\
+\hline Z\times Z & z_{1}\times z_{2}\rightarrow z_{2}\oplus z_{1} & \bbnum 0\\
+F^{A}\times Z & \_\times z\rightarrow z & \bbnum 0\\
+Z\times F^{B} & z\times\_\rightarrow z & \bbnum 0\\
+F^{A}\times F^{B} & \bbnum 0 & \text{swap}\bef\text{zip}_{F}
+\end{array}\quad.
+\end{align*}
+By assumption, $\text{swap}\bef\text{zip}_{F}=\text{zip}_{F}\bef\text{swap}^{\uparrow F}$.
+Next, we need the code for the lifted $\text{swap}^{\uparrow L}$:
+\[
+\text{swap}^{\uparrow L}=\,\begin{array}{|c||cc|}
+ & Z & F^{B\times A}\\
+\hline Z & \text{id} & \bbnum 0\\
+F^{A\times B} &  & \text{swap}^{\uparrow F}
+\end{array}\quad.
+\]
+We can now transform the right-hand side of the commutativity law:
+\[
+\text{zip}_{L}\bef\text{swap}^{\uparrow L}=\,\begin{array}{|c||cc|}
+ & Z & F^{B\times A}\\
+\hline Z\times Z & z_{1}\times z_{2}\rightarrow z_{1}\oplus z_{2} & \bbnum 0\\
+F^{A}\times Z & \_\times z\rightarrow z & \bbnum 0\\
+Z\times F^{B} & z\times\_\rightarrow z & \bbnum 0\\
+F^{A}\times F^{B} & \bbnum 0 & \text{zip}_{F}\bef\text{swap}^{\uparrow F}
+\end{array}\quad.
+\]
+The difference between the sides disappears if $Z$ is a commutative
+monoid ($z_{1}\oplus z_{2}=z_{2}\oplus z_{1}$). $\square$
 
 \subsubsection{Statement \label{subsec:Statement-co-product-with-identity-applicative}\ref{subsec:Statement-co-product-with-identity-applicative}}
 
 If $F^{\bullet}$ is applicative then $L^{A}\triangleq A+F^{A}$ is
-applicative:
+also applicative:
 \begin{align*}
  & \text{zip}_{L}:(A+F^{A})\times(B+F^{B})\rightarrow A\times B+F^{A\times B}\quad,\quad\quad\text{zip}_{L}\triangleq\,\begin{array}{|c||cc|}
  & A\times B & F^{A\times B}\\
@@ -2303,10 +2443,10 @@ applicative:
 F^{A}\times B & \bbnum 0 & (\text{id}\boxtimes\text{pu}_{F})\bef\text{zip}_{F}\\
 A\times F^{B} & \bbnum 0 & (\text{pu}_{F}\boxtimes\text{id})\bef\text{zip}_{F}\\
 F^{A}\times F^{B} & \bbnum 0 & \text{zip}_{F}
-\end{array}\quad,\\
+\end{array}\quad;\\
  & \text{wu}_{L}:\bbnum 1+F^{\bbnum 1}\quad,\quad\quad\text{wu}_{L}\triangleq1+\bbnum 0^{:F^{\bbnum 1}}\quad.
 \end{align*}
-
+If $F^{\bullet}$ is commutative then $L^{\bullet}$ is also commutative.
 
 \subparagraph{Proof}
 
@@ -2315,25 +2455,120 @@ that $F$ is a lawful applicative functor.
 
 We will use the lifting to $L$ defined in the standard way:
 \[
-(f^{:A\rightarrow B})^{\uparrow L}=\,\begin{array}{|c||cc|}
+(f^{:A\rightarrow B})^{\uparrow L}\triangleq\,\begin{array}{|c||cc|}
  & B & F^{B}\\
 \hline A & f & \bbnum 0\\
 F^{A} & \bbnum 0 & f^{\uparrow F}
 \end{array}\quad.
 \]
 
-To verify the left identity law, we use the left identity law of $\text{zip}_{F}$:
+To verify the left identity law, we begin with its left-hand side:
+\begin{align*}
+ & \text{zip}_{L}(\text{wu}_{L}\times p)=\big((1+\bbnum 0^{:F^{\bbnum 1}})\times p^{:B+F^{B}}\big)\triangleright\,\begin{array}{|c||cc|}
+ & \bbnum 1\times B & F^{\bbnum 1\times B}\\
+\hline \bbnum 1\times B & \text{id} & \bbnum 0\\
+F^{\bbnum 1}\times B & \bbnum 0 & (\text{id}\boxtimes\text{pu}_{F})\bef\text{zip}_{F}\\
+\bbnum 1\times F^{B} & \bbnum 0 & (\text{pu}_{F}\boxtimes\text{id})\bef\text{zip}_{F}\\
+F^{\bbnum 1}\times F^{B} & \bbnum 0 & \text{zip}_{F}
+\end{array}\\
+ & =p\triangleright\text{ilu}\bef\,\begin{array}{|c||cc|}
+ & \bbnum 1\times B & F^{\bbnum 1\times B}\\
+\hline \bbnum 1\times B & \text{id} & \bbnum 0\\
+\bbnum 1\times F^{B} & \bbnum 0 & (\text{pu}_{F}\boxtimes\text{id})\bef\text{zip}_{F}
+\end{array}\quad.\\
+ & =p\triangleright\,\begin{array}{|c||cc|}
+ & \bbnum 1\times B & F^{\bbnum 1\times B}\\
+\hline B & \text{ilu} & \bbnum 0\\
+F^{B} & \bbnum 0 & \text{ilu}^{\uparrow F}
+\end{array}=p\triangleright\text{ilu}^{\uparrow L}\quad.
+\end{align*}
+We now simplify the second row of the matrix:
+\begin{align*}
+ & \text{ilu}\bef(\text{pu}_{F}\boxtimes\text{id})\bef\text{zip}_{F}=f^{:F^{B}}\rightarrow\text{zip}_{F}(\text{pu}_{F}(1)\times f)\\
+{\color{greenunder}\text{left identity law of }\text{zip}_{F}:}\quad & =f\rightarrow f\triangleright\text{ilu}^{\uparrow F}=\text{ilu}^{\uparrow F}\quad.
+\end{align*}
+After this simplification, we transform the left-hand side into the
+right-hand side of the law:
+\[
+p\triangleright\text{ilu}\bef\,\begin{array}{|c||cc|}
+ & \bbnum 1\times B & F^{\bbnum 1\times B}\\
+\hline \bbnum 1\times B & \text{id} & \bbnum 0\\
+\bbnum 1\times F^{B} & \bbnum 0 & (\text{pu}_{F}\boxtimes\text{id})\bef\text{zip}_{F}
+\end{array}\,=p\triangleright\,\begin{array}{|c||cc|}
+ & \bbnum 1\times B & F^{\bbnum 1\times B}\\
+\hline B & \text{ilu} & \bbnum 0\\
+F^{B} & \bbnum 0 & \text{ilu}^{\uparrow F}
+\end{array}=p\triangleright\text{ilu}^{\uparrow L}\quad.
+\]
 
-{*}{*}{*}
+The right identity law is verified in a similar way:
+\begin{align*}
+ & \text{zip}_{L}(p\times\text{wu}_{L})=\text{zip}_{L}\big(p^{:A+F^{A}}\times(1+\bbnum 0^{:F^{\bbnum 1}})\big)=p\triangleright\text{iru}\bef\,\begin{array}{|c||cc|}
+ & A\times\bbnum 1 & F^{A\times\bbnum 1}\\
+\hline A\times\bbnum 1 & \text{id} & \bbnum 0\\
+F^{A}\times\bbnum 1 & \bbnum 0 & (\text{id}\boxtimes\text{pu}_{F})\bef\text{zip}_{F}
+\end{array}\\
+ & =p\triangleright\,\begin{array}{|c||cc|}
+ & A\times\bbnum 1 & F^{A\times\bbnum 1}\\
+\hline A & \text{iru} & \bbnum 0\\
+F^{A} & \bbnum 0 & \text{iru}^{\uparrow F}
+\end{array}=p\triangleright\text{iru}^{\uparrow L}\quad.
+\end{align*}
 
-$\square$
+To verify the associativity law, we use a trick similar to that in
+the proof of the associativity law in Statement~\ref{subsec:Statement-co-product-with-constant-functor-applicative}.
+The associativity law is an equation between values of type $A\times B\times C+F^{A\times B\times C}$:
+\[
+\text{zip}_{L}(p^{:A+F^{A}}\times\text{zip}_{L}(q^{:B+F^{B}}\times r^{:C+F^{C}}))\triangleright\varepsilon_{1,23}^{\uparrow L}=\text{zip}_{L}(\text{zip}_{L}(p^{:A+F^{A}}\times q^{:B+F^{B}})\times r^{:C+F^{C}})\triangleright\varepsilon_{12,3}^{\uparrow L}\quad.
+\]
+The operation $\text{zip}_{L}(p\times q)$ is defined in such a way
+that it returns a value of type $A\times B+\bbnum 0$ only when both
+$p$ and $q$ are in the left part of the disjunction:
+\[
+\text{zip}_{L}\big((a^{:A}+\bbnum 0^{:F^{A}})\times(b^{:B}+\bbnum 0^{:F^{B}})\big)=a\times b+\bbnum 0^{:F^{A\times B}}\quad.
+\]
+Otherwise, $\text{zip}_{L}(p\times q)$ returns a value of type $\bbnum 0^{:A\times B}+F^{A\times B}$.
+So, let us consider the two cases:
+
+\textbf{(1)} The arguments are $p=a^{:A}+\bbnum 0$, $q=b^{:B}+\bbnum 0$,
+$r=c^{:C}+\bbnum 0$. In this case, $\text{zip}_{L}$ reduces to tuple
+construction:
+\begin{align*}
+{\color{greenunder}\text{left-hand side}:}\quad & \text{zip}_{L}(p\times\text{zip}_{L}(q\times r))\triangleright\varepsilon_{1,23}^{\uparrow L}=\big(a\times(b\times c)\big)\triangleright\varepsilon_{1,23}=a\times b\times c\quad,\\
+{\color{greenunder}\text{right-hand side}:}\quad & \text{zip}_{L}(\text{zip}_{L}(p\times q)\times r)\triangleright\varepsilon_{12,3}^{\uparrow L}=\big((a\times b)\times c\big)\triangleright\varepsilon_{1,23}=a\times b\times c\quad.
+\end{align*}
+
+\textbf{(2)} At least one of the arguments $p$, $q$, $r$ is of
+type $\bbnum 0+F^{\bullet}$. In this case, $\text{zip}_{L}$ reduces
+to $\text{zip}_{F}$ after converting arguments to type $F^{\bullet}$
+using $\text{pu}_{F}$ when needed. This conversion may be defined
+as a helper function \lstinline!toF!:
+\[
+\text{toF}:A+F^{A}\rightarrow F^{A}\quad,\quad\quad\text{toF}\triangleq\,\begin{array}{|c||c|}
+ & F^{A}\\
+\hline A & \text{pu}_{F}\\
+F^{A} & \text{id}
+\end{array}\quad.
+\]
+Then we may express $\text{zip}_{L}$ as:
+\[
+\text{zip}_{L}(p\times q)=\text{zip}_{F}(\text{toF}\left(p\right)\times\text{toF}\left(q\right))\quad.
+\]
+ The associativity law of $\text{zip}_{L}$ is then reduced to the
+same law of $\text{zip}_{F}$:
+\begin{align*}
+{\color{greenunder}\text{left-hand side}:}\quad & \text{zip}_{L}(p\times\text{zip}_{L}(q\times r))\triangleright\varepsilon_{1,23}^{\uparrow L}=\text{zip}_{F}\big(\text{toF}\left(p\right)\times\text{zip}_{F}(\text{toF}\left(q\right)\times\text{toF}\left(r\right))\big)\triangleright\varepsilon_{1,23}^{\uparrow F}\quad,\\
+{\color{greenunder}\text{right-hand side}:}\quad & \text{zip}_{L}(\text{zip}_{L}(p\times q)\times r)\triangleright\varepsilon_{12,3}^{\uparrow L}=\text{zip}_{F}(\text{zip}_{F}(\text{toF}\left(p\right)\times\text{toF}\left(q\right))\times\text{toF}\left(r\right))\triangleright\varepsilon_{12,3}^{\uparrow L}\quad.
+\end{align*}
+By assumption, the associativity law of $\text{zip}_{F}$ holds, so
+the two sides are equal. $\square$
 
 It is important that Statements~\ref{subsec:Statement-co-product-with-constant-functor-applicative}\textendash \ref{subsec:Statement-co-product-with-identity-applicative}
 define the methods \lstinline!zip! and \lstinline!wu! differently
 for $L^{A}\triangleq Z+F^{A}$ and for $L^{A}\triangleq A+F^{A}$.
 Only then the applicative laws of \lstinline!zip! and \lstinline!wu!
-would hold. Also, those definitions agree with the implementations
-of \lstinline!zip! and \lstinline!wu! for the \lstinline!Either!
+will hold for those functors. Also, those definitions agree with the
+implementations of \lstinline!zip! and \lstinline!wu! for the \lstinline!Either!
 functor (Section~\ref{subsec:Programs-that-accumulate-errors}).
 The \lstinline!Either! functor ($L^{A}\triangleq Z+A$ with a fixed
 monoid type $Z$) is constructed as $L^{A}\triangleq Z+F^{A}$ with
@@ -2350,21 +2585,85 @@ the \lstinline!Reader! functor to a wider class of applicative functors.
 
 \subsubsection{Statement \label{subsec:Statement-applicative-function-type}\ref{subsec:Statement-applicative-function-type}}
 
-For \emph{any} contrafunctor $H^{A}$, the functor $L^{A}\triangleq H^{A}\rightarrow A$
-is applicative.
+$L^{A}\triangleq H^{A}\rightarrow A$ is a commutative applicative
+functor for \emph{any} contrafunctor $H^{A}$.
 
 \subparagraph{Proof}
 
 We define the \lstinline!zip! and \lstinline!wu! methods as follows:
 \begin{align*}
  & \text{zip}:(H^{A}\rightarrow A)\times(H^{B}\rightarrow B)\rightarrow H^{A\times B}\rightarrow A\times B\quad,\\
- & \text{zip}\triangleq f^{:H^{A}\rightarrow A}\times g^{:H^{B}\rightarrow B}\rightarrow h^{:H^{A\times B}}\rightarrow f(h\triangleright(\text{lpair}\,(g)(h))^{\downarrow H})\times g(h\triangleright(\text{rpair}\,(f)(h))^{\downarrow H})\quad,\\
- & \text{where }\text{lpair}\,(g^{:H^{B}\rightarrow B})(h^{:H^{A\times B}})\triangleq a^{:A}\rightarrow a\times g\big(h\triangleright(b^{:B}\rightarrow a\times b)^{\downarrow H}\big)\\
- & \text{ and }\text{rpair}\,(f^{:H^{A}\rightarrow A})(h^{:H^{A\times B}})\triangleq b^{:B}\rightarrow f(h\triangleright(a^{:A}\rightarrow a\times b)^{\downarrow H})\times b\quad;\\
+ & \text{zip}\big(f^{:H^{A}\rightarrow A}\times g^{:H^{B}\rightarrow B}\big)\triangleq h^{:H^{A\times B}}\rightarrow f\big(h\triangleright(\text{lpair}\,(g)(h))^{\downarrow H}\big)\times g\big(h\triangleright(\text{rpair}\,(f)(h))^{\downarrow H}\big)\quad,\\
+ & \quad\text{ where }\text{lpair}\,(g^{:H^{B}\rightarrow B})(h^{:H^{A\times B}})\triangleq a^{:A}\rightarrow a\times g\big(h\triangleright(b^{:B}\rightarrow a\times b)^{\downarrow H}\big)\\
+ & \quad\text{ and }\text{rpair}\,(f^{:H^{A}\rightarrow A})(h^{:H^{A\times B}})\triangleq b^{:B}\rightarrow f(h\triangleright(a^{:A}\rightarrow a\times b)^{\downarrow H})\times b\quad;\\
  & \text{wu}:H^{\bbnum 1}\rightarrow\bbnum 1\quad,\quad\quad\text{wu}\triangleq\_\rightarrow1\quad.
 \end{align*}
 
+The lifting $^{\uparrow L}$ is defined in the standard way by $(f^{:A\rightarrow B})^{\uparrow L}\triangleq p^{:H^{A}\rightarrow A}\rightarrow f^{\downarrow H}\bef p\bef f$.
+
+To verify the left identity law of \lstinline!zip!, begin with its
+left-hand side:
+\begin{align*}
+ & \text{zip}\big(\text{wu}\times p^{:H^{A}\rightarrow A}\big)=h^{:H^{\bbnum 1\times A}}\rightarrow\gunderline{\text{wu}\left(h\triangleright...\right)}\times p\big(h\triangleright(\text{rpair}\left(\text{wu}\right)\left(h\right))^{\downarrow H}\big)\\
+ & =1\times p\big(h\triangleright(\text{rpair}\left(\text{wu}\right)\left(h\right))^{\downarrow H}\big)\quad.
+\end{align*}
+Simplify separately:
+\[
+\text{rpair}\left(\text{wu}\right)\left(h\right)=b\rightarrow\gunderline{\text{wu}(h\triangleright...)}\times b=b\rightarrow1\times b\triangleq\text{ilu}\quad.
+\]
+So, the left-hand side of the left identity law becomes:
+\[
+\text{zip}\left(\text{wu}\times p\right)=h\rightarrow1\times p(h\triangleright\text{ilu}^{\downarrow H})=\gunderline{h\rightarrow h\,\triangleright}\,\text{ilu}^{\downarrow H}\bef p\bef\text{ilu}=\text{ilu}^{\downarrow H}\bef p\bef\text{ilu}\quad.
+\]
+This is reduced to the expected right-hand side if we use the lifting
+code to $L$:
+\[
+p\triangleright\text{ilu}^{\uparrow L}=\text{ilu}^{\downarrow H}\bef p\bef\text{ilu}\quad.
+\]
+
+To verify the right identity law of \lstinline!zip!, begin with its
+left-hand side:
+\begin{align*}
+ & \text{zip}\big(p^{:H^{A}\rightarrow A}\times\text{wu}\big)=h^{:H^{A\times\bbnum 1}}\rightarrow p\big(h\triangleright(\text{lpair}\,(\text{wu})(h))^{\downarrow H}\big)\times\gunderline{\text{wu}\left(h\triangleright...\right)}\\
+ & =\gunderline{h\rightarrow h\,\triangleright}\,(\text{lpair}\,(\text{wu})(h))^{\downarrow H}\bef p\bef\text{iru}=(\text{lpair}\,(\text{wu})(h))^{\downarrow H}\bef p\bef\text{iru}\quad.
+\end{align*}
+Simplify separately:
+\[
+\text{lpair}\left(\text{wu}\right)\left(h\right)=a\rightarrow a\times\text{wu}\left(h\triangleright...\right)=a\rightarrow a\times1=\text{iru}\quad.
+\]
+So, the left-hand side of the right identity law becomes equal to
+its right-hand side:
+\[
+\text{zip}\left(p\times\text{wu}\right)=\text{iru}^{\downarrow H}\bef p\bef\text{iru}=p\triangleright\text{iru}^{\uparrow L}\quad.
+\]
+
+To verify the associativity law, apply both its sides to a value $h^{:H^{A\times B\times C}}$:
+\begin{align*}
+ & h\triangleright\big(\text{zip}\big(p\times\text{zip}\left(q\times r\right)\big)\triangleright\varepsilon_{1,23}^{\uparrow L}\big)=h\triangleright\varepsilon_{1,23}^{\downarrow H}\bef\text{zip}\big(p\times\text{zip}\left(q\times r\right)\big)\bef\varepsilon_{1,23}\quad,\\
+ & h\triangleright\big(\text{zip}\big(\text{zip}\left(p\times q\right)\times r\big)\triangleright\varepsilon_{12,3}^{\uparrow L}\big)=h\triangleright\varepsilon_{12,3}^{\downarrow H}\bef\text{zip}\big(\text{zip}\left(p\times q\right)\times r\big)\bef\varepsilon_{12,3}\quad.
+\end{align*}
+To simplify working with these complicated expressions of type $A\times B\times C$,
+we will use the projection functions $\pi_{1}$, $\pi_{2}$, $\pi_{3}$
+to obtain the three parts of the tuples separately. For instance,
+the first parts (of type $A$) are found by applying $\pi_{1}$ to
+both sides:
+\begin{align*}
+{\color{greenunder}\text{left-hand side}:}\quad & h\triangleright\varepsilon_{1,23}^{\downarrow H}\bef\text{zip}\big(p\times\text{zip}\left(q\times r\right)\big)\bef\gunderline{\varepsilon_{1,23}\bef\pi_{1}}=h\triangleright\varepsilon_{1,23}^{\downarrow H}\triangleright\gunderline{\text{zip}}\big(p\times\text{zip}\left(q\times r\right)\big)\,\gunderline{\triangleright\,\pi_{1}}\\
+ & =p\big(h\triangleright\varepsilon_{1,23}^{\downarrow H}\triangleright(\text{lpair}\,(\text{zip}\left(q\times r\right))(h\triangleright\varepsilon_{1,23}^{\downarrow H}))^{\downarrow H}\big)\quad.\\
+{\color{greenunder}\text{right-hand side}:}\quad & h\triangleright\varepsilon_{12,3}^{\downarrow H}\bef\text{zip}\big(\text{zip}\left(p\times q\right)\times r\big)\bef\gunderline{\varepsilon_{12,3}\bef\pi_{1}}=h\triangleright\varepsilon_{12,3}^{\downarrow H}\triangleright\gunderline{\text{zip}}\big(\text{zip}\left(p\times q\right)\times r\big)\,\gunderline{\triangleright\,\pi_{1}}\bef\pi_{1}\\
+ & =\big(\gunderline{\text{zip}}\left(p\times q\right)\big(h\triangleright\varepsilon_{12,3}^{\downarrow H}\triangleright(\text{lpair}\,(r)(h\triangleright\varepsilon_{12,3}^{\downarrow H}))^{\downarrow H}\big)\big)\gunderline{\,\triangleright\,\pi_{1}}\\
+ & =p\big(h\triangleright\varepsilon_{12,3}^{\downarrow H}\triangleright(\text{lpair}\,(r)(h\triangleright\varepsilon_{12,3}^{\downarrow H}))^{\downarrow H}\triangleright(\text{lpair}\,(q)(h\triangleright\varepsilon_{12,3}^{\downarrow H}\triangleright(\text{lpair}\,(r)(h\triangleright\varepsilon_{12,3}^{\downarrow H}))^{\downarrow H}))^{\downarrow H}\big)\quad.
+\end{align*}
 {*}{*}{*}
+\begin{align*}
+ & h^{:H^{A\times B\times C}}\triangleright\big(\text{zip}\big(p\times\text{zip}\left(q\times r\right)\big)\triangleright\varepsilon_{1,23}^{\uparrow L}\big)=h\triangleright\varepsilon_{1,23}^{\downarrow H}\bef\text{zip}\big(p\times\text{zip}\left(q\times r\right)\big)\bef\varepsilon_{1,23}\\
+ & =\big(p\big(h\triangleright\varepsilon_{1,23}^{\downarrow H}\triangleright(\text{lpair}\,(\text{zip}\left(q\times r\right))(h\triangleright\varepsilon_{1,23}^{\downarrow H}))^{\downarrow H}\big)\times\text{zip}\left(q\times r\right)\big(h\triangleright\varepsilon_{1,23}^{\downarrow H}\triangleright(\text{rpair}\,(\text{zip}\left(q\times r\right))(h\triangleright\varepsilon_{1,23}^{\downarrow H}))^{\downarrow H}\big)\big)\triangleright\varepsilon_{1,23}\quad.
+\end{align*}
+Simplify parts of this expression separately:
+\begin{align*}
+ & h\triangleright\varepsilon_{1,23}^{\downarrow H}\triangleright(\text{rpair}\,(\text{zip}\left(q\times r\right))(h\triangleright\varepsilon_{1,23}^{\downarrow H}))^{\downarrow H}=h\triangleright\big(\text{rpair}\,(\text{zip}\left(q\times r\right))(h\triangleright\varepsilon_{1,23}^{\downarrow H})\bef\varepsilon_{1,23}\big)^{\downarrow H}\\
+ & =h\triangleright\big(\text{rpair}\,(\text{zip}\left(q\times r\right))(h\triangleright\varepsilon_{1,23}^{\downarrow H})\bef\varepsilon_{1,23}\big)^{\downarrow H}=h\triangleright\text{zip}\left(q\times r\right)\big(b\rightarrow(h\triangleright(a^{:A}\rightarrow a\times b)^{\downarrow H})\times b\big)^{\downarrow H}
+\end{align*}
 
 $\square$
 
@@ -2573,7 +2872,7 @@ are commutative applicative functors
 
 \section{Discussion and further developments}
 
-\subsection{What does it mean that some typeclass methods are \textsf{``}equivalent\textsf{''}?}
+\subsection{What does it mean that some typeclass methods are \textquotedblleft equivalent\textquotedblright ?}
 
 In this and the two previous chapters, we have been proving equivalence
 of certain typeclass methods. The equivalence of \lstinline!map2!,
@@ -2752,7 +3051,8 @@ is applicative but \emph{not} a monad (see Exercise~\ref{subsec:Exercise-1-monad
 {*}{*}{*}
 \begin{itemize}
 \item Applicative that disagrees with its monad: $F^{A}\triangleq1+\left(1\rightarrow A\times F^{A}\right)$
-(lazy list, non-standard applicative)
+(lazy list, non-standard applicative) as well as several other examples
+in this chapter (free pointed functor, free monad, selector)
 \item Examples of non-applicative functors: $F^{A}\triangleq\left(P\rightarrow A\right)+\left(Q\rightarrow A\right)$,
 $F^{A}\triangleq\left(A\rightarrow P\right)\rightarrow Q$,\  $F^{A}\triangleq\left(A\rightarrow P\right)\rightarrow1+A$
 \end{itemize}
@@ -2779,11 +3079,6 @@ is a monad)
 \end{itemize}
 Previous examples of non-applicative functors are all \emph{non-polynomial}
 \end{itemize}
-
-\subsection{Commutative applicative functors and parallel computation}
-
-Spark\textsf{'}s \lstinline!RDD! is a commutative applicative functor \textemdash{}
-but not a monad.
 
 \subsection{Deriving the laws of \texttt{ap} in view of category theory}
 
@@ -3056,8 +3351,8 @@ use the left identity law of \lstinline!zip! but do not need the
 right identity law. That law is equivalent to an additional law of
 \lstinline!ap! (see Exercise~\ref{subsec:Exercise-additional-law-of-ap}).
 
-\subsection{The pattern of \textsf{``}functor-based\textsf{''} typeclasses in view of category
-theory}
+\subsection{The pattern of \textquotedblleft functor-based\textquotedblright{}
+typeclasses in view of category theory}
 
 The \textsf{``}liftings\textsf{''} show the types of category\textsf{'}s morphisms
 \begin{center}
