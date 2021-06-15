@@ -82,12 +82,11 @@ or if they wish to make comments or suggestions regarding the contents of the bo
 
 # Building a PDF version of the book from LyX sources
 
-The current build of the full PDF file is available as [sofp-src/sofp.pdf](sofp-src/sofp.pdf).
-It contains the proofread chapters as well as some chapters that are not ready and may contain some partial text and some older slides.
-
 If you want to build from source, currently you need `LyX` 2.3.x and `pdftk` installed. 
 
 The command `bash make_sofp_pdf.sh` builds PDF files `sofp.pdf` and `sofp-draft.pdf`.
+The first file is a full draft with some unfinished chapters,
+the second file contains only finished and proofread chapters.
 
 If this does not work, you can build manually with a simple command such as `lyx --export pdf sofp.lyx`,
 but the resulting PDF version will lack certain cosmetic features such as special colors and formatting.
