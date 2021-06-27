@@ -1,5 +1,194 @@
+\global\long\def\gunderline#1{\mathunderline{greenunder}{#1}}%
+\global\long\def\bef{\forwardcompose}%
+\global\long\def\bbnum#1{\custombb{#1}}%
+\global\long\def\pplus{{\displaystyle }{+\negmedspace+}}%
+
 
 \chapter{Traversable functors\label{chap:9-Traversable-functors-and}}
+
+\section{Motivation}
+
+The \lstinline!map!/\lstinline!reduce! programming style\index{map/reduce programming style@\texttt{map}/\texttt{reduce} programming style}
+was the first significant industrial use of functional programming.
+Other methods such as \lstinline!filter!, \lstinline!flatMap!, and
+\lstinline!zip! were added later to increase the expressive power
+of that programming style. Previous chapters examined systematically
+the properties of some of those methods and generalized them to many
+different type constructors. This chapter uses the same approach to
+study and generalize the \lstinline!reduce! method. In this way,
+we obtain a complete understanding of the \lstinline!map!/\lstinline!reduce!
+paradigm.
+
+\subsection{From \texttt{reduce} and \texttt{foldLeft} to \texttt{foldMap}}
+
+The type signatures of \lstinline!reduce! and \lstinline!foldLeft!
+for a sequence of type \lstinline!Seq! can be written as:
+\begin{lstlisting}
+def reduce[A](la: Seq[A])(update: (A, A) => A): A
+def foldLeft[A, B](la: Seq[A])(init: B)(update: (B, A) => B): B
+\end{lstlisting}
+\[
+\text{reduce}:\text{Seq}^{A}\rightarrow(A\times A\rightarrow A)\rightarrow A\quad,\quad\quad\text{foldLeft}:\text{Seq}^{A}\rightarrow B\rightarrow(B\times A\rightarrow B)\rightarrow B\quad.
+\]
+We can see that \lstinline!foldLeft! is a generalized version of
+\lstinline!reduce!: in \lstinline!foldLeft!, the accumulated result
+is of a different type ($B$) than the type of sequence elements ($A$).
+It is easy to implement \lstinline!reduce! through \lstinline!foldLeft!:
+\begin{lstlisting}
+def reduce[A](la: Seq[A])(update: (A, A) => A): A = reduce.tail.foldLeft(reduce.head)(update)
+\end{lstlisting}
+
+We have seen many examples of using \lstinline!foldLeft! and \lstinline!reduce!
+in Chapter~\ref{chap:2-Mathematical-induction}. Now we would like
+to generalize these functions to data structures other than sequences.
+Such a generalization must be based on requiring suitable laws, but
+it is not obvious what laws \lstinline!foldLeft! and \lstinline!reduce!
+must satisfy (other than naturality laws that will hold automatically
+for any fully parametric code). To make progress, we need to simplify
+these type signatures and to reformulate them in a more suggestive
+form. We will achieve this reformulation in two steps, generalizing
+\lstinline!foldLeft! first to a new function called \lstinline!foldMap!
+and then to \lstinline!traverse!. 
+
+The way to \lstinline!foldMap! starts by changing the type of the
+argument \lstinline!update: (B, A) => B! to an equivalent curried
+form with flipped argument order:
+\[
+\text{upd}:A\rightarrow B\rightarrow B\quad.
+\]
+So, $\text{upd}\left(x^{:A}\right)$ has type $B\rightarrow B$. The
+key observation is that all functions of type $B\rightarrow B$ form
+a \emph{monoid} (denoted by \lstinline!monoidFunc! in Example~\ref{subsec:tc-Example-Monoids}
+and Section~\ref{subsec:Monoids-constructions}).\index{monoid}
+For brevity, let us denote that monoid by \lstinline!MF!. The empty
+element of that monoid is the identity function ($e_{\text{MF}}\triangleq\text{id}^{:B\rightarrow B}$),
+and the \lstinline!compose! operation is the function composition
+($f^{:B\rightarrow B}\oplus_{\text{MF}}g^{:B\rightarrow B}\triangleq f\bef g$).
+With this formulation, the evaluation of a \lstinline!foldLeft! function
+can be written like this:
+\begin{align*}
+ & \text{foldl}\left(\left[x_{1},x_{2},x_{3}\right]\right)\left(b_{0}\right)\left(\text{upd}\right)=b_{0}\triangleright\text{upd}\left(x_{1}\right)\triangleright\text{upd}\left(x_{2}\right)\triangleright\text{upd}\left(x_{3}\right)\\
+ & =b_{0}\triangleright\text{upd}\left(x_{1}\right)\bef\text{upd}\left(x_{2}\right)\bef\text{upd}\left(x_{3}\right)=b_{0}\triangleright\big(\text{upd}\left(x_{1}\right)\oplus_{\text{MF}}\text{upd}\left(x_{2}\right)\oplus_{\text{MF}}\text{upd}\left(x_{3}\right)\big)\quad.
+\end{align*}
+This formulation suggests that we could replace the specific monoid
+(\lstinline!MF!) by an arbitrary monoid ($M$). The new, more general
+function is called \lstinline!foldMap!. To obtain that function,
+we first change the order of the curried arguments for convenience:
+\[
+\text{foldMap}\left(\text{upd}\right)\left(xs\right)\left(b_{0}\right)\triangleq\text{foldl}\left(xs\right)\left(b_{0}\right)\left(\text{upd}\right)\quad.
+\]
+Omitting the argument $b_{0}$, we may visualize the computation of
+\lstinline!foldMap! as:
+\[
+\text{foldMap}\left(\text{upd}\right)\left(\left[x_{1},x_{2},x_{3}\right]\right)=\text{upd}\left(x_{1}\right)\oplus_{M}\text{upd}\left(x_{2}\right)\oplus_{M}\text{upd}\left(x_{3}\right)\quad.
+\]
+Now, the type of \lstinline!upd! is $A\rightarrow M$ instead of
+$A\rightarrow B\rightarrow B$. So, the type signature of \lstinline!foldMap!
+must be:
+\[
+\text{foldMap}:(A\rightarrow M)\rightarrow\text{Seq}^{A}\rightarrow M\quad.
+\]
+This type signature assumes that $M$ is a monoid type. We can now
+implement \lstinline!foldMap! via \lstinline!foldLeft!:
+\begin{lstlisting}
+def foldMap[M: Monoid, A](f: A => M): Seq[A] => M =
+  _.foldLeft(Monoid[M].empty) { (m, a) => m |+| f(a) }
+\end{lstlisting}
+We can also implement \lstinline!foldLeft! via \lstinline!foldMap!
+by using the monoid instance of \lstinline!FM! (see Example~\ref{subsec:tc-Example-Monoids}):
+\begin{lstlisting}
+implicit def monoidFunc[A]: Monoid[A => A] = ...
+def foldLeft[A, B](la: Seq[A])(init: B)(update: (B, A) => B): B =
+  foldMap[B => B, A](identity)(a => b => update(b, a))(init)
+\end{lstlisting}
+We will prove later than \lstinline!foldLeft! and \lstinline!foldMap!
+are in fact equivalent.
+
+The type signature of \lstinline!foldMap! suggests further to replace
+\lstinline!Seq! by another type constructor (say, \lstinline!L[_]!).
+We may call \textbf{foldable}\index{foldable functor} a type constructor
+$L^{\bullet}$ for which the \lstinline!foldMap! method is defined:
+\[
+\text{foldMap}_{L}:\left(A\rightarrow M\right)\rightarrow L^{A}\rightarrow M\quad,\quad\text{assuming that }M\text{ is a monoid}\quad.
+\]
+The function $\text{foldMap}_{L}$ works in the same way for all monoids
+$M$ (but differently for each $L^{\bullet}$). 
+
+The second step that will bring us to the \lstinline!traverse! method
+replaces the arbitrary monoid $M$ by an arbitrary applicative functor
+$F^{B}$ applied to a type parameter $B$. Since this step is not
+straightforward, we will give an independent motivation for the \lstinline!traverse!
+method in the next subsection.
+
+\subsection{The \texttt{traverse} operation}
+
+It is often necessary to wait for several concurrent operations to
+finish. As a simple example, assume that we are given a list of type
+\lstinline!List[A]! and a processing function of type \lstinline!A => Future[B]!.
+We are required to apply the processing function to all items from
+the list in parallel and wait until the entire data set is processed.
+
+The standard Scala method to use in this situation is called \lstinline!Future.traverse!:
+\begin{lstlisting}
+val data: List[A] = ...
+val processing: A => Future[B] = ...
+implicit val ec: ExecutionContext = ...
+val results: Future[List[B]] = Future.traverse(data)(processing)
+\end{lstlisting}
+If we ignore the implicit argument of type \lstinline!ExecutionContext!,
+which is specific to the \lstinline!Future! data type, and if we
+flip the first two curried arguments, we will arrive at the following
+type signature of \lstinline!traverse! (short notation \textsf{``}$\text{trav}$\textsf{''}):
+\[
+\text{trav}:(A\rightarrow\text{Future}^{B})\rightarrow\text{List}^{A}\rightarrow\text{Future}^{\text{List}^{B}}\quad.
+\]
+Generalizing to other type constructors $F$, $L$ instead of \lstinline!Future!
+and \lstinline!List!, we obtain:
+\[
+\text{trav}_{L}:(A\rightarrow F^{B})\rightarrow L^{A}\rightarrow F^{L^{B}}\quad.
+\]
+In this type signature, we have chosen the names $F$ and $L$ specifically
+to help us avoid errors (e.g., writing $L^{F^{B}}$ instead of $F^{L^{B}}$)
+by recalling the example with $F=$\lstinline!Future! and $L=$\lstinline!List!.
+
+It turns out that the \lstinline!traverse! method can work in the
+same way for any \emph{applicative} functor $F^{\bullet}$. A functor
+$L^{\bullet}$ having a \lstinline!traverse! method of this type
+is called \index{traversable}\textbf{traversable}.
+
+The type signatures of \lstinline!traverse! and \lstinline!foldMap!
+are similar except that $M$ is replaced by $F^{B}$ or $F^{L^{B}}$
+as appropriate. To see that \lstinline!foldMap! is a special case
+of \lstinline!traverse!, consider a constant functor $F^{A}\triangleq M$,
+which is applicative if $M$ is a monoid (see Section~\ref{subsec:Constructions-of-applicative-functors}).
+With this choice of $F^{\bullet}$, the type signature of \lstinline!traverse!
+reduces to that of \lstinline!foldMap!.
+
+Before studying the properties of \lstinline!traverse!, we will look
+at some examples of its practical use.
+
+\section{Practical use of \texttt{traverse}}
+
+Convert foldable data structures to list
+
+Fold a tree to aggregate data
+
+Decorate a tree with Depth-First traversal order labels
+
+Implement \texttt{\textcolor{blue}{\footnotesize{}scanMap}} and \texttt{\textcolor{blue}{\footnotesize{}scanLeft}}
+as \texttt{\textcolor{blue}{\footnotesize{}traverse}} with a state
+monad
+
+Traversal for a non-monadic \textsf{``}rigid\textsf{''} tree $T^{A}\triangleq A+T^{A\times A}$
+
+The corresponding construction is $L^{A}\triangleq S^{A,L^{R^{A}}}$
+where $R$ is applicative and traversable and $S$ is bitraversable
+
+What \emph{cannot} be implemented as a traversal:
+
+Breadth-first traversal for a tree as  \Tree[ [ 2 [ 3 4 ] ] 1 ]  
+
+Depth labeling of a tree as {\footnotesize{}} \Tree[ [ 2 [ 3 3 ] ] 1 ] {\footnotesize\par}
 
 \section{Slides}
 
@@ -336,32 +525,7 @@ must return $1+\bbnum 0$
 
 So, the result is trivial and probably not useful
 
-Laws of traversables allow ignoring the effects of $F$
-
-
-\paragraph{Examples of usage}
-
-Convert foldable data structures to list
-
-Fold a tree to aggregate data
-
-Decorate a tree with Depth-First traversal order labels
-
-Implement \texttt{\textcolor{blue}{\footnotesize{}scanMap}} and \texttt{\textcolor{blue}{\footnotesize{}scanLeft}}
-as \texttt{\textcolor{blue}{\footnotesize{}traverse}} with a state
-monad
-
-Traversal for a non-monadic \textsf{``}rigid\textsf{''} tree $T^{A}\triangleq A+T^{A\times A}$
-
-The corresponding construction is $L^{A}\triangleq S^{A,L^{R^{A}}}$
-where $R$ is applicative and traversable and $S$ is bitraversable
-
-What \emph{cannot} be implemented as a traversal:
-
-Breadth-first traversal for a tree as  \Tree[ [ 2 [ 3 4 ] ] 1 ]  
-
-Depth labeling of a tree as  \Tree[ [ 2 [ 3 3 ] ] 1 ] {\footnotesize{} }{\footnotesize\par}
-
+Laws of traversables allow ignoring the effects of $F$ 
 
 \paragraph{Naturality with respect to applicative functor as parameter}
 
@@ -394,18 +558,6 @@ as a \textsf{``}lifting\textsf{''}
 
 Use a more general definition of category than what we had so far
 (morphisms between type constructors)
-
-\subsection{Monoid morphisms}
-
-Given two monoid types $M$ and $N$, a function $\phi:M\rightarrow N$
-is a \textbf{monoid morphism}\index{monoid morphism} if $\phi$ satisfies
-the two laws:
-\begin{align*}
-{\color{greenunder}\text{identity law}:}\quad & \phi(e_{M})=e_{N}\quad,\\
-{\color{greenunder}\text{composition law}:}\quad & \phi(p\oplus_{M}q)=\phi(p)\oplus_{N}\phi(q)\quad.
-\end{align*}
-These laws mean that $\phi$ translates the operations of $M$ into
-the operations of $N$.
 
 \subsection{Exercises\index{exercises}}
 
@@ -447,7 +599,7 @@ suitable bifunctor $S^{X,Y}$.
 
 \subsubsection{Exercise \label{subsec:Exercise-traversables-7}\ref{subsec:Exercise-traversables-7}}
 
-For a tree type $T^{A}$ of your choice, implement a traversable instance
+For a binary tree type of your choice, implement a traversable instance
 for right-to-left traversal order, and test that the tree is decorated
 with labels as  \Tree[ [ 4 [ 3 2 ] ] 1 ]  
 
@@ -461,6 +613,26 @@ $S$ is bitraversable (use constructions).
 
 Is the recursive type constructor $L^{A}\triangleq A+L^{\text{List}^{A}}$
 traversable? Explain what sort of data container it is.
+
+The following definition is used in the next few exercises:
+
+\subsubsection{Definition \label{subsec:Definition-monoid-morphism}\ref{subsec:Definition-monoid-morphism}}
+
+For any two monoids $M$ and $N$, a function $\phi:M\rightarrow N$
+is called a \textbf{monoid morphism}\index{monoid morphism} if $\phi$
+satisfies the following two laws:
+\begin{align*}
+{\color{greenunder}\text{identity law}:}\quad & \phi(e_{M})=e_{N}\quad,\\
+{\color{greenunder}\text{composition law}:}\quad & \phi(p\oplus_{M}q)=\phi(p)\oplus_{N}\phi(q)\quad.
+\end{align*}
+These laws mean that $\phi$ translates the operations of $M$ into
+the operations of $N$.
+
+\subsubsection{Exercise \label{subsec:Exercise-traversables-10-2}\ref{subsec:Exercise-traversables-10-2}}
+
+Show that for any two monoid morphisms $\phi:M\rightarrow N$ and
+$\psi:N\rightarrow P$ (where $M$, $N$, and $P$ are monoids), the
+composition $\phi\bef\psi:M\rightarrow P$ is again a monoid morphism.
 
 \subsubsection{Exercise \label{subsec:Exercise-traversables-10}\ref{subsec:Exercise-traversables-10}}
 
@@ -530,6 +702,20 @@ Now check the composition law: for any $p^{:M^{R}}$ and $q^{:M^{R}}$,
 \end{align*}
 \end{comment}
 
+
+\subsubsection{Exercise \label{subsec:Exercise-traversables-10-3}\ref{subsec:Exercise-traversables-10-3}}
+
+Given an applicative functor $M$ and a monoid morphism $\phi^{:R\rightarrow S}$
+between some monoid types $R$ and $S$, prove that $\phi^{\uparrow M}:M^{R}\rightarrow M^{S}$
+is also a monoid morphism. (The types $M^{R}$ and $M^{S}$ are monoids
+due to Exercise~\ref{subsec:Exercise-applicative-of-monoid-is-monoid}).
+
+\subsubsection{Exercise \label{subsec:Exercise-traversables-10-1-1}\ref{subsec:Exercise-traversables-10-1-1}}
+
+Given a monoid type $R$ and an applicative morphism $\phi:M\leadsto N$
+between some applicative functors $M$ and $N$, prove that $\phi:M^{R}\rightarrow N^{R}$
+is a monoid morphism between $M^{R}$ and $N^{R}$. (The types $M^{R}$
+and $N^{R}$ are monoids due to Exercise~\ref{subsec:Exercise-applicative-of-monoid-is-monoid}).
 
 \section{Discussion}
 
