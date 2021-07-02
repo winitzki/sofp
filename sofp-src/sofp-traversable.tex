@@ -17,7 +17,7 @@ of that programming style. Previous chapters examined systematically
 the properties of some of those methods and generalized them to many
 different type constructors. This chapter uses the same approach to
 study and generalize the \lstinline!reduce! method. In this way,
-we obtain a complete understanding of the \lstinline!map!/\lstinline!reduce!
+we will obtain a complete understanding of \lstinline!map!/\lstinline!reduce!
 programming.
 
 \subsection{From \texttt{reduce} and \texttt{foldLeft} to \texttt{foldMap}}
@@ -180,7 +180,7 @@ at some examples of its practical use.
 \subsection{Implementing \texttt{traverse} for various data types}
 
 To understand how \lstinline!traverse! works, let us implement it
-for some simple data types.
+for some data types, including lists and trees.
 
 \subsubsection{Example \label{subsec:Example-traverse-for-1+a*a}\ref{subsec:Example-traverse-for-1+a*a}\index{solved examples}}
 
@@ -303,10 +303,10 @@ We implement \lstinline!trav! similarly to the implementation of
 \lstinline!foldLeft! in Section~\ref{subsec:Binary-trees}:
 \begin{lstlisting}
 def trav[A, B, F[_]: Functor : Applicative](f: A => F[B])(t: Tree2[A]): F[Tree2[B]] = t match {
-  case Leaf(a)          => f(a).map(b => Leaf(b))                    // Reproduce the Leaf structure.
+  case Leaf(a)          => f(a).map(b => Leaf(b))            // Reproduce the Leaf structure under F.
   case Branch(t1, t2)   =>
     val (r1, r2) = (trav(f)(t1), trav(f)(t2))    // Traverse the two branches and obtain two results.
-    F.zip(r1, f2).map { case (b1, b2)   => Branch(b1, b2) }        // Reproduce the Branch structure.
+    F.zip(r1, f2).map { case (b1, b2)  => Branch(b1, b2) } // Reproduce the Branch structure under F.
 }
 \end{lstlisting}
 In the code notation, this function looks like this:
@@ -320,22 +320,65 @@ In the code notation, this function looks like this:
 
 The code first traverses the two sub-branches (using recursive calls
 to \lstinline!trav!) and then combines the resulting values. So,
-this implementation represents a depth-first traversal of the tree.
+this implementation represents the depth-first, left-to-right traversal
+of the tree.
+
+\subsubsection{Example \label{subsec:Example-traversal-regular-shaped-tree}\ref{subsec:Example-traversal-regular-shaped-tree}}
+
+Implement a \lstinline!traverse! operation for the regular-shaped
+tree \lstinline!RTree! (Section~\ref{subsec:Regular-shaped-trees}).
+
+\subparagraph{Solution}
+
+We begin writing code as in Example~\ref{subsec:Example-traverse-tree}
+by pattern matching:
+\begin{lstlisting}[numbers=left]
+def trav[A, B, F[_]: Functor : Applicative](f: A => F[B])(t: RTree[A]): F[RTree[B]] = t match {
+  case Leaf(a)     => f(a).map(b => Leaf(b))           // Reproduce the Leaf structure under F.
+  case Branch(t)   => ???  // Here t has type RTree[(A, A)].
+}
+\end{lstlisting}
+In line 3, we have a pattern variable \lstinline!t! of type \lstinline!RTree[(A, A)]!,
+but we need to obtain a value of type \lstinline!F[Branch[B]]! in
+that scope. Since a \lstinline!Branch! contains a recursive instance
+of the type \lstinline!RTree!, it seems we need to use a recursive
+call of \lstinline!trav! here. However, we cannot apply \lstinline!trav(f)!
+to \lstinline!t! because the types do not match. We will be able
+to apply \lstinline!trav! if instead of \lstinline!f: A => F[B]!
+we had a function of type \lstinline!(A, A) => F[(B, B)]!. We can
+create such a function out of \lstinline!f! using $F$\textsf{'}s \lstinline!zip!
+method:
+\begin{lstlisting}
+{ case (a1, a2) => f(a1) zip f(a2) }
+\end{lstlisting}
+ So, we write:
+\begin{lstlisting}
+  case Branch(t)   => trav { case (a1, a2) => f(a1) zip f(a2) }(t); ??? } // Have F[RTree[(B, B)]].
+\end{lstlisting}
+We can now use $F$\textsf{'}s \lstinline!map! method to restore the \lstinline!Branch!
+structure under $F$. The complete code is:
+\begin{lstlisting}[numbers=left]
+def trav[A, B, F[_]: Functor : Applicative](f: A => F[B])(t: RTree[A]): F[RTree[B]] = t match {
+  case Leaf(a)     => f(a).map(b => Leaf(b))           // Reproduce the Leaf structure under F.
+  case Branch(t)   => (trav[(A, A), (B, B), F] { case (a1, a2) => f(a1) zip f(a2) }(t)
+                      ).map(x => Branch(x))          // Reproduce the Branch structure under F.
+}
+\end{lstlisting}
 $\square$
 
-These examples show how one would implement the \lstinline!traverse!
-operation for a data structure of type $L^{A}$. Each element of type
-$A$ contained in the data structure should be processed using the
-given function $f:A\rightarrow F^{B}$. All of the resulting $F$-effects
-need to be collected and merged (using $F$\textsf{'}s \lstinline!zip!) into
-a single $F$-effect that wraps a value of type $L^{B}$. That value
-should (as closely as possible) repeat the data structure that was
-present in the input value of type $L^{A}$. 
+These examples show how to implement the \lstinline!traverse! operation
+for a data structure of type $L^{A}$. Each value of type $A$ contained
+in the data structure should be processed using the given function
+$f:A\rightarrow F^{B}$. All of the resulting $F$-effects need to
+be collected and merged (using $F$\textsf{'}s \lstinline!zip! and \lstinline!map!)
+into a single $F$-effect that wraps a value of type $L^{B}$. That
+value should reproduce the shape of the data structure that was present
+in the input value of type $L^{A}$. 
 
-In all examples above, we all $F$-effects together, making sure that
-each $F$-effect is collected exactly once. It would be strange if
-the \lstinline!traverse! operation were to repeat some $F$-effects,
-as the following code shows:
+In all examples above, we merge all $F$-effects together, making
+sure that each $F$-effect is collected exactly once. It would be
+strange if the \lstinline!traverse! operation were to repeat some
+$F$-effects, as the following code shows:
 \begin{lstlisting}
 def badtrav[A, B, F[_]: Functor : Applicative](f: A => F[B])(la: List[A]): F[List[B]] = la match {
   case Nil            => F.pure(Nil)
@@ -403,12 +446,12 @@ allows us to apply any monoidal aggregation operation to the functor\textsf{'}s
 data. 
 
 An aggregation\textsf{'}s results may depend on the order of data traversal.
-It is important that the function \lstinline!toList! is free to choose
-the order in which it writes the data from \lstinline!L! to a list.
-Some data structures have a \textsf{``}natural\textsf{''} order of traversal that
-is easiest to implement, but this is by no means the only possible
-traversal order. Let us see some examples of implementing different
-traversal orders for lists and trees.
+It is important that the function \lstinline!toList! can be implemented
+in different ways depending on the order in which it writes the data
+from \lstinline!L! to a list. Some data structures have a \textsf{``}natural\textsf{''}
+traversal order that is easiest to implement, but this is by no means
+the only possible traversal order. Let us see some examples of implementing
+different traversal orders for lists and trees.
 
 The above code of \lstinline!foldMap! for the binary tree implements
 a depth-first traversal of the tree. We can see that by applying \lstinline!toList!
@@ -421,7 +464,7 @@ res0: List[Int] = List(8, 3, 5, 4)
 \end{lstlisting}
 
 Let us now implement another version of \lstinline!toList! that performs
-a breadth-first traversal of binary trees. The idea is to prepare
+the breadth-first traversal of a binary tree. The idea is to prepare
 a list of all values at level $0$ in the tree, then a list of all
 values at level $1$, and so on. For each level, values must be collected
 left to right. For instance, a breadth-first traversal of the tree
@@ -482,28 +525,64 @@ direct or reverse. A direct traversal is implemented by the standard
 traversal is done simply by applying the \lstinline!reverse! method,
 such as \lstinline!la.reverse.foldLeft(...)(...)!.
 
-\subsection{Decorating a tree with depth-first and breadth-first traversals{*}{*}{*}}
+Similarly to \lstinline!foldLeft! and \lstinline!foldMap!, the \lstinline!traverse!
+method may be implemented with different traversal orders. For comparison,
+we show the code for the direct-ordered and reverse-ordered \lstinline!List!
+traversals:
+\begin{lstlisting}
+// This code assumes that F has typeclass instances for Applicative and Functor.
+def travList[A, B](f: A => F[B])(la: List[A]): F[List[B]] = la match {
+  case Nil            => Applicative[F].pure(Nil)
+  case head :: tail   => f(head).map2(travList(f)(tail)) { (x, y) => x +: y }
+}
+def travRevList[A, B](f: A => F[B])(la: List[A]): F[List[B]] = la.reverse match {
+  case Nil            => Applicative[F].pure(Nil)
+  case head :: tail   => f(head).map2(travRevList(f)(tail)) { (x, y) => y :+ x }
+}
+\end{lstlisting}
+First, we reverse the given list, so that $F$\textsf{'}s effects are merged
+in the reverse order. Second, we recreate the original list structure
+wrapped under $F$.
 
-\subsection{Using \texttt{traverse} and the \texttt{State} monad}
+Implementing breadth-first \lstinline!traverse! for a tree is more
+difficult. It is not sufficient to convert the tree to a list in the
+breadth-first order and collect $F$\textsf{'}s effects. We also need to restore
+the original tree structure wrapped under the applicative functor
+$F$. The next section shows an example implementation of the breadth-first
+tree traversal.
 
-Implement scanMap and scanLeft
+\subsection{Decorating a tree with depth-first and breadth-first traversals }
 
-\subsection{Traversing a regular-shaped binary tree}
+Once we implement \lstinline!traverse! for a tree-like data structure,
+we may use it to perform various operations on trees, as long as those
+operations are described by the effect of some applicative functor
+$F$. An example
+
+\subsection{Implement \texttt{scanLeft} and \texttt{scanMap} via \texttt{traverse}
+and the \texttt{State} monad}
+
+\subsection{Examples of tasks that \emph{cannot} be implemented as a traversal}
+
+Breadth-first traversal for a tree as  \Tree[ [ 2 [ 3 4 ] ] 1 ] 
+\emph{can} be implemented as a traversal. 
+
+Depth labeling of a tree as  \Tree[ [ 2 [ 3 3 ] ] 1 ]  is not possible
+with a traversal because we cannot distinguish between nodes at the
+same depth and nodes at different depth. A traversal simply accumulates
+the effects for all tree nodes. We cannot label a certain pair of
+nodes with the same depth value but other nodes with a different depth
+value; either the state value is updated at \emph{each} node or not.
+Depth labeling must be implemented as a special operation such as
+zipWithDepth.
+
+\section{Laws and structure}
+
+\subsection{Regular-shaped binary tree}
 
 $T^{A}\triangleq A+T^{A\times A}$
 
 The corresponding construction is $L^{A}\triangleq S^{A,L^{R^{A}}}$
 where $R$ is applicative and traversable and $S$ is bitraversable
-
-\subsection{Examples of tasks that \emph{cannot} be implemented as a traversal}
-
-Breadth-first traversal for a tree as  \Tree[ [ 2 [ 3 4 ] ] 1 ] 
-- is this correct, and if so, how can we see that?
-
-Depth labeling of a tree as  \Tree[ [ 2 [ 3 3 ] ] 1 ]  - can we still
-do this using some kind of trick?
-
-\section{Laws and structure}
 
 \section{Slides}
 
