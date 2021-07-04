@@ -221,8 +221,8 @@ fi
 
 bash spelling_check.sh
 
-# Prepare the full 3-page book covers.
-sed -i.bak -e "s|TOTALPAGES|$draft_pages|" book_cover/sofp-cover-parameters.tex
+# Prepare the full 3-page book covers. Use $total_pages and not $draft_pages since the printed file has all unedited content as well.
+sed -i.bak -e "s|TOTALPAGES|$total_pages|" book_cover/sofp-cover-parameters.tex
 (cd book_cover; bash sofp-make-cover.sh)
 
 # Cleanup?

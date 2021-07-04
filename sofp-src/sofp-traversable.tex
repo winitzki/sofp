@@ -311,7 +311,7 @@ def trav[A, B, F[_]: Functor : Applicative](f: A => F[B])(t: T2[A]): F[T2[B]] = 
   case Leaf(a)          => f(a).map(b => Leaf(b))            // Reproduce the Leaf structure under F.
   case Branch(t1, t2)   =>
     val (r1, r2) = (trav(f)(t1), trav(f)(t2))    // Traverse the two branches and obtain two results.
-    F.zip(r1, f2).map { case (b1, b2)  => Branch(b1, b2) } // Reproduce the Branch structure under F.
+    (r1 zip r2).map { case (b1, b2)  => Branch(b1, b2) }   // Reproduce the Branch structure under F.
 }
 \end{lstlisting}
 In the code notation, this function looks like this:
@@ -404,7 +404,7 @@ we will see that the laws of \lstinline!traverse! prohibit implementations
 that either repeat some of the $F$-effects or ignore some of the
 values.
 
-\subsection{Aggregating tree-like data by folding. Breadth-first traversal}
+\subsection{Aggregating tree-like data by folding. Breadth-first traversal\label{subsec:Aggregating-tree-like-data-bfs}}
 
 Although \lstinline!foldMap! (and \lstinline!foldLeft!) are special
 cases of \lstinline!traverse!, it is often easier to implement \lstinline!foldMap!
@@ -550,7 +550,7 @@ the original tree structure wrapped under the applicative functor
 $F$. The next section shows an example implementation of a breadth-first
 \lstinline!traverse!.
 
-\subsection{Decorating a tree with depth-first and breadth-first traversals }
+\subsection{Decorating a tree. I. Depth-first traversal}
 
 A \lstinline!traverse! method for a given tree-like data structure
 may be used to perform various operations on trees, as long as those
@@ -586,49 +586,67 @@ we may use the \lstinline!State! monad as the applicative functor
 $F$ when using the \lstinline!traverse! function.
 
 In this section, we will implement \lstinline!zipWithIndex! for depth-first
-and for breadth-first tree traversals. The implementation of \lstinline!zipWithIndexDFS!
+tree traversal. The implementation of \lstinline!zipWithIndexDF!
 will have this form:
 \begin{lstlisting}
 final case class St[A](run: Int => (A, Int))    // A State monad with internal state of type Int.
                          // Assume that we have defined Applicative and Functor instances for St.
-val f: A => St[(A, Int)] = ???     // Define the "decoration" function.
-def zipWithIndexDFS[A](tree: T2[A]): T2[(A, Int)] = {
-  val afterTraverse: St[T2[(A, Int)]] = trav[A, (A, Int), St](f)(tree)
-  afterTraverse.run(0)._1          // Run the State monad and get the result value.
+def computeIndex[A]: A => St[(A, Int)] = ???                 // Define the "decoration" function.
+def zipWithIndexDF[A](tree: T2[A]): T2[(A, Int)] = {
+  val afterTraverse: St[T2[(A, Int)]] = trav[A, (A, Int), St](computeIndex)(tree)
+  afterTraverse.run(0)._1                        // Run the State monad and get the result value.
 }
 \end{lstlisting}
 This will be a depth-first traversal if \lstinline!trav! is the function
 shown in Example~\ref{subsec:Example-traverse-tree}. It remains
-to define the function \lstinline!f! describing the \textsf{``}decoration
-logic\textsf{''}. Begin writing the code of \lstinline!f!:
+to define the function \lstinline!computeIndex! describing the \textsf{``}decoration
+logic\textsf{''}. Begin writing the code of \lstinline!computeIndex!:
 \begin{lstlisting}
-val f: A => St[(A, Int)] = a => St { i => ???: ((A, Int), Int) }
+def computeIndex[A]: A => St[(A, Int)] = a => St { i => ???: ((A, Int), Int) }
 \end{lstlisting}
 Given a leaf value \lstinline!a: A! and a previous internal state
 \lstinline!i: Int!, we must compute the \textsf{``}decorated\textsf{''} leaf value
 of type $A\times\text{Int}$ as well as the new internal state. Since
 our goal is to label the leaves by the current leaf count, we use
-the internal state to keep the number of leaves seen so far. We just
-need to increment the internal state after copying it to the leaf:
+the internal state to keep the number of leaves seen so far. So, we
+just need to increment the internal state after copying it to the
+leaf:
 \begin{lstlisting}
-val f: A => St[(A, Int)] = a => St { i => ((a, i), i + 1) }
+def computeIndex[A]: A => St[(A, Int)] = a => St { i => ((a, i), i + 1) }
 \end{lstlisting}
-This completes the implementation of \lstinline!zipWithIndexDFS!:
+This completes the implementation of \lstinline!zipWithIndexDFS!,
+which we can now test:
 \begin{lstlisting}
-scala> zipWithIndexDFS(t2)
+scala> zipWithIndexDF(t2)
 res0: T2[(Int, Int)] = Branch(Leaf((8,0)), Branch(Branch(Leaf((3,1)), Leaf((5,2))), Leaf((4,3))))
 \end{lstlisting}
 
-{*}{*}{*}
 
-Note that the depth-first code differs from the breadth-first code
-only in the implementation of \lstinline!traverse!. The \textsf{``}decoration\textsf{''}
-logic is completely separate from the traversal code. As a result,
-we gain flexibility: an arbitrary implementation of \lstinline!traverse!
-may be used with an arbitrary \textsf{``}decoration\textsf{''} function.
+\subsection{Decorating a tree. II. Breadth-first traversal}
 
-\subsection{Implement \texttt{scanLeft} and \texttt{scanMap} via \texttt{traverse}
-and the \texttt{State} monad}
+In Section~\ref{subsec:Aggregating-tree-like-data-bfs}, we have
+implemented a breadth-first folding for the tree data structure \lstinline!T2[A]!.
+While folding over \lstinline!T2[A]! merely needs to arrange the
+leaf values of type \lstinline!A! in the breadth-first order, a traversal
+requires to sequence the effects of an arbitrary applicative functor
+\lstinline!F[_]! in that order while reproducing the original tree
+structure wrapped under \lstinline!F!. The function \lstinline!toListBFS!
+shown in the previous section is not sufficient for that purpose,
+because the tree structure cannot be reproduced if we only have a
+list of leaf values. We need to keep additional information about
+the tree position of each leaf value.
+
+The plan of {*}{*}{*}
+
+Note that the implementation of \lstinline!traverse! is the only
+difference between the breadth-first code and the depth-first code
+shown in the previous section. The \textsf{``}decoration logic\textsf{''} is described
+by the function \lstinline!computeIndex! and does not depend on the
+traversal order. As a result, we gain flexibility: an arbitrary implementation
+of \lstinline!traverse! may be used with an arbitrary \textsf{``}decoration\textsf{''}
+function.
+
+\subsection{Implementing \texttt{scanLeft} and \texttt{scanMap} via \texttt{traverse}}
 
 \subsection{Examples of tasks that \emph{cannot} be implemented as a traversal{*}{*}{*}}
 
