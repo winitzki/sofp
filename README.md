@@ -32,7 +32,7 @@ The book is a tutorial exposition of the theoretical knowledge that functional p
 contains audio recordings with slides. The tutorials show an early version of the material in this book.
 Many notations and explanations have been revised and improved when writing up the text of the book.
 
-# Source code
+# Source code and PDF files
 
 The book is published under the [GNU Free Documentation License](https://www.gnu.org/licenses/old-licenses/fdl-1.2.en.html).
 Permission is granted to _copy, distribute and/or modify_ this book under the terms of that license.
@@ -49,14 +49,16 @@ The latest release is
 [![GitHub release](https://img.shields.io/github/release/winitzki/sofp.svg?include_prereleases)](https://github.com/winitzki/sofp/releases)
 and represents the most recent, relatively stable version of the text.
 
+The PDF version of the current master branch can be downloaded by following the link to the [PDF builds](https://github.com/winitzki/sofp/actions).
+
 This repository also contains the slides for YouTube presentations that initiated the work on this book.
 The talk slides are not part of the book and are partially obsolete both in content and in the notation used.
 
 # Current status of the book
 
-Chapters 1-10 and 14, as well as some appendices and discussion chapters are ready after a second proofreading of the draft.
+Chapters 1-11 and 14, as well as some appendices and discussion chapters are ready after a second proofreading of the draft.
 
-Chapters 11-13 and two more appendices are under construction.
+Chapters 12-13 and one more appendix are under construction.
 
 # Leanpub version of the draft
 
