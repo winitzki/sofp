@@ -49,7 +49,7 @@ The latest release is
 [![GitHub release](https://img.shields.io/github/release/winitzki/sofp.svg?include_prereleases)](https://github.com/winitzki/sofp/releases)
 and represents the most recent, relatively stable version of the text.
 
-The PDF version of the current master branch can be downloaded by following the link to the [PDF builds](https://github.com/winitzki/sofp/actions).
+The PDF version of the most recent master branch of the book can be downloaded by following the link to the [PDF builds](https://github.com/winitzki/sofp/actions), clicking on the latest PDF build, and then clicking on "PDF files and LaTeX logs".
 
 This repository also contains the slides for YouTube presentations that initiated the work on this book.
 The talk slides are not part of the book and are partially obsolete both in content and in the notation used.
