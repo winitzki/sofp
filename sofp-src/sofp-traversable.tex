@@ -1,38 +1,681 @@
+\global\long\def\gunderline#1{\mathunderline{greenunder}{#1}}%
+\global\long\def\bef{\forwardcompose}%
+\global\long\def\bbnum#1{\custombb{#1}}%
+\global\long\def\pplus{{\displaystyle }{+\negmedspace+}}%
+
 
 \chapter{Traversable functors\label{chap:9-Traversable-functors-and}}
+
+\section{Motivation}
+
+Starting from the year 2004, the \lstinline!map!/\lstinline!reduce!
+programming style\index{map/reduce programming style@\texttt{map}/\texttt{reduce} programming style}
+was the first significant industrial use of functional programming.
+Other methods such as \lstinline!filter!, \lstinline!flatMap!, and
+\lstinline!zip! were added later to increase the expressive power
+of that programming style. Previous chapters examined systematically
+the properties of some of those methods and generalized them to many
+different type constructors. This chapter uses the same approach to
+study and generalize the \lstinline!reduce! method. In this way,
+we will obtain a complete understanding of \lstinline!map!/\lstinline!reduce!
+programming.
+
+\subsection{From \texttt{reduce} and \texttt{foldLeft} to \texttt{foldMap}}
+
+The type signatures of \lstinline!reduce! and \lstinline!foldLeft!
+for a sequence of type \lstinline!Seq! can be written as:
+\begin{lstlisting}
+def reduce[A](la: Seq[A])(update: (A, A) => A): A
+def foldLeft[A, B](la: Seq[A])(init: B)(update: (B, A) => B): B
+\end{lstlisting}
+\[
+\text{reduce}:\text{Seq}^{A}\rightarrow(A\times A\rightarrow A)\rightarrow A\quad,\quad\quad\text{foldLeft}:\text{Seq}^{A}\rightarrow B\rightarrow(B\times A\rightarrow B)\rightarrow B\quad.
+\]
+We can see that \lstinline!foldLeft! is a generalized version of
+\lstinline!reduce!: in \lstinline!foldLeft!, the accumulated result
+is of a different type ($B$) than the type of sequence elements ($A$).
+It is easy to implement \lstinline!reduce! through \lstinline!foldLeft!:
+\begin{lstlisting}
+def reduce[A](la: Seq[A])(update: (A, A) => A): A = reduce.tail.foldLeft(reduce.head)(update)
+\end{lstlisting}
+
+The \lstinline!foldLeft! and \lstinline!reduce! operations will
+go over each element of the sequence and accumulate the state updates,
+returning the final value. We have seen many examples of using \lstinline!foldLeft!
+and \lstinline!reduce! in Chapter~\ref{chap:2-Mathematical-induction}.
+Now we would like to generalize these functions to data structures
+other than sequences. Such a generalization must be based on requiring
+suitable laws, but it is not obvious what laws \lstinline!foldLeft!
+and \lstinline!reduce! must satisfy (other than naturality laws that
+will hold automatically for any fully parametric code). To make progress,
+we need to simplify these type signatures and to reformulate them
+in a more suggestive form. We will achieve this reformulation in two
+steps, generalizing \lstinline!foldLeft! first to a new function
+called \lstinline!foldMap! and then to \lstinline!traverse!. 
+
+The way to \lstinline!foldMap! starts by changing the type of the
+argument \lstinline!update: (B, A) => B! to an equivalent curried
+form with flipped argument order:
+\[
+\text{upd}:A\rightarrow B\rightarrow B\quad.
+\]
+So, $\text{upd}\left(x^{:A}\right)$ has type $B\rightarrow B$. The
+key observation is that all functions of type $B\rightarrow B$ form
+a \emph{monoid} (denoted by \lstinline!monoidFunc! in Example~\ref{subsec:tc-Example-Monoids}
+and Section~\ref{subsec:Monoids-constructions}).\index{monoid}
+For brevity, let us denote that monoid by \lstinline!MF!. The empty
+element of that monoid is the identity function ($e_{\text{MF}}\triangleq\text{id}^{:B\rightarrow B}$),
+and the \lstinline!compose! operation is the function composition
+($f^{:B\rightarrow B}\oplus_{\text{MF}}g^{:B\rightarrow B}\triangleq f\bef g$).
+With this formulation, the evaluation of a \lstinline!foldLeft! function
+can be written like this:
+\begin{align*}
+ & \text{foldLeft}\left(\left[x_{1},x_{2},x_{3}\right]\right)\left(b_{0}\right)\left(\text{upd}\right)=b_{0}\triangleright\text{upd}\left(x_{1}\right)\triangleright\text{upd}\left(x_{2}\right)\triangleright\text{upd}\left(x_{3}\right)\\
+ & =b_{0}\triangleright\text{upd}\left(x_{1}\right)\bef\text{upd}\left(x_{2}\right)\bef\text{upd}\left(x_{3}\right)=b_{0}\triangleright\big(\text{upd}\left(x_{1}\right)\oplus_{\text{MF}}\text{upd}\left(x_{2}\right)\oplus_{\text{MF}}\text{upd}\left(x_{3}\right)\big)\quad.
+\end{align*}
+This formulation suggests that we could replace the specific monoid
+(\lstinline!MF!) by an arbitrary monoid ($M$). The new, more general
+function is called \lstinline!foldMap!. To obtain that function,
+we first change the order of the curried arguments for convenience:
+\[
+\text{foldMap}\left(\text{upd}\right)\left(xs\right)\left(b_{0}\right)\triangleq\text{foldl}\left(xs\right)\left(b_{0}\right)\left(\text{upd}\right)\quad.
+\]
+Omitting the argument $b_{0}$, we may visualize the computation of
+\lstinline!foldMap! as:
+\[
+\text{foldMap}\left(\text{upd}\right)\left(\left[x_{1},x_{2},x_{3}\right]\right)=\text{upd}\left(x_{1}\right)\oplus_{M}\text{upd}\left(x_{2}\right)\oplus_{M}\text{upd}\left(x_{3}\right)\quad.
+\]
+Now, the type of \lstinline!upd! is $A\rightarrow M$ instead of
+$A\rightarrow B\rightarrow B$. So, the type signature of \lstinline!foldMap!
+must be:
+\[
+\text{foldMap}:(A\rightarrow M)\rightarrow\text{Seq}^{A}\rightarrow M\quad.
+\]
+This type signature assumes that $M$ is a monoid type. We can now
+implement \lstinline!foldMap! via \lstinline!foldLeft!:
+\begin{lstlisting}
+def foldMap[M: Monoid, A](f: A => M): Seq[A] => M =
+  _.foldLeft(Monoid[M].empty) { (m, a) => m |+| f(a) }
+\end{lstlisting}
+We can also implement \lstinline!foldLeft! via \lstinline!foldMap!
+by using the monoid instance of \lstinline!FM! (see Example~\ref{subsec:tc-Example-Monoids}):
+\begin{lstlisting}
+implicit def monoidFunc[A]: Monoid[A => A] = ...
+def foldLeft[A, B](la: Seq[A])(init: B)(update: (B, A) => B): B =
+  foldMap[B => B, A](identity)(a => b => update(b, a))(init)
+\end{lstlisting}
+We will prove later than \lstinline!foldLeft! and \lstinline!foldMap!
+are in fact equivalent.
+
+The type signature of \lstinline!foldMap! suggests further to replace
+\lstinline!Seq! by another type constructor (say, \lstinline!L[_]!).
+We may call \textbf{foldable}\index{foldable functor} a type constructor
+$L^{\bullet}$ for which the \lstinline!foldMap! method is defined:
+\[
+\text{foldMap}_{L}:\left(A\rightarrow M\right)\rightarrow L^{A}\rightarrow M\quad,\quad\text{assuming that }M\text{ is a monoid}\quad.
+\]
+The function $\text{foldMap}_{L}$ works in the same way for all monoids
+$M$ (but differently for each $L^{\bullet}$). 
+
+The second step that will bring us to the \lstinline!traverse! method
+replaces the arbitrary monoid $M$ by an arbitrary applicative functor
+$F^{B}$ applied to a type parameter $B$. Since this step is not
+straightforward, we will give an independent motivation for the \lstinline!traverse!
+method in the next subsection.
+
+\subsection{The \texttt{traverse} operation}
+
+It is often necessary to wait for several concurrent operations to
+finish. As a simple example, assume that we are given a list of type
+\lstinline!List[A]! and a processing function of type \lstinline!A => Future[B]!.
+We are required to apply the processing function to all items from
+the list in parallel and wait until the entire data set is processed.
+
+The Scala standard library method to use in this situation is \lstinline!Future.traverse!:
+\begin{lstlisting}
+val data: List[A] = ...
+val processing: A => Future[B] = ...
+implicit val ec: ExecutionContext = ...
+val results: Future[List[B]] = Future.traverse(data)(processing)
+\end{lstlisting}
+Since the processing of each element is asynchronous, the result must
+be also wrapped in a \lstinline!Future! type constructor. The \lstinline!traverse!
+method will mark that \lstinline!Future! value as finished only when
+all processing operations are done.
+
+If we ignore the implicit argument of type \lstinline!ExecutionContext!
+(which is specific to the \lstinline!Future! class) and also flip
+the first two curried arguments, we will arrive at the following type
+signature of \lstinline!traverse! (short notation \textsf{``}$\text{trav}$\textsf{''}):
+\[
+\text{trav}:(A\rightarrow\text{Future}^{B})\rightarrow\text{List}^{A}\rightarrow\text{Future}^{\text{List}^{B}}\quad.
+\]
+Generalizing to other type constructors $F$, $L$ instead of \lstinline!Future!
+and \lstinline!List!, we obtain:
+\[
+\text{trav}_{L}:(A\rightarrow F^{B})\rightarrow L^{A}\rightarrow F^{L^{B}}\quad.
+\]
+In this type signature, we have chosen the names $F$ and $L$ specifically
+to help us avoid errors (e.g., writing $L^{F^{B}}$ instead of $F^{L^{B}}$)
+by recalling the example with $F=$\lstinline!Future! and $L=$\lstinline!List!.
+
+It turns out that the \lstinline!traverse! method can work in the
+same way for any \emph{applicative} functor $F^{\bullet}$. A functor
+$L^{\bullet}$ having a \lstinline!traverse! method of this type
+is called \index{traversable}\textbf{traversable}.
+
+The type signatures of \lstinline!traverse! and \lstinline!foldMap!
+are similar except that $M$ is replaced by $F^{B}$ or $F^{L^{B}}$
+as appropriate. To show that \lstinline!foldMap! is a special case
+of \lstinline!traverse!, take a constant functor $F^{A}\triangleq M$,
+which is applicative if $M$ is a monoid (see Section~\ref{subsec:Constructions-of-applicative-functors}).
+With this choice of $F^{\bullet}$, the type signature of \lstinline!traverse!
+reduces to that of \lstinline!foldMap!.
+
+Before studying the properties of \lstinline!traverse!, we will look
+at some examples of its practical use.
+
+\section{Practical use of \texttt{foldMap} and \texttt{traverse}}
+
+\subsection{Implementing \texttt{traverse} for various data types}
+
+To understand how \lstinline!traverse! works, let us implement it
+for some data types, including lists and trees.
+
+\subsubsection{Example \label{subsec:Example-traverse-for-1+a*a}\ref{subsec:Example-traverse-for-1+a*a}\index{solved examples}}
+
+Implement \lstinline!traverse! for the type constructor $L^{\bullet}$
+defined by:
+
+\begin{wrapfigure}{l}{0.5\columnwidth}%
+\vspace{-1\baselineskip}
+\begin{lstlisting}
+type L[A] = Option[(A, A)]
+\end{lstlisting}
+\vspace{-0.5\baselineskip}
+\end{wrapfigure}%
+
+~\vspace{-0.5\baselineskip}
+\[
+L^{A}\triangleq\bbnum 1+A\times A\quad.
+\]
+
+
+\subparagraph{Solution}
+
+For the given type constructor $L^{\bullet}$, write an equivalent
+type signature of \lstinline!trav! as:
+\begin{lstlisting}
+def trav[A, B, F[_]: Functor : Applicative](f: A => F[B]): Option[(A, A)] => F[Option[(B, B)]]
+\end{lstlisting}
+Here \lstinline!F[_]! is an unknown applicative functor. In the short
+type notation, this type signature is:
+\[
+\text{trav}_{L}:(A\rightarrow F^{B})\rightarrow(\bbnum 1+A\times A)\rightarrow F^{\bbnum 1+B\times B}\quad.
+\]
+ Let us implement \lstinline!trav!, aiming to preserve information.
+We need to compute a value of type $F^{\bbnum 1+B\times B}$. Since
+$F$ is applicative, the code of \lstinline!trav! could just always
+return an empty value:
+\begin{lstlisting}
+def trav[A, B, F[_]: Functor : Applicative](f: A => F[B]): Option[(A, A)] => F[Option[(B, B)]] =
+  F.pure(None)   // Assuming F.pure is defined.
+\end{lstlisting}
+We reject this implementation since it ignores all arguments and loses
+information. Instead, we begin by pattern matching on the argument
+of type $\bbnum 1+A\times A$:
+\begin{lstlisting}
+def trav[A, B, F[_]: Functor : Applicative](f: A => F[B]): Option[(A, A)] => F[Option[(B, B)]] = {
+  case None             => F.pure(None)   // We must return this value in this case.
+  case Some((a1, a2))   => ???            // Would like a value of type F[Some[(B, B)]] here.
+}
+\end{lstlisting}
+The only way of getting values of type $B$ is by applying \lstinline!f!
+to some arguments. We can apply \lstinline!f! to the values \lstinline!a1!
+and \lstinline!a2!; the result will be two values of type $F^{B}$.
+Since $F$ is applicative, we may use its \lstinline!zip! method
+and obtain a single value of type $F^{B\times B}$. It remains to
+use $F$\textsf{'}s \lstinline!map! and transform that value to the required
+type $F^{\bbnum 1+B\times B}$:
+\begin{lstlisting}
+def trav[A, B, F[_]: Functor : Applicative](f: A => F[B]): Option[(A, A)] => F[Option[(B, B)]] = {
+  case None             => F.pure(None)         // Here we must return an empty value.
+  case Some((a1, a2))   => F.zip(f(a1), f(a2)).map { case (b1, b2)  => Some((b1, b2)) }
+}
+\end{lstlisting}
+In the code notation, this is written as:
+\[
+\text{trav}_{L}(f^{:A\rightarrow F^{B}})\triangleq\,\begin{array}{|c||c|}
+ & F^{\bbnum 1+B\times B}\\
+\hline \bbnum 1 & \_\rightarrow\text{pu}_{F}(\bbnum 1+\bbnum 0^{:B\times B})\\
+A\times A & (f\boxtimes f)\bef\text{zip}_{F}\bef(b_{1}^{:B}\times b_{2}^{:B}\rightarrow\bbnum 0^{:\bbnum 1}+b_{1}\times b_{2})^{\uparrow F}
+\end{array}\quad.
+\]
+The code uses $F$\textsf{'}s methods \lstinline!map!, \lstinline!pure!,
+and \lstinline!zip!. This makes it clear why \lstinline!traverse!
+requires $F$ to be an applicative functor. Apart from that requirement,
+the code works in the same way for all $F$.
+
+\subsubsection{Example \label{subsec:Example-traversable-seq}\ref{subsec:Example-traversable-seq}}
+
+Implement \lstinline!traverse! for Scala\textsf{'}s \lstinline!List! type
+constructor. 
+
+\subparagraph{Solution}
+
+We need to implement the following type signature:
+\begin{lstlisting}
+def trav[A, B, F[_]: Functor : Applicative](f: A => F[B]): List[A] => F[List[B]]
+\end{lstlisting}
+A list may be empty, or may have a head and a tail. Similarly to the
+code in Example~\ref{subsec:Example-traverse-for-1+a*a}, we use
+$F$\textsf{'}s methods \lstinline!pure!, \lstinline!zip!, and \lstinline!map!
+to compute a suitable value of type \lstinline!F[Seq[B]]! in these
+cases.
+\begin{lstlisting}
+def trav[A, B, F[_]: Functor : Applicative](f: A => F[B])(la: List[A]): F[List[B]] = la match {
+  case Nil            => F.pure(Nil)
+  case head :: tail   => F.zip(f(head), trav(f)(tail)).map { case (headB, tailB)  => headB :: tailB }
+}
+\end{lstlisting}
+This code iterates over each element of the list (of type \lstinline!List[A]!)
+and accumulates the effect expressed by the applicative functor $F$.
+The $F$-effects are merged using $F$\textsf{'}s \lstinline!zip! method.
+
+In the code notation, the function \lstinline!trav! looks like this:
+\[
+\text{trav}_{\text{List}}(f^{:A\rightarrow F^{B}})\triangleq\,\begin{array}{|c||c|}
+ & F^{\bbnum 1+B\times\text{List}^{B}}\\
+\hline \bbnum 1 & \_\rightarrow\text{pu}_{F}(\bbnum 1+\bbnum 0^{:B\times\text{List}^{B}})\\
+A\times\text{List}^{A} & \big(f\boxtimes\overline{\text{trav}}_{\text{List}}(f)\big)\bef\text{zip}_{F}\bef(h^{:B}\times t^{:\text{List}^{B}}\rightarrow\bbnum 0^{:\bbnum 1}+h\times t)^{\uparrow F}
+\end{array}\quad.
+\]
+
+
+\subsubsection{Example \label{subsec:Example-traverse-tree}\ref{subsec:Example-traverse-tree}}
+
+Implement a \lstinline!traverse! operation for the binary tree (Section~\ref{subsec:Binary-trees}).
+
+\subparagraph{Solution}
+
+We will use the following binary tree data type denoted by \lstinline!T2!:
+\begin{lstlisting}
+sealed trait T2[A]
+final case class Leaf[A](a: A)                 extends T2[A]
+final case class Branch[A](l: T2[A], r: T2[A]) extends T2[A]
+\end{lstlisting}
+We implement \lstinline!trav! similarly to the implementation of
+\lstinline!foldLeft! in Section~\ref{subsec:Binary-trees}:
+\begin{lstlisting}
+def trav[A, B, F[_]: Functor : Applicative](f: A => F[B])(t: T2[A]): F[T2[B]] = t match {
+  case Leaf(a)          => f(a).map(b => Leaf(b))            // Reproduce the Leaf structure under F.
+  case Branch(t1, t2)   =>
+    val (r1, r2) = (trav(f)(t1), trav(f)(t2))    // Traverse the two branches and obtain two results.
+    (r1 zip r2).map { case (b1, b2)  => Branch(b1, b2) }   // Reproduce the Branch structure under F.
+}
+\end{lstlisting}
+In the code notation, this function looks like this:
+\[
+\text{trav}\,(f^{:A\rightarrow F^{B}})\triangleq\,\begin{array}{|c||c|}
+ & F^{B+\text{T2}^{B}\times\text{T2}^{B}}\\
+\hline A & f\bef(b^{:B}\rightarrow b+\bbnum 0^{:\text{T2}^{B}\times\text{T2}^{B}})^{\uparrow F}\\
+\text{T2}^{A}\times\text{T2}^{A} & \big(\overline{\text{trav}}\,(f)\boxtimes\overline{\text{trav}}\,(f)(f)\big)\bef\text{zip}_{F}\bef(l^{:\text{T2}^{B}}\times r^{:\text{T2}^{B}}\rightarrow\bbnum 0^{:B}+l\times r)^{\uparrow F}
+\end{array}\quad.
+\]
+
+The code first traverses the two sub-branches (using recursive calls
+to \lstinline!trav!) and then combines the resulting values. So,
+this implementation represents the depth-first, left-to-right traversal
+of the tree.
+
+\subsubsection{Example \label{subsec:Example-traversal-regular-shaped-tree}\ref{subsec:Example-traversal-regular-shaped-tree}}
+
+Implement a \lstinline!traverse! operation for the regular-shaped
+tree \lstinline!RTree! (Section~\ref{subsec:Regular-shaped-trees}).
+
+\subparagraph{Solution}
+
+We begin writing code as in Example~\ref{subsec:Example-traverse-tree}
+by pattern matching:
+\begin{lstlisting}[numbers=left]
+def trav[A, B, F[_]: Functor : Applicative](f: A => F[B])(t: RTree[A]): F[RTree[B]] = t match {
+  case Leaf(a)     => f(a).map(b => Leaf(b))           // Reproduce the Leaf structure under F.
+  case Branch(t)   => ???  // Here t has type RTree[(A, A)].
+}
+\end{lstlisting}
+In line 3, we have a pattern variable \lstinline!t! of type \lstinline!RTree[(A, A)]!,
+but we need to obtain a value of type \lstinline!F[Branch[B]]! in
+that scope. Since a \lstinline!Branch! contains a recursive instance
+of the type \lstinline!RTree!, it seems we need to use a recursive
+call of \lstinline!trav! here. However, we cannot apply \lstinline!trav(f)!
+to \lstinline!t! because the types do not match. We will be able
+to apply \lstinline!trav! if instead of \lstinline!f: A => F[B]!
+we had a function of type \lstinline!(A, A) => F[(B, B)]!. We can
+create such a function out of \lstinline!f! using $F$\textsf{'}s \lstinline!zip!
+method:
+\begin{lstlisting}
+{ case (a1, a2) => f(a1) zip f(a2) }
+\end{lstlisting}
+ So, we write:
+\begin{lstlisting}
+  case Branch(t)   => trav { case (a1, a2) => f(a1) zip f(a2) }(t); ??? } // Have F[RTree[(B, B)]].
+\end{lstlisting}
+We can now use $F$\textsf{'}s \lstinline!map! method to restore the \lstinline!Branch!
+structure under $F$. The complete code is:
+\begin{lstlisting}
+def trav[A, B, F[_]: Functor : Applicative](f: A => F[B])(t: RTree[A]): F[RTree[B]] = t match {
+  case Leaf(a)     => f(a).map(b => Leaf(b))           // Reproduce the Leaf structure under F.
+  case Branch(t)   => (trav[(A, A), (B, B), F] { case (a1, a2) => f(a1) zip f(a2) }(t)
+                      ).map(x => Branch(x))          // Reproduce the Branch structure under F.
+}
+\end{lstlisting}
+Here we assumed that the \lstinline!zip! is defined on \lstinline!F!
+as an extension method. $\square$
+
+These examples show how to implement the \lstinline!traverse! operation
+for a data structure of type $L^{A}$. Each value of type $A$ contained
+in the data structure should be processed using the given function
+$f:A\rightarrow F^{B}$. All of the resulting $F$-effects need to
+be collected and merged (using $F$\textsf{'}s \lstinline!zip! and \lstinline!map!)
+into a single $F$-effect that wraps a value of type $L^{B}$. That
+value should reproduce the shape of the data structure that was present
+in the input value of type $L^{A}$. 
+
+In all examples above, we merge all $F$-effects together, making
+sure that each $F$-effect is collected exactly once. It would be
+strange if the \lstinline!traverse! operation were to repeat some
+$F$-effects, as the following code shows:
+\begin{lstlisting}
+def badtrav[A, B, F[_]: Functor : Applicative](f: A => F[B])(la: List[A]): F[List[B]] = la match {
+  case Nil            => F.pure(Nil)
+  case head :: tail   => F.zip(f(head), F.zip(f(head), badtrav(f)(tail)))  // Use the F-effect twice.
+                          .map { case (headB, (_, tailB))  => headB :: tailB }
+}
+\end{lstlisting}
+Although this implementation fits the type signature of \lstinline!traverse!,
+it contradicts the intuition of traversing the sequence only once.
+When $F=$\lstinline!Future!, the code \lstinline!badtrav(f)(xs)!
+would start \emph{two} parallel computations for each element of the
+sequence \lstinline!xs! and ignore one of the results. When $F$\textsf{'}s
+effect describes parsing (see Section~\ref{subsec:Parsing-with-applicative-and-monadic-parsers})
+or other computations that maintain an internal state, invoking such
+an $F$-effect twice will likely lead to incorrect results. Below
+we will see that the laws of \lstinline!traverse! prohibit implementations
+that either repeat some of the $F$-effects or ignore some of the
+values.
+
+\subsection{Aggregating tree-like data by folding. Breadth-first traversal\label{subsec:Aggregating-tree-like-data-bfs}}
+
+Although \lstinline!foldMap! (and \lstinline!foldLeft!) are special
+cases of \lstinline!traverse!, it is often easier to implement \lstinline!foldMap!
+directly. Let us look at some examples of \lstinline!foldMap! that
+implements different kinds of tree traversals.
+
+One implementation of \lstinline!foldMap! corresponds to the \lstinline!traverse!
+operation defined in Example~\ref{subsec:Example-traverse-tree}.
+The code of \lstinline!foldMap! is:
+\begin{lstlisting}
+def foldMap[A, M: Monoid](f: A => M)(t: T2[A]): M = t match {
+  case Leaf(a)          => f(a)
+  case Branch(t1, t2)   => foldMap(f)(t1) |+| foldMap(f)(t2)
+}
+\end{lstlisting}
+
+A special case of a monoid is \lstinline!List[A]!; its \lstinline!combine!
+operation is the concatenation of lists. If we use \lstinline!foldMap!
+with the monoid \lstinline!M = List[A]! and the function \lstinline!f: A => List[A]!
+that creates a single-element list, we obtain an interesting result:
+a function \lstinline!toList! that converts a tree \lstinline!T2[A]!
+into \lstinline!List[A]!.
+\begin{lstlisting}
+def toList[A]: T2[A] => List[A] = foldMap[A, List[A]](List(_)) // Need a Monoid instance for List[A].
+\end{lstlisting}
+
+In the same way, we may implement \lstinline!toList: L[A] => List[A]!
+for any foldable functor \lstinline!L!.
+
+The function \lstinline!toList! captures the requirement that a foldable
+functor \lstinline!L! must have a well-defined way of iterating over
+the data items stored inside it. So, \lstinline!L! is foldable if
+there is a known way of extracting its data items in the form of a
+list. We may then use standard aggregation operations on lists (\lstinline!foldLeft!,
+\lstinline!reduce!, and so on). Below, we will prove that \lstinline!toList!
+is equivalent to \lstinline!foldMap!. So, a foldable functor automatically
+allows us to apply any monoidal aggregation operation to the functor\textsf{'}s
+data. 
+
+An aggregation\textsf{'}s results may depend on the order of data traversal.
+It is important that the function \lstinline!toList! can be implemented
+in different ways depending on the order in which it writes the data
+from \lstinline!L! to a list. Some data structures have a \textsf{``}natural\textsf{''}
+traversal order that is easiest to implement, but this is by no means
+the only possible traversal order. Let us see some examples of implementing
+different traversal orders for lists and trees.
+
+The above code of \lstinline!foldMap! for the binary tree implements
+a depth-first traversal of the tree. We can see that by applying \lstinline!toList!
+to the tree  \Tree[ 8 [ [ 3 5 ] 4 ] ] :
+\begin{lstlisting}
+val t2: T2[Int] = Branch(Leaf(8), Branch(Branch(Leaf(3), Leaf(5)), Leaf(4)))
+
+scala> toList(t2)
+res0: List[Int] = List(8, 3, 5, 4)
+\end{lstlisting}
+
+Let us now implement another version of \lstinline!toList! that performs
+the \emph{breadth-first} traversal of a binary tree. The idea is to
+prepare a list of all leaf values at level $0$ in the tree, then
+a list of all values at level $1$, and so on. For each level, values
+must be collected left to right. The result must be a list of lists.
+For instance, a the tree \lstinline!t2! has no values at level $0$,
+value $8$ at level $1$, value $4$ at level $2$, and values $3$
+and $5$ at level $3$. So, we will implement a function (called \lstinline!toList2!)
+that computes a list of lists of the form $\left[\left[\right],\left[8\right],\left[4\right],\left[3,5\right]\right]$
+for this tree, enumerating all leaf values level by level. Then we
+can \lstinline!flatten! that list and obtain the list $\left[8,4,3,5\right]$,
+which is the breadth-first traversal order of the tree \lstinline!t2!. 
+
+Begin writing code of \lstinline!toList2! by pattern matching on
+the tree structure:
+\begin{lstlisting}
+def toListBFS[A]: T2[A] => List[A] = toList2 andThen (_.flatten)
+
+def toList2[A]: T2[A] => List[List[A]] = {
+  case Leaf(a)        => List(List(a))    // Only one value at level 0.
+  case Branch(l, r)   => ???         // Have toList2(l) and toList2(r).
+}
+\end{lstlisting}
+After using recursive calls of \lstinline!toList2! on the left and
+right sub-trees (\lstinline!l! and \lstinline!r!), we need somehow
+to combine the resulting lists. In the example of the tree \lstinline!t2!,
+applying \lstinline!toList2! to the sub-trees will return the lists
+$\left[\left[8\right]\right]$ and $\left[\left[\right],\left[4\right],\left[3,5\right]\right]$.
+We need to concatenate the corresponding nested lists and obtain $\left[\left[\right],\left[8\right],\left[4\right],\left[3,5\right]\right]$.
+(An initial empty list need to be added because the sub-trees begin
+one level deeper.) The standard \lstinline!zip! operation will not
+help since \lstinline!zip! will \emph{truncate} the longer list.
+However, here we need to keep the longer list\textsf{'}s elements. So, let
+us implement a special helper function for merging the nested lists
+in this way:
+\begin{lstlisting}
+def listMerge[A](l: List[List[A]], r: List[List[A]]): List[List[A]] = (l, r) match {
+  case (Nil, r)               => r        // Keep the elements from the longer list.
+  case (l, Nil)               => l
+  case (lh :: lt, rh :: rt)   => (lh ++ rh) :: listMerge(lt, rt)
+}
+\end{lstlisting}
+Now we can complete the code of \lstinline!toList2! and \lstinline!toListBFS!:
+\begin{lstlisting}
+def toList2[A]: T2[A] => List[List[A]] = {
+  case Leaf(a)        => List(List(a)) // Only one value at level 0.
+  case Branch(l, r)   => listMerge(Nil :: toList2(l), Nil :: toList2(r))
+}
+
+scala> toList2(t2)
+res1: List[List[Int]] = List(List(), List(8), List(4), List(3, 5))
+
+scala> toListBFS(t2)
+res2: List[Int] = List(8, 4, 3, 5)
+\end{lstlisting}
+
+For lists and other sequences, the easiest traversal orders are either
+direct or reverse. A direct traversal is implemented by the standard
+\lstinline!foldLeft! operation on \lstinline!Seq!, while a reverse-order
+traversal is done simply by applying the \lstinline!reverse! method,
+such as \lstinline!la.reverse.foldLeft(...)(...)!.
+
+Similarly to \lstinline!foldLeft! and \lstinline!foldMap!, the \lstinline!traverse!
+method may be implemented with different traversal orders. For comparison,
+we show the code for the direct-ordered and reverse-ordered \lstinline!List!
+traversals:
+\begin{lstlisting}
+// This code assumes that F has typeclass instances for Applicative and Functor.
+def travList[A, B](f: A => F[B])(la: List[A]): F[List[B]] = la match {
+  case Nil            => Applicative[F].pure(Nil)
+  case head :: tail   => f(head).map2(travList(f)(tail)) { (x, y) => x +: y }
+}
+def travRevList[A, B](f: A => F[B])(la: List[A]): F[List[B]] = la.reverse match {
+  case Nil            => Applicative[F].pure(Nil)
+  case head :: tail   => f(head).map2(travRevList(f)(tail)) { (x, y) => y :+ x }
+}
+\end{lstlisting}
+First, we reverse the given list, so that $F$\textsf{'}s effects are merged
+in the reverse order. Second, we recreate the original list structure
+wrapped under $F$.
+
+Implementing a breadth-first \lstinline!traverse! for a tree is more
+difficult. It is not sufficient to convert the tree to a list in the
+breadth-first order and collect $F$\textsf{'}s effects. We also need to restore
+the original tree structure wrapped under the applicative functor
+$F$. The next section shows an example implementation of a breadth-first
+\lstinline!traverse!.
+
+\subsection{Decorating a tree. I. Depth-first traversal}
+
+A \lstinline!traverse! method for a given tree-like data structure
+may be used to perform various operations on trees, as long as those
+operations are described by the effect of some applicative functor
+$F$. 
+
+An example of a tree operation is \textsf{``}decorating\textsf{''}, i.e., adding labels
+of some sort to each leaf. Since tree-like data types are functors
+that have a \lstinline!map! method, a simple decorating operation
+replaces each leaf with a function of the data at that leaf. For instance,
+we may add the value $20$ to each leaf:
+\begin{lstlisting}
+val t2 = Branch(Leaf(8), Branch(Branch(Leaf(3), Leaf(5)), Leaf(4)))
+
+scala> t2.map(x => x + 20)  // Assuming a Functor instance for T2[_].
+res0: T2[Int] = Branch(Leaf(28), Branch(Branch(Leaf(23), Leaf(25)), Leaf(24)))
+\end{lstlisting}
+This transforms the tree \Tree[ 8 [ [ 3 5 ] 4 ] ]  into \Tree[ 28 [ [ 23 25 ] 24 ] ] \relax.
+However, the \lstinline!map! method works separately with each leaf
+and cannot use any information from previously computed values. We
+cannot use \lstinline!map! to, e.g., count the leaves and to label
+each leaf with its index value, similarly to the \lstinline!zipWithIndex!
+function for sequences, transforming the tree \Tree[ 8 [ [ 3 5 ] 4 ] ] 
+into \Tree[ (8,0) [ [ (3,1) (5,2) ] (4,3) ] ] \relax. For such tasks,
+we need the \lstinline!traverse! operation.
+
+Labeling the leaves of a tree with their traversal index requires
+us to update some internal state (the number of leaves seen so far)
+while traversing the tree. Updating an internal state is the effect
+of a \lstinline!State! monad. Since all monads can also implement
+the applicative methods (\lstinline!pure! and \lstinline!zip!),
+we may use the \lstinline!State! monad as the applicative functor
+$F$ when using the \lstinline!traverse! function.
+
+In this section, we will implement \lstinline!zipWithIndex! for depth-first
+tree traversal. The implementation of \lstinline!zipWithIndexDF!
+will have this form:
+\begin{lstlisting}
+final case class St[A](run: Int => (A, Int))    // A State monad with internal state of type Int.
+                         // Assume that we have defined Applicative and Functor instances for St.
+def computeIndex[A]: A => St[(A, Int)] = ???                 // Define the "decoration" function.
+def zipWithIndexDF[A](tree: T2[A]): T2[(A, Int)] = {
+  val afterTraverse: St[T2[(A, Int)]] = trav[A, (A, Int), St](computeIndex)(tree)
+  afterTraverse.run(0)._1                        // Run the State monad and get the result value.
+}
+\end{lstlisting}
+This will be a depth-first traversal if \lstinline!trav! is the function
+shown in Example~\ref{subsec:Example-traverse-tree}. It remains
+to define the function \lstinline!computeIndex! describing the \textsf{``}decoration
+logic\textsf{''}. Begin writing the code of \lstinline!computeIndex!:
+\begin{lstlisting}
+def computeIndex[A]: A => St[(A, Int)] = a => St { i => ???: ((A, Int), Int) }
+\end{lstlisting}
+Given a leaf value \lstinline!a: A! and a previous internal state
+\lstinline!i: Int!, we must compute the \textsf{``}decorated\textsf{''} leaf value
+of type $A\times\text{Int}$ as well as the new internal state. Since
+our goal is to label the leaves by the current leaf count, we use
+the internal state to keep the number of leaves seen so far. So, we
+just need to increment the internal state after copying it to the
+leaf:
+\begin{lstlisting}
+def computeIndex[A]: A => St[(A, Int)] = a => St { i => ((a, i), i + 1) }
+\end{lstlisting}
+This completes the implementation of \lstinline!zipWithIndexDFS!,
+which we can now test:
+\begin{lstlisting}
+scala> zipWithIndexDF(t2)
+res0: T2[(Int, Int)] = Branch(Leaf((8,0)), Branch(Branch(Leaf((3,1)), Leaf((5,2))), Leaf((4,3))))
+\end{lstlisting}
+
+
+\subsection{Decorating a tree. II. Breadth-first traversal}
+
+In Section~\ref{subsec:Aggregating-tree-like-data-bfs}, we have
+implemented a breadth-first folding for the tree data structure \lstinline!T2[A]!.
+While folding over \lstinline!T2[A]! merely needs to arrange the
+leaf values of type \lstinline!A! in the breadth-first order, a traversal
+requires to sequence the effects of an arbitrary applicative functor
+\lstinline!F[_]! in that order while reproducing the original tree
+structure wrapped under \lstinline!F!. The function \lstinline!toListBFS!
+shown in the previous section is not sufficient for that purpose,
+because the tree structure cannot be reproduced if we only have a
+list of leaf values. We need to keep additional information about
+the tree position of each leaf value.
+
+The plan of {*}{*}{*}
+
+Note that the implementation of \lstinline!traverse! is the only
+difference between the breadth-first code and the depth-first code
+shown in the previous section. The \textsf{``}decoration logic\textsf{''} is described
+by the function \lstinline!computeIndex! and does not depend on the
+traversal order. As a result, we gain flexibility: an arbitrary implementation
+of \lstinline!traverse! may be used with an arbitrary \textsf{``}decoration\textsf{''}
+function.
+
+\subsection{Implementing \texttt{scanLeft} and \texttt{scanMap} via \texttt{traverse}}
+
+\subsection{Examples of tasks that \emph{cannot} be implemented as a traversal{*}{*}{*}}
+
+Depth labeling of a tree as  \Tree[ [ 2 [ 3 3 ] ] 1 ]  is not possible
+with a traversal because we cannot distinguish between nodes at the
+same depth and nodes at different depth. A traversal simply accumulates
+the effects for all tree nodes. We cannot label a certain pair of
+nodes with the same depth value but other nodes with a different depth
+value; either the state value is updated at \emph{each} node or not.
+Depth labeling can be implemented as a special operation such as zipWithDepth.
+
+More generally, traversals cannot perform aggregations that depend
+on depth or on the left or right position of data in the tree. An
+example is pretty-printing where the tree  \Tree[ [ 1 [ 2 3 ] ] 4 ] 
+is printed as the string \lstinline!"[ [ 1 [ 2 3 ] ] 4 ]"!. 
+
+\section{Laws and structure}
+
+\subsection{Regular-shaped binary tree}
+
+$T^{A}\triangleq A+T^{A\times A}$
+
+The corresponding construction is $L^{A}\triangleq S^{A,L^{R^{A}}}$
+where $R$ is applicative and traversable and $S$ is bitraversable
 
 \section{Slides}
 
 \paragraph{Motivation for the \texttt{\textcolor{blue}{\footnotesize{}traverse}}
 operation}
-
-Consider data of type $\text{List}^{A}$ and processing $f:A\rightarrow\text{Future}^{B}$
-
-Typically, we want to wait until the entire data set is processed
-
-What we need is $\text{List}^{A}\rightarrow\left(A\rightarrow\text{Future}^{B}\right)\rightarrow\text{Future}^{\text{List}^{B}}$
-
-Generalize: $L^{A}\rightarrow\left(A\rightarrow F^{B}\right)\rightarrow F^{L^{B}}$
-for some type constructors $F$, $L$
-
-This operation is called \texttt{\textcolor{blue}{\footnotesize{}traverse}} 
-
-How to implement it: for example, a 3-element list is $A\times A\times A$
-
-Consider $L^{A}\triangleq A\times A\times A$, apply $\text{map}\,f$
-and get $F^{B}\times F^{B}\times F^{B}$
-
-We will get $F^{L^{B}}\triangleq F^{B\times B\times B}$ if we can
-apply \texttt{\textcolor{blue}{\footnotesize{}zip}} as $F^{B}\times F^{B}\rightarrow F^{B\times B}$
-
-So we need to assume that $F$ is applicative
-
-In Scala, we have \texttt{\textcolor{blue}{\footnotesize{}Future.traverse()}}
-that assumes $L$ to be a sequence
-
-This is the easy-to-remember example that fixes the requirements
-
-Questions:
 
 Which functors $L$ can have this operation?
 
@@ -133,7 +776,7 @@ It is still useful to have a type class for traversable functors
 operation}
 
 \vspace{-0.2cm}The \href{https://arxiv.org/pdf/1202.2919.pdf}{\textquotedblleft law of traversals\textquotedblright\{\} paper}
-(2012) argues that \texttt{\textcolor{blue}{\footnotesize{}traverse}}
+by M.~Jaskelioff\index{Mauro Jaskelioff} (2012) argues that \texttt{\textcolor{blue}{\footnotesize{}traverse}}
 should \textsf{``}visit each element\textsf{''} of the container $L^{A}$ exactly
 once, and evaluate each corresponding \textsf{``}effect\textsf{''} $F^{B}$ exactly
 once; then they formulate the laws
@@ -336,32 +979,7 @@ must return $1+\bbnum 0$
 
 So, the result is trivial and probably not useful
 
-Laws of traversables allow ignoring the effects of $F$
-
-
-\paragraph{Examples of usage}
-
-Convert foldable data structures to list
-
-Fold a tree to aggregate data
-
-Decorate a tree with Depth-First traversal order labels
-
-Implement \texttt{\textcolor{blue}{\footnotesize{}scanMap}} and \texttt{\textcolor{blue}{\footnotesize{}scanLeft}}
-as \texttt{\textcolor{blue}{\footnotesize{}traverse}} with a state
-monad
-
-Traversal for a non-monadic \textsf{``}rigid\textsf{''} tree $T^{A}\triangleq A+T^{A\times A}$
-
-The corresponding construction is $L^{A}\triangleq S^{A,L^{R^{A}}}$
-where $R$ is applicative and traversable and $S$ is bitraversable
-
-What \emph{cannot} be implemented as a traversal:
-
-Breadth-first traversal for a tree as  \Tree[ [ 2 [ 3 4 ] ] 1 ]  
-
-Depth labeling of a tree as  \Tree[ [ 2 [ 3 3 ] ] 1 ] {\footnotesize{} }{\footnotesize\par}
-
+Laws of traversables allow ignoring the effects of $F$ 
 
 \paragraph{Naturality with respect to applicative functor as parameter}
 
@@ -394,18 +1012,6 @@ as a \textsf{``}lifting\textsf{''}
 
 Use a more general definition of category than what we had so far
 (morphisms between type constructors)
-
-\subsection{Monoid morphisms}
-
-Given two monoid types $M$ and $N$, a function $\phi:M\rightarrow N$
-is a \textbf{monoid morphism}\index{monoid morphism} if $\phi$ satisfies
-the two laws:
-\begin{align*}
-{\color{greenunder}\text{identity law}:}\quad & \phi(e_{M})=e_{N}\quad,\\
-{\color{greenunder}\text{composition law}:}\quad & \phi(p\oplus_{M}q)=\phi(p)\oplus_{N}\phi(q)\quad.
-\end{align*}
-These laws mean that $\phi$ translates the operations of $M$ into
-the operations of $N$.
 
 \subsection{Exercises\index{exercises}}
 
@@ -447,7 +1053,7 @@ suitable bifunctor $S^{X,Y}$.
 
 \subsubsection{Exercise \label{subsec:Exercise-traversables-7}\ref{subsec:Exercise-traversables-7}}
 
-For a tree type $T^{A}$ of your choice, implement a traversable instance
+For a binary tree type of your choice, implement a traversable instance
 for right-to-left traversal order, and test that the tree is decorated
 with labels as  \Tree[ [ 4 [ 3 2 ] ] 1 ]  
 
@@ -461,6 +1067,26 @@ $S$ is bitraversable (use constructions).
 
 Is the recursive type constructor $L^{A}\triangleq A+L^{\text{List}^{A}}$
 traversable? Explain what sort of data container it is.
+
+The following definition is used in the next few exercises:
+
+\subsubsection{Definition \label{subsec:Definition-monoid-morphism}\ref{subsec:Definition-monoid-morphism}}
+
+For any two monoids $M$ and $N$, a function $\phi:M\rightarrow N$
+is called a \textbf{monoid morphism}\index{monoid morphism} if $\phi$
+satisfies the following two laws:
+\begin{align*}
+{\color{greenunder}\text{identity law}:}\quad & \phi(e_{M})=e_{N}\quad,\\
+{\color{greenunder}\text{composition law}:}\quad & \phi(p\oplus_{M}q)=\phi(p)\oplus_{N}\phi(q)\quad.
+\end{align*}
+These laws mean that $\phi$ translates the operations of $M$ into
+the operations of $N$.
+
+\subsubsection{Exercise \label{subsec:Exercise-traversables-10-2}\ref{subsec:Exercise-traversables-10-2}}
+
+Show that for any two monoid morphisms $\phi:M\rightarrow N$ and
+$\psi:N\rightarrow P$ (where $M$, $N$, and $P$ are monoids), the
+composition $\phi\bef\psi:M\rightarrow P$ is again a monoid morphism.
 
 \subsubsection{Exercise \label{subsec:Exercise-traversables-10}\ref{subsec:Exercise-traversables-10}}
 
@@ -530,6 +1156,20 @@ Now check the composition law: for any $p^{:M^{R}}$ and $q^{:M^{R}}$,
 \end{align*}
 \end{comment}
 
+
+\subsubsection{Exercise \label{subsec:Exercise-traversables-10-3}\ref{subsec:Exercise-traversables-10-3}}
+
+Given an applicative functor $M$ and a monoid morphism $\phi^{:R\rightarrow S}$
+between some monoid types $R$ and $S$, prove that $\phi^{\uparrow M}:M^{R}\rightarrow M^{S}$
+is also a monoid morphism. (The types $M^{R}$ and $M^{S}$ are monoids
+due to Exercise~\ref{subsec:Exercise-applicative-of-monoid-is-monoid}).
+
+\subsubsection{Exercise \label{subsec:Exercise-traversables-10-1-1}\ref{subsec:Exercise-traversables-10-1-1}}
+
+Given a monoid type $R$ and an applicative morphism $\phi:M\leadsto N$
+between some applicative functors $M$ and $N$, prove that $\phi:M^{R}\rightarrow N^{R}$
+is a monoid morphism between $M^{R}$ and $N^{R}$. (The types $M^{R}$
+and $N^{R}$ are monoids due to Exercise~\ref{subsec:Exercise-applicative-of-monoid-is-monoid}).
 
 \section{Discussion}
 
