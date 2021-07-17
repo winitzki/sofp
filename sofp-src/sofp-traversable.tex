@@ -1002,15 +1002,15 @@ at two examples of this.
 The first example is depth labeling of a tree where each leaf gets
 a value equal to its depth. For instance, a depth-labeled tree {\scriptsize{} \Tree[ 8 [ [ 3 5 ] 4 ] ] }
 may look like this: {\tiny{}}{\tiny{} \Tree[ (8,1) [ [ (3,3) (5,3) ] (4,2) ] ] }.
-The reason this cannot be implemented via \lstinline!traverse! is
-that the code of \lstinline!traverse! will always collect and merge
-all the effects of a given functor \lstinline!F!. If the effect of
-\lstinline!F! describes incrementing a counter (as in our examples
-involving the \lstinline!State! monad), the code of \lstinline!traverse!
-will increment that counter at \emph{each} leaf. We may certainly
-traverse the tree so that leafs at the same depth are traversed next
-to each other (as in the breadth-first traversal). But the code cannot
-skip the incrementing when the leaf is at the same depth since \lstinline!traverse!
+This cannot be implemented via \lstinline!traverse! because the code
+of \lstinline!traverse! will always collect and merge all the effects
+of a given functor \lstinline!F!. If the effect of \lstinline!F!
+describes incrementing a counter (as in our examples involving the
+\lstinline!State! monad), the code of \lstinline!traverse! will
+increment that counter at \emph{each} leaf. We may certainly traverse
+the tree so that leafs at the same depth are traversed next to each
+other (as in the breadth-first traversal). But the code cannot skip
+the incrementing when the leaf is at the same depth since \lstinline!traverse!
 does not receive any information about the position of values in the
 tree. So, we cannot label certain nodes with the same depth value
 but other nodes with a different depth value; either the counter is
@@ -1030,9 +1030,9 @@ res0: T2[(Int, Int)] = Branch(Leaf((8,1)), Branch(Branch(Leaf((3,3)), Leaf((5,3)
 \end{lstlisting}
 
 More generally, traversals cannot perform computations that depend
-on the position of data in the tree (such as, whether the data is
-in the left or in the right branch and at what depth). An example
-of such an computation is \textsf{``}pretty-printing\textsf{''} that converts trees
+on the \emph{position} of data in the tree (e.g., whether the data
+is in the left or in the right branch and at what depth). An example
+of such a computation is \textsf{``}pretty-printing\textsf{''} that converts trees
 into a text format. In the \LaTeX{} format used in this book, the tree
 {\scriptsize{} \Tree[ 8 [ [ 3 5 ] 4 ] ] } is represented by the text
 \lstinline!\Tree[ 8 [ [ 3 5 ] 4 ] ]!. We may write the following
@@ -1422,10 +1422,17 @@ We now need to determine a suitable type $Z$ and a suitable function
 $f:Z\rightarrow\bbnum 1+A\times Z$ that we can \textsf{``}unfold\textsf{''} into
 the required sequence. If we are in the middle of unfolding, we need
 to produce the remaining portion of the list, say, $\left[128,256,512\right]$,
-given only a current value of type $Z$. It is clear that we need
-to keep track of the last used power of $2$. So, let us choose $Z\triangleq\text{Long}$
-for that value; the type $A$ is the same. The function $f$ should
-return \lstinline!None! when the list is finished:
+given only a current value of type $Z$. We can do that if we keep
+track of the current initial power of $2$. So, let us choose $Z\triangleq$\lstinline!Long!
+to represent that value; the type $A$ will be also \lstinline!Long!. 
+
+How can we implement the function $f$? It should return \lstinline!None!
+(denoted by $1+\bbnum 0$) when the list is finished. When we are
+in the middle of generating the list, the function $f$ should return
+$\bbnum 0+a\times z$ with some values $a$ and $z$. The value $a$
+must be the new element of the list; the value $z$ will be passed
+to the next call of $f$. Since the next element must be twice the
+previous one, we must return $z=2*a$. So, the code of $f$ is:
 \begin{lstlisting}
 def f(n: Long): Long => Option[(Long, Long)] = { z =>
   if (z >= n) None else Some((z, z * 2))
@@ -1449,8 +1456,8 @@ create \textsf{``}full\textsf{''} binary trees of given depth, e.g., {\scriptsiz
 
 \subparagraph{Solution}
 
-The code of \lstinline!unfoldT2! is an adaptation of the general
-code in Eq.~(\ref{eq:unfold-via-recursion-scheme}):
+We adapt the general code in Eq.~(\ref{eq:unfold-via-recursion-scheme})
+to obtain the code of \lstinline!unfoldT2!:
 \begin{lstlisting}
 type S[A, R] = Either[A, (R, R)]
 def unfoldT2[A, Z](f: Z => S[A, Z])(init: Z): T2[A] = f(init) match {
@@ -1461,20 +1468,130 @@ def unfoldT2[A, Z](f: Z => S[A, Z])(init: Z): T2[A] = f(init) match {
 We plan to implement the function \lstinline!fullBinaryTree! like
 this:
 \begin{lstlisting}
-def fullBinaryTree(n: Int): T2[Int] = unfoldT2[Int, Z](???)(???)
+def fullBinaryTree(n: Int): T2[Int] = {
+  type Z = ???
+  val init: Z = ???
+  val f: Z => Either[Int, (Z, Z)] = ???
+  unfoldT2[Int, Z](f)(init)
+}
 \end{lstlisting}
 The next step is to choose a suitable type $Z$ such that the unfolding
-procedure can create the required tree. 
+procedure can generate a tree such as {\tiny{}\Tree[ [ [ 0 1 ] [ 2 3 ] ] [ [ 4 5 ] [ 6 7 ] ] ]}.
+To figure out what $Z$ must be, we need to consider an intermediate
+step that generates a subtree of this tree at some point in the middle
+of \textsf{``}unfolding\textsf{''}. An example of a subtree in the middle is {\tiny{}\Tree[ 4 5 ]}.
+This subtree must be computed as \lstinline!unfoldT2(f)(z)! with
+some value \lstinline!z: Z!. The information needed for this computation
+is the initial value ($4$) and the total number ($2$) of the subtree\textsf{'}s
+leaves. So, the type $Z$ needs to contain two integers, the value
+of the first leaf and the size of the remaining subtree (which will
+always be a power of $2$):
+\begin{lstlisting}
+type Z = (Int, Int)        // (k, m) where k is the first leaf\textsf{'}s value and m is the subtree size.
+val init: Z = (0, 1 << n)
+\end{lstlisting}
+The initial value for the entire tree shown above will be \lstinline!(0, 8)!.
 
-{*}{*}{*}
+Next, we figure out the function \lstinline!f!. When \lstinline!f!
+is applied to a value \lstinline!(k, m)! of type \lstinline!Z!,
+it should generate the corresponding subtree. If the subtree size
+\lstinline!m! is $1$, the return value needs to be \lstinline!Left(k)!.
+Otherwise, the return value needs to contain two new values of type
+\lstinline!Z! corresponding to the two next subtrees at one level
+deeper. These two subtrees have sizes \lstinline!m / 2! and initial
+values \lstinline!k! and \lstinline!k + m / 2!. So, the code of
+\lstinline!f! is:
+\begin{lstlisting}
+val f: Z => Either[Int, (Z, Z)] = {
+  case (k, m) if m == 1   => Left(k)
+  case (k, m)             => Right(((k, m / 2), (k + m / 2, m / 2)))
+}
+\end{lstlisting}
+
+This completes the implementation of \lstinline!fullBinaryTree!.
+To test the resulting code:
+\begin{lstlisting}
+scala> fullBinaryTree(2)
+res0: T2[Int] = Branch(Branch(Leaf(0), Leaf(1)), Branch(Leaf(2), Leaf(3)))
+\end{lstlisting}
+
 
 \subsubsection{Example \label{subsec:Example-unfold-tree-1}\ref{subsec:Example-unfold-tree-1}}
 
-{*}{*}{*}
+Use \lstinline!unfoldT2! from Example~\ref{subsec:Example-unfold-tree}
+to implement the function \lstinline!evenOdd(n)! that generates binary
+trees of type \lstinline!T2[Int]! where the leaves have descending
+numbers from \lstinline!n! to \lstinline!0!, but all odd numbers
+are on the left and even numbers on the right. For example, \lstinline!evenOdd(3)!
+should generate the tree {\tiny{}\Tree[ 3 [ [ 1 0 ] 2 ] ]}, while
+\lstinline!evenOdd(4)! should give {\tiny{}\Tree[ [ 3 [ [ 1 0 ] 2 ] ] 4 ]}.
 
 \subparagraph{Solution}
 
-{*}{*}{*}
+We plan to implement \lstinline!evenOdd! like this:
+\begin{lstlisting}
+def evenOdd(n: Int): T2[Int] = {
+  type Z = ???
+  val init: Z = ???
+  val f: Z => Either[Int, (Z, Z)] = ???
+  unfoldT2[Int, Z](f)(init)
+}
+\end{lstlisting}
+The examples with \lstinline!evenOdd(3)! and \lstinline!evenOdd(4)!
+suggest that \lstinline!evenOdd(n)! is a tree containing a leaf with
+value \lstinline!n! and a subtree \lstinline!evenOdd(n - 1)!. Can
+we use the integer \lstinline!n! as the initial value for unfolding? 
+
+To figure this out, consider an intermediate stage of the unfolding
+process where \lstinline!unfoldT2! will apply the function \lstinline!f!
+to some intermediate value \lstinline!z: Z!. If \lstinline!f(z) == Left(k)!,
+we will get a \lstinline!Leaf! with value \lstinline!k!. The other
+possibility is \lstinline!f(z) == Right((z1, z2))! where \lstinline!z1!
+and \lstinline!z2! are some values of type \lstinline!Z!. This will
+generate a \lstinline!Branch! with two subtrees. The function \lstinline!unfoldT2!
+will then apply \lstinline!f! to \lstinline!z1! and \lstinline!z2!
+in order to create the left and the right subtrees. The difference
+between the subtrees must come entirely from the difference between
+the values \lstinline!z1! and \lstinline!z2!. 
+
+In our case, we need to make either the left or the right subtree
+a \lstinline!Leaf! depending on whether the initial leaf value is
+odd or even. The function \lstinline!f! cannot know that its application
+\lstinline!f(z1)! or \lstinline!f(z2)! is used to generate the left
+or the right subtree, or that it must create a \lstinline!Leaf! in
+some cases. This information must come from the values \lstinline!z1!
+and \lstinline!z2!. So, the type \lstinline!Z! must contain a \lstinline!Boolean!
+flag indicating whether it is necessary to create a \lstinline!Leaf!
+at the current place.
+
+For additional clarity, let us define the type \lstinline!Z! as a
+case class:
+\begin{lstlisting}
+final case class Z(startAt: Int, makeLeaf: Boolean)
+val init = Z(startAt = n, makeLeaf = false)
+\end{lstlisting}
+When \lstinline!makeLeaf == true!, we should create a \lstinline!Leaf!,
+so \lstinline!f! should return a \lstinline!Left()!. Otherwise,
+\lstinline!f! should return a \lstinline!Right((z1, z2))! where
+either \lstinline!z1! or \lstinline!z2! should have \lstinline!makeLeaf = true!
+according to the number \lstinline!startAt! being odd or even. Looking
+at the examples, we find that \lstinline!f! should also return a
+\lstinline!Left()! when \lstinline!startAt == 0!. So, the complete
+code of \lstinline!f! is:
+\begin{lstlisting}
+val f: Z => Either[Int, (Z, Z)] = {
+  case Z(n, false) if n > 0 && n % 2 == 0  => Right((Z(n - 1, false), Z(n, true)))
+  case Z(n, false) if n > 0 && n % 2 == 1  => Right((Z(n, true), Z(n - 1, false)))
+  case Z(n, _)                             => Left(n) // Make a leaf when n == 0 or makeLeaf == true.
+}
+\end{lstlisting}
+The implementation of \lstinline!evenOdd! is now complete. Let us
+test it:
+\begin{lstlisting}
+scala> evenOdd(3)
+res0: T2[Int] = Branch(Leaf(3), Branch(Branch(Leaf(1), Leaf(0)), Leaf(2)))
+\end{lstlisting}
+
 
 \subsection{Recursion schemes. III. Traversing operations}
 
