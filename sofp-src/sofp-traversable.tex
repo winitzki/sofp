@@ -995,9 +995,9 @@ of data types (traversable functors).
 
 Although \lstinline!traverse! is a powerful method due to its use
 of an arbitrary applicative functor \lstinline!F[_]!, some computations
-are not expressible via \lstinline!traverse! because they require
-information that \lstinline!traverse! does not have. We will look
-at two examples of this.
+are still not expressible via \lstinline!traverse! because they require
+information that \lstinline!traverse! cannot have. We will look at
+two examples of this.
 
 The first example is depth labeling of a tree where each leaf gets
 a value equal to its depth. For instance, a depth-labeled tree {\scriptsize{} \Tree[ 8 [ [ 3 5 ] 4 ] ] }
@@ -1302,7 +1302,7 @@ it is no longer polynomial.
 \end{comment}
 the evaluation of the value of type $R$. This allows us to implement
 a well-defined, finite value \lstinline!x: L[A]! which refers to
-itself under the delayed recursive evaluation:
+itself under the delayed evaluation:
 \begin{lstlisting}
 type S[A, R] = Either[A, Unit => R]
 final case class Looping[A](run: S[A, Looping[A]])
@@ -1318,12 +1318,11 @@ Trying to compute \lstinline!fold(f)(x)! with any \lstinline!f!
 will result in an infinite loop.
 
 It seems that we need to restrict recursion schemes $S^{A,R}$ to
-be \emph{polynomial} bifunctors. In that case, $L^{A}$ defined via
-$S^{A,R}$ will also be a polynomial functor that supports no delayed
-evaluation of values stored inside it. So, any value \lstinline!x!
-of type $L^{A}$ will have to contain a finite number of values of
-type $A$, and \lstinline!fold(f)(x)! is guaranteed to terminate
-for any terminating function $f:S^{A,Z}\rightarrow Z$.
+be \emph{polynomial} bifunctors. Such $S^{A,R}$ will define recursive
+polynomial functors $L^{A}$ that support no delayed evaluation of
+stored values of type $A$. So, any value \lstinline!x! of type $L^{A}$
+will have to contain a finite number of values of type $A$, and \lstinline!fold(f)(x)!
+is guaranteed to terminate for any terminating function $f:S^{A,Z}\rightarrow Z$.
 
 Rather than working with the general \lstinline!fold! function and
 redefine all recursive types via \lstinline!Fix!, it is more convenient
@@ -1334,9 +1333,9 @@ mechanically (e.g., using macros or code generators) into a specialized
 implementation for a given data type and recursion scheme.
 
 For instance, while the type \lstinline!TreeN[A]! is equivalent to
-\lstinline!Fix[S3[A, *]]! shown above, it is easier to work directly
-with values of type \lstinline!TreeN[A]!. The specialized version
-of \lstinline!fold! for \lstinline!TreeN[A]! has the type signature:
+\lstinline!Fix[S3[A, *]]! shown above, it is easier to work with
+\lstinline!TreeN[A]!. The specialized version of \lstinline!fold!
+for \lstinline!TreeN[A]! has the type signature:
 \begin{lstlisting}
 def foldTreeN[A, Z](f: S3[A, Z] => Z): TreeN[A] => Z = ???
 \end{lstlisting}
@@ -1356,7 +1355,7 @@ def printLaTeX[A](tree: TreeN[A]): String = "\\Tree" + foldTreeN[A, String](toLa
 
 Another simple example of an aggregation operation that cannot be
 expressed as a traversal is the task of determining the maximum branching
-number of a given rose tree. The \lstinline!foldTreeN! function allows
+number of a given rose tree. The function \lstinline!foldTreeN! allows
 us to implement that computation:
 \begin{lstlisting}
 def maxBranching[A]: TreeN[A] => Int = foldTreeN[A, Int] {
@@ -1476,31 +1475,31 @@ def fullBinaryTree(n: Int): T2[Int] = {
 }
 \end{lstlisting}
 The next step is to choose a suitable type $Z$ such that the unfolding
-procedure can generate a tree such as {\tiny{}\Tree[ [ [ 0 1 ] [ 2 3 ] ] [ [ 4 5 ] [ 6 7 ] ] ]}.
-To figure out what $Z$ must be, we need to consider an intermediate
-step that generates a subtree of this tree at some point in the middle
-of \textsf{``}unfolding\textsf{''}. An example of a subtree in the middle is {\tiny{}\Tree[ 4 5 ]}.
-This subtree must be computed as \lstinline!unfoldT2(f)(z)! with
-some value \lstinline!z: Z!. The information needed for this computation
-is the initial value ($4$) and the total number ($2$) of the subtree\textsf{'}s
-leaves. So, the type $Z$ needs to contain two integers, the value
-of the first leaf and the size of the remaining subtree (which will
-always be a power of $2$):
+procedure can generate trees of the required shape. To figure out
+what $Z$ must be, we need to consider an intermediate step that generates
+a subtree of this tree at some point in the middle of \textsf{``}unfolding\textsf{''}.
+For the tree of depth $3$ as shown above, an example of a subtree
+in the middle is {\tiny{}\Tree[ 4 5 ]}. This subtree must be computed
+as \lstinline!unfoldT2(f)(z)! with some value \lstinline!z: Z!.
+The information needed for this computation is the initial value ($4$)
+and the total number ($2$) of the subtree\textsf{'}s leaves. So, the type
+$Z$ needs to contain two integers, the value of the first leaf and
+the size of the remaining subtree (which will always be a power of
+$2$):
 \begin{lstlisting}
 type Z = (Int, Int)        // (k, m) where k is the first leaf\textsf{'}s value and m is the subtree size.
-val init: Z = (0, 1 << n)
+val init: Z = (0, 1 << n)  // The size of the tree is 2 to the power n.
 \end{lstlisting}
 The initial value for the entire tree shown above will be \lstinline!(0, 8)!.
 
 Next, we figure out the function \lstinline!f!. When \lstinline!f!
 is applied to a value \lstinline!(k, m)! of type \lstinline!Z!,
 it should generate the corresponding subtree. If the subtree size
-\lstinline!m! is $1$, the return value needs to be \lstinline!Left(k)!.
-Otherwise, the return value needs to contain two new values of type
-\lstinline!Z! corresponding to the two next subtrees at one level
-deeper. These two subtrees have sizes \lstinline!m / 2! and initial
-values \lstinline!k! and \lstinline!k + m / 2!. So, the code of
-\lstinline!f! is:
+\lstinline!m! is $1$, the return value is \lstinline!Left(k)!.
+Otherwise, the return value should give two new values of type \lstinline!Z!
+corresponding to the two next subtrees at one level deeper. These
+two subtrees have sizes \lstinline!m / 2! and initial values \lstinline!k!
+and \lstinline!k + m / 2!. So, the code of \lstinline!f! is:
 \begin{lstlisting}
 val f: Z => Either[Int, (Z, Z)] = {
   case (k, m) if m == 1   => Left(k)
@@ -1562,10 +1561,8 @@ or the right subtree, or that it must create a \lstinline!Leaf! in
 some cases. This information must come from the values \lstinline!z1!
 and \lstinline!z2!. So, the type \lstinline!Z! must contain a \lstinline!Boolean!
 flag indicating whether it is necessary to create a \lstinline!Leaf!
-at the current place.
-
-For additional clarity, let us define the type \lstinline!Z! as a
-case class:
+at the current place. For clarity, let us define the type \lstinline!Z!
+as a case class:
 \begin{lstlisting}
 final case class Z(startAt: Int, makeLeaf: Boolean)
 val init = Z(startAt = n, makeLeaf = false)
@@ -1590,6 +1587,43 @@ test it:
 \begin{lstlisting}
 scala> evenOdd(3)
 res0: T2[Int] = Branch(Leaf(3), Branch(Branch(Leaf(1), Leaf(0)), Leaf(2)))
+\end{lstlisting}
+$\square$
+
+Is the recursion guaranteed to stop while evaluating \lstinline!unfold!?
+During evaluation, \lstinline!unfold(f)(z)! will recursively call
+$f$ whenever the value $f(z)$ of type $S^{A,Z}$ contains additional
+values of type $Z$. In the examples just shown, we used \lstinline!unfold(f)!
+with a function $f$ that was specially designed to stop the recursion
+at the required places. For instance, if $S^{A,Z}\triangleq A+Z\times Z$,
+the function $f$ can return a value of type $A+\bbnum 0$ to stop
+the unfolding.
+
+However, the type signature $f:Z\rightarrow S^{A,Z}$ does not guarantee
+that $f(z)$ will return values that stop the unfolding at the right
+place. It is the programmer\textsf{'}s responsibility to choose functions $f$
+that do not cause infinite loops during unfolding. If $S^{A,Z}\triangleq A+Z\times Z$
+and $f(z)$ always returns values of type $\bbnum 0+Z\times Z$ (for
+example, $f(z)\triangleq\bbnum 0+z\times z$), the unfolding operation
+will enter an infinite loop trying to construct a tree of infinite
+size. 
+
+Data structures in a computer\textsf{'}s memory cannot have infinite size.
+To guarantee that unfolding always terminates, we could use a data
+structure that delays the full evaluation of some of its parts. Such
+data structures can simulate \textsf{``}infinite\textsf{''} lists or trees because
+further parts of a recursive structure are evaluated only when requested.
+
+As an example, consider the recursion scheme $S^{A,R}\triangleq A+(\bbnum 1\rightarrow R\times R)$.
+The corresponding data type $L^{A}\triangleq S^{A,L^{A}}$ is a binary
+tree with a delayed evaluation of branches (but eager evaluation of
+leaves). This data structure supports unfolding with any function
+$f:Z\rightarrow S^{A,Z}$ because the recursive evaluation of $f$
+at the branches is always delayed. So, we can use \lstinline!unfold!
+to generate a value of type $L^{A}$ whose tree structure has the
+form {\tiny{}\Tree[ 1 [ 2  [3 ... ] ] ]} with unbounded size:
+\begin{lstlisting}
+type S[A, R] = Either[A, Unit => (R, R)]
 \end{lstlisting}
 
 
