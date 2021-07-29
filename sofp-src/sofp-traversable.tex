@@ -328,25 +328,25 @@ to \lstinline!trav!) and then combines the resulting values. So,
 this implementation represents the depth-first, left-to-right traversal
 of the tree.
 
-\subsubsection{Example \label{subsec:Example-traversal-regular-shaped-tree}\ref{subsec:Example-traversal-regular-shaped-tree}}
+\subsubsection{Example \label{subsec:Example-traversal-perfect-shaped-tree}\ref{subsec:Example-traversal-perfect-shaped-tree}}
 
-Implement a \lstinline!traverse! operation for the regular-shaped
-tree \lstinline!RTree! (Section~\ref{subsec:Regular-shaped-trees}).
+Implement a \lstinline!traverse! operation for the perfect-shaped
+tree \lstinline!PTree! (Section~\ref{subsec:Perfect-shaped-trees}).
 
 \subparagraph{Solution}
 
 We begin writing code as in Example~\ref{subsec:Example-traverse-tree}
 by pattern matching:
 \begin{lstlisting}[numbers=left]
-def trav[A, B, F[_]: Functor : Applicative](f: A => F[B])(t: RTree[A]): F[RTree[B]] = t match {
+def trav[A, B, F[_]: Functor : Applicative](f: A => F[B])(t: PTree[A]): F[PTree[B]] = t match {
   case Leaf(a)     => f(a).map(b => Leaf(b))           // Reproduce the Leaf structure under F.
-  case Branch(t)   => ???  // Here t has type RTree[(A, A)].
+  case Branch(t)   => ???  // Here t has type PTree[(A, A)].
 }
 \end{lstlisting}
-In line 3, we have a pattern variable \lstinline!t! of type \lstinline!RTree[(A, A)]!,
+In line 3, we have a pattern variable \lstinline!t! of type \lstinline!PTree[(A, A)]!,
 but we need to obtain a value of type \lstinline!F[Branch[B]]! in
 that scope. Since a \lstinline!Branch! contains a recursive instance
-of the type \lstinline!RTree!, it seems we need to use a recursive
+of the type \lstinline!PTree!, it seems we need to use a recursive
 call of \lstinline!trav! here. However, we cannot apply \lstinline!trav(f)!
 to \lstinline!t! because the types do not match. We will be able
 to apply \lstinline!trav! if instead of \lstinline!f: A => F[B]!
@@ -358,12 +358,12 @@ method:
 \end{lstlisting}
  So, we write:
 \begin{lstlisting}
-  case Branch(t)   => trav { case (a1, a2) => f(a1) zip f(a2) }(t); ??? } // Have F[RTree[(B, B)]].
+  case Branch(t)   => trav { case (a1, a2) => f(a1) zip f(a2) }(t); ??? } // Have F[PTree[(B, B)]].
 \end{lstlisting}
 We can now use $F$\textsf{'}s \lstinline!map! method to restore the \lstinline!Branch!
 structure under $F$. The complete code is:
 \begin{lstlisting}
-def trav[A, B, F[_]: Functor : Applicative](f: A => F[B])(t: RTree[A]): F[RTree[B]] = t match {
+def trav[A, B, F[_]: Functor : Applicative](f: A => F[B])(t: PTree[A]): F[PTree[B]] = t match {
   case Leaf(a)     => f(a).map(b => Leaf(b))           // Reproduce the Leaf structure under F.
   case Branch(t)   => (trav[(A, A), (B, B), F] { case (a1, a2) => f(a1) zip f(a2) }(t)
                       ).map(x => Branch(x))          // Reproduce the Branch structure under F.
@@ -991,7 +991,8 @@ def scanLeft[A, Z](la: L[A])(init: Z)(f: (A, Z) => Z): L[Z] = trav(a => accum(a,
 In this way, \lstinline!scanLeft! is generalized to a wide class
 of data types (traversable functors).
 
-\subsection{Tasks \emph{not} implementable via \texttt{traverse}}
+\subsection{Tasks \emph{not} implementable\label{subsec:Tasks-not-implementable-via-traverse}
+via \texttt{traverse}}
 
 Although \lstinline!traverse! is a powerful method due to its use
 of an arbitrary applicative functor \lstinline!F[_]!, some computations
@@ -1051,7 +1052,7 @@ res1: String = \Tree[ [ 8 [ 3 5 ] ] 4 ]
 \end{lstlisting}
 
 
-\subsection{Recursion schemes. I. Folding operations\label{subsec:Recursion-schemes.-folding}}
+\subsection{Using recursion schemes. I. Folding operations\label{subsec:Recursion-schemes.-folding}}
 
 The previous section showed two examples of folding and traversing
 operations that cannot be expressed through the standard \lstinline!foldMap!
@@ -1368,7 +1369,7 @@ res2: Int = 2
 \end{lstlisting}
 
 
-\subsection{Recursion schemes. II. Unfolding operations}
+\subsection{Using recursion schemes. II. Unfolding operations}
 
 A folding operation converts a collection to a single value. The opposite
 operation is \textsf{``}unfolding\textsf{''}: converting a single value into a collection.
@@ -1617,19 +1618,60 @@ further parts of a recursive structure are evaluated only when requested.
 As an example, consider the recursion scheme $S^{A,R}\triangleq A+(\bbnum 1\rightarrow R\times R)$.
 The corresponding data type $L^{A}\triangleq S^{A,L^{A}}$ is a binary
 tree with a delayed evaluation of branches (but eager evaluation of
-leaves). This data structure supports unfolding with any function
+leaves). This data structure supports unfolding with \emph{any} function
 $f:Z\rightarrow S^{A,Z}$ because the recursive evaluation of $f$
-at the branches is always delayed. So, we can use \lstinline!unfold!
-to generate a value of type $L^{A}$ whose tree structure has the
+at the branches is always delayed. For instance, \lstinline!unfold!
+can generate a value of type $L^{A}$ whose tree structure has the
 form {\tiny{}\Tree[ 1 [ 2  [3 ... ] ] ]} with unbounded size:
 \begin{lstlisting}
 type S[A, R] = Either[A, Unit => (R, R)]
+
+sealed trait UT[A]
+final case class ULeaf[A](a: A)                          extends UT[A]
+final case class UBranch[A](run: Unit => (UT[A], UT[A])) extends UT[A]
+
+def unfoldUT[A, Z](f: Z => S[A, Z])(init: Z): UT[A] = f(init) match {
+  case Left(a)       => ULeaf(a)
+  case Right(func)   => UBranch { _ => // Important to delay the evaluation of func().
+    val (z1, z2) = func(())
+    (unfoldUT(f)(z1), unfoldUT(f)(z2))
+  }
+}
+
+val tree1toInf = unfoldUT[Int, (Int, Boolean)] { case (z, makeLeaf) =>
+  if (makeLeaf) Left(z) else Right(_ => ((z + 1, true), (z + 1, false)))
+}((0, false))
+\end{lstlisting}
+The value \lstinline!tree1toInf! is itself finite but contains an
+unbounded number of unevaluated parts. To visualize that value, let
+us implement a function that converts \lstinline!UT[A]! to \lstinline!T2[A]!
+by truncating at a given maximum depth. The unevaluated parts of the
+tree are marked with a value called \lstinline!default!:
+\begin{lstlisting}
+def toT2[A](default: A, maxDepth: Int = 0): UT[A] => T2[A] = {
+  case ULeaf(a)        => Leaf(a)
+  case UBranch(func)   => if (maxDepth == 0) Leaf(default) else {
+    val (z1, z2) = func(())
+    Branch(toT2(default, maxDepth - 1)(z1), toT2(default, maxDepth - 1)(z2))
+  }
+}
+
+scala> toT2(-1, 3)
+res0: T2[Int] = Branch(Leaf(1), Branch(Leaf(2), Branch(Leaf(3), Leaf(-1))))
 \end{lstlisting}
 
 
-\subsection{Recursion schemes. III. Traversing operations}
+\subsection{Using recursion schemes. III. Traversing operations}
 
-We have a recursive type defined by $L^{A}\triangleq S^{A,L^{A}}$,
+Folding with a recursion scheme allows us to implement operations
+such as \lstinline!printLaTeXSubtree! (Section~\ref{subsec:Recursion-schemes.-folding})
+that cannot be expressed via ordinary \lstinline!fold! or \lstinline!traverse!
+functions. Another operation not expressible via \lstinline!traverse!
+is \lstinline!zipWithDepth!, which we implemented in Section~\ref{subsec:Tasks-not-implementable-via-traverse}
+through custom code. We will now figure out how to implement \lstinline!zipWithDepth!
+as a more general traversal operation that uses a recursion scheme.
+
+{*}{*}{*}We have a recursive type defined by $L^{A}\triangleq S^{A,L^{A}}$,
 and an applicative functor $F$. It is not enough to traverse with
 a function $f:A\rightarrow F^{B}$; the function $f$ must receive
 information about the structure of $S$. So, we will use $f:S^{A,F^{L^{B}}}\rightarrow F^{B}$
@@ -1647,8 +1689,8 @@ Now we can apply $f$ to this value. So, we define:
 \text{trav}_{S}(f)\triangleq\big(\overline{\text{trav}_{S}(f)}\big)^{\uparrow S^{A,\bullet}}\bef f\quad.
 \]
 
-To illustrate how this works, let us implement \lstinline!zipWithDepth!
-as a traversal with a tree recursion scheme.{*}{*}{*}
+To illustrate this, let us implement \lstinline!zipWithDepth! as
+a traversal with a tree recursion scheme.{*}{*}{*}
 
 \section{Laws and structure}
 
@@ -1666,7 +1708,7 @@ foldMap works in the same way for all monoids: monoidal naturality
 traverse works in the same way for all applicative functors: applicative
 naturality
 
-\subsection{Regular-shaped binary tree}
+\subsection{Perfect-shaped binary tree}
 
 $T^{A}\triangleq A+T^{A\times A}$
 
@@ -2148,7 +2190,7 @@ and $N^{R}$ are monoids due to Exercise~\ref{subsec:Exercise-applicative-of-mono
 
 \section{Discussion and further developments}
 
-\subsection{Recursion schemes for regular-shaped trees}
+\subsection{Recursion schemes for perfect-shaped trees}
 
 \begin{comment}
 this is chapter 9 of the functional programming tutorial traversable

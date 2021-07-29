@@ -33,7 +33,7 @@ chapters=("Preface" "Mathematical formulas as code. I." \
  "The logic of types. III." "Functors and contrafunctors"  \
  "Reasoning about code." "Typeclasses and functions of types" "Computations in functor blocks. I." \
  "Computations in functor blocks. II." "Applicative functors and contrafunctors" \
- "Traversable functors" "\`\`Free'' type constructions" "Computations in functor blocks. III." \
+ "Traversable functors" "Free typeclass constructions" "Computations in functor blocks. III." \
  "Summary and problems" \
  "\`\`Applied functional type theory'': A proposal" "Essay: Software engineers and software artisans" \
  "Essay: Towards functional data engineering with Scala" "Essay: Why category theory" \
