@@ -9938,7 +9938,7 @@ It seems that we need to restrict recursion schemes
 \begin_inset Formula $S^{A,R}$
 \end_inset
 
- to be 
+ to 
 \emph on
 polynomial
 \emph default
@@ -10032,7 +10032,7 @@ fold
 
 \end_inset
 
- for already defined types.
+ for already defined recursive types.
  The general implementation of 
 \begin_inset listings
 inline true
@@ -12961,13 +12961,17 @@ The method
 \begin_inset Formula $S$
 \end_inset
 
- and for all functors 
+ and for all type constructors 
 \begin_inset Formula $F$
 \end_inset
 
 .
- This makes it powerful but hard to use because one needs to work with data
- structures defined via the 
+ This makes 
+\begin_inset Formula $\text{trav}_{S}$
+\end_inset
+
+ powerful but hard to use because we need to work with data structures defined
+ via the 
 \begin_inset listings
 inline true
 status open
@@ -13002,7 +13006,7 @@ zipWithDepth
 
 \end_inset
 
- as a traversal with a binary tree recursion scheme.
+ via a traversal with a binary tree recursion scheme.
  As in Section
 \begin_inset space ~
 \end_inset
@@ -13029,12 +13033,63 @@ State
 
 \end_inset
 
- monad as the applicative functor 
+ monad as the functor 
 \begin_inset Formula $F$
 \end_inset
 
-.
- We begin by defining the recursion scheme 
+ when running the traversal.
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+final case class St[A](run: Int => (A, Int))  { // A State monad with internal
+ state of type Int.
+\end_layout
+
+\begin_layout Plain Layout
+
+  import io.chymyst.ch.implement                // Implement the monad methods
+ automatically.
+\end_layout
+
+\begin_layout Plain Layout
+
+  def flatMap[B](f: A => St[B]): St[B] = implement
+\end_layout
+
+\begin_layout Plain Layout
+
+  def map[B](f: A => B): St[B] = implement
+\end_layout
+
+\begin_layout Plain Layout
+
+}
+\end_layout
+
+\begin_layout Plain Layout
+
+def incrementAndGet: St[Int] = St(s => (s + 1, s + 1))  // Increment the
+ current state value.
+\end_layout
+
+\begin_layout Plain Layout
+
+def get: St[Int] = St(s => (s, s))             // Fetch the current state
+ value.
+\end_layout
+
+\begin_layout Plain Layout
+
+def set(s: Int): St[Unit] = St(_ => ((), s))   // Set the state, ignore
+ previous state value.
+\end_layout
+
+\end_inset
+
+Next, define the recursion scheme 
 \begin_inset Formula $S^{A,R}$
 \end_inset
 
@@ -13042,7 +13097,7 @@ State
 \begin_inset Formula $\text{trav}_{S}$
 \end_inset
 
- for binary trees of type 
+ for trees of type 
 \begin_inset listings
 inline true
 status open
@@ -13061,11 +13116,7 @@ status open
 
 \begin_layout Plain Layout
 
-type S[A, R] = Either[A, (R, R)]          // Recursion scheme for T2.
-\end_layout
-
-\begin_layout Plain Layout
-
+type S[A, R] = Either[A, (R, R)]          // Recursion scheme for T2[A].
 \end_layout
 
 \begin_layout Plain Layout
@@ -13091,7 +13142,19 @@ def travT2[A, B, F[_]](f: S[A, F[T2[B]]] => F[T2[B]]): T2[A] => F[T2[B]]
 
 \end_inset
 
-It remains to define a suitable function 
+It remains to apply 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+travT2
+\end_layout
+
+\end_inset
+
+ to a suitable function 
 \begin_inset listings
 inline true
 status open
@@ -13104,7 +13167,136 @@ f
 \end_inset
 
 .
- ***
+ The value of the internal state will represent the current depth of the
+ tree element.
+ We need to increment the depth whenever we find a branch and then traverse
+ the two subtrees starting from the same depth value.
+ The code is:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+def zipWithDepth[A](tree: T2[A]): T2[(A, Int)] = travS[A, (A, Int), St]
+ {
+\end_layout
+
+\begin_layout Plain Layout
+
+  case Left(a) => for { s <- get } yield Leaf((a, s)) // Put the current
+ depth into the Leaf value.
+\end_layout
+
+\begin_layout Plain Layout
+
+  case Right((l, r))   => for {
+\end_layout
+
+\begin_layout Plain Layout
+
+    s <- incrementAndGet // Read the current depth after incrementing it.
+\end_layout
+
+\begin_layout Plain Layout
+
+    x <- l // Traverse the left branch starting from the new current depth.
+\end_layout
+
+\begin_layout Plain Layout
+
+    _ <- set(s)   // Set the same depth before traversing the right branch.
+       
+\end_layout
+
+\begin_layout Plain Layout
+
+    y <- r        // Traverse the right branch.
+\end_layout
+
+\begin_layout Plain Layout
+
+  } yield Branch(x, y)
+\end_layout
+
+\begin_layout Plain Layout
+
+}(tree).run(0)._1
+\end_layout
+
+\end_inset
+
+To test this code, apply 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+zipWithDepth
+\end_layout
+
+\end_inset
+
+ to a sample tree 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+t2
+\end_layout
+
+\end_inset
+
+ defined earlier in Sections
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "subsec:Decorating-a-tree-breadth-first-traversal"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+ and
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "subsec:Tasks-not-implementable-via-traverse"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+scala> zipWithDepth(t2)
+\end_layout
+
+\begin_layout Plain Layout
+
+res0: T2[(Int, Int)] = Branch(Branch(Leaf((8,2)), Branch(Leaf((3,3)), Leaf((5,3)
+))), Leaf((4,1)))
+\end_layout
+
+\end_inset
+
+
 \end_layout
 
 \begin_layout Section
