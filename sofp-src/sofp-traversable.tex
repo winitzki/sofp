@@ -1319,7 +1319,7 @@ Trying to compute \lstinline!fold(f)(x)! with any \lstinline!f!
 will result in an infinite loop.
 
 It seems that we need to restrict recursion schemes $S^{A,R}$ to
-be \emph{polynomial} bifunctors. Such $S^{A,R}$ will define recursive
+\emph{polynomial} bifunctors. Such $S^{A,R}$ will define recursive
 polynomial functors $L^{A}$ that support no delayed evaluation of
 stored values of type $A$. So, any value \lstinline!x! of type $L^{A}$
 will have to contain a finite number of values of type $A$, and \lstinline!fold(f)(x)!
@@ -1328,7 +1328,7 @@ is guaranteed to terminate for any terminating function $f:S^{A,Z}\rightarrow Z$
 Rather than working with the general \lstinline!fold! function and
 redefine all recursive types via \lstinline!Fix!, it is more convenient
 to implement and use specialized versions of \lstinline!fold! for
-already defined types. The general implementation of \lstinline!fold!
+already defined recursive types. The general implementation of \lstinline!fold!
 in Eq.~(\ref{eq:fold-via-recursion-scheme-1}) can be translated
 mechanically (e.g., using macros or code generators) into a specialized
 implementation for a given data type and recursion scheme.
@@ -1663,57 +1663,127 @@ res0: T2[Int] = Branch(Leaf(1), Branch(Leaf(2), Branch(Leaf(3), Leaf(-1))))
 
 \subsection{Using recursion schemes. III. Traversing operations}
 
-Folding with a recursion scheme allows us to implement operations
-such as \lstinline!printLaTeXSubtree! (Section~\ref{subsec:Recursion-schemes.-folding})
+Folding with a recursion scheme ($\text{fold}_{S}$) allows us to
+implement operations such as \lstinline!printLaTeXSubtree! (Section~\ref{subsec:Recursion-schemes.-folding})
 that cannot be expressed via ordinary \lstinline!fold! or \lstinline!traverse!
 functions. Another operation not expressible via \lstinline!traverse!
 is \lstinline!zipWithDepth!, which we implemented in Section~\ref{subsec:Tasks-not-implementable-via-traverse}
-through custom code. We will now figure out how to implement \lstinline!zipWithDepth!
-as a more general traversal operation that uses a recursion scheme.
+through custom code. We will now implement \lstinline!zipWithDepth!
+via a more general traversal operation ($\text{trav}_{S}$) parameterized
+by an arbitrary recursion scheme $S^{A,R}$.
 
-{*}{*}{*}We have a recursive type defined by $L^{A}\triangleq S^{A,L^{A}}$,
-and an applicative functor $F$. It is not enough to traverse with
-a function $f:A\rightarrow F^{B}$; the function $f$ must receive
-information about the structure of $S$. So, we will use $f:S^{A,F^{L^{B}}}\rightarrow F^{B}$
-and implement
+To figure out the type signature of $\text{trav}_{S}$, consider the
+relationship between ordinary \lstinline!traverse! and \lstinline!foldMap!
+methods:
+\begin{align*}
+ & \text{foldMap}_{L}(f^{:A\rightarrow Z}):L^{A}\rightarrow Z\quad,\quad\quad\text{trav}_{L}(f^{:A\rightarrow F^{B}}):L^{A}\rightarrow F^{L^{B}}\quad,\\
+ & \text{fold}_{S}(f^{:S^{A,Z}\rightarrow Z}):L^{A}\rightarrow Z\quad,\quad\quad\text{trav}_{S}(f^{:???}):L^{A}\rightarrow F^{L^{B}}\quad.
+\end{align*}
+We recover \lstinline!foldMap! from \lstinline!traverse! by using
+a constant applicative functor $F^{B}\triangleq Z$. So, we expect
+to obtain the type signature of $\text{trav}_{S}$ from the type signature
+of $\text{fold}_{S}$ if we replace $Z$ by $F^{L^{B}}$. The first
+argument $f$ of $\text{trav}_{S}$ will then have the type $S^{A,F^{L^{B}}}\rightarrow F^{L^{B}}$:
 \[
-\text{trav}_{S}:(S^{A,F^{L^{B}}}\rightarrow F^{B})\rightarrow L^{A}\rightarrow F^{L^{B}}\quad.
+\text{trav}_{S}:(S^{A,F^{L^{B}}}\rightarrow F^{L^{B}})\rightarrow L^{A}\rightarrow F^{L^{B}}\quad.
 \]
-We have $L^{A}\cong S^{A,L^{A}}$. We can use $\text{trav}_{S}(f)$
-recursively:
+To implement this method, begin with the type equivalence $L^{A}\cong S^{A,L^{A}}$.
+We can apply $\text{trav}_{S}(f)$ recursively to the values of type
+$L^{A}$ stored inside $S^{A,L^{A}}$:
 \[
-s^{:S^{A,L^{A}}}\triangleright\big(\overline{\text{trav}_{S}(f)}\big)^{\uparrow S^{A,\bullet}}:S^{A,F^{L^{B}}}\quad.
+\big(s^{:S^{A,L^{A}}}\triangleright\big(\overline{\text{trav}_{S}(f)}\big)^{\uparrow S^{A,\bullet}}\big):S^{A,F^{L^{B}}}\quad.
 \]
-Now we can apply $f$ to this value. So, we define: 
+It remains to apply $f$ to the last obtained value. This completes
+the code of $\text{trav}_{S}$: 
 \[
-\text{trav}_{S}(f)\triangleq\big(\overline{\text{trav}_{S}(f)}\big)^{\uparrow S^{A,\bullet}}\bef f\quad.
+\text{trav}_{S}\big(f^{:S^{A,F^{L^{B}}}\rightarrow F^{L^{B}}}\big)\triangleq\big(\overline{\text{trav}_{S}(f)}\big)^{\uparrow S^{A,\bullet}}\bef f\quad.
 \]
 
-To illustrate this, let us implement \lstinline!zipWithDepth! as
-a traversal with a tree recursion scheme.{*}{*}{*}
+The method $\text{trav}_{S}$ works in the same way for all recursion
+schemes $S$ and for all type constructors $F$. This makes $\text{trav}_{S}$
+powerful but hard to use because we need to work with data structures
+defined via the \lstinline!Fix! type constructor. It is easier to
+use a specialized version of $\text{trav}_{S}$ for the data structure
+at hand, as we did in the previous sections for folding and unfolding. 
+
+To illustrate this, let us implement \lstinline!zipWithDepth! via
+a traversal with a binary tree recursion scheme. As in Section~\ref{subsec:Recursion-schemes.-folding},
+we will use the \lstinline!State! monad as the functor $F$ when
+running the traversal.
+\begin{lstlisting}
+final case class St[A](run: Int => (A, Int))  { // A State monad with internal state of type Int.
+  import io.chymyst.ch.implement                // Implement the monad methods automatically.
+  def flatMap[B](f: A => St[B]): St[B] = implement
+  def map[B](f: A => B): St[B] = implement
+}
+def incrementAndGet: St[Int] = St(s => (s + 1, s + 1))  // Increment the current state value.
+def get: St[Int] = St(s => (s, s))             // Fetch the current state value.
+def set(s: Int): St[Unit] = St(_ => ((), s))   // Set the state, ignore previous state value.
+\end{lstlisting}
+Next, define the recursion scheme $S^{A,R}$ and a specialized version
+of $\text{trav}_{S}$ for trees of type \lstinline!T2[A]!:
+\begin{lstlisting}
+type S[A, R] = Either[A, (R, R)]          // Recursion scheme for T2[A].
+def travT2[A, B, F[_]](f: S[A, F[T2[B]]] => F[T2[B]]): T2[A] => F[T2[B]] = {
+  case Leaf(a)        => f(Left(a))
+  case Branch(l, r)   => f(Right((travT2(f)(l), travT2(f)(r))))
+}
+\end{lstlisting}
+It remains to apply \lstinline!travT2! to a suitable function \lstinline!f!.
+The value of the internal state will represent the current depth of
+the tree element. We need to increment the depth whenever we find
+a branch and then traverse the two subtrees starting from the same
+depth value. The code is:
+\begin{lstlisting}
+def zipWithDepth[A](tree: T2[A]): T2[(A, Int)] = travS[A, (A, Int), St] {
+  case Left(a) => for { s <- get } yield Leaf((a, s)) // Put the current depth into the Leaf value.
+  case Right((l, r))   => for {
+    s <- incrementAndGet // Read the current depth after incrementing it.
+    x <- l // Traverse the left branch starting from the new current depth.
+    _ <- set(s)   // Set the same depth before traversing the right branch.       
+    y <- r        // Traverse the right branch.
+  } yield Branch(x, y)
+}(tree).run(0)._1
+\end{lstlisting}
+To test this code, apply \lstinline!zipWithDepth! to a sample tree
+\lstinline!t2! defined earlier in Sections~\ref{subsec:Decorating-a-tree-breadth-first-traversal}
+and~\ref{subsec:Tasks-not-implementable-via-traverse}:
+\begin{lstlisting}
+scala> zipWithDepth(t2)
+res0: T2[(Int, Int)] = Branch(Branch(Leaf((8,2)), Branch(Leaf((3,3)), Leaf((5,3)))), Leaf((4,1)))
+\end{lstlisting}
+
+
+\subsection{Exercises\index{exercises}}
 
 \section{Laws and structure}
+
+\subsection{Equivalence of \texttt{foldMap} and \texttt{reduce}}
+
+\subsection{Equivalence of \texttt{reduce} and \texttt{toList}}
+
+\subsection{The difficulty with laws of \texttt{foldMap} and \texttt{reduce}}
+
+\subsection{Laws of traverse}
+
+\subsection{Equivalence of traverse and sequence}
+
+\subsection{Foldable and traversable functors are polynomial}
+
+\subsection{Exercises\index{exercises}}
 
 All traversable functors are foldable because foldLeft can be implemented
 via traverse. Although the opposite is not true (traverse cannot be
 implemented via foldLeft), it turns out that all foldable functors
-are also traversable. The reason is although this is not automatic
-(we cannot implement traverse via foldLeft). Foldable functors are
-traversable because all polynomial functors (including recursively
-defined polynomial functors) are foldable and no other functors are.
-{*}{*}{*}
+are also traversable. However, this is not automatic (we cannot implement
+traverse via foldLeft). Foldable functors are traversable because
+all polynomial functors (including recursively defined polynomial
+functors) are foldable and no other functors are. {*}{*}{*}
 
 foldMap works in the same way for all monoids: monoidal naturality
 
 traverse works in the same way for all applicative functors: applicative
 naturality
-
-\subsection{Perfect-shaped binary tree}
-
-$T^{A}\triangleq A+T^{A\times A}$
-
-The corresponding construction is $L^{A}\triangleq S^{A,L^{R^{A}}}$
-where $R$ is applicative and traversable and $S$ is bitraversable
 
 \section{Slides }
 
@@ -1800,7 +1870,8 @@ can't have $\text{seq}:L^{F^{B}}\rightarrow F^{L^{B}}$
 
 All polynomial functors are traversable, and usually in several ways
 
-It is still useful to have a type class for traversable functors
+It is still useful to have a typeclass for traversable functors because
+traversal order can vary
 
 
 \paragraph{Motivation for the laws of traverse }
@@ -2036,7 +2107,13 @@ Show that any traversable functor $L$ admits a method called \lstinline!consume!
 for any applicative functor $F$. Show that \lstinline!traverse!
 and \lstinline!consume! are equivalent.
 
-Solution:{*}{*}{*}
+Solution:
+
+First, we express consume via traverse and back.
+\[
+\text{consume}\,(f^{:L^{A}\rightarrow B})(p^{:L^{F^{A}}})\triangleq
+\]
+
 
 \subsubsection{Exercise \label{subsec:Exercise-traversables-2}\ref{subsec:Exercise-traversables-2}}
 
@@ -2046,9 +2123,9 @@ what premises?
 
 \subsubsection{Exercise \label{subsec:Exercise-traversables-3}\ref{subsec:Exercise-traversables-3}}
 
-Show that the identity law is not satisfied by the implementation
+Show that the identity law is \emph{not} satisfied by the implementation
 of $\text{seq}:L^{F^{A}}\rightarrow F^{L^{A}}$ for $F^{A}\triangleq\bbnum 1+A$
-if \lstinline!seq! always returns an empty option ($1+\bbnum 0$,
+where \lstinline!seq! always returns an empty option ($1+\bbnum 0$,
 or \lstinline!None! in Scala).
 
 \subsubsection{Exercise \label{subsec:Exercise-traversables-5}\ref{subsec:Exercise-traversables-5}}
@@ -2190,7 +2267,18 @@ and $N^{R}$ are monoids due to Exercise~\ref{subsec:Exercise-applicative-of-mono
 
 \section{Discussion and further developments}
 
-\subsection{Recursion schemes for perfect-shaped trees}
+\subsection{Traversals for nested recursive types}
+
+\subsection{Recursion schemes for nested recursive types}
+
+\paragraph{Perfect-shaped binary tree}
+
+The type is defined by:
+
+$T^{A}\triangleq A+T^{A\times A}$
+
+The corresponding construction is $L^{A}\triangleq S^{A,L^{R^{A}}}$
+where $R$ is applicative and traversable and $S$ is bitraversable
 
 \begin{comment}
 this is chapter 9 of the functional programming tutorial traversable
