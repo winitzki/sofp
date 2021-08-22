@@ -16,6 +16,8 @@ The book is a tutorial exposition of the theoretical knowledge that functional p
 
 ## Related video presentations
 
+[What I learned about functional programming while writing a book about it (extended version)](https://youtu.be/T5oB8PZQNvY)
+
 [Explaining "theorems for free" and parametricity](https://youtu.be/nSyG5USX3-c)
 
 [Explaining Curry-Howard correspondence](https://youtu.be/XYs1Xg1JbVY)

@@ -5,7 +5,7 @@ for a in sofp*tex; do
   test -s $b && {
     echo "Warning: file $a has display math in new paragraphs at lines:"
     cat $b
-    rm -f $b
  }
-# Output consists of several line numbers.
+ rm -f $b
+# Output may contain several line numbers.
 done
