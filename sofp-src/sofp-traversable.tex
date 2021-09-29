@@ -18,7 +18,8 @@ This chapter uses the same approach to study and generalize the \lstinline!reduc
 method. In this way, we will obtain a complete understanding of the
 \lstinline!map!/\lstinline!reduce! programming style.
 
-\subsection{From \texttt{reduce} and \texttt{foldLeft} to \texttt{foldMap}}
+\subsection{\label{subsec:From-reduce-and-foldleft-to-foldmap}From \texttt{reduce}
+and \texttt{foldLeft} to \texttt{foldMap}}
 
 The type signatures of \lstinline!reduce! and \lstinline!foldLeft!
 for a sequence of type \lstinline!Seq! can be written as:
@@ -1659,10 +1660,10 @@ will enter an infinite loop trying to construct a tree of infinite
 size. 
 
 Data structures in a computer\textsf{'}s memory cannot have infinite size.
-To guarantee that unfolding always terminates, we could use a data
-structure that delays the full evaluation of some of its parts. Such
-data structures can simulate \textsf{``}infinite\textsf{''} lists or trees because
-further data items are evaluated only when requested.
+To ensure that unfolding always terminates, we could use a data structure
+that delays the evaluation of some of its parts. Such data structures
+can imitate infinite lists or trees where further data items are evaluated
+on demand.
 
 As an example, consider the recursion scheme $S^{A,R}\triangleq A+(\bbnum 1\rightarrow R\times R)$.
 The corresponding data type $L^{A}\triangleq S^{A,L^{A}}$ is a binary
@@ -1675,15 +1676,15 @@ form {\tiny{}\Tree[ 1 [ 2  [3 ... ] ] ]} with unbounded size:
 \begin{lstlisting}
 type S[A, R] = Either[A, Unit => (R, R)]
 
-sealed trait UT[A]        // A tree of unbounded size.
+sealed trait UT[A]                // A tree with unevaluated branches.
 final case class ULeaf[A](a: A)                          extends UT[A]
 final case class UBranch[A](run: Unit => (UT[A], UT[A])) extends UT[A]
 
 def unfoldUT[A, Z](f: Z => S[A, Z])(init: Z): UT[A] = f(init) match {
   case Left(a)       => ULeaf(a)
-  case Right(func)   => UBranch { _ =>     // It is important to delay the evaluation of func().
+  case Right(func)   => UBranch { _ =>     // It is important to delay the evaluation of func(()).
     val (z1, z2) = func(())
-    (unfoldUT(f)(z1), unfoldUT(f)(z2))
+    (unfoldUT(f)(z1), unfoldUT(f)(z2))     // Unfolding of further branches is also delayed.
   }
 }
 
@@ -1693,22 +1694,33 @@ val tree1toInf = unfoldUT[Int, (Int, Boolean)] { case (z, makeLeaf) =>
 \end{lstlisting}
 The value \lstinline!tree1toInf! is finite but contains a potentially
 unbounded number of leaves computed on demand. To visualize \lstinline!tree1toInf!,
-let us write a function that converts \lstinline!UT[A]! to \lstinline!T2[A]!
+w write a function that converts \lstinline!UT[A]! to \lstinline!T2[A]!
 by stopping at a given maximum depth. The unevaluated parts of the
 tree will be marked with a value called \lstinline!default!:
 \begin{lstlisting}
 def toT2[A](maxDepth: Int, default: A): UT[A] => T2[A] = {
-  case ULeaf(a)        => Leaf(a)
+  case ULeaf(a)        => Leaf(a)e
   case UBranch(func)   => if (maxDepth == 0) Leaf(default) else {
     val (z1, z2) = func(())
     Branch(toT2(maxDepth - 1, default)(z1), toT2(maxDepth - 1, default)(z2))
   }
 }
+\end{lstlisting}
+To test this code, let us truncate the infinite structure \lstinline!tree1toInf!
+at depth $4$. The result is a finite tree of type \lstinline!T2[Int]!,
+where the unevaluated part of the tree is shown as \textsf{``}\lstinline!-1!\textsf{''}: 
 
-scala> toT2(maxDepth = 3, default = -1)
-res0: T2[Int] = Branch(Leaf(1), Branch(Leaf(2), Branch(Leaf(3), Leaf(-1))))
+\begin{wrapfigure}{l}{0.65\columnwidth}%
+\vspace{-0.95\baselineskip}
+\begin{lstlisting}
+scala> toT2(maxDepth = 3, default = -1)(tree1toInf)
+res0: T2[Int] = Branch(Leaf(1), Branch(Leaf(2), Branch(Leaf(3), Branch(Leaf(4), Leaf(-1)))))
 \end{lstlisting}
 
+\vspace{-0.5\baselineskip}
+\end{wrapfigure}%
+
+\noindent ~{\tiny{}\Tree[ 1 [ 2  [3 [ 4 -1 ] ] ] ]}
 
 \subsection{Using recursion schemes. III. Traversing operations}
 
@@ -1797,15 +1809,47 @@ def zipWithDepth[A](tree: T2[A]): T2[(A, Int)] = travS[A, (A, Int), St] {
 }(tree).run(0)._1
 \end{lstlisting}
 To test this code, apply \lstinline!zipWithDepth! to a sample tree
-\lstinline!t2! defined earlier in Sections~\ref{subsec:Decorating-a-tree-breadth-first-traversal}
+\lstinline!t2! used earlier in Sections~\ref{subsec:Decorating-a-tree-breadth-first-traversal}
 and~\ref{subsec:Tasks-not-implementable-via-traverse}:
+
+\begin{wrapfigure}{l}{0.7\columnwidth}%
+\vspace{-0.75\baselineskip}
 \begin{lstlisting}
 scala> zipWithDepth(t2)
 res0: T2[(Int, Int)] = Branch(Branch(Leaf((8,2)), Branch(Leaf((3,3)), Leaf((5,3)))), Leaf((4,1)))
 \end{lstlisting}
 
+\vspace{-0.5\baselineskip}
+\end{wrapfigure}%
+
+\noindent ~{\tiny{}\Tree[ [ (8,2) [ (3,3) (5,3) ] ] (4,1) ]}
+
+\noindent ~
+
+Note that we used the \lstinline!State! monad\textsf{'}s method \lstinline!set(s)!
+with a value \lstinline!s! obtained from a previous monadic computation.
+So, the code involves $\text{trav}_{S}(f)$ with a function $f:S^{A,F^{L^{B}}\rightarrow F^{L^{B}}}$
+whose $F$-effect is \emph{not} equivalent to an applicative functor\textsf{'}s
+effect. We can see that the recursion scheme-based traversal ($\text{trav}_{S}$)
+is more powerful than the plain traversal, $\text{trav}_{L}(f^{:A\rightarrow F^{B}})$,
+that only uses the applicative functor\textsf{'}s methods of $F$.
 
 \subsection{Exercises\index{exercises}}
+
+\subsubsection{Exercise \label{subsec:Exercise-traversables-7-1}\ref{subsec:Exercise-traversables-7-1}}
+
+Implement \lstinline!foldMap! and \lstinline!traverse! for the following
+type constructors:
+
+\textbf{(a)} $F^{A}\triangleq\text{Int}+A+A\times A\quad.$
+
+\textbf{(b)} $F^{A}\triangleq(\text{String}+A)\times(\bbnum 1+A\times A)\quad.$
+
+\textbf{(c)} $F^{A}\triangleq\bbnum 1+A+A\times A\times F^{A}$ (defined
+recursively).
+
+\textbf{(d)} $F^{A}\triangleq(\bbnum 1+F^{A})\times(\bbnum 1+A\times F^{A})$
+(defined recursively).
 
 \subsubsection{Exercise \label{subsec:Exercise-traversables-7}\ref{subsec:Exercise-traversables-7}}
 
@@ -1817,7 +1861,7 @@ with index as {\tiny{} \Tree[ [ (8,3) [ (3,2) (5,1) ] ] (4,0) ] }.
 
 \subsubsection{Exercise \label{subsec:Exercise-traversables-8}\ref{subsec:Exercise-traversables-8}}
 
-Implement a \lstinline!Traversable! instance for the data type \lstinline!T3[A]!
+Implement a \lstinline!Traversable! instance for the data type \lstinline!T3!
 defined in Exercise~\ref{subsec:Exercise-applicative-I-1-1}.
 
 \subsubsection{Exercise \label{subsec:Exercise-traversables-12}\ref{subsec:Exercise-traversables-12}}
@@ -1835,19 +1879,295 @@ res0: Int = 3
 
 \subsubsection{Exercise \label{subsec:Exercise-traversables-11}\ref{subsec:Exercise-traversables-11}}
 
-Consider the data type \lstinline!T3[A]! defined in Exercise~\ref{subsec:Exercise-applicative-I-1-1}.
-For that data type, define a recursion scheme and implement a specialized
-version of \lstinline!unfold! as \lstinline!unfoldT3!. Using \lstinline!unfoldT3!,
-write a function that generates ternary trees of the form {\tiny{}}{\tiny{} \Tree[.3  0  [.2 0   1   0  ]   0  ] }
+For the data type \lstinline!T3[A]! defined in Exercise~\ref{subsec:Exercise-applicative-I-1-1},
+define a recursion scheme and implement a specialized version of \lstinline!unfold!
+as \lstinline!unfoldT3!. Using \lstinline!unfoldT3!, write a function
+that generates ternary trees of the form {\tiny{}}{\tiny{} \Tree[.3  0  [.2 0   1   0  ]   0  ] }
 starting from the given integer $n$ at the root.
 
 \section{Laws and structure}
 
-\subsection{Equivalence of \texttt{foldMap} and \texttt{reduce}}
+To study the laws of the operations of folding and traversing, it
+helps to choose simpler but equivalent versions of these operations.
+We have seen four methods that implement folding operations: \lstinline!foldLeft!,
+\lstinline!foldMap!, \lstinline!reduce!, and \lstinline!toList!.
+With suitable naturality laws, these methods are equivalent.
 
-\subsection{Equivalence of \texttt{reduce} and \texttt{toList}}
+\subsection{Equivalence of \texttt{foldLeft}, \texttt{foldMap}, \texttt{reduce},
+and \texttt{toList}. Monoid morphisms}
 
-\subsection{The difficulty with laws of \texttt{foldMap} and \texttt{reduce}}
+Scala\textsf{'}s standard \lstinline!reduce! method assumes a non-empty sequence
+and will fail otherwise:
+\begin{lstlisting}
+def reduce[A](la: Seq[A])(red: (A, A) => A): A
+\end{lstlisting}
+For the purposes of this section, we will modify \lstinline!reduce!
+to supply a default value for empty sequences:
+\begin{lstlisting}
+def reduceE[A](la: Seq[A])(default: A)(red: (A, A) => A): A =
+if (la.isEmpty) default else reduce(la)(red)
+\end{lstlisting}
+Having a default value of type $A$ and a binary operation of type
+$A\times A\rightarrow A$ suggest that $A$ may be a monoid (assuming
+that the monoid laws hold, see Example~\ref{subsec:tc-Example-Monoids}).
+So, we rewrite the type signature of \lstinline!reduceE! using a
+\lstinline!Monoid! typeclass constraint:
+\begin{lstlisting}
+def reduceE[A: Monoid](la: Seq[A]): A
+\end{lstlisting}
+
+After this change, let us compare the type signatures of the four
+methods:
+\begin{lstlisting}
+def foldLeft[A, B](la: L[A])(init: B)(update: (B, A) => B): B
+def foldMap[M: Monoid, A](f: A => M): L[A] => M
+def reduceE[M: Monoid]: L[M] => M
+def toList[A]: L[A] => List[A]
+\end{lstlisting}
+\begin{align*}
+ & \text{foldLeft}_{L}:L^{A}\rightarrow B\rightarrow(B\times A\rightarrow B)\rightarrow B\quad,\quad\quad\text{foldMap}_{L}:(A\rightarrow M)\rightarrow L^{A}\rightarrow M\quad,\\
+ & \text{reduceE}_{L}:L^{M}\rightarrow M\quad,\quad\quad\text{toList}_{L}:L^{A}\rightarrow\text{List}^{A}\quad.
+\end{align*}
+While \lstinline!toList! has the simplest type signature, \lstinline!foldLeft!
+is used most often. We will now show that these four functions are
+equivalent, assuming certain naturality laws.
+
+The formulation of naturality laws is different for functions whose
+type parameters have typeclass constraints. For example, consider
+\lstinline!reduceE! whose type parameter $M$ is constrained to be
+a monoid. The naturality law for functions $\phi$ with type signature
+$\forall M.\,L^{M}\rightarrow M$ (but without the typeclass constraint)
+is:
+\[
+\text{for all }f^{:M\rightarrow N}\quad:\quad\quad\phi^{:L^{M}\rightarrow M}\bef f=f^{\uparrow L}\bef\phi^{:L^{N}\rightarrow N}\quad.
+\]
+Does this law hold with $\phi=$ \lstinline!reduceE!? Since we would
+need to use \lstinline!reduceE! with type parameters $M$ and $N$,
+those types have to be monoids for the law to make sense. It turns
+out that the law must be used only with functions $f$ that satisfy
+certain conditions with respect to the monoids $M$ and $N$. 
+
+To see why, let us set $L=$ \lstinline!List!. It is reasonable to
+assume that \lstinline!List!\textsf{'}s \lstinline!reduceE! method should
+satisfy the naturality law, as long as we formulate that law correctly.
+We now apply \lstinline!reduceE! to an empty list and to a list with
+two elements of type $M$:
+\[
+\text{reduceE}\left(\left[\right]\right)=e_{M}\quad,\quad\quad\text{reduceE}\left(\left[x,y\right]\right)=x\oplus_{M}y\quad.
+\]
+Similar values are found when \lstinline!reduceE! is used with the
+monoid $N$. Then we have:
+\begin{align*}
+ & \left[\right]\triangleright\text{reduceE}\triangleright f=f(e_{M})\quad,\quad\quad\left[\right]\triangleright f^{\uparrow L}\triangleright\text{reduceE}=\left[\right]\triangleright\text{reduceE}=e_{N}\quad,\\
+ & \left[x,y\right]\triangleright\text{reduceE}\triangleright f=(x\oplus_{M}y)\triangleright f=f(x\oplus_{M}y)\quad,\\
+ & \left[x,y\right]\triangleright f^{\uparrow L}\triangleright\text{reduceE}=\left[f(x),f(y)\right]\triangleright\text{reduceE}=f(x)\oplus_{N}f(y)\quad.
+\end{align*}
+It follows that the law holds for \lstinline!reduceE! only if the
+function $f$ has the properties: 
+\[
+f(e_{M})=e_{N}\quad,\quad\quad f(x\oplus_{M}y)=f(x)\oplus_{N}f(y)\quad.
+\]
+These properties mean that $f:M\rightarrow N$ is compatible with
+the structure of the monoids $M$ and $N$, in the sense that $f$
+maps the empty value $e_{M}$ to the empty value $e_{N}$ and $M$\textsf{'}s
+binary operation to $N$\textsf{'}s. Functions with these properties are called
+\textsf{``}monoid morphisms\textsf{''}:
+
+\subsubsection{Definition \label{subsec:Definition-monoid-morphism}\ref{subsec:Definition-monoid-morphism}}
+
+For any two monoids $M$ and $N$, a function $\phi:M\rightarrow N$
+is a \textbf{monoid morphism}\index{monoid morphism|textit} if $\phi$
+satisfies the following laws:
+\begin{align*}
+{\color{greenunder}\text{identity law}:}\quad & \phi(e_{M})=e_{N}\quad,\\
+{\color{greenunder}\text{composition law}:}\quad & \phi(x^{:M}\oplus_{M}y^{:M})=\phi(x)\oplus_{N}\phi(y)\quad.
+\end{align*}
+
+The \textbf{monoidal naturality law} \index{monoidal naturality law}of
+\lstinline!reduceE! is then formulated as:
+
+\begin{wrapfigure}{l}{0.2\columnwidth}%
+\vspace{-2.05\baselineskip}
+\[
+\xymatrix{\xyScaleY{1.4pc}\xyScaleX{2.8pc}L^{M}\ar[r]\sp(0.5){\ \text{reduceE}\ }\ar[d]\sp(0.45){\,f^{\uparrow L}} & M\ar[d]\sp(0.45){\,f}\\
+L^{N}\ar[r]\sp(0.5){~\text{reduceE}\ } & N
+}
+\]
+\vspace{-0.6\baselineskip}
+\end{wrapfigure}%
+
+~\vspace{-0.4\baselineskip}
+\begin{equation}
+\text{reduceE}\bef f^{:M\rightarrow N}=f^{\uparrow L}\bef\text{reduceE}\quad,\label{eq:monoidal-naturality-law-of-reduceE}
+\end{equation}
+where the types $M$, $N$ must be monoids and $f:M\rightarrow N$
+is an arbitrary monoid morphism between $M$ and $N$. 
+
+The monoidal naturality law expresses a programmer\textsf{'}s expectation that
+the code of \lstinline!reduceE[M]! should work in the same way for
+every monoid \lstinline!M!. The code of \lstinline!reduceE! should
+be fully parametric and may use the monoid \lstinline!M!\textsf{'}s methods
+but may not inspect the type parameter \lstinline!M! via run-time
+reflection or make any decisions based on that. 
+
+With these definitions, we can now give a precise formulation of the
+following equivalences:
+
+\subsubsection{Statement \label{subsec:Statement-foldleft-foldmap-equivalence}\ref{subsec:Statement-foldleft-foldmap-equivalence}}
+
+\textbf{(a)} The functions \lstinline!foldMap! and \lstinline!reduceE!
+are equivalent as long as \lstinline!foldMap! satisfies the naturality
+law with respect to its type parameter $A$.
+
+\textbf{(b)} The functions \lstinline!foldLeft! and \lstinline!reduceE!
+are equivalent as long as the law~(\ref{eq:foldFn-transformation-law})
+shown below holds and \lstinline!reduceE! satisfies the monoidal
+naturality law with respect to its type parameter $M$. 
+
+We will show in Example~\ref{subsec:relational-property-for-foldFn}
+(Appendix~\ref{app:Proofs-of-naturality-parametricity}) that Eq.~(\ref{eq:foldFn-transformation-law})
+is a consequence of parametricity. So, the law~(\ref{eq:foldFn-transformation-law})
+will hold automatically as long as the code of \lstinline!foldLeft!
+is fully parametric.
+
+\subparagraph{Proof}
+
+\textbf{(a)} The equivalence of \lstinline!foldMap! and \lstinline!reduceE!
+follows from Statement~\ref{subsec:Statement-tr-equivalent-to-ftr}
+if we assume that \lstinline!foldMap! satisfies the naturality law
+with respect to the type parameter $A$. To get that equivalence,
+we need to set $F^{A}\triangleq L^{A}$, $G^{B}\triangleq M$, and
+$H^{B}\triangleq M$ in Statement~\ref{subsec:Statement-tr-equivalent-to-ftr}.
+
+\textbf{(b)} A similar equivalence holds for \lstinline!foldLeft!
+if we reformulate its type signature in a form more similar to that
+of \lstinline!foldMap!. We change the order of curried arguments
+in \lstinline!foldLeft! and also replace the updater function of
+type $B\times A\rightarrow B$ by an equivalent curried function of
+type $A\rightarrow B\rightarrow B$ (similarly to what was done in
+Section~\ref{subsec:From-reduce-and-foldleft-to-foldmap}). The result
+is a function we denote by $\text{fldl}_{L}$:
+\begin{align*}
+ & \text{fldl}_{L}^{B}:(A\rightarrow B\rightarrow B)\rightarrow L^{A}\rightarrow B\rightarrow B\quad,\quad\quad\text{fldl}_{L}(u^{:A\rightarrow B\rightarrow B})(p^{:L^{A}})(z^{:B})\triangleq\text{foldLeft}_{L}(p)(z)(\tilde{u})\quad,\\
+ & \text{where we defined}\quad\tilde{u}^{:B\times A\rightarrow B}\triangleq b^{:B}\times a^{:A}\rightarrow u\left(a\right)(b)\quad.
+\end{align*}
+Setting $F^{A}\triangleq L^{A}$, $G^{A}\triangleq B\rightarrow B$,
+and $H^{A}\triangleq B\rightarrow B$ in Statement~\ref{subsec:Statement-tr-equivalent-to-ftr},
+we obtain an equivalence between $\text{fldl}_{L}$ and a function
+with type signature $L^{B\rightarrow B}\rightarrow B\rightarrow B$
+that we will temporarily denote by \lstinline!foldFn! (\textsf{``}fold with
+function\textsf{''}):
+\[
+\text{foldFn}:L^{B\rightarrow B}\rightarrow B\rightarrow B\quad,\quad\quad\text{foldFn}\,(p^{:L^{B\rightarrow B}})\triangleq\text{fldl}_{L}(\text{id}^{:(B\rightarrow B)\rightarrow B\rightarrow B})(p)\quad.
+\]
+
+We will now prove that \lstinline!foldFn! and \lstinline!reduceE!
+are requivalent. The type signatures of these functions are similar
+except \lstinline!foldFn! uses the type $B\rightarrow B$ where \lstinline!reduceE!
+uses an arbitrary monoid $M$ (having an empty value $e_{M}$ and
+a binary operation $\oplus_{M}$). The type of functions $B\rightarrow B$
+is itself a monoid that we will here denote by $\text{MF}^{B}\triangleq B\rightarrow B$.
+The empty value of that monoid is the identity function ($e_{_{\text{MF}^{B}}}=\text{id}^{:B\rightarrow B}$),
+and the binary operation $\ensuremath{\oplus}_{_{\text{MF}^{B}}}$
+is the (forward) function composition: 
+\[
+p^{:B\rightarrow B}\oplus_{_{\text{MF}^{B}}}q^{:B\rightarrow B}\triangleq p\bef q\quad.
+\]
+
+To relate \lstinline!foldFn! and \lstinline!reduceE!, we need to
+map an arbitrary monoid $M$ to the monoid $\text{MF}^{M}$:
+\[
+\text{inMF}:M\rightarrow\text{MF}^{M}\quad,\quad\quad\text{inMF}\left(m\right)\triangleq n^{:M}\rightarrow n\oplus_{M}m\quad.
+\]
+The code of \lstinline!inMF! is just the monoid $M$\textsf{'}s binary operation
+in a flipped and curried form:
+\[
+\text{inMF}:M\rightarrow M\rightarrow M\quad,\quad\quad\text{inMF}\triangleq m\rightarrow n\rightarrow n\oplus_{M}m\quad.
+\]
+In particular, for any value $m^{:M}$ we have, due to the monoid
+$M$\textsf{'}s identity law: 
+\begin{equation}
+\text{inMF}\,(m)(e_{M})=e_{M}\oplus m=m\quad.\label{eq:identity-law-of-inMF}
+\end{equation}
+
+The function \lstinline!inMF! is a monoid morphism because the two
+laws of Definition~\ref{subsec:Definition-monoid-morphism} hold:
+\begin{align*}
+ & \text{inMF}\,(e_{M})=n^{:M}\rightarrow n\oplus_{M}e_{M}=n^{:M}\rightarrow n=\text{id}=e_{_{\text{MF}^{M}}}\quad,\\
+ & \text{inMF}\,(x\oplus_{M}y)=n^{:M}\rightarrow n\oplus_{M}x\oplus_{M}y\quad,\\
+ & \text{inMF}\left(x\right)\oplus_{_{\text{MF}^{M}}}\text{inMF}\left(y\right)=\text{inMF}\left(x\right)\bef\text{inMF}\left(y\right)=(n\rightarrow n\oplus_{M}x)\bef(n\rightarrow n\oplus_{M}y)\\
+ & \quad=n\rightarrow n\oplus_{M}x\oplus_{M}y=\text{inMF}\,(x\oplus_{M}y)\quad.
+\end{align*}
+Because of this, we may use $f\triangleq\text{inMF}$ in the monoidal
+naturality law~(\ref{eq:monoidal-naturality-law-of-reduceE}) of
+\lstinline!reduceE! with monoids $M$ and $N\triangleq\text{MF}^{M}$:
+\begin{equation}
+\text{reduceE}\bef\text{inMF}=\text{inMF}^{\uparrow L}\bef\text{reduceE}\quad.\label{eq:monoidal-naturality-law-of-reduceE-applied-to-inMF}
+\end{equation}
+
+Now we can express \lstinline!foldFn! and \lstinline!reduceE! through
+each other:
+\begin{align}
+ & \text{foldFn}^{B}=\text{reduceE}^{\text{MF}^{B}}\quad\quad\text{where}\quad\quad\text{MF}^{B}\triangleq B\rightarrow B\quad,\label{eq:foldFn-via-reduceE}\\
+ & \text{reduceE}\,(p^{:L^{M}})=\text{foldFn}\,(p\triangleright\text{inMF}^{\uparrow L})(e_{M})\quad.\label{eq:reduceE-via-foldFn}
+\end{align}
+
+It remains to demonstrate the isomorphism between \lstinline!foldFn!
+and \lstinline!reduceE! in both directions.
+
+\textbf{1)} For a given function \lstinline!foldFn! with the type
+signature shown above, we define \lstinline!reduceE! via Eq.~(\ref{eq:reduceE-via-foldFn})
+and then define a new \lstinline!foldFn!$^{\prime}$ via Eq.~(\ref{eq:foldFn-via-reduceE}).
+We need to show that \lstinline!foldFn!$^{\prime}=$ \lstinline!foldFn!:
+\begin{align*}
+ & \text{foldFn}^{\prime}(p^{:L^{B\rightarrow B}})=\text{reduceE}\,(p)=\text{foldFn}\,(p\triangleright\text{inMF}^{\uparrow L})(e_{\text{MF}})\quad.
+\end{align*}
+Here the function \lstinline!inMF! is used with the type signature
+corresponding to the monoid $M\triangleq A\rightarrow A$:
+\begin{align*}
+ & \text{inMF}:\left(B\rightarrow B\right)\rightarrow\text{MF}^{B\rightarrow B}\cong\left(B\rightarrow B\right)\rightarrow\left(B\rightarrow B\right)\rightarrow B\rightarrow B\quad,\\
+ & \text{inMF}\triangleq g^{:B\rightarrow B}\rightarrow h^{:B\rightarrow B}\rightarrow h\bef g\quad,\\
+ & e_{\text{MF}}\triangleq\text{id}^{:\left(B\rightarrow B\right)\rightarrow B\rightarrow B}\quad.
+\end{align*}
+
+We find that $\text{foldFn}^{\prime}(p)=\text{foldFn}\,(p)$ if we
+assume that the following law holds:
+\begin{equation}
+\text{foldFn}^{B}(p^{:L^{B\rightarrow B}})=\text{foldFn}^{B\rightarrow B}(p\triangleright\text{inMF}^{\uparrow L})(e_{\text{MF}})\quad.\label{eq:foldFn-transformation-law}
+\end{equation}
+This special law is a consequence of parametricity (see Example~\ref{subsec:relational-property-for-foldFn}).
+
+\textbf{2)} For a given function \lstinline!reduceE! with the type
+signature shown above, we define \lstinline!foldFn! via Eq.~(\ref{eq:foldFn-via-reduceE})
+and then define a new \lstinline!reduceE!$^{\prime}$ via Eq.~(\ref{eq:reduceE-via-foldFn}).
+We need to show that \lstinline!reduceE!$^{\prime}=$ \lstinline!reduceE!:
+\begin{align*}
+ & \text{reduceE}^{\prime}(p^{:L^{M}})=\text{foldFn}\,(p\triangleright\text{inMF}^{\uparrow L})(e_{M})=\text{reduceE}\,(p\triangleright\text{inMF}^{\uparrow L})(e_{M})\\
+{\color{greenunder}\text{rewrite using }\triangleright\text{-notation}:}\quad & =e_{M}\triangleright\big(p\triangleright\gunderline{\text{inMF}^{\uparrow L}\bef\text{reduceE}}\big)\\
+{\color{greenunder}\text{use Eq.~(\ref{eq:monoidal-naturality-law-of-reduceE-applied-to-inMF})}:}\quad & =e_{M}\triangleright\big(p\triangleright\text{reduceE}\bef\text{inMF}\big)=\gunderline{\text{inMF}}\,(p\triangleright\text{reduceE})\gunderline{(e_{M})}\\
+{\color{greenunder}\text{use Eq.~(\ref{eq:identity-law-of-inMF})}:}\quad & =p\triangleright\text{reduceE}=\text{reduceE}\,(p)\quad.
+\end{align*}
+
+It remains to prove that \lstinline!foldFn! defined via Eq.~(\ref{eq:foldFn-via-reduceE})
+will always satisfy the transformation law~(\ref{eq:foldFn-transformation-law}):
+\begin{align*}
+ & \text{foldFn}\,(p\triangleright\text{inMF}^{\uparrow L})(e_{\text{MF}})=\text{reduceE}\,(p\triangleright\text{inMF}^{\uparrow L})(e_{\text{MF}})\\
+ & =e_{\text{MF}}\triangleright(p\triangleright\gunderline{\text{inMF}^{\uparrow L}\bef\text{reduceE}})\\
+{\color{greenunder}\text{use Eq.~(\ref{eq:monoidal-naturality-law-of-reduceE-applied-to-inMF})}:}\quad & =e_{\text{MF}}\triangleright\big(p\triangleright\text{reduceE}\bef\text{inMF}\big)=\gunderline{\text{inMF}}\,(p\triangleright\text{reduceE})\gunderline{(e_{\text{MF}})}\\
+{\color{greenunder}\text{use Eq.~(\ref{eq:identity-law-of-inMF})}:}\quad & =p\triangleright\text{reduceE}=\text{reduceE}\,(p)=\text{foldFn}\,(p)\quad.
+\end{align*}
+
+
+\subsubsection{Statement \label{subsec:Statement-reduceE-toList-equivalence}\ref{subsec:Statement-reduceE-toList-equivalence}}
+
+The functions \lstinline!reduceE! and \lstinline!toList! are equivalent
+as long as \lstinline!reduceE! obeys the monoidal naturality law~(\ref{eq:monoidal-naturality-law-of-reduceE}).
+
+\subparagraph{Proof}
+
+{*}{*}{*}
+
+\subsection{The difficulty with the laws of \texttt{foldMap} and \texttt{reduce}}
 
 The type signature of the \lstinline!foldMap! function resembles
 that of a lifting but the type of arrows $A\rightarrow Z$ does not
@@ -1861,9 +2181,9 @@ To express this rigorously, we define \textsf{``}monoidal naturality\textsf{''}.
 
 {*}{*}{*}
 
-\subsection{Laws of \texttt{traverse}}
-
 \subsection{Equivalence of \texttt{traverse} and \texttt{sequence}}
+
+\subsection{Laws of \texttt{traverse} and \texttt{sequence}}
 
 \subsection{Constructions of traversable functors}
 
@@ -2216,20 +2536,6 @@ suitable bifunctor $S^{X,Y}$.
 
 Is the recursive type constructor $L^{A}\triangleq A+L^{\text{List}^{A}}$
 traversable? Explain via examples what sort of data container it is.
-
-The following definition is used in the next few exercises:
-
-\subsubsection{Definition \label{subsec:Definition-monoid-morphism}\ref{subsec:Definition-monoid-morphism}}
-
-For any two monoids $M$ and $N$, a function $\phi:M\rightarrow N$
-is called a \textbf{monoid morphism}\index{monoid morphism|textit}
-if $\phi$ satisfies the following two laws:
-\begin{align*}
-{\color{greenunder}\text{identity law}:}\quad & \phi(e_{M})=e_{N}\quad,\\
-{\color{greenunder}\text{composition law}:}\quad & \phi(p\oplus_{M}q)=\phi(p)\oplus_{N}\phi(q)\quad.
-\end{align*}
-These laws mean that $\phi$ translates the operations of $M$ into
-the operations of $N$.
 
 \subsubsection{Exercise \label{subsec:Exercise-traversables-10-2}\ref{subsec:Exercise-traversables-10-2}}
 
