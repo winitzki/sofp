@@ -6,10 +6,10 @@
 name="sofp"
 
 # Expected total number of pages in the book draft:
-draft_pages=736
+draft_pages=737
 
 # The number of pages in each chapter:
-pagecounts=(3 17 42 34 24 49 43 12 63 54 63 62 28 27 148 4 5 6 3 6 6 3 5 48 18 1 2 1 1 7)
+pagecounts=(3 17 42 34 24 49 43 12 63 54 63 62 28 27 148 4 5 6 3 6 6 3 5 49 18 1 2 1 1 7)
 
 # To create the draft version that contains only proofread chapters:
 # cut out from here, including:
