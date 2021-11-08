@@ -6,10 +6,10 @@
 name="sofp"
 
 # Expected total number of pages in the book draft:
-draft_pages=737
+draft_pages=738
 
 # The number of pages in each chapter:
-pagecounts=(3 17 42 34 24 49 43 12 63 54 63 62 34 27 148 4 5 6 3 6 6 3 5 49 18 1 2 1 1 7)
+pagecounts=(3 17 42 34 24 49 43 12 63 54 63 62 38 27 148 5 5 6 3 6 6 3 5 49 19 1 2 1 1 7)
 
 # To create the draft version that contains only proofread chapters:
 # cut out from here, including:
@@ -17,7 +17,7 @@ draft_title_1="Traversable functors"
 # to here, not including:
 draft_title_2="Computations in functor blocks. III."
 # and then cut out from here, including:
-draft_title_3="Summary and problems"
+draft_title_3="Summary of the book"
 # to here, not including:
 draft_title_4="Applied functional type theory"
 # and then cut out from here, including:
@@ -34,7 +34,7 @@ chapters=("Preface" "Mathematical formulas as code. I." \
  "Reasoning about code." "Typeclasses and functions of types" "Computations in functor blocks. I." \
  "Computations in functor blocks. II." "Applicative functors and contrafunctors" \
  "Traversable functors" "Free typeclass constructions" "Computations in functor blocks. III." \
- "Summary and problems" \
+ "Summary of the book" \
  "\`\`Applied functional type theory'': A proposal" "Essay: Software engineers and software artisans" \
  "Essay: Towards functional data engineering with Scala" "Essay: Why category theory" \
  "A Notations" "B Glossary of terms" "C Inferring code from types" \
