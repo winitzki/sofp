@@ -18,7 +18,8 @@ This chapter uses the same approach to study and generalize the \lstinline!reduc
 method. In this way, we will obtain a complete understanding of the
 \lstinline!map!/\lstinline!reduce! programming style.
 
-\subsection{From \texttt{reduce} and \texttt{foldLeft} to \texttt{foldMap}}
+\subsection{\label{subsec:From-reduce-and-foldleft-to-foldmap}From \texttt{reduce}
+and \texttt{foldLeft} to \texttt{foldMap}}
 
 The type signatures of \lstinline!reduce! and \lstinline!foldLeft!
 for a sequence of type \lstinline!Seq! can be written as:
@@ -1463,7 +1464,7 @@ How can we implement the function $f$? It should return \lstinline!None!
 (denoted by $1+\bbnum 0$) when the list is finished. When we are
 in the middle of generating the list, the call $f(z)$ should return
 $\bbnum 0+a\times z^{\prime}$ with some values $a$ and $z^{\prime}$.
-The value $a$ must be the new element of the list; the value $z^{\prime}$
+The value $a$ must be the new element of the list. The value $z^{\prime}$
 will be passed to the next call of $f$. Since the next element must
 be twice the previous one, we must have $a=z$ and $z^{\prime}=2*z$.
 So, the code of $f$ is:
@@ -1659,10 +1660,10 @@ will enter an infinite loop trying to construct a tree of infinite
 size. 
 
 Data structures in a computer\textsf{'}s memory cannot have infinite size.
-To guarantee that unfolding always terminates, we could use a data
-structure that delays the full evaluation of some of its parts. Such
-data structures can simulate \textsf{``}infinite\textsf{''} lists or trees because
-further data items are evaluated only when requested.
+To ensure that unfolding always terminates, we could use a data structure
+that delays the evaluation of some of its parts. Such data structures
+can imitate infinite lists or trees where further data items are evaluated
+on demand.
 
 As an example, consider the recursion scheme $S^{A,R}\triangleq A+(\bbnum 1\rightarrow R\times R)$.
 The corresponding data type $L^{A}\triangleq S^{A,L^{A}}$ is a binary
@@ -1675,15 +1676,15 @@ form {\tiny{}\Tree[ 1 [ 2  [3 ... ] ] ]} with unbounded size:
 \begin{lstlisting}
 type S[A, R] = Either[A, Unit => (R, R)]
 
-sealed trait UT[A]        // A tree of unbounded size.
+sealed trait UT[A]                // A tree with unevaluated branches.
 final case class ULeaf[A](a: A)                          extends UT[A]
 final case class UBranch[A](run: Unit => (UT[A], UT[A])) extends UT[A]
 
 def unfoldUT[A, Z](f: Z => S[A, Z])(init: Z): UT[A] = f(init) match {
   case Left(a)       => ULeaf(a)
-  case Right(func)   => UBranch { _ =>     // It is important to delay the evaluation of func().
+  case Right(func)   => UBranch { _ =>     // It is important to delay the evaluation of func(()).
     val (z1, z2) = func(())
-    (unfoldUT(f)(z1), unfoldUT(f)(z2))
+    (unfoldUT(f)(z1), unfoldUT(f)(z2))     // Unfolding of further branches is also delayed.
   }
 }
 
@@ -1693,22 +1694,33 @@ val tree1toInf = unfoldUT[Int, (Int, Boolean)] { case (z, makeLeaf) =>
 \end{lstlisting}
 The value \lstinline!tree1toInf! is finite but contains a potentially
 unbounded number of leaves computed on demand. To visualize \lstinline!tree1toInf!,
-let us write a function that converts \lstinline!UT[A]! to \lstinline!T2[A]!
+w write a function that converts \lstinline!UT[A]! to \lstinline!T2[A]!
 by stopping at a given maximum depth. The unevaluated parts of the
 tree will be marked with a value called \lstinline!default!:
 \begin{lstlisting}
 def toT2[A](maxDepth: Int, default: A): UT[A] => T2[A] = {
-  case ULeaf(a)        => Leaf(a)
+  case ULeaf(a)        => Leaf(a)e
   case UBranch(func)   => if (maxDepth == 0) Leaf(default) else {
     val (z1, z2) = func(())
     Branch(toT2(maxDepth - 1, default)(z1), toT2(maxDepth - 1, default)(z2))
   }
 }
+\end{lstlisting}
+To test this code, let us truncate the infinite structure \lstinline!tree1toInf!
+at depth $4$. The result is a finite tree of type \lstinline!T2[Int]!,
+where the unevaluated part of the tree is shown as \textsf{``}\lstinline!-1!\textsf{''}: 
 
-scala> toT2(maxDepth = 3, default = -1)
-res0: T2[Int] = Branch(Leaf(1), Branch(Leaf(2), Branch(Leaf(3), Leaf(-1))))
+\begin{wrapfigure}{l}{0.65\columnwidth}%
+\vspace{-0.95\baselineskip}
+\begin{lstlisting}
+scala> toT2(maxDepth = 3, default = -1)(tree1toInf)
+res0: T2[Int] = Branch(Leaf(1), Branch(Leaf(2), Branch(Leaf(3), Branch(Leaf(4), Leaf(-1)))))
 \end{lstlisting}
 
+\vspace{-0.5\baselineskip}
+\end{wrapfigure}%
+
+\noindent ~{\tiny{}\Tree[ 1 [ 2  [3 [ 4 -1 ] ] ] ]}
 
 \subsection{Using recursion schemes. III. Traversing operations}
 
@@ -1797,103 +1809,1161 @@ def zipWithDepth[A](tree: T2[A]): T2[(A, Int)] = travS[A, (A, Int), St] {
 }(tree).run(0)._1
 \end{lstlisting}
 To test this code, apply \lstinline!zipWithDepth! to a sample tree
-\lstinline!t2! defined earlier in Sections~\ref{subsec:Decorating-a-tree-breadth-first-traversal}
+\lstinline!t2! used earlier in Sections~\ref{subsec:Decorating-a-tree-breadth-first-traversal}
 and~\ref{subsec:Tasks-not-implementable-via-traverse}:
+
+\begin{wrapfigure}{l}{0.7\columnwidth}%
+\vspace{-0.75\baselineskip}
 \begin{lstlisting}
 scala> zipWithDepth(t2)
 res0: T2[(Int, Int)] = Branch(Branch(Leaf((8,2)), Branch(Leaf((3,3)), Leaf((5,3)))), Leaf((4,1)))
 \end{lstlisting}
 
+\vspace{-0.5\baselineskip}
+\end{wrapfigure}%
+
+\noindent ~{\tiny{}\Tree[ [ (8,2) [ (3,3) (5,3) ] ] (4,1) ]}
+
+\noindent ~
+
+Note that we used the \lstinline!State! monad\textsf{'}s method \lstinline!set(s)!
+with a value \lstinline!s! obtained from a previous monadic computation.
+So, the code involves $\text{trav}_{S}(f)$ with a function $f:S^{A,F^{L^{B}}\rightarrow F^{L^{B}}}$
+whose $F$-effect is \emph{not} equivalent to an applicative functor\textsf{'}s
+effect. We can see that the recursion scheme-based traversal ($\text{trav}_{S}$)
+is more powerful than the plain traversal, $\text{trav}_{L}(f^{:A\rightarrow F^{B}})$,
+that only uses the applicative functor\textsf{'}s methods of $F$.
 
 \subsection{Exercises\index{exercises}}
+
+\subsubsection{Exercise \label{subsec:Exercise-traversables-7-1}\ref{subsec:Exercise-traversables-7-1}}
+
+Implement \lstinline!foldMap! and \lstinline!traverse! for the following
+type constructors:
+
+\textbf{(a)} $F^{A}\triangleq\text{Int}+A+A\times A\quad.$
+
+\textbf{(b)} $F^{A}\triangleq(\text{String}+A)\times(\bbnum 1+A\times A)\quad.$
+
+\textbf{(c)} $F^{A}\triangleq\bbnum 1+A+A\times A\times F^{A}$ (defined
+recursively).
+
+\textbf{(d)} $F^{A}\triangleq(\bbnum 1+F^{A})\times(\bbnum 1+A\times F^{A})$
+(defined recursively).
+
+\subsubsection{Exercise \label{subsec:Exercise-traversables-7}\ref{subsec:Exercise-traversables-7}}
+
+For the binary tree \lstinline!T2[A]! (Section~\ref{subsec:Recursion-schemes.-folding}),
+implement a \lstinline!Traversable! instance for right-to-left depth-first
+traversal order. Use that to implement \lstinline!zipWithIndex!,
+and test that the tree {\tiny{} \Tree[ [ 8 [ 3 5 ] ] 4 ] } is decorated
+with index as {\tiny{} \Tree[ [ (8,3) [ (3,2) (5,1) ] ] (4,0) ] }.
+
+\subsubsection{Exercise \label{subsec:Exercise-traversables-8}\ref{subsec:Exercise-traversables-8}}
+
+Implement a \lstinline!Traversable! instance for the data type \lstinline!T3!
+defined in Exercise~\ref{subsec:Exercise-applicative-I-1-1}.
+
+\subsubsection{Exercise \label{subsec:Exercise-traversables-12}\ref{subsec:Exercise-traversables-12}}
+
+Use the specialized version of $\text{fold}_{S}$ for the binary tree
+\lstinline!T2[A]! (Section~\ref{subsec:Recursion-schemes.-folding})
+to compute the maximum depth of a tree:
+\begin{lstlisting}
+def maxDepth[A](tree: T2[A]): Int = foldT2(???)(???)
+
+scala> maxDepth(Branch(Leaf(0), Branch(Branch(Leaf(0), Leaf(0)), Leaf(0))))
+res0: Int = 3
+\end{lstlisting}
+
+
+\subsubsection{Exercise \label{subsec:Exercise-traversables-11}\ref{subsec:Exercise-traversables-11}}
+
+For the data type \lstinline!T3[A]! defined in Exercise~\ref{subsec:Exercise-applicative-I-1-1},
+define a recursion scheme and implement a specialized version of \lstinline!unfold!
+as \lstinline!unfoldT3!. Using \lstinline!unfoldT3!, write a function
+that generates ternary trees of the form {\tiny{}}{\tiny{} \Tree[.3  0  [.2 0   1   0  ]   0  ] }
+starting from the given integer $n$ at the root.
 
 \section{Laws and structure}
 
-\subsection{Equivalence of \texttt{foldMap} and \texttt{reduce}}
+To study the laws of the operations of folding and traversing, it
+helps to choose simpler but equivalent versions of these operations.
+We have seen four methods that implement folding operations: \lstinline!foldLeft!,
+\lstinline!foldMap!, \lstinline!reduce!, and \lstinline!toList!.
+With suitable naturality laws, these methods are equivalent.
 
-\subsection{Equivalence of \texttt{reduce} and \texttt{toList}}
+\subsection{Equivalence of \texttt{foldLeft}, \texttt{foldMap}, \texttt{reduce},
+and \texttt{toList}. Monoid morphisms\label{subsec:Equivalence-of-foldLeft,foldMap,reduce,and-toList}}
 
-\subsection{The difficulty with laws of \texttt{foldMap} and \texttt{reduce}}
+Scala\textsf{'}s standard \lstinline!reduce! method assumes a non-empty sequence
+and will fail otherwise:
+\begin{lstlisting}
+def reduce[A](la: Seq[A])(red: (A, A) => A): A
+\end{lstlisting}
+For the purposes of this section, we will modify \lstinline!reduce!
+to supply a default value for empty sequences:
+\begin{lstlisting}
+def reduceE[A](la: Seq[A])(default: A)(red: (A, A) => A): A =
+if (la.isEmpty) default else reduce(la)(red)
+\end{lstlisting}
+Having a default value of type $A$ and a binary operation of type
+$A\times A\rightarrow A$ suggest that $A$ may be a monoid (assuming
+that the monoid laws hold, see Example~\ref{subsec:tc-Example-Monoids}).
+So, we rewrite the type signature of \lstinline!reduceE! using a
+\lstinline!Monoid! typeclass constraint:
+\begin{lstlisting}
+def reduceE[A: Monoid](la: Seq[A]): A
+\end{lstlisting}
 
-The type signature of the \lstinline!foldMap! function resembles
-that of a lifting but the type of arrows $A\rightarrow Z$ does not
-support composition. (We would need to compose $A\rightarrow Z$ with
-$B\rightarrow Z$ to obtain some $C\rightarrow Z$, which does not
-make sense in terms of category theory.)
+After this change, let us compare the type signatures of the four
+methods:
+\begin{lstlisting}
+def foldLeft[A, B](la: L[A])(init: B)(update: (B, A) => B): B
+def foldMap[M: Monoid, A](f: A => M): L[A] => M
+def reduceE[M: Monoid]: L[M] => M
+def toList[A]: L[A] => List[A]
+\end{lstlisting}
+\begin{align*}
+ & \text{foldLeft}_{L}:L^{A}\rightarrow B\rightarrow(B\times A\rightarrow B)\rightarrow B\quad,\quad\quad\text{foldMap}_{L}:(A\rightarrow M)\rightarrow L^{A}\rightarrow M\quad,\\
+ & \text{reduceE}_{L}:L^{M}\rightarrow M\quad,\quad\quad\text{toList}_{L}:L^{A}\rightarrow\text{List}^{A}\quad.
+\end{align*}
+While \lstinline!toList! has the simplest type signature, \lstinline!foldLeft!
+is used most often. We will now show that these four functions are
+equivalent, assuming certain naturality laws.
 
-We do have the laws of naturality with respect to $A$ and $Z$. The
-naturality laws must respect the constraint that $Z$ is a monoid.
-To express this rigorously, we define \textsf{``}monoidal naturality\textsf{''}. 
+The formulation of naturality laws is different for functions whose
+type parameters have typeclass constraints. For example, consider
+\lstinline!reduceE! whose type parameter $M$ is constrained to be
+a monoid. The naturality law for functions $\phi$ with type signature
+$\forall M.\,L^{M}\rightarrow M$ (but without the typeclass constraint)
+is:
+\[
+\text{for all }f^{:M\rightarrow N}\quad:\quad\quad\phi^{:L^{M}\rightarrow M}\bef f=f^{\uparrow L}\bef\phi^{:L^{N}\rightarrow N}\quad.
+\]
+Does this law hold with $\phi=$ \lstinline!reduceE!? Since we would
+need to use \lstinline!reduceE! with type parameters $M$ and $N$,
+those types have to be monoids for the law to make sense. It turns
+out that the law must be used only with functions $f$ that satisfy
+certain conditions with respect to the monoids $M$ and $N$. 
+
+To see why, let us set $L=$ \lstinline!List!. It is reasonable to
+assume that \lstinline!List!\textsf{'}s \lstinline!reduceE! method should
+satisfy the naturality law, as long as we formulate that law correctly.
+We now apply \lstinline!reduceE! to an empty list and to a list with
+two elements of type $M$:
+\[
+\text{reduceE}\left(\left[\right]\right)=e_{M}\quad,\quad\quad\text{reduceE}\left(\left[x,y\right]\right)=x\oplus_{M}y\quad.
+\]
+Similar values are found when \lstinline!reduceE! is used with the
+monoid $N$. Then we have:
+\begin{align*}
+ & \left[\right]\triangleright\text{reduceE}\triangleright f=f(e_{M})\quad,\quad\quad\left[\right]\triangleright f^{\uparrow L}\triangleright\text{reduceE}=\left[\right]\triangleright\text{reduceE}=e_{N}\quad,\\
+ & \left[x,y\right]\triangleright\text{reduceE}\triangleright f=(x\oplus_{M}y)\triangleright f=f(x\oplus_{M}y)\quad,\\
+ & \left[x,y\right]\triangleright f^{\uparrow L}\triangleright\text{reduceE}=\left[f(x),f(y)\right]\triangleright\text{reduceE}=f(x)\oplus_{N}f(y)\quad.
+\end{align*}
+It follows that the law holds for \lstinline!reduceE! only if the
+function $f$ has the properties: 
+\[
+f(e_{M})=e_{N}\quad,\quad\quad f(x\oplus_{M}y)=f(x)\oplus_{N}f(y)\quad.
+\]
+These properties mean that $f:M\rightarrow N$ is compatible with
+the structure of the monoids $M$ and $N$, in the sense that $f$
+maps the empty value $e_{M}$ to the empty value $e_{N}$ and $M$\textsf{'}s
+binary operation to $N$\textsf{'}s. Functions with these properties are called
+\textsf{``}monoid morphisms\textsf{''}:
+
+\subsubsection{Definition \label{subsec:Definition-monoid-morphism}\ref{subsec:Definition-monoid-morphism}}
+
+For any two monoids $M$ and $N$, a function $\phi:M\rightarrow N$
+is a \textbf{monoid morphism}\index{monoid morphism|textit} if $\phi$
+satisfies the following laws:
+\begin{align*}
+{\color{greenunder}\text{identity law}:}\quad & \phi(e_{M})=e_{N}\quad,\\
+{\color{greenunder}\text{composition law}:}\quad & \phi(x^{:M}\oplus_{M}y^{:M})=\phi(x)\oplus_{N}\phi(y)\quad.
+\end{align*}
+
+The \textbf{monoidal naturality law} \index{monoidal naturality law}of
+\lstinline!reduceE! is then formulated as:
+
+\begin{wrapfigure}{l}{0.2\columnwidth}%
+\vspace{-2.05\baselineskip}
+\[
+\xymatrix{\xyScaleY{1.4pc}\xyScaleX{2.8pc}L^{M}\ar[r]\sp(0.5){\ \text{reduceE}\ }\ar[d]\sp(0.45){\,f^{\uparrow L}} & M\ar[d]\sp(0.45){\,f}\\
+L^{N}\ar[r]\sp(0.5){~\text{reduceE}\ } & N
+}
+\]
+\vspace{-0.6\baselineskip}
+\end{wrapfigure}%
+
+~\vspace{-0.4\baselineskip}
+\begin{equation}
+\text{reduceE}\bef f^{:M\rightarrow N}=f^{\uparrow L}\bef\text{reduceE}\quad,\label{eq:monoidal-naturality-law-of-reduceE}
+\end{equation}
+where the types $M$, $N$ must be monoids and $f:M\rightarrow N$
+is an arbitrary monoid morphism between $M$ and $N$. 
+
+The monoidal naturality law expresses a programmer\textsf{'}s expectation that
+the code of \lstinline!reduceE[M]! should work in the same way for
+every monoid \lstinline!M!. The code of \lstinline!reduceE! should
+be fully parametric and may use the monoid \lstinline!M!\textsf{'}s methods
+but may not inspect the type parameter \lstinline!M! via run-time
+reflection or make any decisions based on that. 
+
+With these definitions, we can now give a precise formulation of the
+following equivalences:
+
+\subsubsection{Statement \label{subsec:Statement-foldleft-foldmap-equivalence}\ref{subsec:Statement-foldleft-foldmap-equivalence}}
+
+\textbf{(a)} The functions \lstinline!foldMap! and \lstinline!reduceE!
+are equivalent as long as \lstinline!foldMap! satisfies the naturality
+law with respect to its type parameter $A$.
+
+\textbf{(b)} The functions \lstinline!foldLeft! and \lstinline!reduceE!
+are equivalent as long as the law~(\ref{eq:foldFn-transformation-law})
+shown below holds and \lstinline!reduceE! satisfies the monoidal
+naturality law with respect to its type parameter $M$. 
+
+We will show in Example~\ref{subsec:relational-property-for-foldFn}
+(Appendix~\ref{app:Proofs-of-naturality-parametricity}) that Eq.~(\ref{eq:foldFn-transformation-law})
+is a consequence of parametricity. So, the law~(\ref{eq:foldFn-transformation-law})
+will hold automatically as long as the code of \lstinline!foldLeft!
+is fully parametric.
+
+\subparagraph{Proof}
+
+\textbf{(a)} The equivalence of \lstinline!foldMap! and \lstinline!reduceE!
+follows from Statement~\ref{subsec:Statement-tr-equivalent-to-ftr}
+if we assume that \lstinline!foldMap! satisfies the naturality law
+with respect to the type parameter $A$. To get that equivalence,
+we need to set $F^{A}\triangleq L^{A}$, $G^{B}\triangleq M$, and
+$H^{B}\triangleq M$ in Statement~\ref{subsec:Statement-tr-equivalent-to-ftr}.
+
+\textbf{(b)} A similar equivalence holds for \lstinline!foldLeft!
+if we reformulate its type signature in a form more similar to that
+of \lstinline!foldMap!. We change the order of curried arguments
+in \lstinline!foldLeft! and also replace the updater function of
+type $B\times A\rightarrow B$ by an equivalent curried function of
+type $A\rightarrow B\rightarrow B$ (similarly to what was done in
+Section~\ref{subsec:From-reduce-and-foldleft-to-foldmap}). The result
+is a function we denote by $\text{fldl}_{L}$:
+\begin{align*}
+ & \text{fldl}_{L}^{B}:(A\rightarrow B\rightarrow B)\rightarrow L^{A}\rightarrow B\rightarrow B\quad,\quad\quad\text{fldl}_{L}(u^{:A\rightarrow B\rightarrow B})(p^{:L^{A}})(z^{:B})\triangleq\text{foldLeft}_{L}(p)(z)(\tilde{u})\quad,\\
+ & \text{where we defined}\quad\tilde{u}^{:B\times A\rightarrow B}\triangleq b^{:B}\times a^{:A}\rightarrow u\left(a\right)(b)\quad.
+\end{align*}
+Setting $F^{A}\triangleq L^{A}$, $G^{A}\triangleq B\rightarrow B$,
+and $H^{A}\triangleq B\rightarrow B$ in Statement~\ref{subsec:Statement-tr-equivalent-to-ftr},
+we obtain an equivalence between $\text{fldl}_{L}$ and a function
+with type signature $L^{B\rightarrow B}\rightarrow B\rightarrow B$
+that we will temporarily denote by \lstinline!foldFn! (\textsf{``}fold with
+function\textsf{''}):
+\[
+\text{foldFn}:L^{B\rightarrow B}\rightarrow B\rightarrow B\quad,\quad\quad\text{foldFn}\,(p^{:L^{B\rightarrow B}})\triangleq\text{fldl}_{L}(\text{id}^{:(B\rightarrow B)\rightarrow B\rightarrow B})(p)\quad.
+\]
+
+We will now prove that \lstinline!foldFn! and \lstinline!reduceE!
+are equivalent. The type signatures of these functions are similar
+except \lstinline!foldFn! uses the type $B\rightarrow B$ where \lstinline!reduceE!
+uses an arbitrary monoid $M$ (having an empty value $e_{M}$ and
+a binary operation $\oplus_{M}$). The type of functions $B\rightarrow B$
+is itself a monoid that we here denote by $\text{MF}^{B}\triangleq B\rightarrow B$.
+The empty value of that monoid is the identity function ($e_{_{\text{MF}^{B}}}=\text{id}^{:B\rightarrow B}$),
+and the binary operation $\ensuremath{\oplus}_{_{\text{MF}^{B}}}$
+is the (forward) function composition: 
+\[
+p^{:B\rightarrow B}\oplus_{_{\text{MF}^{B}}}q^{:B\rightarrow B}\triangleq p\bef q\quad.
+\]
+
+To relate \lstinline!foldFn! and \lstinline!reduceE!, we need to
+map an arbitrary monoid $M$ to the monoid $\text{MF}^{M}$:
+\[
+\text{inMF}:M\rightarrow\text{MF}^{M}\quad,\quad\quad\text{inMF}\left(m\right)\triangleq n^{:M}\rightarrow n\oplus_{M}m\quad.
+\]
+The code of \lstinline!inMF! is just the monoid $M$\textsf{'}s binary operation
+in a flipped and curried form:
+\[
+\text{inMF}:M\rightarrow M\rightarrow M\quad,\quad\quad\text{inMF}\triangleq m\rightarrow n\rightarrow n\oplus_{M}m\quad.
+\]
+In particular, for any value $m^{:M}$ we have, due to the monoid
+$M$\textsf{'}s identity law: 
+\begin{equation}
+\text{inMF}\,(m)(e_{M})=e_{M}\oplus m=m\quad.\label{eq:identity-law-of-inMF}
+\end{equation}
+
+The function \lstinline!inMF! is a monoid morphism because the two
+laws of Definition~\ref{subsec:Definition-monoid-morphism} hold:
+\begin{align*}
+ & \text{inMF}\,(e_{M})=n^{:M}\rightarrow n\oplus_{M}e_{M}=n^{:M}\rightarrow n=\text{id}=e_{_{\text{MF}^{M}}}\quad,\\
+ & \text{inMF}\,(x\oplus_{M}y)=n^{:M}\rightarrow n\oplus_{M}x\oplus_{M}y\quad,\\
+ & \text{inMF}\left(x\right)\oplus_{_{\text{MF}^{M}}}\text{inMF}\left(y\right)=\text{inMF}\left(x\right)\bef\text{inMF}\left(y\right)=(n\rightarrow n\oplus_{M}x)\bef(n\rightarrow n\oplus_{M}y)\\
+ & \quad=n\rightarrow n\oplus_{M}x\oplus_{M}y=\text{inMF}\,(x\oplus_{M}y)\quad.
+\end{align*}
+Because of this, we may use $f\triangleq\text{inMF}$ in the monoidal
+naturality law~(\ref{eq:monoidal-naturality-law-of-reduceE}) of
+\lstinline!reduceE! with monoids $M$ and $N\triangleq\text{MF}^{M}$:
+\begin{equation}
+\text{reduceE}\bef\text{inMF}=\text{inMF}^{\uparrow L}\bef\text{reduceE}\quad.\label{eq:monoidal-naturality-law-of-reduceE-applied-to-inMF}
+\end{equation}
+
+Now we can express \lstinline!foldFn! and \lstinline!reduceE! through
+each other:
+\begin{align}
+ & \text{foldFn}^{B}=\text{reduceE}^{\text{MF}^{B}}\quad\quad\text{where}\quad\quad\text{MF}^{B}\triangleq B\rightarrow B\quad,\label{eq:foldFn-via-reduceE}\\
+ & \text{reduceE}\,(p^{:L^{M}})=\text{foldFn}\,(p\triangleright\text{inMF}^{\uparrow L})(e_{M})\quad.\label{eq:reduceE-via-foldFn}
+\end{align}
+
+It remains to demonstrate the isomorphism between \lstinline!foldFn!
+and \lstinline!reduceE! in both directions.
+
+\textbf{1)} For a given function \lstinline!foldFn! with the type
+signature shown above, we define \lstinline!reduceE! via Eq.~(\ref{eq:reduceE-via-foldFn})
+and then define a new \lstinline!foldFn!$^{\prime}$ via Eq.~(\ref{eq:foldFn-via-reduceE}).
+We need to show that \lstinline!foldFn!$^{\prime}=$ \lstinline!foldFn!:
+\begin{align*}
+ & \text{foldFn}^{\prime}(p^{:L^{B\rightarrow B}})=\text{reduceE}\,(p)=\text{foldFn}\,(p\triangleright\text{inMF}^{\uparrow L})(e_{M})\quad.
+\end{align*}
+Here the function \lstinline!inMF! is used with the type signature
+corresponding to the monoid $M\triangleq B\rightarrow B$:
+\begin{align*}
+ & \text{inMF}:\left(B\rightarrow B\right)\rightarrow\text{MF}^{B\rightarrow B}\cong\left(B\rightarrow B\right)\rightarrow\left(B\rightarrow B\right)\rightarrow B\rightarrow B\quad,\\
+ & \text{inMF}\triangleq g^{:B\rightarrow B}\rightarrow h^{:B\rightarrow B}\rightarrow h\bef g\quad,\quad\quad e_{\text{MF}}\triangleq\text{id}^{:B\rightarrow B}.
+\end{align*}
+
+We find that $\text{foldFn}^{\prime}(p)=\text{foldFn}\,(p)$ if we
+assume that the following law holds:
+\begin{equation}
+\text{foldFn}^{B}(p^{:L^{B\rightarrow B}})=\text{foldFn}^{B\rightarrow B}(p\triangleright\text{inMF}^{\uparrow L})(\text{id}^{:B\rightarrow B})\quad.\label{eq:foldFn-transformation-law}
+\end{equation}
+This special law is a consequence of parametricity, as shown in Example~\ref{subsec:relational-property-for-foldFn}.
+
+\textbf{2)} For a given function \lstinline!reduceE! with the type
+signature shown above, we define \lstinline!foldFn! via Eq.~(\ref{eq:foldFn-via-reduceE})
+and then define a new \lstinline!reduceE!$^{\prime}$ via Eq.~(\ref{eq:reduceE-via-foldFn}).
+We need to show that \lstinline!reduceE!$^{\prime}=$ \lstinline!reduceE!:
+\begin{align*}
+{\color{greenunder}\text{expect to equal }\text{reduceE}\left(p\right):}\quad & \text{reduceE}^{\prime}(p^{:L^{M}})=\text{foldFn}\,(p\triangleright\text{inMF}^{\uparrow L})(e_{M})=\text{reduceE}\,(p\triangleright\text{inMF}^{\uparrow L})(e_{M})\\
+{\color{greenunder}\text{rewrite using }\triangleright\text{-notation}:}\quad & =e_{M}\triangleright\big(p\triangleright\gunderline{\text{inMF}^{\uparrow L}\bef\text{reduceE}}\big)\\
+{\color{greenunder}\text{use Eq.~(\ref{eq:monoidal-naturality-law-of-reduceE-applied-to-inMF})}:}\quad & =e_{M}\triangleright\big(p\triangleright\text{reduceE}\bef\text{inMF}\big)=\gunderline{\text{inMF}}\,(p\triangleright\text{reduceE})\gunderline{(e_{M})}\\
+{\color{greenunder}\text{use Eq.~(\ref{eq:identity-law-of-inMF})}:}\quad & =p\triangleright\text{reduceE}=\text{reduceE}\,(p)\quad.
+\end{align*}
+
+It remains to prove that \lstinline!foldFn! defined via Eq.~(\ref{eq:foldFn-via-reduceE})
+will always satisfy the transformation law~(\ref{eq:foldFn-transformation-law}):
+\begin{align*}
+{\color{greenunder}\text{expect to equal }\text{foldFn}\left(p\right):}\quad & \text{foldFn}\,(p\triangleright\text{inMF}^{\uparrow L})(e_{\text{MF}})=\text{reduceE}\,(p\triangleright\text{inMF}^{\uparrow L})(e_{\text{MF}})\\
+ & =e_{\text{MF}}\triangleright(p\triangleright\gunderline{\text{inMF}^{\uparrow L}\bef\text{reduceE}})\\
+{\color{greenunder}\text{use Eq.~(\ref{eq:monoidal-naturality-law-of-reduceE-applied-to-inMF})}:}\quad & =e_{\text{MF}}\triangleright\big(p\triangleright\text{reduceE}\bef\text{inMF}\big)=\gunderline{\text{inMF}}\,(p\triangleright\text{reduceE})\gunderline{(e_{\text{MF}})}\\
+{\color{greenunder}\text{use Eq.~(\ref{eq:identity-law-of-inMF})}:}\quad & =p\triangleright\text{reduceE}=\text{reduceE}\,(p)=\text{foldFn}\,(p)\quad.
+\end{align*}
+
+Let us clarify the meaning of the special law~(\ref{eq:foldFn-transformation-law}).
+This law is a consequence of parametricity, so it ensures that \lstinline!foldFn(p)!
+uses the functions of type $B\rightarrow B$ contained in $p:L^{B\rightarrow B}$
+in a fully parametric manner. In other words, the code of \lstinline!foldFn!
+must work in the same way for all types $B$; it cannot inspect the
+type $B$ or the code of the functions of type $B\rightarrow B$.
+The only possibility of using those functions is to compose them with
+each other, obtaining again a function of type $B\rightarrow B$.
+The law~(\ref{eq:foldFn-transformation-law}) expresses this property
+by writing the function composition explicitly as part of the code
+of the function \lstinline!inMF!.
+
+\subsubsection{Statement \label{subsec:Statement-reduceE-toList-equivalence}\ref{subsec:Statement-reduceE-toList-equivalence}}
+
+Functions \lstinline!reduceE! and \lstinline!toList! are equivalent
+and are expressed as:
+\begin{align*}
+ & \text{toList}:L^{A}\rightarrow\text{List}^{A}\quad,\quad\quad\text{toList}=\text{pu}_{\text{List}}^{\uparrow L}\bef\text{reduceE}^{\text{List}^{A}}\quad,\\
+ & \text{reduceE}:L^{M}\rightarrow M\quad,\quad\quad\text{reduceE}=\text{toList}\bef\text{reduceList}\quad,
+\end{align*}
+if \lstinline!reduceE! obeys the monoidal naturality law~(\ref{eq:monoidal-naturality-law-of-reduceE}).
+Here, $\text{reduceE}^{\text{List}^{A}}$ is \lstinline!reduceE!
+applied to the monoidal type \lstinline!List[A]!, with the list concatenation
+as the monoidal operation. The function \lstinline!reduceList[M]!
+is defined for monoids $M$ by:
+\begin{lstlisting}
+def reduceList[M: Monoid]: List[M] => M = {
+  case Nil            => Monoid[M].empty
+  case head :: tail   => head |+| reduceList(tail)
+}
+\end{lstlisting}
+\[
+\text{reduceList}:\text{List}^{M}\rightarrow M\quad,\quad\quad\text{reduceList}\triangleq\,\begin{array}{|c||c|}
+ & M\\
+\hline \bbnum 1 & e_{M}\\
+M\times\text{List}^{M} & h^{:M}\times t^{:\text{List}^{M}}\rightarrow h\oplus_{M}\overline{\text{reduceList}}\left(t\right)
+\end{array}\quad.
+\]
+
+
+\subparagraph{Proof}
 
 {*}{*}{*}
 
-\subsection{Laws of \texttt{traverse}}
+\subsection{The missing laws of \texttt{foldMap} and \texttt{reduce}}
+
+The equivalence of \lstinline!foldLeft!, \lstinline!foldMap!, \lstinline!reduce!,
+and \lstinline!toList! was ensured by assuming full parametricity,
+which entails various naturality laws. However, those naturality laws
+do not fully describe the programmer\textsf{'}s expectations about the behavior
+of folding operations. 
+
+To see why, let us consider \lstinline!toList! with the type signature
+$L^{A}\rightarrow\text{List}^{A}$. If \lstinline!toList! is fully
+parametric, it will satisfy the naturality law:
+\[
+(f^{:A\rightarrow B})^{\uparrow L}\bef\text{toList }=\text{toList}\bef f^{\uparrow\text{List}}\quad.
+\]
+This law describes the property that \lstinline!toList[A]! works
+in the same way for all types \lstinline!A!. Certainly, programmers
+expect this property to hold. But the main intent of \lstinline!toList!
+is to extract values of type $A$ out of $L^{A}$ and store them in
+a list. Naturality laws do not express this intent.
+
+More precisely, programmers expect that for any \textsf{``}container\textsf{''} value
+\lstinline!p! of type \lstinline!L[A]!, the value \lstinline!toList(p)!
+should be a list of \emph{all} values of type \lstinline!A! stored
+in \lstinline!p!. As an example of unexpected behavior, imagine implementing
+the type signature of \lstinline!toList! by a function that always
+returns an empty list. For \textsf{``}containers\textsf{''} that store some values
+of type \lstinline!A!, this implementation would be unacceptable
+since it loses information (the code always ignores the argument and
+returns a fixed value).
+
+To prohibit such implementations, we would like to impose a law that
+holds only when \lstinline!toList! has extracted every value of type
+\lstinline!A! stored in \lstinline!p!. Unfortunately, it seems to
+be impossible to express this property in the form of an equation
+satisfied by \lstinline!toList!. Often, a loss of information is
+prevented by imposing an identity law. Can we formulate an identity
+law for \lstinline!toList!? Such a law could state that \lstinline!toList(p)!
+should extract some known values contained in \lstinline!p!. If $L$
+were a pointed functor\index{pointed functor}, we could use its \lstinline!pure!
+method to inject a known value \lstinline!x! into the container \lstinline!p!
+and then require \lstinline!toList! to extract the same value \lstinline!x!.
+But the definition of \lstinline!toList! does not require the functor
+$L$ to be pointed. So, in general we cannot inject values into $L^{A}$
+in a way that is guaranteed to preserve information. This prevents
+us from formulating an identity law for \lstinline!toList!.
+
+Another approach to finding laws is to look for type signatures in
+the form of a \textsf{``}lifting\textsf{''}, where a function of one type is transformed
+into a function of another type. We have summarized the methods of
+several standard typeclasses as \textsf{``}liftings\textsf{''} in Section~\ref{subsec:The-pattern-of-functorial-typeclasses}.
+The laws of a \textsf{``}lifting\textsf{''} are the functor laws (identity and composition).
+Could we apply this approach to the folding operations? The type signature
+of the \lstinline!foldMap! function is:
+\[
+\text{foldMap}:\left(A\rightarrow M\right)\rightarrow L^{A}\rightarrow M\quad.
+\]
+This resembles a \textsf{``}lifting\textsf{''} from functions of type $A\rightarrow M$
+to functions of type $L^{A}\rightarrow M$. However, it is not possible
+to impose the functor laws on these liftings. For instance, the functor
+composition law involves applying \lstinline!foldMap! to a composition
+of arguments. But the type signature $A\rightarrow M$ (where $M$
+is a fixed type) does not support composition, as we cannot compose
+$A\rightarrow M$ with $B\rightarrow M$.
+
+So, the \textsf{``}lifting\textsf{''} approach also fails to yield a suitable law
+for folding operations. However, we will see below that lifting-like
+laws may be imposed on the \lstinline!traverse! operation, whose
+type signature is a generalization of that of \lstinline!foldMap!.
+We will show that the laws of \lstinline!traverse! forbid information-losing
+implementations. Since \lstinline!foldMap! can be derived from \lstinline!traverse!,
+we may take the position that the only acceptable implementations
+of \lstinline!foldMap! are those derived from a lawful \lstinline!traverse!
+function.
+
+\subsection{All polynomial functors are foldable}
+
+It turns out that the lack of available laws does not prevent us from
+finding correct implementations of folding operations. The reason
+is that folding operations are available only for polynomial functors,
+such as \lstinline!Option[A]! and \lstinline!List[A]! (where \lstinline!List!
+is a \emph{recursive} polynomial functor). These functors represent
+finite containers storing values of type \lstinline!A!. So, it is
+clear what it means to extract \textsf{``}all values of type $A$\textsf{''} from
+such containers. To show that all polynomial functors are foldable,
+we will define \lstinline!toList! inductively via structural analysis.
+The definition will ensure that \lstinline!toList! extracts exactly
+as many values as stored in the functor.
+
+Let us first show that non-polynomial functors are \emph{not} foldable.
+An example of a non-polynomial functor is the \lstinline!Reader!
+monad:
+\[
+\text{Reader}^{R,A}\triangleq R\rightarrow A\quad,
+\]
+where $R$ is a fixed but arbitrarily chosen type. A value $p$ of
+type $R\rightarrow A$ can be viewed as a container that stores one
+value of type $A$ for each value of type $R$. We can extract all
+values of type $A$ from $p$ only if we can enumerate all possible
+values of type $R$. In general, it is not practical to enumerate
+all values of a given type (as an example, consider the type $R=\text{String}\rightarrow\text{String}$).
+So, we will not be able to implement \lstinline!toList!, \lstinline!foldMap!,
+\lstinline!foldLeft!, or \lstinline!reduce! for the \lstinline!Reader!
+monad ($\text{Reader}^{R,A}$). The only exceptions are types $R$
+that are known to have a fixed and finite number of distinct values,
+such as $R=\text{Boolean}$. However, in these cases the type $R\rightarrow A$
+is equivalent to a polynomial functor:
+\[
+\text{Reader}^{\text{Boolean},A}=\bbnum 2\rightarrow A\cong A\times A\quad.
+\]
+
+We are now ready to show that all polynomial functors are foldable.
+It is convenient to use the \lstinline!toList! operation to define
+the \textsf{``}\index{foldable functor}foldable functor\textsf{''} typeclass:
+\begin{lstlisting}
+trait Foldable[L[_]] {
+  def toList[A]: L[A] => List[A]
+}
+\end{lstlisting}
+Other folding operations (\lstinline!foldLeft!, \lstinline!foldMap!,
+\lstinline!reduce!) can be derived from \lstinline!toList! (Section~\ref{subsec:Equivalence-of-foldLeft,foldMap,reduce,and-toList}).
+
+Polynomial functors are built via the five standard type constructions
+(Table~\ref{subsec:Type-notation-and-standard-type-constructions}
+without the function types). Defining \lstinline!toList! for these
+constructions will provide an implementation of folding operations
+for all polynomial functors.
+
+\paragraph{Fixed type}
+
+Constant functors $L^{A}\triangleq Z$, where $Z$ is a fixed type,
+are viewed as containers that are always empty and cannot store any
+values of type $A$. So, \lstinline!toList! for $L$ always returns
+an empty list.
+
+\paragraph{Type parameter}
+
+The identity functor $L^{A}\triangleq A$ is viewed as a container
+holding a single value of type $A$. So, we simply define $\text{toList}\triangleq\text{id}$.
+
+\paragraph{Products}
+
+If $K$ and $L$ are foldable functors (so $\text{toList}_{K}$ and
+$\text{toList}_{L}$ are available), we define the product $M^{A}\triangleq K^{A}\times L^{A}$
+and the corresponding $\text{toList}_{M}$ as:
+\begin{lstlisting}
+def toList_M[A]: ((K[A], L[A])) => List[A] = { case (p, q) => toList_K(p) ++ toList_L(q) }
+\end{lstlisting}
+\[
+\text{toList}_{M}:K^{A}\times L^{A}\rightarrow\text{List}^{A}\quad,\quad\quad\text{toList}_{M}\triangleq p^{:K^{A}}\times q^{:L^{A}}\triangleq\text{toList}_{K}(p)\,\pplus\,\text{toList}_{L}(q)\quad.
+\]
+This implementation contains an arbitrary choice: the values stored
+in $p$ are taken first and the values stored in $q$ are taken last.
+We could equally well write $\text{toList}_{L}(q)\,\pplus\,\text{toList}_{K}(p)$
+in the function body. This arbitrary choice corresponds to the arbitrariness
+of the order in which a folding operation traverses the values stored
+a container. Different instances of the \lstinline!Foldable! typeclass
+may define different traversal orders, as we have seen in the code
+examples earlier in this chapter.
+
+\paragraph{Co-products}
+
+If $K$ and $L$ are foldable functors, we define the co-product $M^{A}\triangleq K^{A}+L^{A}$
+and the corresponding $\text{toList}_{M}:K^{A}+L^{A}\rightarrow\text{List}^{A}$
+as:
+
+\begin{wrapfigure}{l}{0.7\columnwidth}%
+\vspace{-0.95\baselineskip}
+\begin{lstlisting}
+def toList_M[A]: Either[K[A], L[A]] => List[A] = {
+  case Left(p)    => toList_K(p)
+  case Right(q)   => toList_L(q)
+}
+\end{lstlisting}
+
+\vspace{-2.5\baselineskip}
+\end{wrapfigure}%
+
+\noindent ~\vspace{-2.25\baselineskip}
+\[
+\text{toList}_{M}\triangleq\,\begin{array}{|c||c|}
+ & \text{List}^{A}\\
+\hline K^{A} & \text{toList}_{K}\\
+L^{A} & \text{toList}_{L}
+\end{array}\quad.
+\]
+\vspace{-1\baselineskip}
+
+
+\paragraph{Recursive types}
+
+We need to implement \lstinline!toList! for a functor $L$ defined
+recursively by $L^{A}\triangleq S^{A,L^{A}}$, where $S^{\bullet,\bullet}$
+is a bifunctor that is itself foldable. A bifunctor $S^{\bullet,\bullet}$
+is \textbf{foldable}\index{foldable bifunctor} if there is a \lstinline!toList!
+function with this type signature:
+\[
+\text{toList}_{S}:S^{A,A}\rightarrow\text{List}^{A}\quad.
+\]
+Given $\text{toList}_{S}$, we define $\text{toList}_{L}$ by:
+\begin{lstlisting}
+def toList_L[A]: S[A, L[A]] => List[A] = _.map2(toList_L).map1(List(_)).toList.flatten
+\end{lstlisting}
+\[
+\text{toList}_{L}:S^{A,L^{A}}\rightarrow\text{List}^{A}\quad,\quad\quad\text{toList}_{L}\triangleq\overline{\text{toList}_{L}}^{\uparrow S^{A,\bullet}}\bef\text{pu}_{\text{List}}^{\uparrow S^{\bullet,\text{List}^{A}}}\bef\text{toList}_{S}\bef\text{ftn}_{\text{List}}\quad.
+\]
+This code first converts values of type $S^{A,L^{A}}$ into type $S^{A,\text{List}^{A}}$
+by lifting \lstinline!toList! recursively to the second type parameter
+of $S^{\bullet,\bullet}$. We also convert $S^{A,\text{List}^{A}}$
+into $S^{\text{List}^{A},\text{List}^{A}}$ by creating one-element
+lists via $\text{pu}_{\text{List}}$. After that, all values of type
+$A$ are extracted from $S^{\text{List}^{A},\text{List}^{A}}$ using
+$\text{toList}_{S}$, which returns a nested $\text{List}^{\text{List}^{A}}$.
+The final flatten operation reduces that to a $\text{List}^{A}$.
+
+This completes the implementation of \lstinline!toList! for the five
+type constructions that build up polynomial functors. In each case,
+it is clear that \lstinline!toList! extracts all stored values of
+type $A$. In principle, one can write a code generator to provide
+a \lstinline!Foldable! instance for any polynomial functor automatically.
+When writing code by hand, it is more convenient to implement folding
+operations directly, as we have been doing at the beginning of this
+chapter.
 
 \subsection{Equivalence of \texttt{traverse} and \texttt{sequence}}
 
-\subsection{Constructions of traversable functors}
+The standard Scala library contains the method \lstinline!Future.sequence!
+in addition to \lstinline!Future.traverse!. While full type signature
+of \lstinline!Future.sequence! is complicated due to the implementation
+details, the main use of \lstinline!sequence! is for transforming
+a sequence of \lstinline!Future! values that may run in parallel.
+The result is a single \lstinline!Future! value that waits until
+all parallel computations are finished. We may simplify the type signature
+of \lstinline!Future.sequence! to:
+\begin{lstlisting}
+def sequence[A, L[X]: TraversableOnce[X]]: L[Future[A]] => Future[L[A]]
+\end{lstlisting}
+
+The function \lstinline!Future.sequence! is limited to sequences
+and sequence-like data types such as \lstinline!L[A] = List[A]!.
+To generalize the \lstinline!sequence! operation to other data types,
+we replace a sequence-like type by an arbitrary traversable functor
+\lstinline!L[A]!. We also replace the \lstinline!Future! type constructor
+by an arbitrary applicative functor (since the traverse operation
+accepts one). It turns out that a function called \lstinline!sequence!
+can then be defined via the \lstinline!traverse! operation, and vice
+versa:
+\begin{lstlisting}
+def sequence[A, L[_]: Traversable, F[_]: Applicative : Functor]: L[F[A]] => F[L[A]] = _.traverse(id)
+def traverse[A, B, L[_]: Traversable, F[_]: Applicative : Functor](la: L[A])(f: A => F[B]): F[L[B]] = sequence(la.map(f))
+\end{lstlisting}
+\begin{align*}
+ & \text{seq}_{L}:L^{F^{A}}\rightarrow F^{L^{A}}\quad,\quad\quad\text{seq}_{L}\triangleq\text{trav}_{L}(\text{id})\quad,\\
+ & \text{trav}_{L}:(A\rightarrow F^{B})\rightarrow L^{A}\rightarrow F^{L^{B}}\quad,\quad\quad\text{trav}_{L}(f)\triangleq f^{\uparrow L}\bef\text{seq}_{L}\quad.
+\end{align*}
+An inverse transformation ($F^{L^{A}}\rightarrow L^{F^{A}}$) is not
+always possible, as shown in Exercise~\ref{subsec:Exercise-traversables-laws}.
+The example with $F=$ \lstinline!Future! and $L=$ \lstinline!List!
+may help remember the correct type signature of \lstinline!sequence!.
+
+The equivalence between \lstinline!traverse! and \lstinline!sequence!
+holds under the assumption that \lstinline!traverse! obeys a naturality
+law with respect to the type parameter $A$. This follows from Statement~\ref{subsec:Statement-tr-equivalent-to-ftr}
+if we set $\text{tr}\triangleq\text{seq}$, $\text{ftr}\triangleq\text{trav}$,
+$F\triangleq L$, $G\triangleq F$, and $H\triangleq F\circ L$. 
+
+Because of this equivalence, we may define the \lstinline!Traversable!
+typeclass in terms of \lstinline!sequence! instead of using \lstinline!traverse!.
+It is easier to study the properties and laws of the \lstinline!sequence!
+operation because it has a simpler type signature. It is also easier
+to prove that the laws hold for an implementation of \lstinline!sequence!.
+So, we will use \lstinline!sequence! when proving the type constructions
+for traversable functors.
+
+\subsection{Laws of \texttt{traverse}}
+
+Given a value \lstinline!p: L[A]!, where \lstinline!L! is a traversable
+functor, programmers expect that the code \lstinline!p.traverse(f)!
+should evaluate the function \lstinline!f: A => F[B]! on each value
+of type \lstinline!A! stored within the container \lstinline!p!.
+The resulting applicative $F$-effects should be merged into a single
+value of type \lstinline!F[L[B]]!. At the same time, the structure
+of the initial value \lstinline!p: L[A]! must be preserved as much
+as possible in the resulting values of type \lstinline!L[B]! wrapped
+under \lstinline!F!. Also, the \lstinline!traverse! function should
+work in the same way for all types \lstinline!A! and \lstinline!B!,
+and for all applicative functors \lstinline!F!. How can we express
+these expectations as equations that \lstinline!traverse! must satisfy?\footnote{Those equations were given in the paper by M.~Jaskelioff\index{Mauro Jaskelioff}
+and O.~Rypacek, \textsf{``}An investigation of the laws of traversals\textsf{''},
+see \texttt{\href{https://arxiv.org/abs/1202.2919}{https://arxiv.org/abs/1202.2919}}}
+
+A naturality law formalizes the requirement that a function with a
+type parameter should work in the same way regardless of the type
+chosen for that type parameter. There is one naturality law per type
+parameter. So, we impose the naturality laws with respect to type
+parameters \lstinline!A! and \lstinline!B!. The form of the naturality
+laws follows from the type signature of \lstinline!traverse!:
+\[
+\text{trav}_{L}^{F,A,B}:(A\rightarrow F^{B})\rightarrow L^{A}\rightarrow F^{L^{B}}\quad.
+\]
+If we keep \lstinline!B! fixed and let \lstinline!A! vary, the type
+signature is of the form $J^{A}\rightarrow K^{A}$, a natural transformation
+between two contrafunctors. If we keep \lstinline!A! fixed and let
+\lstinline!B! vary, this type signature has the form $G^{A}\rightarrow H^{A}$,
+a natural transformation between two functors. So, we can formulate
+the two \index{naturality law!of traverse@of \texttt{traverse}}naturality
+laws of \lstinline!traverse! according to the recipes of Section~\ref{subsec:Naturality-laws-and-natural-transformations}.
+For any $f^{:X\rightarrow A}$, $g^{:A\rightarrow F^{B}}$, and $h^{:B\rightarrow C}$:
+\begin{equation}
+\text{trav}_{L}^{F,X,B}(f\bef g)=f^{\uparrow L}\bef\text{trav}_{L}^{F,A,B}(g)\quad,\quad\quad\text{trav}_{L}^{F,A,C}(g\bef h^{\uparrow F})=\text{trav}_{L}^{F,A,B}(g)\bef h^{\uparrow L\uparrow F}\quad.\label{eq:naturality-laws-of-traverse}
+\end{equation}
+\vspace{-1\baselineskip}
+\[
+\xymatrix{\xyScaleY{3.0pc}\xyScaleX{5.0pc}L^{X}\ar[rd]\sp(0.6){~~\text{trav}_{L}^{F,X,B}(f\bef g)}\ar[d]\sp(0.45){f^{\uparrow L}} &  & L^{A}\ar[rd]\sb(0.4){\text{trav}_{L}^{F,A,C}(g\bef h)~~}\ar[r]\sp(0.5){\text{trav}_{L}^{F,A,B}(g)} & F^{L^{B}}\ar[d]\sp(0.45){h^{\uparrow L\uparrow F}}\\
+L^{A}\ar[r]\sb(0.5){\text{trav}_{L}^{F,A,B}(g)} & F^{L^{B}} &  & F^{L^{C}}
+}
+\]
+
+We also need a naturality law with respect to the parameter \lstinline!F!,
+which is a type constructor required to be an applicative functor.
+This law expresses the requirement that \lstinline!traverse! may
+not inspect the type of \lstinline!F! directly and make decisions
+based on that type. The code of \lstinline!traverse! may only use
+$F$\textsf{'}s applicative methods (\lstinline!wu! and \lstinline!zip!).
+To formulate this \textbf{applicative naturality law}\index{applicative naturality law!of traverse@of \texttt{traverse}},
+we write an equation similar to the second naturality law, except
+that the arbitrary function $f$ will now map the applicative functor
+$F$ to another arbitrary applicative functor $G$:%
+\begin{comment}
+precarious formatting
+\end{comment}
+
+\begin{wrapfigure}{l}{0.28\columnwidth}%
+\vspace{-1.2\baselineskip}
+$\xymatrix{\xyScaleY{3.0pc}\xyScaleX{5.0pc}L^{A}\ar[rd]\sb(0.4){\text{trav}_{L}^{G,A,B}(g\bef f)~~}\ar[r]\sp(0.5){\text{trav}_{L}^{F,A,B}(g)} & F^{L^{B}}\ar[d]\sp(0.45){f^{\uparrow L\uparrow F}}\\
+ & G^{L^{B}}
+}
+$\vspace{0\baselineskip}
+\end{wrapfigure}%
+
+~\vspace{-2\baselineskip}
+
+\begin{equation}
+\text{trav}_{L}^{G,A,B}(g^{:A\rightarrow F^{B}}\bef f^{:F^{B}\rightarrow G^{B}})=\text{trav}_{L}^{F,A,B}(g)\bef f^{:F^{L^{B}}\rightarrow G^{L^{B}}}\quad.\label{eq:traverse-applicative-naturality-law}
+\end{equation}
+
+\noindent Here $f$ is a natural transformation with type signature
+$f:\forall X.\,F^{X}\rightarrow G^{X}$. So, we are allowed to apply
+the same code of $f$ to different types: $f$ has type $F^{B}\rightarrow G^{B}$
+in the left-hand side of the law and $F^{L^{B}}\rightarrow G^{L^{B}}$
+in the right-hand side.
+
+In addition, the function $f$ must preserve the applicative typeclass,
+in the sense that $f$ should map $F$\textsf{'}s applicative methods (\lstinline!wu!
+and \lstinline!zip!) to the corresponding methods of $G$. Otherwise,
+the code of $\text{trav}_{L}^{F,A,B}$ that uses those methods of
+$F$ will not be mapped via $f$ to the same code of $\text{trav}_{L}^{G,A,B}$
+that uses $G$\textsf{'}s applicative methods. 
+
+Natural transformations $f:F^{X}\rightarrow G^{X}$ that preserve
+the applicative methods of $F$ and $G$ are called \index{applicative morphism}\textbf{applicative
+morphisms} (compare to monoid morphisms defined in Section~\ref{subsec:Equivalence-of-foldLeft,foldMap,reduce,and-toList}
+and monad morphisms defined in Section~\ref{subsec:Monads-in-category-theory-monad-morphisms}).
+The laws of applicative morphisms are:
+\begin{align*}
+{\color{greenunder}\text{identity law of applicative morphism}:}\quad & f^{:F^{\bbnum 1}\rightarrow G^{\bbnum 1}}(\text{wu}_{F})=\text{wu}_{G}\quad,\\
+{\color{greenunder}\text{composition law of applicative morphism}:}\quad & \text{zip}_{G}\big(f(p^{:F^{A}})\times f(q^{:F^{B}})\big)=f(\text{zip}_{F}(p\times q))\quad.
+\end{align*}
+The applicative naturality law is required to hold only when $f$
+is an applicative morphism.
+
+Here are some examples of applicative morphisms and applicative naturality.
+
+\subsubsection{Example \label{subsec:Example-pure-is-applicative-morphism-1}\ref{subsec:Example-pure-is-applicative-morphism-1}}
+
+Consider applicative functors $\text{Id}^{A}\triangleq A$ and $P^{A}\triangleq A\times A$. 
+
+\textbf{(a)} Show that the standard function $\Delta:\text{Id}^{A}\rightarrow P^{A}$
+is an applicative morphism.
+
+\textbf{(b)} Show that the standard function $\pi_{1}:P^{A}\rightarrow\text{Id}^{A}$
+is an applicative morphism. 
+
+\subparagraph{Solution}
+
+We need to check that these functions obey the laws of applicative
+morphisms.
+
+\textbf{(a)} To verify the identity law:
+
+To verify the composition law:
+
+\textbf{(b)} To verify the identity law:
+
+To verify the composition law:
+
+{*}{*}{*}
+
+\subsubsection{Example \label{subsec:Example-pure-is-applicative-morphism-2}\ref{subsec:Example-pure-is-applicative-morphism-2}}
+
+Verify the naturality law of \lstinline!traverse! for $L^{A}\triangleq A\times A$
+using the applicative functor $F^{A}\triangleq\bbnum 1+A$ mapped
+to $G^{A}\triangleq\bbnum 1+A\times A$ by an applicative morphism. 
+
+\subparagraph{Solution}
+
+{*}{*}{*}
+
+\subsubsection{Example \label{subsec:Example-pure-is-applicative-morphism}\ref{subsec:Example-pure-is-applicative-morphism}}
+
+For an applicative functor $F$, show that the \lstinline!pure! method
+($\text{pu}_{F}:A\rightarrow F^{A}$) is an applicative morphism between
+the identity functor $\text{Id}^{A}\triangleq A$ and $F$.
+
+\subparagraph{Solution}
+
+The identity functor\textsf{'}s applicative methods are identity functions:
+\[
+\text{wu}_{\text{Id}}=1\quad,\quad\quad\text{pu}_{\text{Id}}(x)=x\quad,\quad\quad\text{zip}_{\text{Id}}(p\times q)=p\times q\quad.
+\]
+To check the identity law, write:
+\begin{align*}
+ & \text{pu}_{F}(\text{wu}_{\text{Id}})\overset{?}{=}\text{wu}_{F}\\
+{\color{greenunder}\text{definition of }\text{wu}_{F}:}\quad & =\text{pu}_{F}(1)=\text{pu}_{F}(\text{wu}_{\text{Id}})\quad.
+\end{align*}
+To check the composition law, write:
+\begin{align*}
+ & \text{zip}_{F}\big(\text{pu}_{F}(p^{:A})\times\text{pu}_{F}(q^{:B})\big)\overset{?}{=}\text{pu}_{F}(\text{zip}_{\text{Id}}(p\times q))=\text{pu}_{F}(p\times q)\\
+{\color{greenunder}\text{use Exercise~\ref{subsec:Exercise-zip-pure-pure}}:}\quad & =\text{zip}_{F}(\text{pu}_{F}(p)\times\text{pu}_{F}(q))\quad.
+\end{align*}
+
+$\square$
+
+We have analyzed the expectation that \lstinline!traverse! should
+work in the same way for all types and applicative functors. Another
+reasonable expectation is that \lstinline!p.traverse(f)! should visit
+\emph{every} value of type \lstinline!A! stored inside \lstinline!p!
+(where \lstinline!p! has type $L^{A}$). To formulate that expectation
+as a law, consider for simplicity a function $f$ of type $A\rightarrow F^{A}$.
+Then the final result of \lstinline!p.traverse(f)! has type $F^{L^{A}}$,
+which can be visualized as a value of type $L^{A}$ wrapped under
+an $F$-effect. If \lstinline!p.traverse(f)! does not skip any data
+stored in \lstinline!p!, the full data structure of \lstinline!p!
+should be preserved in the final result. 
+
+To formulate this condition in a simple way, we may choose functions
+$f$ that always return an \emph{empty} $F$-effect (that is, a result
+of applying $F$\textsf{'}s \lstinline!pure! method to some value). So, we
+choose $f\triangleq\text{pu}_{F}$. We expect that traversing \lstinline!p!
+with this function $f$ should reproduce the same value \lstinline!p!
+wrapped in an empty $F$-effect. So, we write the law as:
+\begin{equation}
+\text{trav}_{L}^{F,A,A}(\text{pu}_{F})=\text{pu}_{F}\quad.\label{eq:traverse-identity-law-with-pure}
+\end{equation}
+
+Alternatively, we may choose $F^{A}\triangleq\text{Id}^{A}=A$ (the
+identity functor), $A=B$, and $f^{:A\rightarrow F^{B}}=\text{id}^{:A\rightarrow A}$.
+Then the result of \lstinline!p.traverse(f)! will have type $F^{L^{A}}=L^{A}$
+and is expected to equal the initial value \lstinline!p!, as the
+transformation \lstinline!f! is an identity function. We obtain the
+\textbf{identity law}\index{identity laws!of traverse@of \texttt{traverse}}:
+\begin{equation}
+\text{trav}_{L}^{\text{Id},A,A}(\text{id})=\text{id}\quad.\label{eq:traverse-identity-law}
+\end{equation}
+
+We can show that this law is equivalent to the more complicated law~(\ref{eq:traverse-identity-law-with-pure}):
+
+\subsubsection{Statement \label{subsec:Statement-identity-law-traverse-simplified}\ref{subsec:Statement-identity-law-traverse-simplified}}
+
+\textbf{(a)} If \lstinline!traverse! obeys Eq.~(\ref{eq:traverse-identity-law-with-pure})
+then it also obeys Eq.~(\ref{eq:traverse-identity-law}).
+
+\textbf{(b)} If \lstinline!traverse! obeys Eq.~(\ref{eq:traverse-identity-law})
+and the law~(\ref{eq:traverse-applicative-naturality-law}) then
+it also obeys Eq.~(\ref{eq:traverse-identity-law-with-pure}).
+
+\subparagraph{Proof}
+
+\textbf{(a)} We may set $F\triangleq\text{Id}$ in the law~(\ref{eq:traverse-identity-law-with-pure}).
+Then we get Eq.~(\ref{eq:traverse-identity-law}) since $\text{pu}_{\text{Id}}=\text{Id}$.
+
+\textbf{(b)} Example~\ref{subsec:Example-pure-is-applicative-morphism}
+shows that $\text{pu}_{F}$ is an applicative morphism between $\text{Id}$
+and $F$. So, we may set $F\triangleq\text{Id}$, $G\triangleq F$,
+$f\triangleq\text{pu}_{F}$, and $g\triangleq\text{\text{id}}$ in
+the applicative naturality law~(\ref{eq:traverse-applicative-naturality-law}).
+We then obtain:
+\begin{align*}
+{\color{greenunder}\text{applicative naturality law~(\ref{eq:traverse-applicative-naturality-law})}:}\quad & \text{trav}_{L}(\text{id}\bef f)\overset{!}{=}\gunderline{\text{trav}_{L}(\text{id})}\bef f\\
+{\color{greenunder}\text{identity law~(\ref{eq:traverse-identity-law})}:}\quad & =\text{id}\bef f=f=\text{pu}_{F}\quad.
+\end{align*}
+The left-hand side is $\text{trav}_{L}(\text{id}\bef f)=\text{trav}_{L}(f)=\text{trav}_{L}(\text{pu}_{F})$.
+So, Eq.~(\ref{eq:traverse-identity-law-with-pure}) holds. $\square$
+
+The identity law of \lstinline!traverse! guarantees that all stored
+values are visited exactly once. The remaining expected property of
+\lstinline!traverse! is that all $F$-effects returned by $f$ are
+collected exactly once. We do not expect \lstinline!traverse! to
+copy some of the $F$-effects multiple times. As an example of violating
+that expectation, consider a simple traversable functor $L^{A}=A\times A$
+and implement the \lstinline!traverse! method like this:
+\begin{lstlisting}
+def trav2[A, B, F[_]: WuZip : Functor](f: A => F[B])(la: (A, A)): F[(B, B)] = {
+  val (f1, f2) = (f(la._1), f(la._2))
+  (f1 zip f1 zip f2).map { case ((x, y), z) => (y, z) }
+}
+\end{lstlisting}
+This code applies the function \lstinline!f! to both values in the
+given pair. The result is a pair \lstinline!(f1, f2)! of type \lstinline!(F[B], F[B])!.
+The code is supposed to \lstinline!zip! the two $F$-effects together,
+but we copy the first effect twice, discarding the first of the values
+of type \lstinline!B!. 
+
+We expect that the function \lstinline!trav2! should violate some
+law of \lstinline!traverse!. It turns out that a suitable law is
+found by composing two \lstinline!traverse! operations. Consider
+two different applicative functors ($F$ and $G$), two functions
+$f:A\rightarrow F^{B}$ and $g:B\rightarrow G^{C}$, and compute the
+following composition:
+\[
+p\triangleright\text{trav}_{L}^{F,A,B}(f)\triangleright\big(\text{trav}_{L}^{G,B,C}(g)\big)^{\uparrow F}:F^{G^{L^{C}}}\quad.
+\]
+The second \lstinline!traverse! operation needs to be lifted to \lstinline!F!
+for the types to match. The result looks like a \lstinline!traverse!
+operation with respect to the functor $F\circ G$. Since the functor
+composition of two applicative functors is again applicative (Statement~\ref{subsec:Statement-applicative-composition}),
+the functor $F\circ G$ is applicative. So, we may also write a single
+\lstinline!traverse! operation using that functor and obtain a value
+of the same type $F^{G^{L^{C}}}$:
+\[
+p\triangleright\text{trav}_{L}^{F\circ G,A,C}(f\bef g^{\uparrow F}):F^{G^{L^{C}}}\quad.
+\]
+The \textbf{composition law}\index{composition law!of traverse@of \texttt{traverse}}
+of \lstinline!traverse! says that the two results should be equal:
+\begin{equation}
+\text{trav}_{L}^{F,A,B}(f)\bef\big(\text{trav}_{L}^{G,B,C}(g)\big)^{\uparrow F}=\text{trav}_{L}^{F\circ G,A,C}(f\bef g^{\uparrow F})\quad.\label{eq:composition-law-of-traverse}
+\end{equation}
+
+So far, we have not given a motivation for the law~(\ref{eq:composition-law-of-traverse}).
+We just wrote that law by analogy with composition laws of other \textsf{``}lifting\textsf{''}-like
+functions. It is not obvious that the law~(\ref{eq:composition-law-of-traverse})
+indeed prevents \lstinline!traverse! from evaluating some effects
+more than once. To get a heuristic explanation, assume that \lstinline!traverse!
+evaluates some effect twice. The left-hand side of the law~(\ref{eq:composition-law-of-traverse})
+will evaluate some $F$-effect twice and then evaluate some $G$-effect
+twice, wrapped under the twice evaluated $F$-effect. The right-hand
+side will evaluate an $F\circ G$-effect twice. To illustrate the
+difference between the resulting effects, we may write heuristically
+$(F\times F)\circ(G\times G)$ and $(F\circ G)\times(F\circ G)$.
+In general, these results will not be the same when $F$-effects and
+$G$-effects do not commute.
+
+To make this heuristic explanation more rigorous, let us show a counterexample
+where the law~(\ref{eq:composition-law-of-traverse}) is violated
+by the function \lstinline!trav2! shown above. We need to choose
+sufficiently complicated applicative functors $F$ and $G$ whose
+effects do not commute. A suitable example is found by choosing both
+$F$ and $G$ to be the \lstinline!State! monad.\footnote{The paper \texttt{\href{https://arxiv.org/abs/1202.2919}{https://arxiv.org/abs/1202.2919}}
+shows another example using the \lstinline!List! monad.} For simplicity, we set all types to \lstinline!Int! and choose the
+functions $f$ and $g$ that add their arguments to the internal state.
+The complete code (using the \lstinline!Zippable! typeclass defined
+in Section~\ref{subsec:The-Zippable-and-Applicative-typeclass})
+is shown in Fig.~\ref{fig:Full-code-implementing-traverse-law-counterexample}.
+
+\begin{figure}
+\begin{centering}
+\begin{lstlisting}[frame=single,fillcolor={\color{black}},framesep={0.2mm},framexleftmargin=2mm,framexrightmargin=2mm,framextopmargin=2mm,framexbottommargin=2mm]
+import io.chymyst.ch.implement // Automatic implementation of some methods.
+
+type L[A] = (A, A) // A very simple but nontrivial traversable functor.
+
+implicit val functorL: Functor[L] = new Functor[L] {
+  override def map[A, B](fa: (A, A))(f: A => B): (B, B) = implement
+}
+
+def trav2[A, B, F[_] : Zippable : Functor](f: A => F[B])(la: L[A]): F[L[B]] = la.map(f) match {
+  case (f1, f2) => f1 zip f1 zip f2
+}
+
+final case class S[A](run: Int => (A, Int)) // State monad with internal state of type Int.
+
+implicit val FunctorS: Functor[S] = new Functor[S] {
+  override def map[A, B](fa: S[A])(f: A => B): S[B] = implement
+}
+
+implicit val ZippableS: Zippable[S] = new Zippable[S] {
+  override def zip[A, B](fa: S[A], fb: S[B]): S[(A, B)] = S { i  =>
+    val (a, j) = fa.run(i)
+    val (b, k) = fb.run(j)
+    ((a, b), k)
+  }
+}
+
+  // Define F[A] as the composition S[S[A]] and implement WuZip and Functor instances.
+final case class F[A](run: S[S[A]]) {
+  // A runner method to help with testing.
+  def eval(i: Int, j: Int): (A, Int, Int) = {
+    val (sa, k) = run.run(i)
+    val (a, l) = sa.run(j)
+    (a, k, l)
+  }
+}
+
+implicit val FunctorF: Functor[F] = new Functor[F] {
+  override def map[A, B](fa: F[A])(f: A => B): F[B] = implement
+}
+
+implicit val ZippableF: Zippable[F] = new Zippable[F] {
+  override def zip[A, B](fa: F[A], fb: F[B]): F[(A, B)] =
+    F((fa.run zip fb.run).map { case (sa, sb) => sa zip sb })
+}
+
+val f: Int => S[Int] = i => S(j => (i + j, i + j))
+val g: Int => S[Int] = f
+val ff: Int => F[Int] = i => F(f(i).map(g))
+val l: L[Int] = (1, 0)
+
+val result1: F[L[Int]] = trav2[Int, Int, F](f1f2)(l)
+val result2: F[L[Int]] = {
+  val x: S[(Int, Int)] = trav2[Int, Int, S](f1)(l)
+  val y: S[S[(Int, Int)]] = x.map(trav2[Int, Int, S](f2))
+  F(y)
+}
+
+// Show that result1 is not equal to result2:
+
+scala> result1.eval(0, 0)
+res0: ((Int, Int), Int, Int) = ((3, 5), 2, 5)
+
+scala> result2.eval(0,0)
+res1: ((Int, Int), Int, Int) = ((4, 6), 2, 6) 
+\end{lstlisting}
+\par\end{centering}
+\caption{A counterexample violating the composition law of \lstinline!traverse!.\label{fig:Full-code-implementing-traverse-law-counterexample}}
+\end{figure}
+
+The counterexamples show that \emph{some} incorrect implementations
+of \lstinline!traverse! are excluded by the composition laws. But
+it remains unknown (Problem~\ref{par:Problem-traverse-law}) whether
+the composition law~(\ref{eq:composition-law-of-traverse}) always
+guarantees that the traverse function evaluates each $F$-effect exactly
+once.
+
+\subsection{Laws of \texttt{sequence}}
+
+We now derive the laws of \lstinline!sequence! that correspond to
+the laws of \lstinline!traverse! found previously. 
+
+Begin with the naturality laws. Since the type signature of \lstinline!sequence!
+($L^{F^{A}}\rightarrow F^{L^{A}}$) has only one type parameter, \lstinline!sequence!
+has only one naturality law\index{naturality law!of sequence@of \texttt{sequence}}:
+
+\begin{wrapfigure}{l}{0.22\columnwidth}%
+\vspace{-1.3\baselineskip}
+$\xymatrix{\xyScaleY{1.5pc}\xyScaleX{2.0pc}L^{F^{A}}\ar[d]\sb(0.45){\text{seq}_{L}^{F,A}}\ar[r]\sb(0.5){f^{\uparrow F\uparrow L}} & L^{F^{B}}\ar[d]\sp(0.45){\text{seq}_{L}^{F,B}}\\
+F^{L^{A}}\ar[r]\sp(0.5){f^{\uparrow L\uparrow F}} & F^{L^{B}}
+}
+$\vspace{1.5\baselineskip}
+\end{wrapfigure}%
+
+~\vspace{-1.4\baselineskip}
+
+\begin{equation}
+(f^{:A\rightarrow B})^{\uparrow F\uparrow L}\bef\text{seq}_{L}^{F,B}=\text{seq}_{L}^{F,A}\bef f^{\uparrow L\uparrow F}\quad.\label{eq:sequence-naturality-law}
+\end{equation}
+
+\noindent It will be shown in Exercise~\ref{subsec:Exercise-traversables-laws-2}
+that this naturality law is equivalent to the two naturality laws
+of \lstinline!traverse!.
+
+Turning now to the applicative naturality law~(\ref{eq:traverse-applicative-naturality-law})
+of \lstinline!traverse!, we derive the corresponding applicative
+naturality law of \lstinline!sequence!. Express \lstinline!traverse!
+via \lstinline!sequence! and substitute in both sides of Eq.~(\ref{eq:traverse-applicative-naturality-law}):
+\begin{align*}
+{\color{greenunder}\text{left-hand side}:}\quad & \text{trav}_{L}^{G,A,B}(g\bef f^{B})=(g\bef f^{B})^{\uparrow L}\bef\text{seq}_{L}^{G,B}=g^{\uparrow L}\bef f^{\uparrow L}\bef\text{seq}_{L}\quad,\\
+{\color{greenunder}\text{right-hand side}:}\quad & \text{trav}_{L}^{F,A,B}(g)\bef f^{L^{B}}=g^{\uparrow L}\bef\text{seq}_{L}^{F,B}\bef f^{L^{B}}\quad.
+\end{align*}
+The common function $g^{\uparrow L}$ can be omitted from the equality
+(see Exercise~\ref{subsec:Exercise-simplify-law-omit-lifted-function}
+for a similar property).
+
+\begin{wrapfigure}{l}{0.22\columnwidth}%
+\vspace{-1\baselineskip}
+$\xymatrix{\xyScaleY{1.5pc}\xyScaleX{2.0pc}L^{F^{A}}\ar[d]\sb(0.45){\text{seq}_{L}^{F,A}}\ar[r]\sb(0.5){(f^{A})^{\uparrow L}} & L^{G^{A}}\ar[d]\sp(0.45){\text{seq}_{L}^{G,A}}\\
+F^{L^{A}}\ar[r]\sp(0.5){f^{L^{A}}} & G^{L^{A}}
+}
+$\vspace{-0.5\baselineskip}
+\end{wrapfigure}%
+
+\noindent Renaming $B$ to $A$, we write the applicative naturality
+law\index{applicative naturality law!of sequence@of \texttt{sequence}}
+of \lstinline!sequence! as:
+\[
+(f^{A})^{\uparrow L}\bef\text{seq}_{L}^{G,A}=\text{seq}_{L}^{F,A}\bef f^{L^{A}}\quad.
+\]
+
+\noindent Here we wrote the full type parameters in $f^{X}$ and $\text{seq}_{L}^{F,A}$
+for clarity.
+
+Turning now to the identity law, we again express \lstinline!traverse!
+via \lstinline!sequence! and substitute into the simpler formulation~(\ref{eq:traverse-identity-law})
+of the identity law of \lstinline!traverse!:
+\[
+\text{id}\overset{!}{=}\text{trav}_{L}^{\text{Id},A,A}(\text{id})=\text{id}^{\uparrow L}\bef\text{seq}_{L}^{\text{Id},A}\overset{!}{=}\text{seq}_{L}^{\text{Id},A}\quad.
+\]
+So, the identity law of sequence\index{identity laws!of sequence@of \texttt{sequence}}
+is:
+\[
+\text{seq}_{L}^{\text{Id},A}=\text{id}\quad.
+\]
+
+The composition law~(\ref{eq:composition-law-of-traverse}) of \lstinline!traverse!
+leads to the following composition law of \lstinline!sequence!:
+\begin{align*}
+{\color{greenunder}\text{left-hand side}:}\quad & \text{trav}_{L}^{F,A,B}(f^{:A\rightarrow F^{B}})\bef\big(\text{trav}_{L}^{G,B,C}(g^{:B\rightarrow G^{C}})\big)^{\uparrow F}=f^{\uparrow L}\bef\text{seq}_{L}^{F,B}\bef\big(g^{\uparrow L}\bef\text{seq}_{L}^{G,C}\big)^{\uparrow F}\\
+ & \quad=f^{\uparrow L}\bef\gunderline{\text{seq}_{L}^{F,B}\bef g^{\uparrow L\uparrow F}}\bef(\text{seq}_{L}^{G,C})^{\uparrow F}\\
+{\color{greenunder}\text{naturality law~(\ref{eq:sequence-naturality-law})}:}\quad & \quad=f^{\uparrow L}\bef g^{\uparrow F\uparrow L}\bef\text{seq}_{L}^{F,G^{C}}\bef(\text{seq}_{L}^{G,C})^{\uparrow F}\quad,\\
+{\color{greenunder}\text{right-hand side}:}\quad & \text{trav}_{L}^{F\circ G,A,C}(f\bef g^{\uparrow F})=(f\bef g^{\uparrow F})^{\uparrow L}\bef\text{seq}_{L}^{F\circ G,C}\quad.
+\end{align*}
+
+\begin{wrapfigure}{l}{0.28\columnwidth}%
+\vspace{-1.5\baselineskip}
+$\xymatrix{\xyScaleY{1.5pc}\xyScaleX{3.0pc}L^{F^{G^{A}}}\ar[r]\sp(0.55){\text{seq}_{L}^{F,G^{A}}}\ar[rd]\sb(0.45){\text{seq}_{L}^{F\circ G,A}} & F^{L^{G^{A}}}\ar[d]\sp(0.45){(\text{seq}_{L}^{G,A})^{\uparrow F}}\\
+ & F^{G^{L^{A}}}
+}
+$\vspace{-1.9\baselineskip}
+\end{wrapfigure}%
+
+\noindent Omitting the common function $(f\bef g^{\uparrow F})^{\uparrow L}$
+and renaming $C$ to $A$, we obtain the \index{composition law!of sequence@of \texttt{sequence}}composition
+law of \lstinline!sequence!:
+\[
+\text{seq}_{L}^{F,G^{A}}\bef(\text{seq}_{L}^{G,A})^{\uparrow F}=\text{seq}_{L}^{F\circ G,A}\quad.
+\]
+
+Since \lstinline!sequence! has a simpler type signature than \lstinline!traverse!
+and its laws have a simpler form, we will use \lstinline!sequence!
+for verifying the laws of traversable functors. 
+
+\subsection{All polynomial functors are traversable}
 
 \subsection{Exercises\index{exercises}}
 
-All traversable functors are foldable because foldLeft can be implemented
-via traverse. Although the opposite is not true (traverse cannot be
-implemented via foldLeft), it turns out that all foldable functors
-are also traversable. However, this is not automatic (we cannot implement
-traverse via foldLeft). Foldable functors are traversable because
-all polynomial functors (including recursively defined polynomial
-functors) are foldable and no other functors are. {*}{*}{*}
+\subsubsection{Exercise \label{subsec:Exercise-traversables-laws}\ref{subsec:Exercise-traversables-laws}}
 
-foldMap works in the same way for all monoids: monoidal naturality
+Find an example of an applicative functor $F$ and a traversable functor
+$L$ such that one \emph{cannot} implement a natural transformation
+with type signature $F^{L^{A}}\rightarrow L^{F^{A}}$ (the inverse
+to the type signature of \lstinline!sequence!). 
 
-traverse works in the same way for all applicative functors: applicative
-naturality
+\subsubsection{Exercise \label{subsec:Exercise-traversables-laws-2}\ref{subsec:Exercise-traversables-laws-2}}
+
+Statement~\ref{subsec:Statement-tr-equivalent-to-ftr} shows that
+two functions (\lstinline!tr! and \lstinline!ftr!) are equivalent
+if a naturality law holds for \lstinline!ftr! with respect to the
+type parameter $A$. Under the same assumption, show that the naturality
+law of \lstinline!ftr! with respect to the type parameter $B$ is
+equivalent to the naturality law of \lstinline!tr!.
+
+\subsubsection{Exercise \label{subsec:Exercise-traversables-laws-1}\ref{subsec:Exercise-traversables-laws-1}}
 
 \section{Slides }
 
-Which functors $L$ can have a \lstinline!traverse! operation?
-
-Can we express traverse through a simpler operation?
-
-What are the required laws for traverse?
-
-What about contrafunctors or profunctors?
-
-
-\paragraph{Deriving the sequence operation}
-
-\vspace{-0.1cm}The type signature of traverse is a complicated \textsf{``}lifting\textsf{''}
-
-A \textsf{``}lifting\textsf{''} is often equivalent to a simpler natural transformation
-
-To derive it, ask: what is missing from \lstinline!fmap! to do the
-job of traverse?
-\[
-\text{fmap}_{L}:(A\rightarrow F^{B})\rightarrow L^{A}\rightarrow L^{F^{B}}
-\]
-
-We need $F^{L^{B}}$, but the traverse operation gives us $L^{F^{B}}$
-instead
-
-What\textsf{'}s missing is a natural transformation sequence $:L^{F^{B}}\rightarrow F^{L^{B}}$ 
-
-The functions traverse and sequence are computationally equivalent:
-\[
-\text{trav}(f^{:A\rightarrow F^{B}})=f^{\uparrow L}\bef\text{seq}
-\]
-\[
-\xymatrix{\xyScaleY{0.2pc}\xyScaleX{3pc} & L^{F^{B}}\ar[rd]\sp(0.45){\text{seq}}\\
-L^{A}\ar[ru]\sp(0.45){\big(f^{:A\rightarrow F^{B}}\big)^{\uparrow L}}\ar[rr]\sb(0.45){\text{trav}\,f^{\underline{A\rightarrow F^{B}}}} &  & F^{L^{B}}
-}
-\]
-Here $F$ is an arbitrary applicative functor
-
 Keep in mind the example Future.sequence $:\text{List}^{\text{Future}^{X}}\rightarrow\text{Future}^{\text{List}^{X}}$
-
-Examples: $L^{A}\triangleq A\times A\times A$; $L^{A}=\text{List}^{A}$;
-finite trees 
-
-Non-traversable: $L^{A}\triangleq R\rightarrow A$; lazy list (\textsf{``}infinite
-product\textsf{''})
 
 Note: We cannot have the opposite transformation $F^{L^{B}}\rightarrow L^{F^{B}}$
 
@@ -2140,27 +3210,6 @@ Use a more general definition of category than what we had so far
 \subsection{Exercises\index{exercises}}
 
 
-\subsubsection{Exercise \label{subsec:Exercise-traversables-12}\ref{subsec:Exercise-traversables-12}}
-
-Use the specialized version of $\text{fold}_{S}$ for the binary tree
-\lstinline!T2[A]! (Section~\ref{subsec:Recursion-schemes.-folding})
-to compute the maximum depth of a tree:
-\begin{lstlisting}
-def maxDepth[A](tree: T2[A]): Int = foldT2(???)(???)
-
-scala> maxDepth(Branch(Leaf(0), Branch(Branch(Leaf(0), Leaf(0)), Leaf(0))))
-res0: Int = 3
-\end{lstlisting}
-
-
-\subsubsection{Exercise \label{subsec:Exercise-traversables-11}\ref{subsec:Exercise-traversables-11}}
-
-Consider the data type \lstinline!T3[A]! defined in Exercise~\ref{subsec:Exercise-applicative-I-1-1}.
-For that data type, define a recursion scheme and implement a specialized
-version of \lstinline!unfold! as \lstinline!unfoldT3!. Using \lstinline!unfoldT3!,
-write a function that generates ternary trees of the form {\tiny{}}{\tiny{} \Tree[.3  0  [.2 0   1   0  ]   0  ] }
-starting from the given integer $n$ at the root.
-
 \subsubsection{Exercise \label{subsec:Exercise-traversables-1}\ref{subsec:Exercise-traversables-1}}
 
 Show that any traversable functor $L$ admits a method called \lstinline!consume!:
@@ -2199,40 +3248,10 @@ For the tree-like type defined as $T^{A}\triangleq\bbnum 1+A\times T^{A}\times T
 define a traversable instance. Verify that the laws hold, using a
 suitable bifunctor $S^{X,Y}$.
 
-\subsubsection{Exercise \label{subsec:Exercise-traversables-7}\ref{subsec:Exercise-traversables-7}}
-
-For the binary tree \lstinline!T2[A]! (Section~\ref{subsec:Recursion-schemes.-folding}),
-implement a \lstinline!Traversable! instance for right-to-left depth-first
-traversal order. Use that to implement \lstinline!zipWithIndex!,
-and test that the tree {\tiny{} \Tree[ [ 8 [ 3 5 ] ] 4 ] } is decorated
-with index as {\tiny{} \Tree[ [ (8,3) [ (3,2) (5,1) ] ] (4,0) ] }.
-
-\subsubsection{Exercise \label{subsec:Exercise-traversables-8}\ref{subsec:Exercise-traversables-8}}
-
-Implement a \lstinline!Traversable! instance for a \textsf{``}rose tree\textsf{''}
-$T^{A}\triangleq A+\text{List}^{T^{A}}$. Represent $T^{A}$ via a
-suitable bifunctor $S^{X,Y}$ and show that $S$ is bitraversable
-(use constructions). {*}{*}{*} Did we already have an Example with
-this solved?
-
 \subsubsection{Exercise \label{subsec:Exercise-traversables-9}\ref{subsec:Exercise-traversables-9}}
 
 Is the recursive type constructor $L^{A}\triangleq A+L^{\text{List}^{A}}$
 traversable? Explain via examples what sort of data container it is.
-
-The following definition is used in the next few exercises:
-
-\subsubsection{Definition \label{subsec:Definition-monoid-morphism}\ref{subsec:Definition-monoid-morphism}}
-
-For any two monoids $M$ and $N$, a function $\phi:M\rightarrow N$
-is called a \textbf{monoid morphism}\index{monoid morphism|textit}
-if $\phi$ satisfies the following two laws:
-\begin{align*}
-{\color{greenunder}\text{identity law}:}\quad & \phi(e_{M})=e_{N}\quad,\\
-{\color{greenunder}\text{composition law}:}\quad & \phi(p\oplus_{M}q)=\phi(p)\oplus_{N}\phi(q)\quad.
-\end{align*}
-These laws mean that $\phi$ translates the operations of $M$ into
-the operations of $N$.
 
 \subsubsection{Exercise \label{subsec:Exercise-traversables-10-2}\ref{subsec:Exercise-traversables-10-2}}
 
@@ -2325,9 +3344,9 @@ and $N^{R}$ are monoids due to Exercise~\ref{subsec:Exercise-applicative-of-mono
 
 \section{Discussion and further developments}
 
-\subsection{Traversals for nested recursive types}
+\subsection{Traversable contrafunctors and profunctors are not useful}
 
-\subsection{Traversable contrafunctors and profunctors}
+\subsection{Traversals for nested recursive types}
 
 \subsection{Recursion schemes for nested recursive types}
 
