@@ -5,6 +5,8 @@
 
 name="sofp"
 
+# When changing the title of any chapter, make sure it is correctly updated in `draft_title_*` and in the `chapters` array below.
+
 # Expected total number of pages in the book draft:
 draft_pages=738
 
