@@ -4133,42 +4133,6 @@ to convert to the type $F^{N\times N\rightarrow A}$. The only way
 we can do these computations is by enumerating all possible values
 of type $N$.
 
-Note that the type \lstinline!Sq! sets the type parameter \lstinline!N!
-in \lstinline!SqSize[N, A]! as \lstinline!N = Unit!. This forces
-the type parameters \lstinline!N! in all of the \lstinline!Next()!
-constructors to be set to \lstinline!Unit! wrapped in a number of
-\lstinline!Option! constructors. All values of a type of this form
-can be enumerated explicitly. However, the type \lstinline!SqSize[N, A]!
-does not speficy that the type parameter \lstinline!N! will be an
-enumerable type. This is a problem our current code for \lstinline!Sq!,
-which prevents us from implementing the \lstinline!sequence! method.
-
-To resolve this problem, we add a typeclass constraint on the type
-parameter \lstinline!N!. Let us call the typeclass \textsf{``}\lstinline!Finite!\textsf{''}.
-A suitable typeclass instance of type \lstinline!Finite[N]! simply
-contains a list of all values of type \lstinline!N!:
-\begin{lstlisting}
-type Finite[N] = List[N] // A list of all possible values of type N.
-\end{lstlisting}
-Typeclass instances are created automatically for \lstinline!Finite[Unit]!,
-\lstinline!Finite[Option[Unit]]!, \lstinline!Finite[Option[Option[Unit]]]!
-and so on:
-\begin{lstlisting}
-implicit val finiteUnit: Finite[Unit] = List(())
-implicit def finiteOUnit[N: Finite]: Finite[Option[N]] = None +: Finite[N].map(Some(_))
-\end{lstlisting}
-Using these typeclass instances, we can now extract all values of
-type $A$ from a value of type $N\times N\rightarrow A$:
-\begin{lstlisting}
-def access[N: Finite, A](s: SqSize[N, A], i: Int, j: Int): A = s match {
-  case Matrix(byIndex) => byIndex((Finite[N].apply(i), Finite[N].apply(j)))
-  case Next(next) => access[Option[N], A](next, i, j)
-}
-
-scala> access(matrix2x2, 0, 1)
-res0: Int = 12
-\end{lstlisting}
-
 \begin{figure}
 \begin{centering}
 \begin{lstlisting}[frame=single,fillcolor={\color{black}},framesep={0.2mm},framexleftmargin=2mm,framexrightmargin=2mm,framextopmargin=2mm,framexbottommargin=2mm]
@@ -4234,6 +4198,44 @@ def sequence[N: Finite, F[_] : Zippable : Functor, A](sq: SqSize[N, F[A]]): F[Sq
 \caption{Implementing \lstinline!sequence! for square matrices.\label{fig:Full-code-implementing-traverse-for-square-matrix}}
 \end{figure}
 
+Note that the type \lstinline!Sq! sets the type parameter \lstinline!N!
+in \lstinline!SqSize[N, A]! as \lstinline!N = Unit!. This forces
+the type parameters \lstinline!N! in all of the \lstinline!Next()!
+constructors to be set to \lstinline!Unit! wrapped in a number of
+\lstinline!Option! constructors. All values of a type of this form
+can be enumerated explicitly. However, the type \lstinline!SqSize[N, A]!
+does not specify that the type parameter \lstinline!N! will be a
+type with a known finite number of values. This is a problem our current
+code for \lstinline!Sq!, which prevents us from implementing the
+\lstinline!sequence! method.
+
+A solution is to add a typeclass constraint (with a typeclass called
+\textsf{``}\lstinline!Finite!\textsf{''}) on the type parameter \lstinline!N!. A
+suitable typeclass instance of type \lstinline!Finite[N]! contains
+a list of all values of type \lstinline!N!:
+\begin{lstlisting}
+type Finite[N] = List[N] // A list of all possible values of type N.
+\end{lstlisting}
+We can implement functions that create typeclass instances automatically
+for all the types we will actually use instead of the type parameter
+\lstinline!N!: namely, the types \lstinline!Finite[Unit]!, \lstinline!Finite[Option[Unit]]!,
+\lstinline!Finite[Option[Option[Unit]]]! and so on:
+\begin{lstlisting}
+implicit val finiteUnit: Finite[Unit] = List(())
+implicit def finiteOUnit[N: Finite]: Finite[Option[N]] = None +: Finite[N].map(Some(_))
+\end{lstlisting}
+Using these definitions, we can now extract all values of type $A$
+from a value of type $N\times N\rightarrow A$:
+\begin{lstlisting}
+def access[N: Finite, A](s: SqSize[N, A], i: Int, j: Int): A = s match {
+  case Matrix(byIndex) => byIndex((Finite[N].apply(i), Finite[N].apply(j)))
+  case Next(next) => access[Option[N], A](next, i, j)
+}
+
+scala> access(matrix2x2, 0, 1)
+res0: Int = 12
+\end{lstlisting}
+
 Figures~\ref{fig:Full-code-implementing-traverse-for-square-matrix}
 and~\ref{fig:Full-code-implementing-traverse-for-square-matrix-tests}
 show the complete code of \lstinline!sequence! for \lstinline!Sq!.
@@ -4248,7 +4250,7 @@ represents a square matrix of lists:
  Applying \lstinline!sequence! to that value, we obtain a list of
 $3$ square matrices:
 \[
-\left[\left|\begin{array}{cc}
+\big[\left|\begin{array}{cc}
 0 & 1\\
 2 & 3
 \end{array}\right|,\left|\begin{array}{cc}
@@ -4257,7 +4259,7 @@ $3$ square matrices:
 \end{array}\right|,\left|\begin{array}{cc}
 100 & 101\\
 102 & 103
-\end{array}\right|\right]\quad.
+\end{array}\right|\big]\quad.
 \]
 This represents a kind of transposition operation for tensors of dimension
 $2\times2\times3$.
