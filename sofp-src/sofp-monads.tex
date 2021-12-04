@@ -1999,14 +1999,14 @@ auxiliary function that consumes the result. The auxiliary function
 is called a \textsf{``}continuation\textsf{''} or a \textsf{``}callback\index{callback}\textsf{''}.
 
 To compare the direct style with the continuation-passing style, consider
-an arithmetic calculation:
+this calculation:
 \begin{lstlisting}
 def add3(x: Int): Int = x + 3
 def mult4(x: Int): Int = x * 4
-val result = add3(mul4(10)) // result = 43
+val result = add3(mul4(10))     // Will have result == 43 after this.
 \end{lstlisting}
-Now we add callback arguments to each function and rewrite the code
-as
+Now we add a callback argument to each function and rewrite the code
+as:
 \begin{lstlisting}
 def add3(x: Int)(callback: Int => Unit): Unit = callback(x + 3)
 def mult4(x: Int)(callback: Int => Unit): Unit = callback(x * 4)
@@ -2037,14 +2037,15 @@ def result(callback: Int => Unit): Unit =
 \noindent This code is a typical pattern of continuation-passing style.
 The final result of the calculation is only available as the bound
 variable \lstinline!z! in a deeply nested function scope. This makes
-working with this code style more difficult: All subsequent code that
-needs to use the value \lstinline!z! needs to be written either directly
-within that deeply nested scope, or must be contained within the given
-\lstinline!callback!. This is the heuristic reason for the name \textsf{``}continuation\textsf{''}.
+working with this code style more difficult: We can continue the program
+only by writing code either directly within that deeply nested scope
+or within the given \lstinline!callback!. This is the heuristic reason
+why callback programming is known as \textsf{``}continuation-passing\textsf{''} style.
 
 Another feature of the continuation-passing style is that callbacks
-could be called later, while the main thread of computation continues
-running concurrently. To show an example, redefine
+could be called at a later time, concurrently with the main thread
+of computation. To show an example, redefine \lstinline!add3! and
+\lstinline!mult4! as:
 \begin{lstlisting}
 def add3(x: Int)(callback: Int => Unit): Unit = { Future(callback(x + 3)); () }
 def mult4(x: Int)(callback: Int => Unit): Unit = { Future(callback(x * 4)); () }
@@ -2093,7 +2094,7 @@ and is denoted by $\text{Cont}^{R,A}\triangleq\left(A\rightarrow R\right)\righta
 
 How does the continuation monad make callback-based code composable?
 The answer is in the code of the \lstinline!flatMap! method. Its
-implementation is (Exercise~\ref{subsec:ch-Exercise-7})
+implementation is (see Exercise~\ref{subsec:ch-Exercise-7}):
 \begin{lstlisting}
 type Cont[R, A] = (A => R) => R
 def flatMap[R, A, B](ca: Cont[R, A])(f: A => Cont[R, B]): Cont[R, B] = { br => ca(a => f(a)(br)) }
@@ -2104,7 +2105,7 @@ way, we obtain easy access to the innermost callback scope. This trick
 makes code with deeply nested callbacks composable.
 
 After defining \lstinline!map! and \lstinline!flatMap! as extension
-methods on \lstinline!Cont!, we can rewrite the code above as
+methods on \lstinline!Cont!, we can rewrite the code above as:
 \begin{lstlisting}
 def pure[A]: A => Cont[Unit, A] = a => ar => ar(a)
 def add3(x: Int): Cont[Unit, Int] = callback => callback(x + 3)
@@ -2142,23 +2143,22 @@ Await.result(runner(result), Duration.Inf)
 
 \noindent This runner uses special low-level features of the \lstinline!Future!
 class, such as a mutable value of type \lstinline!Promise!. If these
-features are used in many places in the code, the programmer runs
-the risk of creating concurrency bugs, such as race conditions or
-deadlocks, that are difficult to fix. When using the continuation
-monad, typically there will be only one place in the code where a
-monadic program is being \textsf{``}run\textsf{''}. In this way, we isolate the high-level
-business logic in the \lstinline!Cont! monad from the low-level code
-of the runners.
+features are used in many places in the code, the programmer risks
+creating concurrency bugs, such as race conditions or deadlocks, that
+are difficult to fix. When using the continuation monad, typically
+there will be only one place in the code where a monadic program is
+being \textsf{``}run\textsf{''}. In this way, we isolate the high-level business logic
+in the \lstinline!Cont! monad from the low-level code of the runners.
 
 We conclude this subsection with some more examples of using the continuation
 monad.
 
 \subsubsection{Example \label{subsec:Example-continuation-monad-computation-cost}\ref{subsec:Example-continuation-monad-computation-cost}\index{solved examples}}
 
-Each arithmetic computation (such as \lstinline!add3! or \lstinline!mult4!)
-has a certain arbitrarily specified cost (of a monoid type $W$).
-Use the monad \lstinline!Cont[W, A]! to implement computations with
-specified cost. The total cost must automatically add up when computations
+Each arithmetic computation, such as \lstinline!add3! or \lstinline!mult4!,
+now has a certain cost, which is a value of a monoid type $W$. Use
+the monad \lstinline!Cont[W, A]! to implement computations with a
+specified cost. The total cost must add up automatically when computations
 are chained using \lstinline!flatMap!.
 
 \subparagraph{Solution}
@@ -2171,7 +2171,7 @@ def pure[A](a: A): Cont[W, A] = { ar => ar(a) }
 def add3(x: Int, cost: W): Cont[W, Int] = { callback => callback(x + 3) |+| cost }
 def mult4(x: Int, cost: W): Cont[W, Int] = { callback => callback(x * 4) |+| cost }
 \end{lstlisting}
-The computation of \lstinline!result! can be now written as
+The computation of \lstinline!result! can be now written as:
 \begin{lstlisting}
 val result: Cont[W, Int] = for {
   x <- pure(10)
@@ -4215,7 +4215,8 @@ val result2 = c.flatMap { x => f(x).map(g) }
 Now consider the case when there are more than two levels of nested
 iterations. Such programs are usually written as functor blocks with
 three or more source lines. However, any subgroup of source lines
-can be refactored into a separate functor block with unchanged result:
+can be refactored into a separate functor block, and the result remains
+the same:
 
 \vspace{0.3\baselineskip}
 
@@ -4245,12 +4246,12 @@ val result2 = c.flatMap(f).flatMap(yy => g(yy))
 %
 \end{minipage}\vspace{0\baselineskip}
 
-We obtained three general requirements (or \textsf{``}laws\textsf{''}) for the \lstinline!flatMap!
-method. Let us now formulate these requirements as rigorous equations.
+We obtained three general requirements for the \lstinline!flatMap!
+method. Let us now formulate these requirements as equations (or \textsf{``}laws\textsf{''}).
 
 For brevity, we will denote the \lstinline!flatMap! method for a
 semimonad \lstinline!S[_]! by \textsf{``}$\text{flm}$\textsf{''}. We will write
-$\text{flm}_{S}$ when we need to indicate explicitly the type constructor
+$\text{flm}_{S}$ when we want to indicate explicitly the type constructor
 being used. The type signature is
 
 \begin{wrapfigure}{l}{0.475\columnwidth}%
@@ -4299,8 +4300,8 @@ and $g^{:B\rightarrow S^{C}}$. This is a \textsf{``}\textbf{left naturality}
 law\index{naturality law!of flatMap@of \texttt{flatMap}} of \lstinline!flatMap!\textsf{''}
 since it exchanges the order of lifted functions to the left of \lstinline!flatMap!.
 More precisely, we may call this equation the naturality law of \lstinline!flatMap[A, B]!
-\textsf{``}with respect to \lstinline!A!\textsf{''} since the application of $f^{\uparrow S}$
-acts on the type parameter \lstinline!A!.
+\textsf{``}with respect to \lstinline!A!\textsf{''} since $f^{\uparrow S}$ acts
+on the type parameter \lstinline!A!.
 
 The second law holds for arbitrary $f^{:A\rightarrow S^{B}}$ and
 $g^{:B\rightarrow C}$:
