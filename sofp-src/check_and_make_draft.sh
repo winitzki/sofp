@@ -23,7 +23,7 @@ draft_title_3="Summary of the book"
 # to here, not including:
 draft_title_4="Applied functional type theory"
 # and then cut out from here, including:
-draft_title_5="Inferring code from types with the LJT algorithm"
+draft_title_5="Inferring code from types"
 # to here, not including:
 draft_title_6="D Parametricity theorem"
 
