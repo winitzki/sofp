@@ -8,10 +8,10 @@ name="sofp"
 # When changing the title of any chapter, make sure it is correctly updated in `draft_title_*` and in the `chapters` array below.
 
 # Expected total number of pages in the book draft:
-draft_pages=740
+draft_pages=746
 
 # The number of pages in each chapter:
-pagecounts=(3 17 42 34 24 49 43 12 63 54 63 62 52 27 148 5 5 6 3 6 6 3 4 49 21 1 2 1 1 7)
+pagecounts=(3 17 42 34 24 49 43 12 63 54 63 62 52 27 148 5 5 6 3 6 6 3 6 49 21 1 2 1 1 7)
 
 # To create the draft version that contains only proofread chapters:
 # cut out from here, including:
@@ -22,10 +22,6 @@ draft_title_2="Computations in functor blocks. III."
 draft_title_3="Summary of the book"
 # to here, not including:
 draft_title_4="Applied functional type theory"
-# and then cut out from here, including:
-draft_title_5="Inferring code from types"
-# to here, not including:
-draft_title_6="D Parametricity theorem"
 
 # Checking the page counts.
 
@@ -39,7 +35,7 @@ chapters=("Preface" "Mathematical formulas as code. I." \
  "Summary of the book" \
  "\`\`Applied functional type theory'': A proposal" "Essay: Software engineers and software artisans" \
  "Essay: Towards functional data engineering with Scala" "Essay: Why category theory" \
- "A Notations" "B Glossary of terms" "C Inferring code from types" \
+ "A Notations" "B Glossary of terms" "Inferring code from types." \
  "D Parametricity theorem" "E Solutions of some exercises" "F A humorous disclaimer" "G GNU Free Documentation License" \
  "List of Tables" "List of Figures" "Index" "END_OF_BOOK")
 
@@ -65,8 +61,8 @@ function create_draft {
 	local base="$1" output_pdf="$2"
 	"$pdftk" $name.pdf dump_data output $name.data
 	egrep -v 'Bookmark(Level|Begin)' $name.data|fgrep Bookmark|perl -e 'undef $/; while(<>){ s/\nBookmarkPageNumber/ BookmarkPageNumber/ig; print; }' | tee $name.chapters | \
-	egrep "($draft_title_1|$draft_title_2|$draft_title_3|$draft_title_4|$draft_title_5|$draft_title_6)" | egrep -o '[0-9]+$' | \
-		(read b1; read e1; read b2; read e2; read b3; read e3; pageranges="1-$((b1-1)) $e1-$((b2-1)) $e2-$((b3-1)) $e3-end"; \
+	egrep "($draft_title_1|$draft_title_2|$draft_title_3|$draft_title_4)" | egrep -o '[0-9]+$' | \
+		(read b1; read e1; read b2; read e2; pageranges="1-$((b1-1)) $e1-$((b2-1)) $e2-end"; \
                  pdftk sofp.pdf cat $pageranges output $output_pdf; \
                  echo Draft page ranges $pageranges )
 
