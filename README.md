@@ -59,9 +59,9 @@ The talk slides are not part of the book and are partially obsolete both in cont
 
 # Current status of the book
 
-Chapters 1-11 and 14, as well as appendices and discussion chapters are ready after a second proofreading of the draft.
+Chapters 1-12 and 14, as well as appendices and discussion chapters are ready after a second proofreading of the draft.
 
-Chapters 12-13 are under construction.
+Chapter 13 remains under construction. It is the last chapter to be written. After that, the book will be ready for general release. 
 
 # Leanpub version of the draft
 
