@@ -349,36 +349,9 @@ Option
 \end_inset
 
  represents a possibly missing value.
- To describe a possibly missing value that is computed concurrently, we
- need somehow to combine 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Future
-\end_layout
-
-\end_inset
-
- with 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Option
-\end_layout
-
-\end_inset
-
-.
-\end_layout
-
-\begin_layout Standard
-The type constructors 
+ We would like to describe a possibly missing value that is computed concurrentl
+y.
+ The type constructors 
 \begin_inset listings
 inline true
 status open
@@ -402,8 +375,8 @@ Option
 
 \end_inset
 
- are not equivalent, so we cannot simply use them together in one functor
- block:
+ are not compatible (not subtypes of each other), so we cannot simply use
+ them together in one functor block:
 \begin_inset listings
 inline false
 status open
@@ -423,61 +396,13 @@ for {
   y <- Option(x + 1) // Type error.
 \end_layout
 
-\begin_layout Plain Layout
-
-  ...
-\end_layout
-
 \end_inset
 
 
 \end_layout
 
 \begin_layout Standard
-One way of combining two effects is by using functor composition, 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Future[Option[A]]
-\end_layout
-
-\end_inset
-
-.
- However, we run into a problem if we want to use a result value within
- the nested type.
- For instance, this code will not compile:
-\begin_inset listings
-inline false
-status open
-
-\begin_layout Plain Layout
-
-for {
-\end_layout
-
-\begin_layout Plain Layout
-
-  xOpt <- Future(Option(1))       // xOpt: Option[Int]
-\end_layout
-
-\begin_layout Plain Layout
-
-  x    <- xOpt    // We would like to get x: Int here.
-\end_layout
-
-\begin_layout Plain Layout
-
-  ...
-\end_layout
-
-\end_inset
-
-The source types must be compatible throughout the entire functor block;
- we cannot mix source lines of 
+One solution is to combine the effects of 
 \begin_inset listings
 inline true
 status open
@@ -501,8 +426,78 @@ Option
 
 \end_inset
 
- types.
- We could work with the nested data type using code like this:
+ in a single 
+\begin_inset Quotes eld
+\end_inset
+
+larger
+\begin_inset Quotes erd
+\end_inset
+
+ monad.
+ Perhaps the type constructor of that monad is 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Future[Option[A]]
+\end_layout
+
+\end_inset
+
+? However, we run into a problem if we want to use this nested type directly
+ in a functor block.
+ For instance, this code will not compile:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+for {
+\end_layout
+
+\begin_layout Plain Layout
+
+  xOpt <- Future(Option(1)) // We have xOpt: Option[Int] here.
+\end_layout
+
+\begin_layout Plain Layout
+
+  x    <- xOpt              // Type error.
+\end_layout
+
+\end_inset
+
+We cannot mix source lines of 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Future
+\end_layout
+
+\end_inset
+
+ and 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Option
+\end_layout
+
+\end_inset
+
+ types because the source types must be compatible throughout the entire
+ functor block.
+ We could work with the nested type using code like this:
 \begin_inset listings
 inline false
 status open
@@ -524,13 +519,13 @@ val result: Future[Option[Int]] = for {
 
 \begin_layout Plain Layout
 
-    case None     => Future.successful(None)     // This expression must
+    case None      => Future.successful(None)     // This expression must
  be a Future[Option[Int]].
 \end_layout
 
 \begin_layout Plain Layout
 
-    case Some(x)  => for {
+    case Some(x)   => for {
 \end_layout
 
 \begin_layout Plain Layout
@@ -545,13 +540,13 @@ val result: Future[Option[Int]] = for {
 
 \begin_layout Plain Layout
 
-          case None    => Future.successful(None) // Must return a Future[Option[
-Int]] everywhere.
+          case None      => Future.successful(None) // Must return a Future[Optio
+n[Int]] everywhere.
 \end_layout
 
 \begin_layout Plain Layout
 
-          case Some(y) => Future(Option(y + 3))
+          case Some(y)   => Future(Option(y + 3))
 \end_layout
 
 \begin_layout Plain Layout
@@ -576,9 +571,9 @@ Int]] everywhere.
 
 \end_inset
 
-The nested type constructor forces us to use pattern matching with nested
- functor blocks, since that is the only way of getting access to values
- of type 
+The type constructor forces us to use pattern matching with nested functor
+ blocks, since that is the only way of getting access to values of type
+ 
 \begin_inset listings
 inline true
 status open
@@ -681,7 +676,7 @@ A
 \end_inset
 
 .
- Let us wrap the type 
+ To achieve that, let us wrap the type 
 \begin_inset listings
 inline true
 status open
@@ -693,7 +688,19 @@ Future[Option[A]]
 
 \end_inset
 
- into a class and implement the 
+ into a new class 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+FutOpt
+\end_layout
+
+\end_inset
+
+ and implement the 
 \begin_inset listings
 inline true
 status open
@@ -717,7 +724,7 @@ flatMap
 
 \end_inset
 
- methods:
+ methods for that class:
 \begin_inset listings
 inline false
 status open
@@ -773,6 +780,10 @@ d.map(_.map(f)))
 \begin_layout Plain Layout
 
 import scala.concurrent.ExecutionContext.Implicits.global
+\end_layout
+
+\begin_layout Plain Layout
+
 \end_layout
 
 \begin_layout Plain Layout
@@ -932,7 +943,7 @@ val result: FutOpt[Int] = for {
 \end_layout
 
 \begin_layout Standard
-We may hope to apply the same technique when mixing effects from arbitrary
+We may hope to apply the same technique when mixing effects of arbitrary
  monads, such as:
 \begin_inset listings
 inline false
@@ -1003,13 +1014,47 @@ Try
 \end_inset
 
 .
- 
+ But it turns out that a simple composition of these type constructors in
+ a certain chosen order (say, as 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Seq[Future[Try[A]]]
+\end_layout
+
+\end_inset
+
+, or as 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Future[Try[Seq[A]]]
+\end_layout
+
+\end_inset
+
+, etc.) cannot be made into a lawful monad.
 \end_layout
 
 \begin_layout Standard
-It turns out that there is no simple recipe for implementing a combined
- monad out of a given set of monads.
- Developing the necessary techniques is the focus of this chapter.
+No simple recipe is known for combining two or more arbitrary monads into
+ a 
+\begin_inset Quotes eld
+\end_inset
+
+larger
+\begin_inset Quotes erd
+\end_inset
+
+ monad.
+ Certain techniques are known to work for specific kinds of monads.
+ This chapter focuses on developing these techniques.
 \end_layout
 
 \begin_layout Standard
@@ -1050,7 +1095,7 @@ Future[Option[A]]
 \end_inset
 
 .
- Does functor composition always work? If 
+ Does functor composition always work? For some monads 
 \begin_inset Formula $M_{1}$
 \end_inset
 
@@ -1058,7 +1103,7 @@ Future[Option[A]]
 \begin_inset Formula $M_{2}$
 \end_inset
 
- are monads then at least one of the compositions, 
+, one of the compositions (
 \begin_inset Formula $M_{1}\circ M_{2}$
 \end_inset
 
@@ -1066,7 +1111,7 @@ Future[Option[A]]
 \begin_inset Formula $M_{2}\circ M_{1}$
 \end_inset
 
-, is sometimes a monad.
+) may turn out to be a monad.
  However, 
 \begin_inset listings
 inline true
@@ -1080,7 +1125,7 @@ Option[Future[A]]
 \end_inset
 
  is not a monad.
- By trial and error, we may find further examples where the functor composition
+ By trial and error, we find further examples where the functor composition
  works and where it does not (see Table
 \begin_inset space ~
 \end_inset
@@ -1108,7 +1153,7 @@ preferred
 \begin_inset Quotes erd
 \end_inset
 
- order (we will see proofs of these properties later in this chapter).
+ order.
  For instance, the 
 \begin_inset listings
 inline true
@@ -1125,7 +1170,7 @@ Reader
 \begin_inset Formula $M^{A}\triangleq R\rightarrow A$
 \end_inset
 
-) always composes on the outside (Statement
+) always composes on the outside (as Statement
 \begin_inset space ~
 \end_inset
 
@@ -1139,7 +1184,7 @@ noprefix "false"
 
 \end_inset
 
-) but not necessarily on the inside.
+ shows) but not necessarily on the inside.
  On the other hand, the 
 \begin_inset listings
 inline true
@@ -1465,6 +1510,13 @@ Either
 \end_inset
 
  will not append any message on failure.
+\end_layout
+
+\begin_layout Standard
+Throughout this chapter, we will see other examples of monads whose effects
+ can be combined in different order.
+ The programmer needs to choose carefully the order of composition, according
+ to the desired behavior of the effects.
 \end_layout
 
 \begin_layout Standard
@@ -2039,13 +2091,6 @@ Correct and incorrect compositions of monads.
 \end_layout
 
 \begin_layout Standard
-Throughout this chapter, we will see other examples of monads whose effects
- can be combined in different order.
- The programmer needs to choose carefully the order of composition, according
- to the desired behavior of the effects.
-\end_layout
-
-\begin_layout Standard
 When functor composition works, implementing the 
 \begin_inset listings
 inline true
@@ -2327,7 +2372,7 @@ res0: ListTry[Int] = ListTry(List(Success(101), Success(102), Success(103)))
 
 \begin_layout Standard
 \begin_inset Note Note
-status open
+status collapsed
 
 \begin_layout Plain Layout
 \begin_inset listings
@@ -2946,7 +2991,7 @@ Combining monads via monad transformers
 
 \begin_layout Standard
 Not all monads combine with others via functor composition.
- But even for those that do, the method used in Example
+ But even for those that do, the method of Example
 \begin_inset space ~
 \end_inset
 
@@ -2960,7 +3005,7 @@ noprefix "false"
 
 \end_inset
 
- requires writing custom wrapper classes for each
+ requires us to write custom wrapper classes for each
 \emph on
  pair
 \emph default
@@ -2975,12 +3020,12 @@ Monad transformers
 \begin_inset Quotes erd
 \end_inset
 
- is an approach for organizing the monad-combining code without incurring
- the quadratic growth of the code size.
+ is the name of an approach for organizing the monad-combining code where
+ the code size is only linear in the number of monads.
 \end_layout
 
 \begin_layout Standard
-In this approach, we fix the first monad 
+In that approach, we fix the first monad 
 \begin_inset Formula $L$
 \end_inset
 
@@ -3020,7 +3065,8 @@ foreign
 \begin_inset Quotes erd
 \end_inset
 
- monad), implementing a new monad denoted by 
+ monad).
+ This implements a new monad denoted by 
 \begin_inset Formula $T_{L}^{M}$
 \end_inset
 
@@ -3681,7 +3727,7 @@ TryT
 
 \end_inset
 
- works, it leaves us with further questions.
+ works, it leads to more questions.
  The code of 
 \begin_inset listings
 inline true
@@ -3778,7 +3824,12 @@ Success
 \begin_inset Formula $L$
 \end_inset
 
- (this is reflected in the notation: 
+.
+ This is shown by the notation 
+\begin_inset Formula $T_{L}^{M}$
+\end_inset
+
+ where 
 \begin_inset Formula $L$
 \end_inset
 
@@ -3786,16 +3837,12 @@ Success
 \emph on
 subscript
 \emph default
- in 
-\begin_inset Formula $T_{L}^{M}$
-\end_inset
-
-).
- So, changing the base monad 
+.
+ Changing the base monad 
 \begin_inset Formula $L$
 \end_inset
 
- to another monad forces a complete rewrite of 
+ to another monad will require a complete rewrite of 
 \begin_inset Formula $T_{L}^{M}$
 \end_inset
 
@@ -4448,7 +4495,7 @@ Cont
 \end_layout
 
 \begin_layout Standard
-It is not easy to guess the type of a monad transformer.
+It is not easy to determine the type of a monad transformer.
 \begin_inset Foot
 status open
 
@@ -4495,7 +4542,7 @@ literal "false"
 
 \end_inset
 
- A justification for the types in Table
+ A justification for the types shown in Table
 \begin_inset space ~
 \end_inset
 
@@ -4511,8 +4558,8 @@ noprefix "false"
 
  is that they work and obey the required laws, while no simpler transformers
  are known.
- We will prove the required laws for these and other transformers later
- in this chapter.
+ Later in this chapter, we will prove that those and other monad transformers
+ are correct.
  For now, we accept the results of Table
 \begin_inset space ~
 \end_inset
@@ -61804,8 +61851,11 @@ Chapter eleven of the functional programming tutorial computations in a
  a type future they're not compatible future and try are not compatible
  types and so this would not work if you wanted to do that and you need
  to do something else you'd have to unify both right-hand sides into a bigger
- moment such that you somehow transform this into the value of a bigger
- monad he also transformed this into the value of a bigger movement so these
+ moment such that you somehow transform this into the value of a 
+\end_layout
+
+\begin_layout Plain Layout
+monad he also transformed this into the value of a bigger movement so these
  operations are called lifting so you lift the small nut into the bigger
  moment you also lift the small nut and a bigger more not and then if you
  can do that and I have done this in my code I just showed you using an
