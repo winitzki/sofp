@@ -14,51 +14,49 @@ Monads describe effects that depend on previously computed values.
 It is often necessary to combine effects of several monads in one.
 For example, the effect of \lstinline!Future! is to compute values
 concurrently, while \lstinline!Option! represents a possibly missing
-value. To describe a possibly missing value that is computed concurrently,
-we need somehow to combine \lstinline!Future! with \lstinline!Option!.
-
-The type constructors \lstinline!Future! and \lstinline!Option!
-are not equivalent, so we cannot simply use them together in one functor
-block:
+value. We would like to describe a possibly missing value that is
+computed concurrently. The type constructors \lstinline!Future! and
+\lstinline!Option! are not compatible (not subtypes of each other),
+so we cannot simply use them together in one functor block:
 \begin{lstlisting}
 for {
   x <- Future(1)
   y <- Option(x + 1) // Type error.
-  ...
 \end{lstlisting}
 
-One way of combining two effects is by using functor composition,
-\lstinline!Future[Option[A]]!. However, we run into a problem if
-we want to use a result value within the nested type. For instance,
-this code will not compile:
+One solution is to combine the effects of \lstinline!Future! and
+\lstinline!Option! in a single \textsf{``}larger\textsf{''} monad. Perhaps the type
+constructor of that monad is \lstinline!Future[Option[A]]!? However,
+we run into a problem if we want to use this nested type directly
+in a functor block. For instance, this code will not compile:
 \begin{lstlisting}
 for {
-  xOpt <- Future(Option(1))       // xOpt: Option[Int]
-  x    <- xOpt    // We would like to get x: Int here.
-  ...
+  xOpt <- Future(Option(1)) // We have xOpt: Option[Int] here.
+  x    <- xOpt              // Type error.
 \end{lstlisting}
-The source types must be compatible throughout the entire functor
-block; we cannot mix source lines of \lstinline!Future! and \lstinline!Option!
-types. We could work with the nested data type using code like this:
+We cannot mix source lines of \lstinline!Future! and \lstinline!Option!
+types because the source types must be compatible throughout the entire
+functor block. We could work with the nested type using code like
+this:
 \begin{lstlisting}
 val result: Future[Option[Int]] = for {
   xOpt <- Future(Option(1))  // xOpt: Option[Int]
   tOpt <- xOpt match {       // yOpt: Option[Int]
-    case None     => Future.successful(None)     // This expression must be a Future[Option[Int]].
-    case Some(x)  => for {
+    case None      => Future.successful(None)     // This expression must be a Future[Option[Int]].
+    case Some(x)   => for {
         yOpt <- Future(Option(x + 1))
         zOpt <- yOpt match { // zOpt: Option[Int]
-          case None    => Future.successful(None) // Must return a Future[Option[Int]] everywhere.
-          case Some(y) => Future(Option(y + 3))
+          case None      => Future.successful(None) // Must return a Future[Option[Int]] everywhere.
+          case Some(y)   => Future(Option(y + 3))
         }
       } yield zOpt
   }
 } yield tOpt
 \end{lstlisting}
-The nested type constructor forces us to use pattern matching with
-nested functor blocks, since that is the only way of getting access
-to values of type \lstinline!A! within \lstinline!Future[Option[A]]!.
-The code is repetitive and deeply nested, which makes it hard to read
+The type constructor forces us to use pattern matching with nested
+functor blocks, since that is the only way of getting access to values
+of type \lstinline!A! within \lstinline!Future[Option[A]]!. The
+code is repetitive and deeply nested, which makes it hard to read
 and to change. 
 
 The first step towards solving the problem is to rewrite this monadic
@@ -73,9 +71,10 @@ val result: Future[Option[Int]] = for { // This will not compile!
 \end{lstlisting}
 To be able to write code in this way, we need to implement the \lstinline!flatMap!
 operation directly on the type \lstinline!Future[Option[A]]! with
-respect to the type parameter \lstinline!A!. Let us wrap the type
-\lstinline!Future[Option[A]]! into a class and implement the \lstinline!map!
-and \lstinline!flatMap! methods:
+respect to the type parameter \lstinline!A!. To achieve that, let
+us wrap the type \lstinline!Future[Option[A]]! into a new class \lstinline!FutOpt!
+and implement the \lstinline!map! and \lstinline!flatMap! methods
+for that class:
 \begin{lstlisting}
 final case class FutOpt[A](nested: Future[Option[A]]) {
   def map[B](f: A => B)(implicit ec: ExecutionContext): FutOpt[B] = FutOpt(nested.map(_.map(f)))
@@ -87,6 +86,7 @@ final case class FutOpt[A](nested: Future[Option[A]]) {
 }
 
 import scala.concurrent.ExecutionContext.Implicits.global
+
 val result: FutOpt[Int] = for {      // This code compiles now.
   x <- FutOpt(Future(Option(1)))     // x: Int
   y <- FutOpt(Future(Option(x + 1))) // y: Int
@@ -112,7 +112,7 @@ val result: FutOpt[Int] = for {
 } yield z  // This eventually evaluates to `FutOpt(Future.Successful(Some(5)))`.
 \end{lstlisting}
 
-We may hope to apply the same technique when mixing effects from arbitrary
+We may hope to apply the same technique when mixing effects of arbitrary
 monads, such as:
 \begin{lstlisting}
 val result: SomeBigMonad[Int] = for {  // After some definitions, this code should work:
@@ -122,27 +122,31 @@ val result: SomeBigMonad[Int] = for {  // After some definitions, this code shou
 } yield z
 \end{lstlisting}
 This code will work if we somehow create a new monad that combines
-\lstinline!Seq!, \lstinline!Future!, and \lstinline!Try!. 
+\lstinline!Seq!, \lstinline!Future!, and \lstinline!Try!. But it
+turns out that a simple composition of these type constructors in
+a certain chosen order (say, as \lstinline!Seq[Future[Try[A]]]!,
+or as \lstinline!Future[Try[Seq[A]]]!, etc.) cannot be made into
+a lawful monad.
 
-It turns out that there is no simple recipe for implementing a combined
-monad out of a given set of monads. Developing the necessary techniques
-is the focus of this chapter.
+No simple recipe is known for combining two or more arbitrary monads
+into a \textsf{``}larger\textsf{''} monad. Certain techniques are known to work for
+specific kinds of monads. This chapter focuses on developing these
+techniques.
 
 We have seen that \lstinline!Future[A]! and \lstinline!Option[A]!
 are combined in a new monad as \lstinline!Future[Option[A]]!. Does
-functor composition always work? If $M_{1}$ and $M_{2}$ are monads
-then at least one of the compositions, $M_{1}\circ M_{2}$ or $M_{2}\circ M_{1}$,
-is sometimes a monad. However, \lstinline!Option[Future[A]]! is not
-a monad. By trial and error, we may find further examples where the
-functor composition works and where it does not (see Table~\ref{tab:Correct-and-incorrect-compositions};
+functor composition always work? For some monads $M_{1}$ and $M_{2}$,
+one of the compositions ($M_{1}\circ M_{2}$ or $M_{2}\circ M_{1}$)
+may turn out to be a monad. However, \lstinline!Option[Future[A]]!
+is not a monad. By trial and error, we find further examples where
+the functor composition works and where it does not (see Table~\ref{tab:Correct-and-incorrect-compositions};
 incorrect choices are marked with a strike-through line).
 
 It turns out that some monads do not compose in either order, while
-others have a \textsf{``}preferred\textsf{''} order (we will see proofs of these properties
-later in this chapter). For instance, the \lstinline!Reader! monad
-($M^{A}\triangleq R\rightarrow A$) always composes on the outside
-(Statement~\ref{subsec:Statement-monad-construction-1}) but not
-necessarily on the inside. On the other hand, the \lstinline!Either!
+others have a \textsf{``}preferred\textsf{''} order. For instance, the \lstinline!Reader!
+monad ($M^{A}\triangleq R\rightarrow A$) always composes on the outside
+(as Statement~\ref{subsec:Statement-monad-construction-1} shows)
+but not necessarily on the inside. On the other hand, the \lstinline!Either!
 monad ($M^{A}\triangleq Z+A$) always composes on the inside (we will
 prove that in Section~\ref{sec:transformers-linear-monads}), but
 not necessarily on the outside.
@@ -186,6 +190,11 @@ $Z+A$ (allowing failure) can be composed in two ways. The monad $M^{A}\triangleq
 describes a computation that may fail but always appends a message.
 The monad $M^{A}\triangleq Z+W\times A$ will not append any message
 on failure.
+
+Throughout this chapter, we will see other examples of monads whose
+effects can be combined in different order. The programmer needs to
+choose carefully the order of composition, according to the desired
+behavior of the effects.
 \begin{center}
 \begin{table}[h]
 \begin{centering}
@@ -218,11 +227,6 @@ compositions of monads.}
 \vspace{-2\baselineskip}
 \end{table}
 \par\end{center}
-
-Throughout this chapter, we will see other examples of monads whose
-effects can be combined in different order. The programmer needs to
-choose carefully the order of composition, according to the desired
-behavior of the effects.
 
 When functor composition works, implementing the \lstinline!up! methods
 is straightforward:
@@ -349,16 +353,16 @@ for arbitrary functions \lstinline!f!.
 \subsection{Combining monads via monad transformers}
 
 Not all monads combine with others via functor composition. But even
-for those that do, the method used in Example~\ref{subsec:Example-lift-for-List-Try-composition}
-requires writing custom wrapper classes for each\emph{ pair} of monads.
-The length of the required code is then quadratic in the number of
-supported monads. \textsf{``}Monad transformers\textsf{''} is an approach for organizing
-the monad-combining code without incurring the quadratic growth of
-the code size.
+for those that do, the method of Example~\ref{subsec:Example-lift-for-List-Try-composition}
+requires us to write custom wrapper classes for each\emph{ pair} of
+monads. The length of the required code is then quadratic in the number
+of supported monads. \textsf{``}Monad transformers\textsf{''} is the name of an approach
+for organizing the monad-combining code where the code size is only
+linear in the number of monads.
 
-In this approach, we fix the first monad $L$ (the \textsf{``}\textbf{base}\textsf{''}
+In that approach, we fix the first monad $L$ (the \textsf{``}\textbf{base}\textsf{''}
 monad) and write code that combines $L$ with an \emph{arbitrary}
-second monad $M$ (the \textsf{``}\textbf{foreign}\textsf{''} monad), implementing
+second monad $M$ (the \textsf{``}\textbf{foreign}\textsf{''} monad). This implements
 a new monad denoted by $T_{L}^{M}$. It turns out that the code of
 $T_{L}^{M}$ can be made fully parametric in the monad $M$: the \lstinline!pure!
 and \lstinline!flatMap! methods of $T_{L}^{M}$ will use only $M$\textsf{'}s
@@ -442,15 +446,15 @@ monads $L$, $M$.
 
 \subsection{Monad transformers for standard monads\label{subsec:Monad-transformers-for-standard-monads}}
 
-While the code of \lstinline!TryT! works, it leaves us with further
-questions. The code of \lstinline!TryT! is specific to the \lstinline!Try!
+While the code of \lstinline!TryT! works, it leads to more questions.
+The code of \lstinline!TryT! is specific to the \lstinline!Try!
 monad and uses its internal structure (the \lstinline!Failure! and
 \lstinline!Success! subtypes). It is not obvious how to implement
 a monad transformer $T_{L}^{M}$ for an arbitrary given base monad
 $L$. We expect the code for $T_{L}^{M}$\textsf{'}s methods to be parametric
-in $M$ but not in $L$ (this is reflected in the notation: $L$ is
-a \emph{subscript} in $T_{L}^{M}$). So, changing the base monad $L$
-to another monad forces a complete rewrite of $T_{L}^{M}$\textsf{'}s code.
+in $M$ but not in $L$. This is shown by the notation $T_{L}^{M}$
+where $L$ is a \emph{subscript}. Changing the base monad $L$ to
+another monad will require a complete rewrite of $T_{L}^{M}$\textsf{'}s code.
 
 There is no general recipe for implementing a monad transformer $T_{L}^{M}$
 given the code for a monad $L$. Nevertheless, monad transformers
@@ -497,15 +501,16 @@ defined by composing inside the foreign monad (\lstinline!Either!,
 monad (\lstinline!List!); and by mixing the foreign monad in a special
 way with the base monad (\lstinline!Eval!, \lstinline!State!, \lstinline!Cont!). 
 
-It is not easy to guess the type of a monad transformer.\footnote{The difficulty of that task is illustrated by the history of the \lstinline!ListT!
+It is not easy to determine the type of a monad transformer.\footnote{The difficulty of that task is illustrated by the history of the \lstinline!ListT!
 transformer in the Haskell standard library. The transformer \lstinline!ListT!
 was implemented incorrectly in 2002; the code violated the monad laws.
 The faulty transformer remained in the library until 2007. See the
-discussion in \texttt{\href{https://wiki.haskell.org/index.php?title=ListT_done_right}{https://wiki.haskell.org/index.php?title=ListT\_done\_right}}} A justification for the types in Table~\ref{tab:Known-monad-transformers}
+discussion in \texttt{\href{https://wiki.haskell.org/index.php?title=ListT_done_right}{https://wiki.haskell.org/index.php?title=ListT\_done\_right}}} A justification for the types shown in Table~\ref{tab:Known-monad-transformers}
 is that they work and obey the required laws, while no simpler transformers
-are known. We will prove the required laws for these and other transformers
-later in this chapter. For now, we accept the results of Table~\ref{tab:Known-monad-transformers}
-and turn to the practical use of monad transformers. 
+are known. Later in this chapter, we will prove that those and other
+monad transformers are correct. For now, we accept the results of
+Table~\ref{tab:Known-monad-transformers} and turn to the practical
+use of monad transformers. 
 
 The first task is to obtain the code of monad methods and lifts for
 the transformers in Table~\ref{tab:Known-monad-transformers}.
@@ -895,8 +900,9 @@ Also, creating a value of type $(A\rightarrow M^{R})\rightarrow M^{R}$
 from scratch is impossible. 
 
 To produce an explicit example where \lstinline!blift! cannot be
-implemented, we use the \texttt{curryhoward} library and choose a
-monad $M^{R}$ that has no fully parametric runner, e.g., $M^{R}\triangleq Z+R$:
+implemented, we use the \lstinline!curryhoward! library\index{curryhoward library@\texttt{curryhoward} library}
+and choose a monad $M^{R}$ that has no fully parametric runner, e.g.,
+$M^{R}\triangleq Z+R$:
 \begin{lstlisting}
 import io.chymyst.ch._
 
@@ -1518,14 +1524,15 @@ order, so that the missing base runners are not needed.
 \subsection{Constructing lifts via type relations\label{subsec:Constructing-lifts-via-type-relations}}
 
 The \index{monad transformers!lift@\textsf{``}lift relation\textsf{''} technique}\textsf{``}lift
-relation\textsf{''} technique creates a type relation that describes all the
-possible liftings within a given monad stack. Two monads $P$ and
-$Q$ are \textbf{in a lift relation} if there exists a monad morphism
-$P\leadsto Q$. If $Q$ is itself a monad stack containing the monad
-$P$, we can implement the lift relation $P\leadsto Q$ by using the
-monad transformers from that stack. For instance, the monads $L$
-and $K\varangle L\varangle M$ are in a lift relation because we can
-construct a monad morphism $L\leadsto K\varangle L\varangle M$ as:
+relation\textsf{''} technique creates a type relation\index{type relation}
+that describes all the possible liftings within a given monad stack.
+Two monads $P$ and $Q$ are \textbf{in a lift relation} if there
+exists a monad morphism $P\leadsto Q$. If $Q$ is itself a monad
+stack containing the monad $P$, we can implement the lift relation
+$P\leadsto Q$ by using the monad transformers from that stack. For
+instance, the monads $L$ and $K\varangle L\varangle M$ are in a
+lift relation because we can construct a monad morphism $L\leadsto K\varangle L\varangle M$
+as:
 \[
 \big(\text{blift}_{L}^{M}\bef\text{flift}_{K}^{L\varangle M}\big):L\leadsto K\varangle L\varangle M\quad.
 \]
@@ -2715,7 +2722,7 @@ function (\lstinline!blift!):
 \text{blift}:T_{L}^{\text{Id}}\leadsto T_{L}^{M}\cong L\leadsto T_{L}^{M}\quad,\quad\quad\text{blift}\triangleq\text{frun}\,(\text{pu}_{M})\quad.
 \]
 The base lift and the foreign runner automatically satisfy a \textbf{nondegeneracy
-law},\index{nondegeneracy law!of base lift}
+law}:\index{nondegeneracy law!of base lift (blift)@of base lift (\texttt{blift})}
 \[
 \text{blift}\bef\text{frun}\,(\phi^{:M\leadsto\text{Id}})=\text{id}\quad,
 \]
@@ -6569,8 +6576,8 @@ verify all the laws.
 The recursively defined type of $T_{\text{Free}}^{M,A}$ contains
 infinitely many nested layers of the monad $M$ composed with the
 functor $F$. We use the \textsf{``}unrolling trick\textsf{''}\index{unrolling trick for recursive types}\index{recursive types!unrolling trick}
-to express $T_{\text{Free}}$ through simpler types. We may write
-$T_{\text{Free}}$ as an \textsf{``}infinite\textsf{''} type expression:
+to express $T_{\text{Free}}$ through simpler types. Write $T_{\text{Free}}$
+as an \textsf{``}infinite\textsf{''} type expression:
 \[
 T_{\text{Free}}^{M}=M\circ\left(\text{Id}+F\circ M\circ\left(\text{Id}+F\circ M\circ(\text{Id}+...)\right)\right)\quad.
 \]
@@ -11331,10 +11338,10 @@ operation ($F^{A}\rightarrow M^{A}$):
 
 \subsubsection{Statement \label{subsec:Statement-monatron-flipped-standard-op-equivalent-to-sop}\ref{subsec:Statement-monatron-flipped-standard-op-equivalent-to-sop}}
 
-The type of functions $M^{F^{A}}\rightarrow M^{A}$ that obey the
-compatibility law:
+The type of functions $\text{op}:M^{F^{A}}\rightarrow M^{A}$ that
+obey the compatibility law:
 
-\begin{wrapfigure}{i}{0.25\columnwidth}%
+\begin{wrapfigure}{l}{0.3\columnwidth}%
 \begin{centering}
 \vspace{-2.3\baselineskip}
 \[
@@ -11350,8 +11357,8 @@ M^{P^{A}}\ar[r]\sp(0.5){\text{op}} & M^{A}
 \[
 \text{op}^{\uparrow M}\bef\text{ftn}_{M}=\text{ftn}_{M}\bef\text{op}\quad,
 \]
-is equivalent to the type $F^{A}\rightarrow M^{A}$. (Here $M$ is
-a monad and $F$ is any functor.)
+is equivalent to the type of functions $F^{A}\rightarrow M^{A}$.
+(Here $M$ is a monad and $F$ is any functor.)
 
 \subparagraph{Proof}
 
@@ -11424,8 +11431,8 @@ to an arbitrary monad stack containing the monad $M$.
 We need to consider two cases: the stack $P$ contains $M$ at the
 deep end ($P\triangleq L\varangle M$) or in the middle ($P\triangleq L\varangle M\varangle N$). 
 
-For the first case, we assume that the monad $L$ has the foreign
-runner ($\text{frun}_{L}$). For a given operation $\text{op}:M^{F^{A}}\rightarrow M^{A}$,
+In the first case, we assume that the monad $L$ has the foreign runner
+($\text{frun}_{L}$). For a given operation $\text{op}:M^{F^{A}}\rightarrow M^{A}$,
 we define the lifted operation ($\text{op}_{P}$) by:
 \[
 \text{op}_{P}:(L\varangle M)^{F^{A}}\rightarrow(L\varangle M)^{A}\quad,\quad\quad\text{op}_{P}\triangleq\text{frun}_{L}(\text{op})\quad.
@@ -11440,14 +11447,14 @@ the natural transformation \lstinline!op! (which is not a monad morphism):
 \text{flift}_{L}^{F^{A}}\bef\text{op}_{P}=\text{flift}_{L}\bef\text{frun}_{L}(\text{op})=\text{op}\bef\text{flift}_{L}\quad.
 \]
 
-For the second case, we need to lift \lstinline!op! to the stack
-$Q\triangleq M\varangle N$ that contains $M$ as a base monad. In
-general (for arbitrary \textsf{``}flipped-standard\textsf{''} operations), this lifting
-is not possible since we cannot transform $(M\varangle N)^{F^{A}}$
-to $M^{F^{A}}$. However, the operations \lstinline!collect! and
-\lstinline!process! are in the \lstinline!Writer! monad whose transformer
-is composed-outside ($M\varangle N=N\circ M$). In that case, the
-lifted operation ($\text{op}_{Q}$) can be defined by:
+In the second case, we need to lift \lstinline!op! to the stack $Q\triangleq M\varangle N$
+that contains $M$ as a base monad. In general (for arbitrary \textsf{``}flipped-standard\textsf{''}
+operations), this lifting is not possible since we cannot transform
+$(M\varangle N)^{F^{A}}$ to $M^{F^{A}}$. However, the operations
+\lstinline!collect! and \lstinline!process! are in the \lstinline!Writer!
+monad whose transformer is composed-outside ($M\varangle N=N\circ M$).
+In that case, the lifted operation ($\text{op}_{Q}$) can be defined
+by:
 \[
 \text{op}_{Q}:N^{M^{F^{A}}}\rightarrow N^{M^{A}}\quad,\quad\quad\text{op}_{Q}\triangleq\text{op}^{\uparrow N}\quad.
 \]
@@ -11592,7 +11599,7 @@ $\text{cc}_{P}$, $\text{jump}_{P}$, and $\text{pu}_{P}$:
 In this way, we correctly reproduce the behavior of the \lstinline!callcc!
 operation within the stack $P$.
 
-Apart from \lstinline!callcc!, the continuation monad has other operations,
+Apart from \lstinline!callcc!, the continuation monad has other operations
 such as \lstinline!reset! and \lstinline!shift!:\footnote{See, for example, the Scala-based blog posts \texttt{\href{https://blog.bruchez.name/2011/09/continuations-in-scala.html}{https://blog.bruchez.name/2011/09/continuations-in-scala.html}}
 and \texttt{\href{https://dcsobral.blogspot.com/2009/07/delimited-continuations-explained-in.html}{https://dcsobral.blogspot.com/2009/07/delimited-continuations-explained-in.html}},
 as well as the Haskell-based discussion \texttt{\href{https://stackoverflow.com/questions/43695653/cont-monad-shift}{https://stackoverflow.com/questions/43695653/cont-monad-shift}}}
@@ -11602,7 +11609,7 @@ as well as the Haskell-based discussion \texttt{\href{https://stackoverflow.com/
 \end{align*}
 The type signatures of these operations are neither \textsf{``}standard\textsf{''}
 nor of \textsf{``}flipped-standard\textsf{''}. Lifting these operations in a systematic
-way to arbitrary monad stacks is the question of Problem~\ref{subsec:Problem-monatron-lift-reset-and-shift}.
+way to arbitrary monad stacks is the topic of Problem~\ref{subsec:Problem-monatron-lift-reset-and-shift}.
 
 \paragraph{Characterizing monads by operations}
 
@@ -11627,13 +11634,13 @@ law holds for this function due to the associativity law of $\text{ftn}_{M}$:
 \begin{align*}
 {\color{greenunder}\text{expect to equal }(\text{op}\bef\text{ftn}_{M}):}\quad & \text{ftn}_{M}^{\uparrow M}\bef\text{op}=\text{ftn}_{M}^{\uparrow M}\bef\text{ftn}_{M}=\text{ftn}_{M}\bef\text{ftn}_{M}=\text{op}\bef\text{ftn}_{M}\quad.
 \end{align*}
-The corresponding \textsf{``}simple\textsf{''} operation is:
+The corresponding \textsf{``}simple\textsf{''} operation (\lstinline!sop!) is:
 \[
 \text{sop}\triangleq\text{pu}_{M}^{\uparrow M}\bef\text{op}=\text{pu}_{M}^{\uparrow M}\bef\text{ftn}_{M}=\text{id}\quad.
 \]
 This \textsf{``}simple\textsf{''} operation is just the identity function (of type
 $M^{A}\rightarrow M^{A}$). This function carries no information specific
-to the monad $M$ and cannot be used to characterize $M$. $\square$
+to the monad $M$ and cannot be used to characterize $M$. 
 
 \subsubsection{Example \label{subsec:Example-monatron-free-monad-operation}\ref{subsec:Example-monatron-free-monad-operation}}
 
@@ -11694,11 +11701,14 @@ describe any operations that are not equivalent to \textsf{``}simple\textsf{''} 
 
 Define type constructors for these monad stacks and for their transformers:
 
-\textbf{(a)} \lstinline!List!$\varangle$\lstinline!Eval!
+\textbf{(a)} \lstinline!Eval! $\varangle$ \lstinline!Try!
 
-\textbf{(b)} \lstinline!Try!$\varangle$\lstinline!Writer[W, *]!
+\textbf{(b)} \lstinline!List! $\varangle$ \lstinline!Eval!
 
-\textbf{(c)} \lstinline!Cont[R, *]!$\varangle$\lstinline!Try!$\varangle$\lstinline!State[S, *]!
+\textbf{(c)} \lstinline!Try! $\varangle$ \lstinline!Writer[W, *]!
+
+\textbf{(d)} \lstinline!Cont[R, *]! $\varangle$ \lstinline!Try!
+$\varangle$ \lstinline!State[S, *]!
 
 \subsubsection{Exercise \label{subsec:Exercise-monad-stack-1-1}\ref{subsec:Exercise-monad-stack-1-1}}
 
@@ -11719,7 +11729,7 @@ for all $i$ and $j$ between $1$ and $n$.
 Statement~\ref{subsec:Statement-M-to-M-times-M-is-monadic-morphism}
 shows that the duplicating function $\Delta:M\leadsto M\times M$
 is a monad morphism for an arbitrary monad $M$. Prove that the same
-holds for all similarly defined functions $M\leadsto M\times M\times M$,
+holds for all similarly defined duplicating functions of types $M\leadsto M\times M\times M$,
 $M\leadsto M\times M\times M\times M$, and so on.
 
 \subsubsection{Exercise \label{subsec:Exercise-monad-transformer-extra-layer}\ref{subsec:Exercise-monad-transformer-extra-layer} }
@@ -11732,9 +11742,10 @@ such monad morphisms $\phi$:
 \phi:\text{Id}\leadsto M\quad,\quad\text{or equivalently,}\quad\quad\phi^{A}:A\rightarrow M^{A}\quad.
 \]
 In other words, prove that any such monad morphism $\phi$ must be
-equal to $M$\textsf{'}s \lstinline!pure! method: $\phi=\text{pu}_{M}$. (This
-shows that the identity monad is an initial object\index{category of monads!initial object}
-in the category of monads.)%
+equal to $M$\textsf{'}s \lstinline!pure! method: $\phi=\text{pu}_{M}$. In
+other words, the identity monad is an initial object\index{category of monads!initial object}
+in the category of monads. An object $i$ is an \textbf{initial object}
+of a category if for any object $x$ there is a unique morphism $i\rightarrow x$.%
 \begin{comment}
 Solution
 
@@ -11751,8 +11762,10 @@ There can be no other monad morphisms $\text{Id}\leadsto M$.
 
 \textbf{(a)} Show that for any monad $M$, there is only one monad
 morphism $\varepsilon:M\leadsto\bbnum 1$, where $\bbnum 1$ denotes
-the unit monad, $L^{A}=\bbnum 1$. (This shows that the unit monad
-is a terminal object in the category of monads.)\index{category of monads!terminal object}
+the unit monad, $L^{A}=\bbnum 1$. In other words, the unit monad
+is a terminal object in the category of monads. An object $t$ is
+a \textbf{terminal object} in a category if for any object $x$ there
+is a unique morphism $x\rightarrow t$.\index{category of monads!terminal object}
 
 \textbf{(b)} Show that a monad morphism $\phi:\bbnum 1\leadsto M$
 between the unit monad and some monad $M$ is possible only if $M$
@@ -11763,16 +11776,16 @@ is a unit monad ($M^{A}\triangleq\bbnum 1$).
 For any given monad $M$, consider a function $\text{dbl}:M^{A}\rightarrow M^{A}$
 defined by:
 
-\begin{wrapfigure}{l}{0.52\columnwidth}%
-\vspace{-0.7\baselineskip}
+\begin{wrapfigure}{l}{0.48\columnwidth}%
+\vspace{-0.5\baselineskip}
 \begin{lstlisting}
-def double[M[_]: Monad, A](m: M[A]): M[A] = for {
+def dbl[M[_]: Monad, A](m: M[A]): M[A] = for {
   _ <- m
   x <- m
 } yield x
 \end{lstlisting}
 
-\vspace{-1.5\baselineskip}
+\vspace{-1.2\baselineskip}
 \end{wrapfigure}%
 
 ~\vspace{-0.45\baselineskip}
@@ -11781,21 +11794,20 @@ m^{:M^{A}}\triangleright\text{dbl} & \triangleq m\triangleright\text{flm}_{M}(\_
  & =m\triangleright(\_\rightarrow m)^{\uparrow M}\bef\text{ftn}_{M}\quad.
 \end{align*}
 
-Heuristically, this function \textsf{``}doubles\textsf{''} the $M$-effect in a given
-monadic value $m$ while keeping the value $x^{:A}$, for an arbitrary
-monad $M$. 
+This function \textsf{``}doubles\textsf{''} the $M$-effect in a given monadic value
+$m$ while keeping the value $x^{:A}$ from the second copy of $m$.
 
-\textbf{(a)} Show that the function \lstinline!double[M, A]! is a
-\emph{monadically natural} transformation $M^{A}\rightarrow M^{A}$
-with respect to the monad type parameter $M$. The monadic naturality
-law requires, for any two monads $M$, $N$ and any monad morphism
-$\phi^{:M\leadsto N}$, the following equation:
+\textbf{(a)} Show that the function \lstinline!dbl[M, A]! is a \emph{monadically
+natural} transformation $M^{A}\rightarrow M^{A}$ with respect to
+the monad type parameter $M$. The monadic naturality law requires,
+for any two monads $M$, $N$ and any monad morphism $\phi^{:M\leadsto N}$,
+the following equation to hold:
 \[
 \text{dbl}^{M}\bef\phi=\phi\bef\text{dbl}^{N}\quad.
 \]
 
 \textbf{(b)} Show that (at least for some monads $M$) the function
-\lstinline!double! is \emph{not} a monad morphism $M\leadsto M$. 
+\lstinline!dbl! is \emph{not} a monad morphism $M\leadsto M$. 
 
 \subsubsection{Exercise \label{subsec:Exercise-monad-morphism-reader-state}\ref{subsec:Exercise-monad-morphism-reader-state}}
 
@@ -12195,85 +12207,86 @@ so if this has a type try and this has a type future they're not compatible
 future and try are not compatible types and so this would not work
 if you wanted to do that and you need to do something else you'd have
 to unify both right-hand sides into a bigger moment such that you
-somehow transform this into the value of a bigger monad he also transformed
-this into the value of a bigger movement so these operations are called
-lifting so you lift the small nut into the bigger moment you also
-lift the small nut and a bigger more not and then if you can do that
-and I have done this in my code I just showed you using an implicit
-conversion so if I can do that I can just write code like this indeed
-and implicit conversions will take care or maybe I can just put some
-type annotations and in there that would take care of types and then
-on the right hand side of the accumulator arrow I will always have
-the same type constructor and that is therefore I'm going to be valid
-Scala code so to see that this is not valid it\textsf{'}s easy to see that
-because I should translate this into flat maps see the first thing
-is in sequence the second thing is the future so the flat map on a
-sequence takes this function but the future is a different kind type
-constructor than the sequence on a flat map has a type signature that
-requires a sequence here so that would not compile so the conclusion
-is that in order to combine different effects in the same function
-block we need to unify all these effects in a new unit that is in
-some sense larger than all the previous monads and contains all of
-them so the main goal of this chapter is to learn how we can compute
-the type of this new moon at how can we decide what that type constructor
-is how to implement the moon add instance for it for any kind of moon
-does that you might want to use so there are several ways of combining
-two models into a new bigger moon at that we could try and many of
-these ways just won't work so the easiest way would be well why don't
-I just take a product of these two moons that\textsf{'}s a monad we know that
-the reason is that this is not what we need this is a moon Atias but
-it describes two separate values of type a each having a separate
-effect on it that\textsf{'}s not what we need we need a single value of type
-a that has a combination of two effects possibly and that\textsf{'}s not all
-this describes now maybe a disjunction because that could be the first
-effect on a or the second effect on a unfortunately this is usually
-not a monad and even even if it is a monad this is really a choice
-between two different effects work even two different values it\textsf{'}s
-not one value with the combination of two effects with with the first
-effect and the second effect remember the Scala speech revulsion the
-combination is at the same time being computed in the future and it
-returns an optional result so this doesn't work now the next what
-we can try is functor composition so we can pose and one of them -
-we can compose in two different orders and sometimes indeed that works
-it is often at one end when you compose so let\textsf{'}s look at some examples
-but if one unit is this and the second model is this then we can compose
-and the composition is this type constructor and that is actually
-correct it as a monad similarly future of option as I just showed
-can be combined in case a moment unfortunately if you try to combine
-in there in the other order for example do some following this or
-something like this those are not units so you can combine option
-and reader this is the reader who not only in one order you can come
-compose reader outside and options if you try option outside and you're
-either inside the result is not imminent also you cannot combine State
-mana with other moons like this so for example neither disorder nor
-that order is a minute so from these examples we see first of all
-sometimes it works but sometimes it requires a specific order of composition
-and it does not work with the other order and sometimes it does not
-work with composition at all so I will show that later that the state
-monad is such that it does not compose with other monads in either
-order so as a comment when composition works both ways and example
-would be either and writer so they can be composed in both ways this
-would be one result of composition this would be another and both
-of these are monads but these moments express different kinds of effects
-so for instance here we either compute result and write a message
-or everything failed we have an error message will have no result
-and no blog messages here we have always a log message the computation
-may fail does not give us a result of type a but the log message is
-always written so we can have an error message and a log message in
-the same time so these are obviously two different kinds of logic
-that you could express or two different kinds of effects so the task
-in front of us is of course to avoid try on there we don't want to
-do that every time that we need to compose two monads we need to have
-a general way defining a new combined monads and we need to show that
-it is always a moment so that we don't have to prove things every
-time when we write code so that is what we would like to achieve and
-we would go a very long way towards that goal in this chapter so what
-we would achieve is that we will have a monad say Big M big manga
-that somehow combines only effects so instead of the code that I showed
-here which is invalid trying to combine the sequence future and try
-in a single functor block that is not valid but if we somehow define
-a big model that combines sequence future and try in the same big
-moment then we had also we would have three functions for lifting
+somehow transform this into the value of a 
+
+monad he also transformed this into the value of a bigger movement
+so these operations are called lifting so you lift the small nut into
+the bigger moment you also lift the small nut and a bigger more not
+and then if you can do that and I have done this in my code I just
+showed you using an implicit conversion so if I can do that I can
+just write code like this indeed and implicit conversions will take
+care or maybe I can just put some type annotations and in there that
+would take care of types and then on the right hand side of the accumulator
+arrow I will always have the same type constructor and that is therefore
+I'm going to be valid Scala code so to see that this is not valid
+it\textsf{'}s easy to see that because I should translate this into flat maps
+see the first thing is in sequence the second thing is the future
+so the flat map on a sequence takes this function but the future is
+a different kind type constructor than the sequence on a flat map
+has a type signature that requires a sequence here so that would not
+compile so the conclusion is that in order to combine different effects
+in the same function block we need to unify all these effects in a
+new unit that is in some sense larger than all the previous monads
+and contains all of them so the main goal of this chapter is to learn
+how we can compute the type of this new moon at how can we decide
+what that type constructor is how to implement the moon add instance
+for it for any kind of moon does that you might want to use so there
+are several ways of combining two models into a new bigger moon at
+that we could try and many of these ways just won't work so the easiest
+way would be well why don't I just take a product of these two moons
+that\textsf{'}s a monad we know that the reason is that this is not what we
+need this is a moon Atias but it describes two separate values of
+type a each having a separate effect on it that\textsf{'}s not what we need
+we need a single value of type a that has a combination of two effects
+possibly and that\textsf{'}s not all this describes now maybe a disjunction
+because that could be the first effect on a or the second effect on
+a unfortunately this is usually not a monad and even even if it is
+a monad this is really a choice between two different effects work
+even two different values it\textsf{'}s not one value with the combination
+of two effects with with the first effect and the second effect remember
+the Scala speech revulsion the combination is at the same time being
+computed in the future and it returns an optional result so this doesn't
+work now the next what we can try is functor composition so we can
+pose and one of them - we can compose in two different orders and
+sometimes indeed that works it is often at one end when you compose
+so let\textsf{'}s look at some examples but if one unit is this and the second
+model is this then we can compose and the composition is this type
+constructor and that is actually correct it as a monad similarly future
+of option as I just showed can be combined in case a moment unfortunately
+if you try to combine in there in the other order for example do some
+following this or something like this those are not units so you can
+combine option and reader this is the reader who not only in one order
+you can come compose reader outside and options if you try option
+outside and you're either inside the result is not imminent also you
+cannot combine State mana with other moons like this so for example
+neither disorder nor that order is a minute so from these examples
+we see first of all sometimes it works but sometimes it requires a
+specific order of composition and it does not work with the other
+order and sometimes it does not work with composition at all so I
+will show that later that the state monad is such that it does not
+compose with other monads in either order so as a comment when composition
+works both ways and example would be either and writer so they can
+be composed in both ways this would be one result of composition this
+would be another and both of these are monads but these moments express
+different kinds of effects so for instance here we either compute
+result and write a message or everything failed we have an error message
+will have no result and no blog messages here we have always a log
+message the computation may fail does not give us a result of type
+a but the log message is always written so we can have an error message
+and a log message in the same time so these are obviously two different
+kinds of logic that you could express or two different kinds of effects
+so the task in front of us is of course to avoid try on there we don't
+want to do that every time that we need to compose two monads we need
+to have a general way defining a new combined monads and we need to
+show that it is always a moment so that we don't have to prove things
+every time when we write code so that is what we would like to achieve
+and we would go a very long way towards that goal in this chapter
+so what we would achieve is that we will have a monad say Big M big
+manga that somehow combines only effects so instead of the code that
+I showed here which is invalid trying to combine the sequence future
+and try in a single functor block that is not valid but if we somehow
+define a big model that combines sequence future and try in the same
+big moment then we had also we would have three functions for lifting
 I would call them lifts one left two and lifts three for now which
 would lift a sequence value into the big model a future value into
 the big wallet and a try value into the big magnet so then we could
