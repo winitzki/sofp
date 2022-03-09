@@ -13,119 +13,56 @@ design pattern. As a first motivation, we will look at how the free
 monad\index{free monad} emerges from elaborating the DSL pattern
 in the functional programming paradigm.
 
-\section{Motivation for the free monad: implement a DSL in five steps}
+\section{Motivation for the free monad: make a DSL in five steps}
 
-The DSL pattern separates the description of computations from the
-process of their evaluation. One defines a \textbf{DSL program}\index{DSL program}
+The main point of using a DSL is to separate the description of computations
+from the process of their evaluation. One writes a \textbf{DSL program}\index{DSL program}
 as a data structure that fully describes what computations and side
 effects need to be run but does not actually perform any of those
-computations and side-effects. The programmer begins by defining the
-type of DSL programs. Helper functions are implemented for creating
-the DSL program values and for combining several DSL programs into
-a larger one. Finally, one or more functions are written to interpret
-(or \textsf{``}run\textsf{''}) the DSL programs.
+computations or side-effects. Helper functions are implemented for
+creating the DSL program values, for combining several DSL programs
+into larger ones, and for interpreting (or \textsf{``}running\textsf{''}) DSL programs.
 
 This design pattern is known as an \textsf{``}embedded\textsf{''} DSL because it is
 implemented as a library in an existing programming language (e.g.,
 Scala), rather than as a separate new language. This chapter only
 considers embedded DSLs and calls them just \textsf{``}DSL'\textsf{'}s for brevity.
 
-We will look at two examples: a DSL for complex numbers and a DSL
-for file operations. We will refine and refactor our DSLs step by
+We will look at two examples: a DSL for file operations and a DSL
+for complex numbers. We will refine and refactor our DSLs step by
 step to make them more powerful and safer to use. In this way, we
-will obtain the construction known as the free monad.
+will obtain the construction known as the \textsf{``}free monad\textsf{''}.
 
 \subsection{Step 1: unevaluated expression trees}
 
-Suppose we need to perform calculations with complex numbers. We could
-begin by implementing a simple data structure (\lstinline!case class Complex!)
-with some operations: 
-\begin{lstlisting}[mathescape=true]
-final case class Complex(x: Double, y: Double) {
-  def +(other: Complex): Complex = Complex(x + other.x, y + other.y)
-  def *(other: Complex): Complex =
-      Complex(x * other.x - y * other.y, x * other.y + y * other.x)
-  def conj: Complex = Complex(x, -y)
-}
-val a = Complex(1, 2)          // $\color{dkgreen}a = 1 + 2 i$
-val b = a * Complex(3, -4)     // $\color{dkgreen}b = (1 + 2 i)(3 - 4 i) = 11 + 2 i$
-val c = b.conj                 // $\color{dkgreen}c = 11 - 2 i$
-
-scala> c
-res0: Complex = Complex(11.0, -2.0)
-\end{lstlisting}
-
-Instead of running a complex-number program directly, the DSL pattern
-first creates a data structure that contains an \emph{unevaluated}
-expression tree for the program. Separate case classes are used for
-addition, multiplication, and conjugation, as well as for inserting
-a literal \lstinline!Complex! value:
-\begin{lstlisting}
-sealed trait PrgComplex
-final case class Add(p1: PrgComplex, p2: PrgComplex) extends PrgComplex
-final case class Mul(p1: PrgComplex, p2: PrgComplex) extends PrgComplex
-final case class Conj(p: PrgComplex)                 extends PrgComplex
-final case class Literal(c: Complex)                 extends PrgComplex
-
-val prgComplex: PrgComplex = Conj(
-  Mul(
-    Literal(Complex(1, 2)), Literal(Complex(3, -4))
-))
-\end{lstlisting}
-
-A simple interpreter for complex-number DSL programs can be written
-like this:
-\begin{lstlisting}
-def run: PrgComplex => Complex = {
-  case Literal(c)    => c
-  case Add(p1, p2)   => run(p1) + run(p2)
-  case Mul(p1, p2)   => run(p1) * run(p2)
-  case Conj(p)       => run(p).conj
-}
-\end{lstlisting}
-We can now use \lstinline!run! to perform the computation \lstinline!prgComplex!
-and get the result as a \lstinline!Complex! value:
-\begin{lstlisting}
-scala> run(prgComplex)
-res1: Complex = Complex(11.0, -2.0)
-\end{lstlisting}
-
-Although the DSL is simple, it already gives us several benefits.
-By representing complex-number calculations as DSL programs, which
-are values of type \lstinline!PrgComplex!, we can compose, verify,
-optimize, or transform those DSL programs before running them. We
-may also implement several runners in order to run the same computation
-in different ways: on GPUs, on a remote computer cluster, or with
-logging, debugging, benchmarking, and so on.
-
-As a second example, consider a DSL for file operations, such as reading
-and writing files at given file paths. Direct Scala code for such
-operations may look like this:
+The first example is a DSL for reading and writing files at given
+file paths. Direct Scala code for such operations may look like this:
 \begin{lstlisting}
 import java.nio.file.{Files, Paths}
 val p = Paths.get("config_location.txt")
 val configLocation = Paths.get(new String(Files.readAllBytes(p)))
 val config = new String(Files.readAllBytes(configLocation))
 \end{lstlisting}
-The DSL will represent these operations by the case classes \lstinline!Literal!,
+The DSL will represent these operations by the case classes \lstinline!Val!,
 \lstinline!Path!, and \lstinline!Read!:
 \begin{lstlisting}
 sealed trait PrgFile
-final case class Literal(s: String) extends PrgFile
-final case class Path(p: PrgFile)   extends PrgFile
-final case class Read(p: PrgFile)   extends PrgFile
+final case class Val(s: String)   extends PrgFile
+final case class Path(p: PrgFile) extends PrgFile
+final case class Read(p: PrgFile) extends PrgFile
 
-val prgFile: PrgFile = Read(Path(Read(Path(Literal("config_location.txt")))))
+val prgFile: PrgFile = Read(Path(Read(Path(Val("config_location.txt")))))
 \end{lstlisting}
-As before, a DSL program contains an unevaluated expression tree describing
-the operations that need to be run. A runner will perform those operations
-and extract the final \lstinline!String! value:
+A DSL program of type \lstinline!PrgFile! is an unevaluated expression
+tree describing the operations that need to be performed. A runner
+will perform those operations and extract the final \lstinline!String!
+value:
 \begin{lstlisting}
-def run: PrgFile => String = {
-  case Literal(s)      => s
-  case Path(p)         => "path=" + run(p)                // For debugging.
-  case Read(Path(p))   => new String(Files.readAllBytes(Paths.get(run(p))))
-  case x => throw new Exception(s"Illegal PrgFile operation: $x")
+def runFile: PrgFile => String = {
+  case Val(s)          => s
+  case Path(p)         => "path=" + runFile(p)                // For debugging.
+  case Read(Path(p))   => new String(Files.readAllBytes(Paths.get(runFile(p))))
+  case x               => throw new Exception(s"Illegal PrgFile operation: $x")
 }
 \end{lstlisting}
 To test this code, prepare a file \lstinline!config.txt! containing
@@ -133,64 +70,203 @@ the text \lstinline!version = 1! and a file \lstinline!config_location.txt!
 containing the text \lstinline!config.txt!. Then we can run the DSL
 program and get the result:
 \begin{lstlisting}
-scala> run(prgFile)
+scala> runFile(prgFile)
 res2: String = "version = 1"
 \end{lstlisting}
 
+The second example is a DSL for calculations with complex numbers.
+We could begin by implementing a data structure (\lstinline!case class Complex!)
+with some operations: 
+\begin{lstlisting}[mathescape=true]
+final case class Complex(x: Double, y: Double) {
+  def +(other: Complex): Complex = Complex(x + other.x, y + other.y)
+  def *(other: Complex): Complex = Complex(x * other.x - y * other.y, x * other.y + y * other.x)
+  def conj: Complex = Complex(x, -y)
+  def phase: Double = math.atan2(y, x)         // Obtain the phase of a complex number.
+  def rotate(alpha: Double): Complex = this * Complex(math.cos(alpha), math.sin(alpha))
+}
+
+val a = Complex(1, 2)          // $\color{dkgreen}a = 1 + 2 i$
+val b = a * Complex(3, -4)     // $\color{dkgreen}b = (1 + 2 i)(3 - 4 i) = 11 + 2 i$
+val c = b.conj                 // $\color{dkgreen}c = 11 - 2 i$
+
+scala> c
+res0: Complex = Complex(11.0, -2.0)
+
+scala> c.rotate(Complex(0, 1).phase) // Multiply by $\color{dkgreen}i$
+res1: Complex = Complex(2.000000000000001, 11.0)
+\end{lstlisting}
+
+Instead of running a complex-number program directly, the DSL pattern
+first creates a data structure that contains an \emph{unevaluated}
+expression tree for a program. Separate case classes are used for
+different operations as well as for inserting a Val \lstinline!Complex!
+value:
+\begin{lstlisting}
+sealed trait PrgComplex
+final case class Val(c: Complex)                      extends PrgComplex
+final case class Add(p1: PrgComplex, p2: PrgComplex)  extends PrgComplex
+final case class Mul(p1: PrgComplex, p2: PrgComplex)  extends PrgComplex
+final case class Conj(p: PrgComplex)                  extends PrgComplex
+final case class Phase(p: PrgComplex)                 extends PrgComplex
+final case class Rotate(p: PrgComplex, a: PrgComplex) extends PrgComplex
+
+val prgComplex1: PrgComplex = Conj(Mul(Val(Complex(1, 2)), Val(Complex(3, -4))))
+
+val prgComplex2: PrgComplex = Rotate(prgComplex1, Phase(Val(Complex(0, 1))))
+\end{lstlisting}
+
+A simple runner for complex-number DSL programs can be written like
+this:
+\begin{lstlisting}
+def runComplex: PrgComplex => Complex = {
+  case Val(c)             => c
+  case Add(p1, p2)        => runComplex(p1) + runComplex(p2)
+  case Mul(p1, p2)        => runComplex(p1) * runComplex(p2)
+  case Conj(p)            => runComplex(p).conj
+  case Phase(p)           => Complex(runComplex(p).phase, 0) // Hack: pretend the phase is a Complex.
+  case Rotate(p, alpha)   => runComplex(p).rotate(runComplex(alpha).x) // Here alpha must be a phase.
+}
+\end{lstlisting}
+We can now apply \lstinline!runComplex! to some DSL programs and
+get the results as \lstinline!Complex! values:
+\begin{lstlisting}
+scala> runComplex(prgComplex1)
+res2: Complex = Complex(11.0, -2.0)
+
+scala> runComplex(prgComplex2)
+res3: Complex = Complex(2.000000000000001, 11.0)
+\end{lstlisting}
+
+Although the DSLs are simple, they already give us several benefits.
+By representing file operations as values of type \lstinline!PrgFile!
+and complex-number calculations as values of type \lstinline!PrgComplex!,
+we can compose, verify, optimize, or transform those DSL programs
+before running them. We may also implement special runners in order
+to execute the same DSL program in different ways: on a remote computer
+cluster, on a distributed file system, by running numerical computations
+on GPUs instead of CPUs, or with logging, debugging, benchmarking,
+and so on.
 
 \subsection{Step 2: implementing type safety in the DSLs}
 
 The two DSLs defined in the previous section have an important shortcoming:
-they are not type-checked at compile time. This becomes clear by looking
-at the DSL program \lstinline!prgFile! shown above. The \lstinline!run!
-function assumes that the \lstinline!Read! operation is always applied
-to a \lstinline!Path!, but this is not enforced by the DSL. When
-combining a larger DSL program from separately defined parts, one
-could by mistake create an invalid DSL program such as \lstinline!Read(Read(Literal("file")))!
+they are not type-checked\index{type checking} at compile time. This
+becomes clear by looking at the DSL program \lstinline!prgFile! shown
+in the previous section. The code of \lstinline!runFile! function
+assumes that the \lstinline!Read! operation is always applied to
+a \lstinline!Path!. However, this assumption is not enforced by the
+DSL. When combining a larger DSL program from separately defined parts,
+one could by mistake create an invalid DSL program such as \lstinline!Read(Read(Val("file")))!
 where the \lstinline!Read! operation is used incorrectly. Running
 this program causes a run-time error:
 \begin{lstlisting}
-scala> run(Read(Read(Literal("file"))))
-java.lang.Exception: Illegal PrgFile operation: Read(Read(Literal(file)))
+scala> runFile(Read(Read(Val("file"))))
+java.lang.Exception: Illegal PrgFile operation: Read(Read(Val(file)))
 \end{lstlisting}
 All DSL program values are of the same type (\lstinline!PrgFile!)
 regardless of their intended meaning. So, the Scala compiler cannot
-check that we are using the DSL correctly. It would be better if the
-DSL program \lstinline!Read(Read(Literal("file")))! failed to compile.
-To achieve that, we need to have different Scala types for DSL programs
-returning a \lstinline!String! and a \lstinline!Path!. So, let us
-replace the type \lstinline!PrgFile! by the type constructor \lstinline!PrgFile[A]!,
-representing a DSL program that will return a value of type \lstinline!A!
-when we run it:
+make sure that we are using the DSL correctly. It would be better
+if the DSL program \lstinline!Read(Read(Val("file")))! failed to
+compile. To achieve that, we will use different Scala types for DSL
+programs returning a \lstinline!String! and a \lstinline!Path!.
+So, let us replace the type \lstinline!PrgFile! by the type constructor
+\lstinline!PrgFile[A]!, representing a DSL program that will return
+a value of type \lstinline!A! when we run it:
 \begin{lstlisting}
 import java.nio.file.{Path => JPath}
 import java.nio.file.{Files, Paths}
 sealed trait PrgFile[A]
-final case class Literal(s: String)       extends PrgFile[String]
+final case class Val(s: String)           extends PrgFile[String]
 final case class Path(p: PrgFile[String]) extends PrgFile[JPath]
 final case class Read(p: PrgFile[JPath])  extends PrgFile[String]
 
-def run[A]: PrgFile[A] => A = {
-  case Literal(s) => s
-  case Path(p) => Paths.get(run(p))
-  case Read(p) => new String(Files.readAllBytes(run(p)))
+def runFile[A]: PrgFile[A] => A = {
+  case Val(s)   => s
+  case Path(p)  => Paths.get(runFile(p))
+  case Read(p)  => new String(Files.readAllBytes(runFile(p)))
 }
 \end{lstlisting}
-Our example DSL is type-safe now. Invalid programs are rejected at
-compile time:
+Our example DSL is type-safe now.\index{type safety} Invalid programs
+are rejected at compile time:
 \begin{lstlisting}
-val prgFile: PrgFile[String] = Read(Path(Read(Path(Literal("config_location.txt")))))
+val prgFile: PrgFile[String] = Read(Path(Read(Path(Val("config_location.txt")))))
 
-scala> run(prgFile)
-res2: String = "version = 1"
+scala> runFile(prgFile)
+res3: String = "version = 1"
 
-scala> run(Read(Read(Literal("file"))))
+scala> runFile(Read(Read(Val("file"))))
 type mismatch;
- found   : Literal
+ found   : Val
  required: PrgFile[java.nio.file.Path]
-val res3 = run(Read(Read(Literal("file"))))
+val res4 = runFile(Read(Read(Val("file"))))
                                 ^
 Compilation Failed 
+\end{lstlisting}
+
+A similar problem exists in our DSL for complex numbers. The code
+of \lstinline!runComplex! assumes that the \lstinline!Rotate! operation
+is always applied to a phase, but the DSL does not enforce that assumption.
+Both arguments of the \lstinline!Rotate! operation are values of
+type \lstinline!PrgComplex!, and the Scala compiler is unable to
+verify that the DSL is being used correctly. If the programmer uses
+an arbitrary complex number instead of a phase, the program will return
+an incorrect result without any indication of error:
+\begin{lstlisting}
+val prgComplex3: PrgComplex = Rotate(prgComplex1, Val(Complex(0, 1))) // Forgot Phase().
+
+scala> runComplex(prgComplex3)
+val res5: Complex = Complex(11.0, -2.0)
+\end{lstlisting}
+
+To achieve type safety, we add a type parameter to \lstinline!PrgComplex!.
+A DSL program of type \lstinline!PrgComplex[A]! will return a value
+of type \lstinline!A! when run. The new definitions of the case classes
+are:
+\begin{lstlisting}
+sealed trait PrgComplex[A]
+final case class Val(c: Complex)                                       extends PrgComplex[Complex]
+final case class Add(p1: PrgComplex[Complex], p2: PrgComplex[Complex]) extends PrgComplex[Complex]
+final case class Mul(p1: PrgComplex[Complex], p2: PrgComplex[Complex]) extends PrgComplex[Complex]
+final case class Conj(p: PrgComplex[Complex])                          extends PrgComplex[Complex]
+final case class Phase(p: PrgComplex[Complex])                         extends PrgComplex[Double]
+final case class Rotate(p: PrgComplex[Complex], a: PrgComplex[Double]) extends PrgComplex[Complex]
+\end{lstlisting}
+The revised code of \lstinline!runComplex! is simpler because hacks
+are no longer needed:
+\begin{lstlisting}
+def runComplex[A]: PrgComplex[A] => A = {
+  case Val(c)             => c
+  case Add(p1, p2)        => runComplex(p1) + runComplex(p2)
+  case Mul(p1, p2)        => runComplex(p1) * runComplex(p2)
+  case Conj(p)            => runComplex(p).conj
+  case Phase(p)           => runComplex(p).phase
+  case Rotate(p, alpha)   => runComplex(p).rotate(runComplex(alpha))
+}
+\end{lstlisting}
+The example programs, \lstinline!prgComplex1! and \lstinline!prgComplex2!,
+do not change except for their type:
+\begin{lstlisting}
+val prgComplex1: PrgComplex[Complex] = Conj(Mul(Val(Complex(1, 2)), Val(Complex(3, -4))))
+
+val prgComplex2: PrgComplex[Complex] = Rotate(prgComplex1, Phase(Val(Complex(0, 1))))
+
+scala> runComplex(prgComplex1)
+res6: Complex = Complex(x = 11.0, y = -2.0)
+
+scala> runComplex(prgComplex2)
+res7: Complex = Complex(x = 2.000000000000001, y = 11.0)
+\end{lstlisting}
+Since \lstinline!Rotate! now requires a \lstinline!PrgComplex[Double]!,
+forgetting to use \lstinline!Phase! will cause a type error:
+\begin{lstlisting}
+scala> val prgComplex3 = Rotate(prgComplex1, Val(Complex(0, 1)))
+<console>:1: type mismatch;
+ found   : Val
+ required: PrgComplex[Double]                                                              
+  case Phase(p)           => runComplex(p)
+                                       ^ 
+Compilation Failed
 \end{lstlisting}
 
 
@@ -198,8 +274,8 @@ Compilation Failed
 
 Another limitation of our DSLs is that they cannot define and use
 new variables within a DSL program. We also cannot use any non-DSL
-code, such as a numerical algorithms library for complex numbers,
-a library for file manipulation, or any other Scala code. 
+code, such as a library for file manipulation, a numerical algorithms
+library for complex numbers, or any other Scala code. 
 
 Both of these limitations would be removed if the DSL could support
 defining \emph{new Scala variables} and setting them to values computed
@@ -211,162 +287,214 @@ reporting an error otherwise. A direct (non-DSL) code for this computation
 looks like this:
 \begin{lstlisting}
 val p = Paths.get("config.txt")
-val result = if (Files.exists(p)) new String(Files.readAllBytes(p)) else "File not found"
+val result = if (Files.exists(p)) new String(Files.readAllBytes(p)) else "No file."
 \end{lstlisting}
 Trying to translate the above code to the \lstinline!PrgFile! DSL,
 we find that we need to set the Scala variable \lstinline!p! to the
 path computed by a previous operation. Here is a first attempt:
 \begin{lstlisting}
-val p: JPath = run(Path(Literal("config.txt")))
-val prg: PrgFile[String] = if (Files.exists(p)) Read(p) else Literal("File not found")
+val p: JPath = runFile(Path(Val("config.txt")))
+val prg: PrgFile[String] = if (Files.exists(p)) Read(p) else Val("No file.")
 \end{lstlisting}
-There are two problems with this code. First, the code \lstinline!Read(p)!
+There are two problems with this code. The first problem is that \lstinline!Read(p)!
 does not compile because the argument of \lstinline!Read! should
 be a \lstinline!PrgFile[JPath]! rather than just a \lstinline!JPath!.
-Second, it is undesirable to use \lstinline!run! in the middle of
-a DSL program. This will prevent us from running the same code through
-different \lstinline!run! functions.
-
-The first problem is solved if we generalize the \lstinline!Literal!
-class to hold values of arbitrary type:
+To solve this problem, we generalize the \lstinline!Val! class to
+hold values of arbitrary type:
 \begin{lstlisting}
-final case class Literal[A](a: A) extends PrgFile[A]
+final case class Val[A](a: A) extends PrgFile[A]
 \end{lstlisting}
-We then replace \lstinline!Read(p)! by \lstinline!Read(Literal(p))!
+We then replace \lstinline!Read(p)! by \lstinline!Read(Val(p))!
 in the code above. The code of \lstinline!run! is unchanged.
 
-To solve the second problem, we need to introduce a new DSL operation
-that binds Scala variables to values returned by other DSL operations.
-A standard way of creating \index{bound variable}bound variables
-is by using those variables as arguments of nameless functions. So,
-let us consider the nameless function:
+The second problem is that we are using \lstinline!runFile! in the
+middle of a DSL program. This will break the assumption that a DSL
+program merely describes the computations without executing them.
+The use of a specific \lstinline!run! function inside a DSL program
+will also prevent us from being able to apply a different runner to
+the same DSL program.
+
+To solve this problem, we introduce a new DSL operation that binds
+Scala variables to values returned by other DSL operations. A standard
+way of creating \index{bound variable}bound variables is by using
+those variables as arguments of nameless functions. So, let us consider
+the nameless function:
 \begin{lstlisting}
-p => if (Files.exists(p)) Read(Literal(p)) else Literal("File not found")
+p => if (Files.exists(p)) Read(Val(p)) else Val("No file.")
 \end{lstlisting}
 This function creates a local variable \lstinline!p! and uses it
 directly in an expression of type \lstinline!PrgFile[String]!. We
 can call this function at the time when the entire DSL program is
-run. So, we can avoid the \lstinline!run! call in the code \lstinline!val p = run(...)!
-and instead introduce a new DSL operation that we will call \lstinline!Bind!.
-The above code that computes \lstinline!p! and \lstinline!prg! is
-replaced by:
+run. So, we replace the code \lstinline!val p = runFile(...)! by
+a new DSL operation that we will call \lstinline!Bind!. The above
+code that computes \lstinline!p! and \lstinline!prg! is replaced
+by:
 \begin{lstlisting}
-val prg2: PrgFile[JPath] = Path(Literal("config.txt"))
-val prg: PrgFile[String] = Bind(prg2, p => if (Files.exists(p)) Read(p) else Literal("File not found"))
+val prg2: PrgFile[JPath] = Path(Val("config.txt"))
+val prg: PrgFile[String] = Bind(prg2){ p => if (Files.exists(p)) Read(Val(p)) else Val("No file.") }
 \end{lstlisting}
-Here, the case class \lstinline!Bind! has two parts: a value of type
-\lstinline!PrgFile[JPath]! and a function of type \lstinline!JPath => PrgFile[String]!.
-That function will be called, at the time we call \lstinline!run!,
-and the argument \lstinline!p! will be set to the value returned
-by \lstinline!prg2!. This is implemented in the new code for \lstinline!run!
-shown below.
+Here, the case class \lstinline!Bind! has two curried arguments:
+a value of type \lstinline!PrgFile[JPath]! and a function of type
+\lstinline!JPath => PrgFile[String]!. That function will be called
+at the time we call \lstinline!runFile!. At that time, the argument
+\lstinline!p! will be set to the value obtained by running \lstinline!prg2!.
+This is implemented in the new code for \lstinline!runFile! shown
+below.
 
 In a different DSL program, we may need different types instead of
 \lstinline!JPath! and \lstinline!String!. So, let us replace those
 types by type parameters \lstinline!A! and \lstinline!B!. Note that
-the resulting type is \lstinline!PrgFile[B]!:
+the resulting type is \lstinline!PrgFile[A]!:
 \begin{lstlisting}
-final case class Bind[A, B](pa: PrgFile[A], f: A => PrgFile[B]) extends PrgFile[B]
+final case class Bind[A, B](pa: PrgFile[B])(f: B => PrgFile[A]) extends PrgFile[A]
 \end{lstlisting}
 
 After adding the \lstinline!Bind!-handling code to the runner, the
 implementation of the DSL becomes:
 \begin{lstlisting}
 sealed trait PrgFile[A]
-final case class Literal[A](a: A) extends PrgFile[A]
-final case class Bind[A, B](pa: PrgFile[A], f: A => PrgFile[B]) extends PrgFile[B]
+final case class Val[A](a: A) extends PrgFile[A]
+final case class Bind[A, B](pa: PrgFile[B])(val f: B => PrgFile[A]) extends PrgFile[A]
 final case class Path(p: PrgFile[String]) extends PrgFile[JPath]
 final case class Read(p: PrgFile[JPath]) extends PrgFile[String]
 
-def run[A]: PrgFile[A] => A = {
-  case Literal(a)    => a
-  case Bind(pa, f)   => f(run(pa))
-  case Path(p)       => Paths.get(run(p))
-  case Read(p)       => new String(Files.readAllBytes(run(p)))
+def runFile[A]: PrgFile[A] => A = {
+  case Val(a)          => a
+  case bind@Bind(pa)   => runFile(bind.f(runFile(pa)))
+  case Path(p)         => Paths.get(runFile(p))
+  case Read(p)         => new String(Files.readAllBytes(runFile(p)))
 }
 \end{lstlisting}
+
+Let us now explain certain features of Scala used in this DSL. Since
+the arguments of the \lstinline!Bind[A, B]! constructor are curried,
+the first curried argument (of type \lstinline!PrgFile[B]!) will
+allow the Scala compiler to determine the type parameter \lstinline!B!
+automatically. At the same time, \lstinline!Bind!\textsf{'}s second curried
+argument may be written as a nameless function in a separate set of
+braces:
+\begin{lstlisting}
+val prg: PrgFile[String] = Bind(prg2){ p =>  ... }
+\end{lstlisting}
+Because the type parameter \lstinline!B! is already fixed, the argument
+\lstinline!p! may be written without a type annotation (in this case,
+it would be \lstinline!p: JPath!). This makes the DSL easier to use.
+However, the underlyng implementation becomes more complicated. Scala\textsf{'}s
+pattern matching syntax is limited to the first curried argument.
+So, the second curried argument of \lstinline!Bind! needs a \lstinline!val!
+declaration and is accessed using another pattern variable (here called
+\lstinline!bind!). Finally, the type parameters \lstinline!A! and
+\lstinline!B! are defined such that \lstinline!Bind[A, B]! is a
+subtype of \lstinline!PrgFile[A]! and not of \lstinline!PrgFile[B]!.
+This allows Scala\textsf{'}s type checking to handle correctly the unknown
+type \lstinline!B! in the pattern \lstinline!Bind(pa)!.
 
 The new \lstinline!Bind! operation allows us to implement a part
 of the DSL program as a \emph{Scala function} that depends on the
 result computed by another part of the DSL program. Since \lstinline!Bind!
-contains arbitrary Scala code (a function of type \lstinline!A => PrgFile[B]!),
+contains arbitrary Scala code (a function of type \lstinline!B => PrgFile[A]!),
 we can now use non-DSL code as part of a DSL program, as long as it
-is enclosed inside a \lstinline!Bind!.
+is enclosed inside a \lstinline!Bind!. 
 
-\subsection{Step 4: arriving at a monadic DSL}
+The body of the function inside \lstinline!Bind! will be evaluated
+only when the DSL program is run. So, the DSL program is still only
+a value that describes the computation but does not execute it.
+\begin{lstlisting}
+scala> runFile(prg)
+res8: String = "version = 1"
+\end{lstlisting}
 
-The key observation is that \lstinline!Bind! and \lstinline!Literal!
+
+\subsection{Step 4: refactoring to a monadic DSL}
+
+The next observation is that \lstinline!Bind! and \lstinline!Val!
 have the same type signatures as the standard \lstinline!flatMap!
 and \lstinline!pure! methods of a monad. For convenience, let us
 define those methods on the \lstinline!PrgFile! class:
 \begin{lstlisting}
 sealed trait PrgFile[A] {
-  def flatMap[B](f: A => Prg[B]): Prg[B] = Bind(this, f)
-  def map[B](f: A => B): PrgFile[B] = Bind(this, f andThen PrgFile.pure)
+  def flatMap[B](f: A => Prg[B]): Prg[B] = Bind(this)(f)
+  def map[B](f: A => B): PrgFile[B] = Bind(this)(f andThen PrgFile.pure)
 }
+// Same case classes as before.
 object PrgFile {
-  def pure[A](a: A): PrgFile[A] = Literal(a) 
+  def pure[A](a: A): PrgFile[A] = Val(a) 
 }
 \end{lstlisting}
 Here we defined \lstinline!map! through \lstinline!flatMap! by analogy
 with the right identity law of monads.
 
-Just like other DSL operations, the \lstinline!flatMap! and \lstinline!pure!
-methods do not run or evaluate any parts of the DSL program. They
-merely create some nested data structures containing not-yet-called
-functions. The necessary logic will be executed only when the \lstinline!run!
-method is invoked to convert the entire DSL program to a result value.
+Like other DSL operations, the \lstinline!map!, \lstinline!flatMap!,
+and \lstinline!pure! methods do not run or evaluate any parts of
+a DSL program. They just create some nested data structures containing
+not-yet-called functions. The necessary logic will be executed only
+when the \lstinline!run! method is invoked. At that time, the entire
+DSL program will be converted into a result value.
 
 Nevertheless, DSL programs can now be written as functor blocks:
 \begin{lstlisting}
 val prg: PrgFile[String] = for {
-  p <- Path(Literal("config.txt"))
-  r <- if (Files.exists(p)) Read(p) else Literal("File not found")
+  p <- Path(Val("config.txt"))
+  r <- if (Files.exists(p)) Read(p) else Val("No file.")
 } yield r
 \end{lstlisting}
 Longer DSL programs may be composed from shorter ones:
 \begin{lstlisting}
-def readPath(filename: String): PrgFile[String] = for {
-  path <- Path(Literal(filename))
-  text <- if (Files.exists(path)) Read(path) else Literal("File not found")
+def readFileContents(filename: String): PrgFile[String] = for {
+  path <- Path(Val(filename))
+  text <- if (Files.exists(path)) Read(path) else Val("No file.")
 } yield text
 
 val prg2: PrgFile[String] = for {
-  str <- readPath("config.txt")
-  result <- if (str.nonEmpty) readPath(str) else PrgFile.pure("Error: empty filename")
+  str <- readFileContents("config.txt")
+  result <- if (str.nonEmpty) readFileContents(str) else PrgFile.pure("No filename.")
 } yield result
+
+scala> runFile(prg2)
+res9 : String = "version = 1"
 \end{lstlisting}
 
 
 \subsection{Step 5: refactoring to reuse common code}
 
-Recall our first example (a DSL for complex numbers) and rewrite it
-in a similar way:
+Recall our second example (a DSL for complex numbers) and rewrite
+it in a similar way:
 \begin{lstlisting}
-sealed trait PrgComplex[A]
-final case class Literal[A](a: A) extends PrgComplex[A]
-final case class Bind[A, B](pa: PrgComplex[A], f: A => PrgComplex[B]) extends PrgComplex[B]
+sealed trait PrgComplex[A] {
+  def flatMap[B](f: A => Prg[B]): Prg[B] = Bind(this)(f)
+  def map[B](f: A => B): PrgFile[B] = Bind(this)(f andThen PrgFile.pure)
+}
+object PrgComplex {
+  def pure[A](a: A): PrgComplex[A] = Val(a)
+}
+
+final case class Val[A](a: A) extends PrgComplex[A]
+final case class Bind[A, B](pa: PrgComplex[B])(val f: B => PrgComplex[A]) extends PrgComplex[A]
 final case class Add(x: PrgComplex[Complex], y: PrgComplex[Complex]) extends PrgComplex[Complex]
 final case class Mul(x: PrgComplex[Complex], y: PrgComplex[Complex]) extends PrgComplex[Complex]
 final case class Conj(x: PrgComplex[Complex]) extends PrgComplex[Complex]
+final case class Phase(p: PrgComplex[Complex]) extends PrgComplex[Double]
+final case class Rotate(p: PrgComplex[Complex], alpha: PrgComplex[Double]) extends PrgComplex[Complex]
 
-def run[A]: PrgComplex[A] => A = {
-  case Literal(a)    => a
-  case Bind(pa, f)   => f(run(pa))
-  case Add(p1, p2)   => run(p1) + run(p2)
-  case Mul(p1, p2)   => run(p1) * run(p2)
-  case Conj(p)       => run(p).conj
+def runComplex[A]: PrgComplex[A] => A = {
+  case Val(a)             => a
+  case bind@Bind(pa)      => runComplex(bind.f(runComplex(pa)))
+  case Add(p1, p2)        => runComplex(p1) + runComplex(p2)
+  case Mul(p1, p2)        => runComplex(p1) * runComplex(p2)
+  case Conj(p)            => runComplex(p).conj
+  case Phase(p)           => runComplex(p).phase
+  case Rotate(p, alpha)   => runComplex(p).rotate(runComplex(alpha))
 }
 \end{lstlisting}
 
 Comparing the code of \lstinline!PrgFile! and \lstinline!PrgComplex!,
-we notice that the the \lstinline!Literal! and \lstinline!Bind!
-operations are implemented in the same way. The differences are in
-the code for operations specific to file handling or to complex numbers.
-So, let us refactor these data structures so that the domain-specific
-operations are separated and the common code may be reused. We will
-gather all the domain-specific operations in a separate type constructor
-that we call the \index{effect constructor}\textbf{effect constructor}.
+we notice that the the \lstinline!Val! and \lstinline!Bind! operations
+are implemented in the same way. The differences are in the code for
+operations specific to file handling or to complex numbers. So, let
+us refactor these data structures so that the domain-specific operations
+are separated and the common code may be reused. We can gather all
+the domain-specific operations in a separate type constructor that
+we call the \index{effect constructor}\textbf{effect constructor}.
 The common code will then use the effect constructor as a type parameter.
 Let us now refactor the two example DSLs in this way.
 
@@ -380,7 +508,7 @@ changes}{\footnotesize\par}
 \texttt{\textcolor{blue}{\footnotesize{}case class Bind{[}A, B{]}(p: Prg{[}A{]},
 f: A$\rightarrow$Prg{[}B{]}) extends Prg{[}B{]}}}{\footnotesize\par}
 
-\texttt{\textcolor{blue}{\footnotesize{}case class Literal{[}A{]}(a: A)
+\texttt{\textcolor{blue}{\footnotesize{}case class Val{[}A{]}(a: A)
 extends Prg{[}A{]}}}{\footnotesize\par}
 
 \texttt{\textcolor{blue}{\footnotesize{}type Complex = (Double, Double)}}\textcolor{darkgray}{\footnotesize{}
@@ -407,7 +535,7 @@ A{]}}}\textcolor{darkgray}{\footnotesize{} // just for convenience}{\footnotesiz
 \texttt{\textcolor{blue}{\footnotesize{}case class Bind{[}A, B{]}(p: Prg{[}A{]},
 f: A$\rightarrow$Prg{[}B{]}) extends Prg{[}B{]}}}{\footnotesize\par}
 
-\texttt{\textcolor{blue}{\footnotesize{}case class Literal{[}A{]}(a: A)
+\texttt{\textcolor{blue}{\footnotesize{}case class Val{[}A{]}(a: A)
 extends Prg{[}A{]}}}{\footnotesize\par}
 
 \texttt{\textcolor{blue}{\footnotesize{}case class Ops{[}A{]}(f: F{[}A{]})
@@ -445,7 +573,7 @@ andThen run(extract))}}{\footnotesize\par}
 \texttt{\textcolor{blue}{\footnotesize{}    \}}}\textcolor{darkgray}{\footnotesize{}
     // Here, the .flatMap is from Either.}{\footnotesize\par}
 
-\texttt{\textcolor{blue}{\footnotesize{}    case Literal(a) => Right(a)}}\textcolor{darkgray}{\footnotesize{}
+\texttt{\textcolor{blue}{\footnotesize{}    case Val(a) => Right(a)}}\textcolor{darkgray}{\footnotesize{}
 // pure: A $\rightarrow$ Err + A}{\footnotesize\par}
 
 \texttt{\textcolor{blue}{\footnotesize{}    case Ops(f) => extract(f)
@@ -521,7 +649,9 @@ Can combine two or more DSLs in a disjunction: $\text{DSL}^{F+G+H,A}$
 
 \paragraph{Monad laws for DSL programs}
 
-Monad laws hold for DSL programs only after evaluating them
+Monad laws hold for DSL programs only after evaluating them; when
+DSL is defined as an unevaluated tree, monad laws do not hold for
+that tree
 
 Consider the law $\text{flm}\left(\text{pure}\right)=\text{id}$;
 both functions $\text{DSL}^{F,A}\rightarrow\text{DSL}^{F,A}$
@@ -530,7 +660,7 @@ Apply both sides to some $\text{prg}:\text{DSL}^{F,A}$ and get the
 new value
 
 \texttt{\textcolor{blue}{\footnotesize{}prg.flatMap(pure) == Bind(prg,
-a $\rightarrow$ Literal(a))}}{\footnotesize\par}
+a $\rightarrow$ Val(a))}}{\footnotesize\par}
 
 This new value is \emph{not equal} to \texttt{\textcolor{blue}{\footnotesize{}prg}},
 so this monad law fails!
@@ -541,10 +671,10 @@ After interpreting this program into a target monad $M^{A}$, the
 law holds:
 
 \texttt{\textcolor{blue}{\footnotesize{}run(ex)(prg).flatMap((a $\rightarrow$
-Literal(a)) andThen run(ex)) }}{\footnotesize\par}
+Val(a)) andThen run(ex)) }}{\footnotesize\par}
 
 \texttt{\textcolor{blue}{\footnotesize{}  == run(ex)(prg).flatMap(a
-$\rightarrow$ run(ex)(Literal(a)) }}{\footnotesize\par}
+$\rightarrow$ run(ex)(Val(a)) }}{\footnotesize\par}
 
 \texttt{\textcolor{blue}{\footnotesize{}  == run(ex)(prg).flatMap(a
 $\rightarrow$ pure(a))}}{\footnotesize\par}
@@ -1821,10 +1951,9 @@ $F$ while preserving the free monad operations.
 
 \subsubsection{Statement \label{subsec:Statement-free-monad-monadic-naturality}\ref{subsec:Statement-free-monad-monadic-naturality}}
 
-The free monad $\text{Free}^{F}$ is natural in the functor $F$:
-for any functor $G$ and any natural transformation $\phi:F^{A}\rightarrow G^{A}$,
+For any functor $G$ and any natural transformation $\phi:F^{A}\rightarrow G^{A}$,
 the corresponding transformation $\psi(\phi):\text{Free}^{F,A}\rightarrow\text{Free}^{G,A}$
-defined by
+defined by:
 \[
 \psi(\phi):\text{Free}^{F,A}\rightarrow\text{Free}^{G,A}\quad,\quad\quad\psi\triangleq\,\begin{array}{|c||cc|}
  & A & G^{\text{Free}^{G,A}}\\
@@ -1832,7 +1961,8 @@ defined by
 F^{\text{Free}^{F,A}} & \bbnum 0 & \overline{\psi}^{\uparrow F}\bef\phi
 \end{array}
 \]
-is a monad morphism.
+is a monad morphism. In other words, the free monad $\text{Free}^{F}$
+is natural in the functor $F$. 
 
 \subparagraph{Proof}
 
@@ -1917,7 +2047,7 @@ So, it remains to show that
 (\overline{\psi}^{\uparrow P}\bef\overline{\psi}\bef\text{ftn}_{Q}\big)^{\uparrow F}\bef\phi\overset{?}{=}\overline{\psi}^{\uparrow P\uparrow F}\bef\overline{\psi}^{\uparrow F}\bef\phi\bef\overline{\text{ftn}}_{Q}^{\uparrow G}\quad.
 \]
 This holds due to the naturality law of $\phi$, in the form $\phi\bef f^{\uparrow G}=f^{\uparrow F}\bef\phi$.
-This concludes the proof.
+$\square$
 
 Heuristically, a free monad on a functor $F$ will wrap $F$ in a
 more complicated type constructor such that the resulting type has
@@ -1942,6 +2072,8 @@ F^{T^{A}} & \overline{p}^{\uparrow F}\bef\text{ftn}_{F}
 
 \textbf{(b)} The function $q:F^{A}\rightarrow T^{A}$ defined by $q(f)\triangleq\bbnum 0+f\triangleright(a^{:A}\rightarrow a+\bbnum 0)^{\uparrow F}$
 is \emph{not} a monad morphism.
+
+{*}{*}{*} but $q\bef f=\text{id}$?
 
 \subparagraph{Proof}
 
@@ -2023,10 +2155,7 @@ cannot equal  $\bbnum 0+\text{pu}_{F}(a+\bbnum 0)$.
 
 The following statement shows that the equivalence between the type
 $\forall X.\,\left(A\rightarrow X\right)\rightarrow X$ and the type
-$A$ can be generalized to involve an arbitrary functor $F$. The
-Church encoding of a simple type is then regarded as a particular
-case of the Yoneda identity where the functor $F$ is chosen as the
-identity functor.
+$A$ can be generalized to involve an arbitrary functor $F$.
 
 \subsubsection{Statement \label{subsec:Statement-covariant-yoneda-identity-for-types}\ref{subsec:Statement-covariant-yoneda-identity-for-types}
 (covariant Yoneda identity)\index{Yoneda identity!covariant}}
@@ -2776,13 +2905,13 @@ a scholar function from a Scala variable STR to another tree and so
 this is how I implement this domain-specific language again we I have
 a seal trade program or probe which now has four case classes and
 the three case classes here are the ones that I would need to implement
-functionality so for example I need literal strings so I'll represent
-that with this literal case class I need paths whose contents are
-maybe programs again because I don't know path can be computed and
-I need to read again I need to read something which could be another
-DSL program so that\textsf{'}s what I do in these three case classes and I
-also had a case class bind which represents binding enum DSL variable
-to a value which is computed when you run the DSL and then so I have
+functionality so for example I need Val strings so I'll represent
+that with this Val case class I need paths whose contents are maybe
+programs again because I don't know path can be computed and I need
+to read again I need to read something which could be another DSL
+program so that\textsf{'}s what I do in these three case classes and I also
+had a case class bind which represents binding enum DSL variable to
+a value which is computed when you run the DSL and then so I have
 the first part of this case class is a DSL program which when run
 will give me a value of type string and the second part of the case
 class is a function from string to another DSL programmer so this
@@ -2792,37 +2921,37 @@ Scala code in principle in the code of this function including conditions
 or creating another dsl program by using the values of these variables
 in an arbitrary way so this variable will be the argument of F so
 here is an example I make a bind so this entire thing becomes a blind
-of this which is read path literal file and this which is a scholar
-function that executes my conditional computation and then returns
-a value of type program again so it returns a DSL program so this
-is a function that takes a string and returns a program so that is
-how I can easily implement the requirement that the DSL should express
-variable binding conditional computations arbitrary Scala code in
-those calculations and using the scala variables such as this one
-in creating expression trees so I still have an expression tree this
-entire thing is still expression tree and still undervalued but now
-I have a lot more flexibility in what sort of computations I can implement
-with the DSL the interpreter for the DSL will still have the same
-type signature it will be perhaps slightly more complicated so let\textsf{'}s
-look at a code examples so first the DSL for complex numbers which
-is what we saw before so the only interesting code here is in running
-a DSL program and here\textsf{'}s how we run we basically take the value of
-the program which is going to be one of these three case classes and
-we match it in each case we run what\textsf{'}s inside so in this strain case
-the inside is a definition of a complex number by string such as this
-one we need to parse it so I have some regular expression that I parse
-this with and the result is going to be one value than a sign and
-another value and then I create a complex number out of that a multiplication
-is a standard formula for complex multiplication but notice that both
-of these are programs so the mall case class contains two programs
-that first have to be run in order to get a complex numbers out of
-them and then I execute a complex multiplication similarly the conjugate
-operation first I have to run the program that is the argument here
-and then I execute the operation so here\textsf{'}s a test conjugate of multiply
-of this which is equal to this complex number so in order to get it
-I do run of program so when I do this nothing is wrong yet it\textsf{'}s a
-data structure and I could have code that for example simplifies this
-in some way maybe or prints it or whatever it\textsf{'}s a data structure that
+of this which is read path Val file and this which is a scholar function
+that executes my conditional computation and then returns a value
+of type program again so it returns a DSL program so this is a function
+that takes a string and returns a program so that is how I can easily
+implement the requirement that the DSL should express variable binding
+conditional computations arbitrary Scala code in those calculations
+and using the scala variables such as this one in creating expression
+trees so I still have an expression tree this entire thing is still
+expression tree and still undervalued but now I have a lot more flexibility
+in what sort of computations I can implement with the DSL the interpreter
+for the DSL will still have the same type signature it will be perhaps
+slightly more complicated so let\textsf{'}s look at a code examples so first
+the DSL for complex numbers which is what we saw before so the only
+interesting code here is in running a DSL program and here\textsf{'}s how we
+run we basically take the value of the program which is going to be
+one of these three case classes and we match it in each case we run
+what\textsf{'}s inside so in this strain case the inside is a definition of
+a complex number by string such as this one we need to parse it so
+I have some regular expression that I parse this with and the result
+is going to be one value than a sign and another value and then I
+create a complex number out of that a multiplication is a standard
+formula for complex multiplication but notice that both of these are
+programs so the mall case class contains two programs that first have
+to be run in order to get a complex numbers out of them and then I
+execute a complex multiplication similarly the conjugate operation
+first I have to run the program that is the argument here and then
+I execute the operation so here\textsf{'}s a test conjugate of multiply of
+this which is equal to this complex number so in order to get it I
+do run of program so when I do this nothing is wrong yet it\textsf{'}s a data
+structure and I could have code that for example simplifies this in
+some way maybe or prints it or whatever it\textsf{'}s a data structure that
 is available for me to work with I could type set this in latex if
 I wanted to before running it so then I also can run it so this is
 the power of the interpreter pattern let\textsf{'}s look at implementing the
@@ -2858,7 +2987,7 @@ of a read is not a path as a string and the program doesn't know about
 it and just it gives us an exception key not found text which is a
 kind of a runtime exception since we don't have a file named text
 in our file system but this should not be the error the error should
-be you cannot read a literal string you must read a class on the file
+be you cannot read a Val string you must read a class on the file
 system which would have been a type error if this were a type safe
 language so that\textsf{'}s the next concern our DSL so far has no type safety
 every value in it is a program and it\textsf{'}s evaluated per string so what
@@ -2876,8 +3005,8 @@ argument of bind is a program that has a string result and a function
 will take that result and output another program with string result
 whereas previously bind had a program and this function returned the
 program now we explicitly demand the result must be of type string
-and then we can apply F to that result so literal will also give us
-a program returning a string and path will take a program that returns
+and then we can apply F to that result so Val will also give us a
+program returning a string and path will take a program that returns
 a string but it will heal the program that has the past in Iowa file
 path type in other words it\textsf{'}s not a program returning string and the
 read will take that kind of program and return a program that evaluates
@@ -2888,7 +3017,7 @@ now so let\textsf{'}s implement instead of niño Java file types let\textsf{'}s j
 have a mock type that represents a file path so now how do we implement
 run you know it\textsf{'}s the same except now it\textsf{'}s impossible to have pass
 in a program of type string so the program of type strain can only
-be by and literal or read it cannot be a path because that\textsf{'}s a program
+be by and Val or read it cannot be a path because that\textsf{'}s a program
 of type the are G of F path so we don't need this case here and instead
 we just implement directly this case where we have a read of the text
 because there is nothing else we can have so now the code is type
@@ -2904,111 +3033,110 @@ the string type is very special and limiting us so for example we
 cannot do this we must have a program that returns at rest so we cannot
 directly read the past and if we wanted to compute this path using
 a scholar program then we cannot convert this into a program of path
-because there is no way to do that literal can only take a string
-and extends program of string so let\textsf{'}s fix these problems now so first
-of all let\textsf{'}s make literal a fully parameterize declaration so that
-it\textsf{'}s literal of a and it returns program of a for any a and secondly
-let\textsf{'}s replace this string by a parameter a as well so that would be
-a parameter even will be an aid to program of B so we want to now
-have arbitrary types instead of string here so we introduce two type
-parameters in Bound and we will have this generality everything else
-stays the same and except we get rid of this program of string and
-program of path because now we have a literal and the literal can
-always convert a string into a program of strain in the path into
-a program of path with no problem so we don't need to have programs
-as types here if we need this kind of thing we just bind a variable
-and we'll get get what we need so now this is an interesting type
-because the signatures of bind and literal are very similar to signatures
-of flat map and pure if you look at this carefully so literal is of
-type a to program of a bind is of this type program of a a to program
-of B and it returns program will be so if we imagine that this is
-a function from here to here then this is going to be just type signature
-flatmap and actually it is in some sense a function binding dot apply
-is a function that takes these as arguments and returns a value of
-this type except it\textsf{'}s not just any function so type constructor so
-this function is defined in a special way so essentially this type
-has methods of type signature flat map and pure it looks like this
-type is a moment so let\textsf{'}s actually define these methods flat map map
-and pure and it\textsf{'}s very easy to do that flat map will just create a
-data structure with the case class bind map we defined automatically
-by a flat map on theorem as we know that in a wallet you can define
-Maps through flat map and pure the pure is defined as just literal
-case closed so these methods don't actually compute anything they
-don't run the DSL they create further unevaluated data structures
-in other words these methods create DSL programs out of previously
-defined DSL programs these are combinators innocence but usually says
-then the combinators data are functions that take values of some type
-and circle those and create new values of the same type the advantage
-of Khalid affined in flat map map and pure is that we can write the
-assault programs as functor blocks and we can compose them very easily
-so for example if you look at the previous program we have a bit of
-a repetition to have this read past literal which we are using twice
-so how can we reuse that well they are easily make a function that
-returns a string value program like this so we take a path we read
-that files contents and this is a standard Scala syntax for the Thunderer
-block as I call it for yield block and we can use this syntax now
-because we have defined flat map and map in the program trade and
-now we can easily combine and reuse the mimetic values in another
-factor block so we can write this code as functor blocks as we would
-do with any other moaner let\textsf{'}s see what the interpreter looks like
-for this one I think DSL now I have full dramatization of types defined
-viewer and map and flatmap and before as a shown in the slide now
-there is a bit of ugliness in the runner because of the problems with
-type pattern matching scholar has this problem where you want to have
-image at least closet has type parameters it\textsf{'}s not easy to do that
-so I have to do a bit of dancing around first I match the bind and
-then I imagine a result I cannot put I parameters here that won't
-compile I think maybe it will but I wasn't able to do it right let
-me see if I can do it in one go Ashley you can see this was entirely
-wrong a great simplification maybe my idea is not the literal and
-other things are the same except now I have to do typecast so again
-Scala is not great when you have to do type parameters on a case class
-and the dual match expression so that\textsf{'}s a bit of ugliness but that\textsf{'}s
-not so bad perhaps so let\textsf{'}s see that all of this actually works and
-so now we are pretty happy we can a monadic DSL now it\textsf{'}s perhaps a
-little too cumbersome because you need to define all these things
-every time so if I wanted to define a DSL for complex numbers in the
-same way as this DSL then I would have to add the bind and the literal
-and these definitions every time so I would have to repeat this code
-every time note that there are no code changes between this DSL for
-the file operations and this DSL for complex numbers up to here so
-this is completely the same the custom code starts later when we define
-some more case classes so let\textsf{'}s refactor the DSL so that the common
-code is separated and the custom code is just wrapped in some type
-constructor called F so here\textsf{'}s how we do that we say there\textsf{'}s a DSL
-type constructor that is paralyzed by the type a is minus 1 and it
-type constructor F that will encapsulate always custom code so the
-type constructor F will have the definition like this just like our
-first first try at DSL so this could be once we add the type parameter
-this could be the type constructor F and then we define just the typeclass
-the case classes that are necessary to implement the moon add functionality
-to bind and literal case classes and then we have this case class
-ops for operations which contain a value of type F of n and so this
-is a wrapper over whatever custom operations we have in our DSL and
-notice here DSL does not have programmers parameters here has the
-complex as parameters it\textsf{'}s up to us we could have programmers parameters
-it\textsf{'}s a matter of convenience what important in it but whatever that
-is it\textsf{'}s going to be encapsulated now in the case class ops so this
-entire code is going to be generic in operations of your DSL so the
-type constructor F represents the operations of the DSL and power
-the our tech constructor DSL is a melodic DSL is permit rised by that
-tightness factor f so this car is now engineered in the operations
-of your Union now the cost of this is that the interpreter now needs
-to know how to interpret your operations so you have to write extra
-code as opposed to hard coding is you just write extra code that converts
-your operations to values so you evaluate your operation so for example
-this operation would be the domain specific part inside this F type
-constructor it needs to be evaluated to yield this path so let\textsf{'}s see
-how that works so the DSL will be general so all this part of code
-is generic it does not depend on the domain all the domain-specific
-operations are encapsulated by the type constructor S which is defined
-later in a different place of your code so in this way we penalize
-by this type constructor in this code is fully generic in any domain
-so now we need to have the extractor the value extractor were evaluated
-for your domain so this needs to be a function as I showed of this
-type I would like to emphasize of this type is actually parameterize
-by a typewriter a inside the expression it is not business for all
-a I quantifier needs to be inside here it cannot be over there when
+because there is no way to do that Val can only take a string and
+extends program of string so let\textsf{'}s fix these problems now so first
+of all let\textsf{'}s make Val a fully parameterize declaration so that it\textsf{'}s
+Val of a and it returns program of a for any a and secondly let\textsf{'}s
+replace this string by a parameter a as well so that would be a parameter
+even will be an aid to program of B so we want to now have arbitrary
+types instead of string here so we introduce two type parameters in
+Bound and we will have this generality everything else stays the same
+and except we get rid of this program of string and program of path
+because now we have a Val and the Val can always convert a string
+into a program of strain in the path into a program of path with no
+problem so we don't need to have programs as types here if we need
+this kind of thing we just bind a variable and we'll get get what
+we need so now this is an interesting type because the signatures
+of bind and Val are very similar to signatures of flat map and pure
+if you look at this carefully so Val is of type a to program of a
+bind is of this type program of a a to program of B and it returns
+program will be so if we imagine that this is a function from here
+to here then this is going to be just type signature flatmap and actually
+it is in some sense a function binding dot apply is a function that
+takes these as arguments and returns a value of this type except it\textsf{'}s
+not just any function so type constructor so this function is defined
+in a special way so essentially this type has methods of type signature
+flat map and pure it looks like this type is a moment so let\textsf{'}s actually
+define these methods flat map map and pure and it\textsf{'}s very easy to do
+that flat map will just create a data structure with the case class
+bind map we defined automatically by a flat map on theorem as we know
+that in a wallet you can define Maps through flat map and pure the
+pure is defined as just Val case closed so these methods don't actually
+compute anything they don't run the DSL they create further unevaluated
+data structures in other words these methods create DSL programs out
+of previously defined DSL programs these are combinators innocence
+but usually says then the combinators data are functions that take
+values of some type and circle those and create new values of the
+same type the advantage of Khalid affined in flat map map and pure
+is that we can write the assault programs as functor blocks and we
+can compose them very easily so for example if you look at the previous
+program we have a bit of a repetition to have this read past Val which
+we are using twice so how can we reuse that well they are easily make
+a function that returns a string value program like this so we take
+a path we read that files contents and this is a standard Scala syntax
+for the Thunderer block as I call it for yield block and we can use
+this syntax now because we have defined flat map and map in the program
+trade and now we can easily combine and reuse the mimetic values in
+another factor block so we can write this code as functor blocks as
+we would do with any other moaner let\textsf{'}s see what the interpreter looks
+like for this one I think DSL now I have full dramatization of types
+defined viewer and map and flatmap and before as a shown in the slide
+now there is a bit of ugliness in the runner because of the problems
+with type pattern matching scholar has this problem where you want
+to have image at least closet has type parameters it\textsf{'}s not easy to
+do that so I have to do a bit of dancing around first I match the
+bind and then I imagine a result I cannot put I parameters here that
+won't compile I think maybe it will but I wasn't able to do it right
+let me see if I can do it in one go Ashley you can see this was entirely
+wrong a great simplification maybe my idea is not the Val and other
+things are the same except now I have to do typecast so again Scala
+is not great when you have to do type parameters on a case class and
+the dual match expression so that\textsf{'}s a bit of ugliness but that\textsf{'}s not
+so bad perhaps so let\textsf{'}s see that all of this actually works and so
+now we are pretty happy we can a monadic DSL now it\textsf{'}s perhaps a little
+too cumbersome because you need to define all these things every time
+so if I wanted to define a DSL for complex numbers in the same way
+as this DSL then I would have to add the bind and the Val and these
+definitions every time so I would have to repeat this code every time
+note that there are no code changes between this DSL for the file
+operations and this DSL for complex numbers up to here so this is
+completely the same the custom code starts later when we define some
+more case classes so let\textsf{'}s refactor the DSL so that the common code
+is separated and the custom code is just wrapped in some type constructor
+called F so here\textsf{'}s how we do that we say there\textsf{'}s a DSL type constructor
+that is paralyzed by the type a is minus 1 and it type constructor
+F that will encapsulate always custom code so the type constructor
+F will have the definition like this just like our first first try
+at DSL so this could be once we add the type parameter this could
+be the type constructor F and then we define just the typeclass the
+case classes that are necessary to implement the moon add functionality
+to bind and Val case classes and then we have this case class ops
+for operations which contain a value of type F of n and so this is
+a wrapper over whatever custom operations we have in our DSL and notice
+here DSL does not have programmers parameters here has the complex
+as parameters it\textsf{'}s up to us we could have programmers parameters it\textsf{'}s
+a matter of convenience what important in it but whatever that is
+it\textsf{'}s going to be encapsulated now in the case class ops so this entire
+code is going to be generic in operations of your DSL so the type
+constructor F represents the operations of the DSL and power the our
+tech constructor DSL is a melodic DSL is permit rised by that tightness
+factor f so this car is now engineered in the operations of your Union
+now the cost of this is that the interpreter now needs to know how
+to interpret your operations so you have to write extra code as opposed
+to hard coding is you just write extra code that converts your operations
+to values so you evaluate your operation so for example this operation
+would be the domain specific part inside this F type constructor it
+needs to be evaluated to yield this path so let\textsf{'}s see how that works
+so the DSL will be general so all this part of code is generic it
+does not depend on the domain all the domain-specific operations are
+encapsulated by the type constructor S which is defined later in a
+different place of your code so in this way we penalize by this type
+constructor in this code is fully generic in any domain so now we
+need to have the extractor the value extractor were evaluated for
+your domain so this needs to be a function as I showed of this type
+I would like to emphasize of this type is actually parameterize by
+a typewriter a inside the expression it is not business for all a
+I quantifier needs to be inside here it cannot be over there when
 the reason is that when we run the DSL it takes a program that evaluates
 a value of type a but intermediate steps could have different types
 it could be that in order to compute a value of type a you first need
@@ -3039,7 +3167,7 @@ language this program is not a factor because we have specific types
 here now we do have a map function but only on the entire DSL the
 F will only encapsulate these two case classes because we are now
 separating the custom code from the generic monadic wrapper the binding
-literal and the F type constructor will only encapsulate the domain-specific
+Val and the F type constructor will only encapsulate the domain-specific
 code which has specific types here and does not have a map method
 so it cannot be a functor it\textsf{'}s a partial type two type function that\textsf{'}s
 only defined for specific type parameters and that cannot be a factor
@@ -3065,8 +3193,8 @@ really not there\textsf{'}s necessarily the same as this a so let\textsf{'}s see
 how we use this so we now define a type constructor just for the custom
 file operations so this is going to be the F here so we called File
 ops and now this is just the domain-specific operations there are
-no bind case constants were literally classes we don't need those
-those are going to be provided generically extractor needs to be defined
+no bind case constants were Vally classes we don't need those those
+are going to be provided generically extractor needs to be defined
 only for these so this is the domain specific code how to read files
 how to create file paths or verify them or whatever this needs to
 be so this is going to be actual domain specific code and then how
@@ -3088,8 +3216,8 @@ evaluate it to either of error and a all we need to do is to provide
 a different extractor an extractor would be of this type so instead
 of going FA to a and goes to fheo some error type was in it and the
 code of the interpreter is almost unchanged except so this is the
-same except the pure needs to put the or the literal case cause it\textsf{'}s
-a pure function in the Monad it needs to put this into the right or
+same except the pure needs to put the or the Val case cause it\textsf{'}s a
+pure function in the Monad it needs to put this into the right or
 the either and the bind needs to use the flat map on the either other
 than that it\textsf{'}s exactly the same so how does this code work well it
 goes through the expression tree when it finds the bind expression
@@ -3230,7 +3358,7 @@ of flatmap and mount all they do is put more case classes on top of
 things they don't actually simplify anything ever so for this reason
 it cannot simplify this to PRT it will create a new bind and all the
 other monad operations will create new case classes and never reduce
-anything so basically the laws fail if you demand that they hold literally
+anything so basically the laws fail if you demand that they hold Vally
 like this so our data structure DSL is not a lawful munna it does
 not satisfy the laws but once you interpret this data structure into
 a target monad and assuming that this monad satisfies the Lord then
@@ -3240,21 +3368,21 @@ you run this value if you apply a run to this and by definition of
 the code it needs to first run this and then apply flatmap with this
 function and then run the results of this function so that is the
 code and if we now symbolically evaluate this code will find that
-the runner of the literal it will just give you a write of a let\textsf{'}s
-say in the ether moment it will be really pure of a in general but
-I'm just substituting the code from the previous line and because
-this is a pure for the either moment the either moment has the wall
-satisfied and so flat map of error is identity and so the result will
-be equal to running the program PRG so in this way assuming that the
-laws will hold for the monel m this both sides when we run them will
-won't be the same so all other laws also hold I will show that next
-but think about what it means it means that the violations of the
-Monad laws that this data structure has are not observable once you
-run the computation so the data structure and they have some extra
-information inside that gets computed away it gets reduced or simplified
-when you run or when you evaluate this into or interpret this into
-some target unit so in this sense I would say that the moral law violations
-are not observable when you actually observe or run or interpret this
+the runner of the Val it will just give you a write of a let\textsf{'}s say
+in the ether moment it will be really pure of a in general but I'm
+just substituting the code from the previous line and because this
+is a pure for the either moment the either moment has the wall satisfied
+and so flat map of error is identity and so the result will be equal
+to running the program PRG so in this way assuming that the laws will
+hold for the monel m this both sides when we run them will won't be
+the same so all other laws also hold I will show that next but think
+about what it means it means that the violations of the Monad laws
+that this data structure has are not observable once you run the computation
+so the data structure and they have some extra information inside
+that gets computed away it gets reduced or simplified when you run
+or when you evaluate this into or interpret this into some target
+unit so in this sense I would say that the moral law violations are
+not observable when you actually observe or run or interpret this
 program there are no violations so these violations are hidden somewhere
 in this data structure and they don't change the results they don't
 make the results invalid and so it\textsf{'}s okay to have those violations
@@ -3298,7 +3426,7 @@ identity long let\textsf{'}s look at the left identity law this it needs to
 be verified we have apply run to both sides and we have to show that
 run of this is equal to run of that so let\textsf{'}s evaluate the run if we
 do the pure flat map then this is translated into that we run that
-get run of literal which is just M of pure so you have a pure followed
+get run of Val which is just M of pure so you have a pure followed
 by flat map of this but pure followed by flat map is going to be in
 the Monon m and that is equivalent to just this function which is
 G so that\textsf{'}s why the run of the two sides is the same because the run
