@@ -35,7 +35,7 @@ chapters=("Preface" "Mathematical formulas as code. I." \
  "Summary of the book" \
  "\`\`Applied functional type theory'': A proposal" "Essay: Software engineers and software artisans" \
  "Essay: Towards functional data engineering with Scala" "Essay: Why category theory" \
- "A Notations" "B Glossary of terms" "Inferring code from types." \
+ "A Notations" "B Glossary of terms" "Deriving code from types." \
  "D Parametricity theorem" "E Solutions of some exercises" "F A humorous disclaimer" "G GNU Free Documentation License" \
  "List of Tables" "List of Figures" "Index" "END_OF_BOOK")
 
