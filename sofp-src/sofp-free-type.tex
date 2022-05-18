@@ -221,8 +221,9 @@ val res5: Complex = Complex(11.0, -2.0)
 
 To achieve type safety, we add a type parameter to \lstinline!PrgComplex!.
 A DSL program of type \lstinline!PrgComplex[A]! will return a value
-of type \lstinline!A! when run. The new definitions of the case classes
-are:
+of type \lstinline!A! when run. (So, the new DSL program will be
+able to compute values of any type, not only of type \lstinline!Complex!.)
+The new definitions of the case classes are:
 \begin{lstlisting}
 sealed trait PrgComplex[A]
 final case class Val(c: Complex)                                       extends PrgComplex[Complex]
@@ -397,13 +398,13 @@ we can now use non-DSL code as part of a DSL program, as long as it
 is enclosed inside a \lstinline!Bind!. 
 
 The body of the function inside \lstinline!Bind! will be evaluated
-only when the DSL program is run. So, the DSL program is still only
-a value that describes the computation but does not execute it.
+only when the DSL program is run:
 \begin{lstlisting}
 scala> runFile(prg)
 res8: String = "version = 1"
 \end{lstlisting}
-
+ So, a value of type \lstinline!PrgFile[A]! describes a computation
+but does not execute it.
 
 \subsection{Step 4: refactoring to a monadic DSL}
 
@@ -413,7 +414,7 @@ and \lstinline!pure! methods of a monad. For convenience, let us
 define those methods on the \lstinline!PrgFile! class:
 \begin{lstlisting}
 sealed trait PrgFile[A] {
-  def flatMap[B](f: A => Prg[B]): Prg[B] = Bind(this)(f)
+  def flatMap[B](f: A => PrgFile[B]): PrgFile[B] = Bind(this)(f)
   def map[B](f: A => B): PrgFile[B] = Bind(this)(f andThen PrgFile.pure)
 }
 // Same case classes as before.
@@ -424,14 +425,15 @@ object PrgFile {
 Here we defined \lstinline!map! through \lstinline!flatMap! by analogy
 with the right identity law of monads.
 
-Like other DSL operations, the \lstinline!map!, \lstinline!flatMap!,
-and \lstinline!pure! methods do not run or evaluate any parts of
-a DSL program. They just create some nested data structures containing
-not-yet-called functions. The necessary logic will be executed only
-when the \lstinline!run! method is invoked. At that time, the entire
-DSL program will be converted into a result value.
+Like other DSL operations, the methods \lstinline!map!, \lstinline!flatMap!,
+and \lstinline!pure! do not run or evaluate any parts of a DSL program.
+They only create some nested data structures containing not-yet-called
+functions. The necessary logic will be executed when the \lstinline!run!
+method is invoked. At that time, the entire DSL program will be converted
+into a result value.
 
-Nevertheless, DSL programs can now be written as functor blocks:
+Because \lstinline!map! and \lstinline!flatMap! are defined, DSL
+programs can now be written as functor blocks:
 \begin{lstlisting}
 val prg: PrgFile[String] = for {
   p <- Path(Val("config.txt"))
@@ -457,12 +459,12 @@ res9 : String = "version = 1"
 
 \subsection{Step 5: refactoring to reuse common code}
 
-Recall our second example (a DSL for complex numbers) and rewrite
-it in a similar way:
+Let us rewrite our second example (a DSL for complex numbers) by adding
+\lstinline!map! and \lstinline!flatMap!:
 \begin{lstlisting}
 sealed trait PrgComplex[A] {
-  def flatMap[B](f: A => Prg[B]): Prg[B] = Bind(this)(f)
-  def map[B](f: A => B): PrgFile[B] = Bind(this)(f andThen PrgFile.pure)
+  def flatMap[B](f: A => PrgComplex[B]): PrgComplex[B] = Bind(this)(f)
+  def map[B](f: A => B): PrgComplex[B] = Bind(this)(f andThen PrgComplex.pure)
 }
 object PrgComplex {
   def pure[A](a: A): PrgComplex[A] = Val(a)
