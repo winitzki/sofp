@@ -1842,7 +1842,7 @@ val p = Paths.get(
 \begin_inset Quotes eld
 \end_inset
 
-config.txt
+config_location.txt
 \begin_inset Quotes erd
 \end_inset
 
@@ -1900,7 +1900,7 @@ val p: JPath = runFile(Path(Val(
 \begin_inset Quotes eld
 \end_inset
 
-config.txt
+config_location.txt
 \begin_inset Quotes erd
 \end_inset
 
@@ -2065,7 +2065,7 @@ run
 \end_inset
 
  function inside a DSL program will also prevent us from being able to apply
- a different runner to the same DSL program.
+ a different runner to the entire DSL program.
 \end_layout
 
 \begin_layout Standard
@@ -3184,8 +3184,7 @@ Step 5: refactoring to reuse common code
 \end_layout
 
 \begin_layout Standard
-Let us rewrite our second example (a DSL for complex numbers) by adding
- 
+Let us also rewrite our second example (a DSL for complex numbers) via 
 \begin_inset listings
 inline true
 status open
@@ -3398,9 +3397,9 @@ Bind
  operations are implemented in the same way.
  The differences are in the code for operations specific to file handling
  or to complex numbers.
- So, let us refactor these data structures so that the domain-specific operation
-s are separated and the common code may be reused.
- We can gather all the domain-specific operations in a separate type constructor
+ So, let us refactor these data structures, separating the domain-specific
+ operations and reusing the common code.
+ We can gather all the domain-specific operations in a new type constructor
  that we call the 
 \begin_inset Index idx
 status open
@@ -3433,7 +3432,7 @@ PrgFile
 
 \end_inset
 
- DSL contains the operations 
+ DSL should contain the operations 
 \begin_inset listings
 inline true
 status open
@@ -3458,7 +3457,303 @@ Read
 \end_inset
 
 .
- We define:
+ As a first attempt, let us just copy the existing case classes for these
+ operations and rename the parent type to 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+PrgFileC
+\end_layout
+
+\end_inset
+
+.
+ We will also move the relevant parts of 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+runFile
+\end_layout
+
+\end_inset
+
+ into a new function, 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+runFileC
+\end_layout
+
+\end_inset
+
+:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+sealed trait PrgFileC[A]
+\end_layout
+
+\begin_layout Plain Layout
+
+final case class Path(p: PrgFile[String]) extends PrgFileC[JPath]
+\end_layout
+
+\begin_layout Plain Layout
+
+final case class Read(p: PrgFile[JPath]) extends PrgFileC[String]
+\end_layout
+
+\begin_layout Plain Layout
+
+  
+\end_layout
+
+\begin_layout Plain Layout
+
+def runFileC[A]: PrgFileC[A] => A = {
+\end_layout
+
+\begin_layout Plain Layout
+
+  case Path(p) => Paths.get(runFile(p))    
+\end_layout
+
+\begin_layout Plain Layout
+
+  case Read(p) => new String(Files.readAllBytes(runFile(p))) 
+\end_layout
+
+\begin_layout Plain Layout
+
+}
+\end_layout
+
+\end_inset
+
+The code of 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+PrgFile
+\end_layout
+
+\end_inset
+
+ becomes shorter since we moved some code out of it:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+sealed trait PrgFile[A] {
+\end_layout
+
+\begin_layout Plain Layout
+
+  def flatMap[B](f: A => PrgFile[B]): PrgFile[B] = Bind(this)(f)
+\end_layout
+
+\begin_layout Plain Layout
+
+  def map[B](f: A => B): PrgFile[B] = Bind(this)(f andThen PrgFile.pure)
+\end_layout
+
+\begin_layout Plain Layout
+
+}
+\end_layout
+
+\begin_layout Plain Layout
+
+final case class Val[A](a: A) extends PrgFile[A]
+\end_layout
+
+\begin_layout Plain Layout
+
+final case class Bind[A, B](pa: PrgFile[B])(val f: B => PrgFile[A]) extends
+ PrgFile[A]
+\end_layout
+
+\begin_layout Plain Layout
+
+final case class Op[A](op: PrgFileC[A]) extends PrgFile[A]  // Wrap custom
+ operations.
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+def runFile[A]: PrgFile[A] => A = {
+\end_layout
+
+\begin_layout Plain Layout
+
+  case Val(a) => a
+\end_layout
+
+\begin_layout Plain Layout
+
+  case bind@Bind(pa) => runFile(bind.f(runFile(pa)))
+\end_layout
+
+\begin_layout Plain Layout
+
+  case Op(op) => runFileC(op)     // Run the custom operation and get the
+ result value.
+\end_layout
+
+\begin_layout Plain Layout
+
+}
+\end_layout
+
+\end_inset
+
+While this refactoring works, it is inconvenient because the definition
+ of custom operations (
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Path
+\end_layout
+
+\end_inset
+
+ and 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Read
+\end_layout
+
+\end_inset
+
+) depends on the type 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+PrgFile
+\end_layout
+
+\end_inset
+
+.
+ Because of that dependency, the code of  
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+runFileC
+\end_layout
+
+\end_inset
+
+ must use 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+PrgFile
+\end_layout
+
+\end_inset
+
+'s runner function (
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+runFile
+\end_layout
+
+\end_inset
+
+), as there is no other way of extracting values from a 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+PrgFile
+\end_layout
+
+\end_inset
+
+ wrapper.
+ It becomes impossible to use a different runner for a given DSL program.
+ A solution is to remove the 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+PrgFile
+\end_layout
+
+\end_inset
+
+ wrapping from the definition of 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Path
+\end_layout
+
+\end_inset
+
+ and 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Read
+\end_layout
+
+\end_inset
+
+.
+ Instead of the code shown above, we define:
 \begin_inset listings
 inline false
 status open
@@ -3478,9 +3773,45 @@ final case class Path(p: String) extends PrgFileC[JPath]
 final case class Read(p: JPath) extends PrgFileC[String]
 \end_layout
 
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+def runFileC[A]: PrgFileC[A] => A = {
+\end_layout
+
+\begin_layout Plain Layout
+
+  case Path(p) => Paths.get(p)    
+\end_layout
+
+\begin_layout Plain Layout
+
+  case Read(p) => new String(Files.readAllBytes(p)) 
+\end_layout
+
+\begin_layout Plain Layout
+
+}
+\end_layout
+
 \end_inset
 
-Now we refactor 
+Now the code of 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+PrgFileC
+\end_layout
+
+\end_inset
+
+ is completely independent of 
 \begin_inset listings
 inline true
 status open
@@ -3492,6 +3823,7 @@ PrgFile
 
 \end_inset
 
+ or its runners.
  by wrapping all file operations in a subtype called 
 \begin_inset listings
 inline true
