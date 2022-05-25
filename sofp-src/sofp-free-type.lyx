@@ -2908,7 +2908,27 @@ sealed trait PrgFile[A] {
 
 \begin_layout Plain Layout
 
-// Same case classes as before.
+final case class Val[A](a: A) extends PrgFile[A]
+\end_layout
+
+\begin_layout Plain Layout
+
+final case class Bind[A, B](pa: PrgFile[B])(val f: B => PrgFile[A]) extends
+ PrgFile[A]
+\end_layout
+
+\begin_layout Plain Layout
+
+final case class Path(p: PrgFile[String]) extends PrgFile[JPath]
+\end_layout
+
+\begin_layout Plain Layout
+
+final case class Read(p: PrgFile[JPath]) extends PrgFile[String]
+\end_layout
+
+\begin_layout Plain Layout
+
 \end_layout
 
 \begin_layout Plain Layout
@@ -3179,24 +3199,8 @@ version = 1
 
 \end_layout
 
-\begin_layout Subsection
-Step 5: refactoring to reuse common code
-\end_layout
-
 \begin_layout Standard
-Let us also rewrite our second example (a DSL for complex numbers) via 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-map
-\end_layout
-
-\end_inset
-
- and 
+Another benefit of the monadic refactoring is that 
 \begin_inset listings
 inline true
 status open
@@ -3208,7 +3212,157 @@ flatMap
 
 \end_inset
 
-:
+ provides a general way of applying a file operation to a value wrapped
+ under 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+PrgFile
+\end_layout
+
+\end_inset
+
+.
+ So, we may simplify the case classes 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Path
+\end_layout
+
+\end_inset
+
+ and 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Read
+\end_layout
+
+\end_inset
+
+ by removing the 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+PrgFile
+\end_layout
+
+\end_inset
+
+ wrapping:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+final case class Path(p: String) extends PrgFile[JPath]
+\end_layout
+
+\begin_layout Plain Layout
+
+final case class Read(p: JPath) extends PrgFile[String]
+\end_layout
+
+\end_inset
+
+This simplifies the usage of the DSL since we may write, e.g., just 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Read(path)
+\end_layout
+
+\end_inset
+
+ instead of 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Read(Val(path))
+\end_layout
+
+\end_inset
+
+.
+ The code of 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+runFile
+\end_layout
+
+\end_inset
+
+ is also shortened:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+def runFile[A]: PrgFile[A] => A = {
+\end_layout
+
+\begin_layout Plain Layout
+
+  case Val(a)          => a
+\end_layout
+
+\begin_layout Plain Layout
+
+  case bind@Bind(pa)   => runFile(bind.f(runFile(pa)))
+\end_layout
+
+\begin_layout Plain Layout
+
+  case Path(p)         => Paths.get(p)
+\end_layout
+
+\begin_layout Plain Layout
+
+  case Read(p)         => new String(Files.readAllBytes(p))
+\end_layout
+
+\begin_layout Plain Layout
+
+}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+Step 5: refactoring to reuse common code
+\end_layout
+
+\begin_layout Standard
+Let us rewrite our second example (a DSL for complex numbers) in the same
+ way:
 \begin_inset listings
 inline false
 status open
@@ -3265,30 +3419,27 @@ final case class Bind[A, B](pa: PrgComplex[B])(val f: B => PrgComplex[A])
 
 \begin_layout Plain Layout
 
-final case class Add(x: PrgComplex[Complex], y: PrgComplex[Complex]) extends
- PrgComplex[Complex]
+final case class Add(x: Complex, y: Complex) extends PrgComplex[Complex]
 \end_layout
 
 \begin_layout Plain Layout
 
-final case class Mul(x: PrgComplex[Complex], y: PrgComplex[Complex]) extends
- PrgComplex[Complex]
+final case class Mul(x: Complex, y: Complex) extends PrgComplex[Complex]
 \end_layout
 
 \begin_layout Plain Layout
 
-final case class Conj(x: PrgComplex[Complex]) extends PrgComplex[Complex]
+final case class Conj(x: Complex) extends PrgComplex[Complex]
 \end_layout
 
 \begin_layout Plain Layout
 
-final case class Phase(p: PrgComplex[Complex]) extends PrgComplex[Double]
+final case class Phase(p: Complex) extends PrgComplex[Double]
 \end_layout
 
 \begin_layout Plain Layout
 
-final case class Rotate(p: PrgComplex[Complex], alpha: PrgComplex[Double])
- extends PrgComplex[Complex]
+final case class Rotate(p: Complex, alpha: Double) extends PrgComplex[Complex]
 \end_layout
 
 \begin_layout Plain Layout
@@ -3312,27 +3463,27 @@ def runComplex[A]: PrgComplex[A] => A = {
 
 \begin_layout Plain Layout
 
-  case Add(p1, p2)        => runComplex(p1) + runComplex(p2)
+  case Add(p1, p2)        => p1 + p2
 \end_layout
 
 \begin_layout Plain Layout
 
-  case Mul(p1, p2)        => runComplex(p1) * runComplex(p2)
+  case Mul(p1, p2)        => p1 * p2
 \end_layout
 
 \begin_layout Plain Layout
 
-  case Conj(p)            => runComplex(p).conj
+  case Conj(p)            => p.conj
 \end_layout
 
 \begin_layout Plain Layout
 
-  case Phase(p)           => runComplex(p).phase
+  case Phase(p)           => p.phase
 \end_layout
 
 \begin_layout Plain Layout
 
-  case Rotate(p, alpha)   => runComplex(p).rotate(runComplex(alpha))
+  case Rotate(p, alpha)   => p.rotate(alpha)
 \end_layout
 
 \begin_layout Plain Layout
@@ -3457,8 +3608,8 @@ Read
 \end_inset
 
 .
- As a first attempt, let us just copy the existing case classes for these
- operations and rename the parent type to 
+ Let us copy the existing case classes for these operations but rename their
+ parent type to 
 \begin_inset listings
 inline true
 status open
@@ -3507,12 +3658,12 @@ sealed trait PrgFileC[A]
 
 \begin_layout Plain Layout
 
-final case class Path(p: PrgFile[String]) extends PrgFileC[JPath]
+final case class Path(p: String) extends PrgFileC[JPath]
 \end_layout
 
 \begin_layout Plain Layout
 
-final case class Read(p: PrgFile[JPath]) extends PrgFileC[String]
+final case class Read(p: JPath) extends PrgFileC[String]
 \end_layout
 
 \begin_layout Plain Layout
@@ -3527,12 +3678,12 @@ def runFileC[A]: PrgFileC[A] => A = {
 
 \begin_layout Plain Layout
 
-  case Path(p) => Paths.get(runFile(p))    
+  case Path(p) => Paths.get(p)    
 \end_layout
 
 \begin_layout Plain Layout
 
-  case Read(p) => new String(Files.readAllBytes(runFile(p))) 
+  case Read(p) => new String(Files.readAllBytes(p)) 
 \end_layout
 
 \begin_layout Plain Layout
@@ -3628,357 +3779,11 @@ def runFile[A]: PrgFile[A] => A = {
 
 \end_inset
 
-While this refactoring works, it is inconvenient because the definition
- of custom operations (
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Path
-\end_layout
-
-\end_inset
-
- and 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Read
-\end_layout
-
-\end_inset
-
-) depends on the type 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-PrgFile
-\end_layout
-
-\end_inset
-
-.
- Because of that dependency, the code of  
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-runFileC
-\end_layout
-
-\end_inset
-
- must use 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-PrgFile
-\end_layout
-
-\end_inset
-
-'s runner function (
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-runFile
-\end_layout
-
-\end_inset
-
-), as there is no other way of extracting values from a 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-PrgFile
-\end_layout
-
-\end_inset
-
- wrapper.
- It becomes impossible to use a different runner for a given DSL program.
- A solution is to remove the 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-PrgFile
-\end_layout
-
-\end_inset
-
- wrapping from the definition of 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Path
-\end_layout
-
-\end_inset
-
- and 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Read
-\end_layout
-
-\end_inset
-
-.
- Instead of the code shown above, we define:
-\begin_inset listings
-inline false
-status open
-
-\begin_layout Plain Layout
-
-sealed trait PrgFileC[A]
-\end_layout
-
-\begin_layout Plain Layout
-
-final case class Path(p: String) extends PrgFileC[JPath]
-\end_layout
-
-\begin_layout Plain Layout
-
-final case class Read(p: JPath) extends PrgFileC[String]
-\end_layout
-
-\begin_layout Plain Layout
-
-\end_layout
-
-\begin_layout Plain Layout
-
-def runFileC[A]: PrgFileC[A] => A = {
-\end_layout
-
-\begin_layout Plain Layout
-
-  case Path(p) => Paths.get(p)    
-\end_layout
-
-\begin_layout Plain Layout
-
-  case Read(p) => new String(Files.readAllBytes(p)) 
-\end_layout
-
-\begin_layout Plain Layout
-
-}
-\end_layout
-
-\end_inset
-
-Now the code of 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-PrgFileC
-\end_layout
-
-\end_inset
-
- is completely independent of 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-PrgFile
-\end_layout
-
-\end_inset
-
- or its runners.
- by wrapping all file operations in a subtype called 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Ops
-\end_layout
-
-\end_inset
-
-:
-\begin_inset listings
-inline false
-status open
-
-\begin_layout Plain Layout
-
-sealed 
-\end_layout
-
-\end_inset
-
 
 \end_layout
 
 \begin_layout Standard
-***is it Ops(f: F[A]) and why not Ops(f: F[Prg[A]])??? What about the complex-nu
-mbers example?
-\end_layout
-
-\begin_layout Standard
-
-\family typewriter
-\size footnotesize
-\color blue
-sealed trait Prg[A] { def flatMap ...
- }
-\family default
-\color darkgray
- // no code changes
-\end_layout
-
-\begin_layout Standard
-
-\family typewriter
-\size footnotesize
-\color blue
-case class Bind[A, B](p: Prg[A], f: A
-\begin_inset Formula $\rightarrow$
-\end_inset
-
-Prg[B]) extends Prg[B]
-\end_layout
-
-\begin_layout Standard
-
-\family typewriter
-\size footnotesize
-\color blue
-case class Val[A](a: A) extends Prg[A]
-\end_layout
-
-\begin_layout Standard
-
-\family typewriter
-\size footnotesize
-\color blue
-type Complex = (Double, Double)
-\family default
-\color darkgray
- // custom code starts here
-\end_layout
-
-\begin_layout Standard
-
-\family typewriter
-\size footnotesize
-\color blue
-case class Str(s: String) extends Prg[Complex]
-\end_layout
-
-\begin_layout Standard
-
-\family typewriter
-\size footnotesize
-\color blue
-case class Mul(c1: Complex, C2: Complex) extends Prg[Complex]
-\end_layout
-
-\begin_layout Standard
-
-\family typewriter
-\size footnotesize
-\color blue
-case class Conj(c: Complex) extends Prg[Complex]
-\end_layout
-
-\begin_layout Standard
-Refactor this DSL to separate common code from custom code:
-\end_layout
-
-\begin_layout Standard
-
-\family typewriter
-\size footnotesize
-\color blue
-sealed trait DSL[F[_], A] { def flatMap ...
- }
-\family default
-\color darkgray
- // no code changes
-\end_layout
-
-\begin_layout Standard
-
-\family typewriter
-\size footnotesize
-\color blue
-type Prg[A] = DSL[F, A]
-\family default
-\color darkgray
- // just for convenience
-\end_layout
-
-\begin_layout Standard
-
-\family typewriter
-\size footnotesize
-\color blue
-case class Bind[A, B](p: Prg[A], f: A
-\begin_inset Formula $\rightarrow$
-\end_inset
-
-Prg[B]) extends Prg[B]
-\end_layout
-
-\begin_layout Standard
-
-\family typewriter
-\size footnotesize
-\color blue
-case class Val[A](a: A) extends Prg[A]
-\end_layout
-
-\begin_layout Standard
-
-\family typewriter
-\size footnotesize
-\color blue
-case class Ops[A](f: F[A]) extends Prg[A]
-\family default
-\color darkgray
- // custom operations here
+The code of PrgComplex is refactored in a similar way: ***
 \end_layout
 
 \begin_layout Standard
