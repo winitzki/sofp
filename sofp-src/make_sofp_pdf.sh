@@ -164,6 +164,11 @@ make_pdf_with_index "$name" # Output is $name.pdf, main file is $name.tex, and o
 
 wait
 
+	if ! test -s "$name".pdf; then
+		echo Output file "$name".pdf not found, exiting.
+		exit 1
+	fi
+
 # Do not attach sources to the main PDF file.
 #"$pdftk" "$name.pdf" attach_files "$name-src.tar.bz2" output "1$name.pdf"
 #mv "1$name.pdf" "$name.pdf"
