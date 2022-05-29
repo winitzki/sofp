@@ -13,7 +13,7 @@ design pattern. As a first motivation, we will look at how the free
 monad\index{free monad} emerges from elaborating the DSL pattern
 in the functional programming paradigm.
 
-\section{Motivation for the free monad: make a DSL in five steps}
+\section{Motivation for the free monad: make a DSL in five stages}
 
 The main point of using a DSL is to separate the description of computations
 from the process of their evaluation. One writes a \textbf{DSL program}\index{DSL program}
@@ -33,7 +33,7 @@ for complex numbers. We will refine and refactor our DSLs step by
 step to make them more powerful and safer to use. In this way, we
 will obtain the construction known as the \textsf{``}free monad\textsf{''}.
 
-\subsection{Step 1: unevaluated expression trees}
+\subsection{Stage 1: unevaluated expression trees}
 
 The first example is a DSL for reading and writing files at given
 file paths. Direct Scala code for such operations may look like this:\inputencoding{latin9}
@@ -151,7 +151,7 @@ cluster, on a distributed file system, by running numerical computations
 on GPUs instead of CPUs, or with logging, debugging, benchmarking,
 and so on.
 
-\subsection{Step 2: implementing type safety in the DSLs}
+\subsection{Stage 2: implementing type safety in the DSLs}
 
 The two DSLs defined in the previous section have an important shortcoming:
 they are not type-checked\index{type checking} at compile time. This
@@ -284,7 +284,7 @@ Compilation Failed
 \end{lstlisting}
 \inputencoding{utf8}
 
-\subsection{Step 3: implementing bound variables}
+\subsection{Stage 3: implementing bound variables}
 
 Another limitation of our DSLs is that they cannot define and use
 new variables within a DSL program. We also cannot use any non-DSL
@@ -432,7 +432,7 @@ res8: String = "version = 1"
 \inputencoding{utf8} So, a value of type \inputencoding{latin9}\lstinline!PrgFile[A]!\inputencoding{utf8}
 describes a computation but does not execute it.
 
-\subsection{Step 4: refactoring to a monadic DSL}
+\subsection{Stage 4: refactoring to a monadic DSL}
 
 The next observation is that \inputencoding{latin9}\lstinline!Bind!\inputencoding{utf8}
 and \inputencoding{latin9}\lstinline!Val!\inputencoding{utf8} have
@@ -518,7 +518,7 @@ def runFile[A]: PrgFile[A] => A = {
 \end{lstlisting}
 \inputencoding{utf8}
 
-\subsection{Step 5: refactoring to reuse common code}
+\subsection{Stage 5: refactoring to reuse common code}
 
 Let us rewrite our second example (a DSL for complex numbers) in the
 same way:\inputencoding{latin9}
@@ -758,9 +758,100 @@ res0: Complex = Complex(x = 2.000000000000001, y = 11.0)
 
 \subsection{The recipe for monadic DSLs}
 
-The type \inputencoding{latin9}\lstinline!MonadDSL[F, A]!\inputencoding{utf8}
-is called a \textbf{free monad} on\index{free monad} the type constructor
-\inputencoding{latin9}\lstinline!F!\inputencoding{utf8}.
+The previous section explained the motivation for defining the type
+constructor \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}.
+Let us now summarize the recipe for using \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}
+when we need to add the monadic functionality to a given DSL.
+
+Begin by writing down the types of available operations in the DSL.
+The operations may be functions between fixed known types, such as
+$\text{Int}\rightarrow\text{Int}\rightarrow\text{String}$ or $\text{String}\rightarrow\bbnum 1$.
+Operations may be also parameterized by one or more arbitrary types,
+for example, $A\times\text{Int}\rightarrow\text{String}$ where $A$
+is a type parameter. In every case, we need to write down the types
+in the form of a function, such as $P\rightarrow Q$, where $P$ and
+$Q$ are type expressions possibly depending on some type parameters.
+
+The next step is to define a new type constructor \inputencoding{latin9}\lstinline!F[_]!\inputencoding{utf8}
+that will be the effect constructor\index{effect constructor} of
+the DSL:\inputencoding{latin9}
+\begin{lstlisting}
+sealed trait F[_]
+\end{lstlisting}
+\inputencoding{utf8} The effect constructor \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}
+will be a disjunctive type whose parts correspond to each of the DSL
+operations. For an operation with type $P\rightarrow Q$, the corresponding
+case class will be defined as:\inputencoding{latin9}
+\begin{lstlisting}
+final case class SomeOperation(x: P) extends F[Q]
+\end{lstlisting}
+\inputencoding{utf8} It is an important part of the recipe that the result type (\inputencoding{latin9}\lstinline!Q!\inputencoding{utf8})
+is wrapped in the effect constructor \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}
+while the argument type (\inputencoding{latin9}\lstinline!P!\inputencoding{utf8})
+is not. The name \inputencoding{latin9}\lstinline!SomeOperation!\inputencoding{utf8}
+should be chosen for clarity.
+
+For example, the \inputencoding{latin9}\lstinline!PrgFile!\inputencoding{utf8}
+DSL described in the previous section has two operations of types
+$\text{String}\rightarrow\text{JPath}$ and $\text{JPath}\rightarrow\text{String}$.
+The corresponding effect constructor is defined by:\inputencoding{latin9}
+\begin{lstlisting}
+sealed trait F[_]
+final case class Path(p: String) extends F[JPath]
+final case class Read(p: JPath) extends F[String]
+\end{lstlisting}
+\inputencoding{utf8}
+Typically, a type constructor \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}
+defined in this way is an \textsf{``}unfunctor\textsf{''}\index{unfunctor}. In the
+example shown above, \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}
+cannot be a functor because it is impossible to create values of type
+\inputencoding{latin9}\lstinline!F[A]!\inputencoding{utf8} with an
+arbitrary type \inputencoding{latin9}\lstinline!A!\inputencoding{utf8}
+(the type \inputencoding{latin9}\lstinline!A!\inputencoding{utf8}
+must be either \inputencoding{latin9}\lstinline!JPath!\inputencoding{utf8}
+or \inputencoding{latin9}\lstinline!String!\inputencoding{utf8}).
+However, in some cases the effect constructor \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}
+could be a lawful functor.
+
+Next, we implement an \textsf{``}effect runner\textsf{''} for \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}.
+The effect runner must be a polymorphic function\index{polymorphic function}
+with the type signature $\forall X.\,F^{X}\rightarrow X$:\inputencoding{latin9}
+\begin{lstlisting}
+val runF: Runner[F] = new Runner[F] { def run[X]: F[X] => X = ??? }
+\end{lstlisting}
+\inputencoding{utf8}If the definition of \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}
+allows only certain types \inputencoding{latin9}\lstinline!A!\inputencoding{utf8}
+in values of type \inputencoding{latin9}\lstinline!F[A]!\inputencoding{utf8}
+then the runner only needs to work for those types. In the example
+shown above, the runner only needs to work with arguments of types
+\inputencoding{latin9}\lstinline!F[JPath]!\inputencoding{utf8} and
+\inputencoding{latin9}\lstinline!F[String]!\inputencoding{utf8},
+not with arguments of type \inputencoding{latin9}\lstinline!F[X]!\inputencoding{utf8}
+with an arbitrary unknown \inputencoding{latin9}\lstinline!X!\inputencoding{utf8}.
+Nevertheless, the runner\textsf{'}s type signature (\inputencoding{latin9}\lstinline!def run[X]: F[X] => X!\inputencoding{utf8})
+remains general, as if \inputencoding{latin9}\lstinline!X!\inputencoding{utf8}
+could be any type
+
+We can now define the monadic DSL as:\inputencoding{latin9}
+\begin{lstlisting}
+type MyDSL[A] = MonadDSL[F, A]
+def runMyDSL[A]: MyDSL[A] => A = MonadDSL.run(runF)
+\end{lstlisting}
+\inputencoding{utf8}DSL programs may be written using functor blocks. Each DSL operation
+needs to be wrapped in \inputencoding{latin9}\lstinline!Op!\inputencoding{utf8}:\inputencoding{latin9}
+\begin{lstlisting}
+type FileDSL[A] = MonadDSL[PrgFileC, A]
+def runFileDSL[A]: FileDSL[A] => A = MonadDSL.run(runnerFile)
+val prgFile1: FileDSL[String] = for {
+  x <- Op(Path("config.txt"))
+  y <- Op(Read(x))
+} yield y
+
+scala> runFileDSL(prgFile1)
+res0: String = "version = 1"
+\end{lstlisting}
+\inputencoding{utf8}
+{*}{*}{*} verify that this code works
 
 \subsection{Preparing to handle errors after running a DSL program}
 
@@ -816,34 +907,31 @@ $\text{ex}^{X}:F^{X}\rightarrow M^{X}$
 Run the program with the extractor: \texttt{\textcolor{blue}{\footnotesize{}run(ex)(prg)}};
 get a value $M^{A}$
 
-\section{Slides}
+\subsection{The free monad in the raw tree encoding}
 
-\paragraph{The interpreter pattern VIII. Monadic DSLs: summary}
+The type \inputencoding{latin9}\lstinline!MonadDSL[F, A]!\inputencoding{utf8}
+is called a \textbf{free monad} on\index{free monad} the type constructor
+\inputencoding{latin9}\lstinline!F!\inputencoding{utf8}. The word
+\textsf{``}free\textsf{''} indicates that the type \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}
+is free of any domain-specific code and works equally well with every
+DSL. We may view \inputencoding{latin9}\lstinline!MonadDSL[F, A]!\inputencoding{utf8}
+as a wrapper that somehow provides the functionality of a monad to
+any type constructor \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}.
 
-Begin with a number of operations, which are typically functions of
-fixed known types such as $A_{1}\rightarrow B_{1}$, $A_{2}\rightarrow B_{2}$
-etc.
-
-Define a type constructor (typically not a functor) encapsulating
-all the operations as case classes, with or without type parameters
-
-\texttt{\textcolor{blue}{\footnotesize{}sealed trait F{[}A{]}}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}case class Op1(a1: A1) extends
-F{[}B1{]}}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}case class Op2(a1: A2) extends
-F{[}B2{]}}}{\footnotesize\par}
-
-Use \texttt{\textcolor{blue}{\footnotesize{}DSL{[}F,A{]}}} with this
-\texttt{\textcolor{blue}{\footnotesize{}F}} to write monadic DSL programs
-\texttt{\textcolor{blue}{\footnotesize{}prg:~DSL{[}F,A{]}}} 
-
-Choose a target monad \texttt{\textcolor{blue}{\footnotesize{}M{[}A{]}}}
-and implement an extractor \texttt{\textcolor{blue}{\footnotesize{}ex:F{[}A{]}$\rightarrow$M{[}A{]}}} 
-
-Run the program with the extractor, \texttt{\textcolor{blue}{\footnotesize{}val
-res:~M{[}A{]} = run(ex)(prg)}} 
+A monad must support the methods \inputencoding{latin9}\lstinline!pure!\inputencoding{utf8},
+\inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8}, and
+\inputencoding{latin9}\lstinline!map!\inputencoding{utf8}. The type
+constructor \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}
+does not support these methods. In many cases, \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}
+is an unfunctor and cannot possibly support the monad\textsf{'}s methods. To
+see how \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}
+is able to convert \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}
+into a monad, let us look at the types used by \inputencoding{latin9}\lstinline!MonadDSL[F, A]!\inputencoding{utf8}.
+For brevity, we will use the type notation:
+\[
+\text{MonadDSL}^{F,A}\triangleq A+F^{A}+\exists B.\,F^{B}\times(B\rightarrow F^{A})\quad.***
+\]
+ So, the {*}{*}{*}
 
 Further directions (out of scope for this chapter):
 
@@ -858,6 +946,7 @@ monad API, we can use monad transformers on it
 
 Can combine two or more DSLs in a disjunction: $\text{DSL}^{F+G+H,A}$
 
+\section{Slides}
 
 \paragraph{Monad laws for DSL programs}
 
