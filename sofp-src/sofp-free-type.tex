@@ -23,15 +23,16 @@ computations or side-effects. Helper functions are implemented for
 creating the DSL program values, for combining several DSL programs
 into larger ones, and for interpreting (or \textsf{``}running\textsf{''}) DSL programs.
 
-This design pattern is known as an \textsf{``}embedded\textsf{''} DSL because it is
-implemented as a library in an existing programming language (e.g.,
-Scala), rather than as a separate new language. This chapter only
-considers embedded DSLs and calls them just \textsf{``}DSL'\textsf{'}s for brevity.
+This design pattern is known as an \textbf{embedded} \textbf{DSL}\index{embedded DSL},
+meaning that it is implemented as a library in an existing programming
+language (e.g., Scala), rather than as a separate new language. This
+chapter only considers embedded DSLs and calls them just \textsf{``}DSL'\textsf{'}s
+for brevity.
 
 We will look at two examples: a DSL for file operations and a DSL
-for complex numbers. We will refine and refactor our DSLs step by
-step to make them more powerful and safer to use. In this way, we
-will obtain the construction known as the \textsf{``}free monad\textsf{''}.
+for complex numbers. Refining and refactoring these DSLs to make them
+more powerful and safer to use, we will obtain a construction known
+as the \textsf{``}free monad\textsf{''}.
 
 \subsection{Stage 1: unevaluated expression trees}
 
@@ -54,10 +55,11 @@ final case class Read(p: PrgFile) extends PrgFile
 val prgFile: PrgFile = Read(Path(Read(Path(Val("config_location.txt")))))
 \end{lstlisting}
 \inputencoding{utf8}A DSL program of type \inputencoding{latin9}\lstinline!PrgFile!\inputencoding{utf8}
-is an unevaluated expression tree describing the operations that need
-to be performed. A runner will perform those operations and extract
-the final \inputencoding{latin9}\lstinline!String!\inputencoding{utf8}
-value:\inputencoding{latin9}
+is a value consisting of many nested case classes. Those case classes
+represent an \emph{unevaluated} expression tree corresponding to the
+operations that need to be performed. To actually perform those operations
+and extract the final \inputencoding{latin9}\lstinline!String!\inputencoding{utf8}
+value, we use a \textsf{``}runner\textsf{''} function:\inputencoding{latin9}
 \begin{lstlisting}
 def runFile: PrgFile => String = {
   case Val(s)          => s
@@ -100,10 +102,10 @@ res1: Complex = Complex(2.000000000000001, 11.0)
 \end{lstlisting}
 \inputencoding{utf8}
 Instead of running a complex-number program directly, the DSL pattern
-first creates a data structure that contains an \emph{unevaluated}
-expression tree for a program. Separate case classes are used for
-different operations as well as for inserting a Val \inputencoding{latin9}\lstinline!Complex!\inputencoding{utf8}
-value:\inputencoding{latin9}
+first creates a data structure that contains an unevaluated expression
+tree describing what needs to be computed. Separate case classes are
+used for different operations as well as for inserting a literal \inputencoding{latin9}\lstinline!Complex!\inputencoding{utf8}
+value (\inputencoding{latin9}\lstinline!Val!\inputencoding{utf8}):\inputencoding{latin9}
 \begin{lstlisting}
 sealed trait PrgComplex
 final case class Val(c: Complex)                      extends PrgComplex
@@ -118,8 +120,9 @@ val prgComplex1: PrgComplex = Conj(Mul(Val(Complex(1, 2)), Val(Complex(3, -4))))
 val prgComplex2: PrgComplex = Rotate(prgComplex1, Phase(Val(Complex(0, 1))))
 \end{lstlisting}
 \inputencoding{utf8}
-A simple runner for complex-number DSL programs can be written like
-this:\inputencoding{latin9}
+Complex-number calculations are now represented by nested case classes.
+A simple runner for the DSL programs of type \inputencoding{latin9}\lstinline!PrgComplex!\inputencoding{utf8}
+can be written like this:\inputencoding{latin9}
 \begin{lstlisting}
 def runComplex: PrgComplex => Complex = {
   case Val(c)             => c
@@ -144,22 +147,21 @@ res3: Complex = Complex(2.000000000000001, 11.0)
 Although the DSLs are simple, they already give us several benefits.
 By representing file operations as values of type \inputencoding{latin9}\lstinline!PrgFile!\inputencoding{utf8}
 and complex-number calculations as values of type \inputencoding{latin9}\lstinline!PrgComplex!\inputencoding{utf8},
-we can compose, verify, optimize, or transform those DSL programs
-before running them. We may also implement special runners in order
-to execute the same DSL program in different ways: on a remote computer
-cluster, on a distributed file system, by running numerical computations
-on GPUs instead of CPUs, or with logging, debugging, benchmarking,
-and so on.
+we can compose, verify, or optimize our DSL programs \emph{before}
+running them. We may also implement different runners that execute
+the same DSL program on a remote computer, on a distributed file system,
+on GPUs instead of CPUs, in a test-only sandbox environment, or with
+logging, benchmarking, etc.
 
 \subsection{Stage 2: implementing type safety in the DSLs}
 
-The two DSLs defined in the previous section have an important shortcoming:
-they are not type-checked\index{type checking} at compile time. This
-becomes clear by looking at the DSL program \inputencoding{latin9}\lstinline!prgFile!\inputencoding{utf8}
-shown in the previous section. The code of \inputencoding{latin9}\lstinline!runFile!\inputencoding{utf8}
-function assumes that the \inputencoding{latin9}\lstinline!Read!\inputencoding{utf8}
+The two DSLs defined in the previous section are not fully type-checked\index{type checking}
+at compile time. This becomes clear by looking at the DSL program
+\inputencoding{latin9}\lstinline!prgFile!\inputencoding{utf8} shown
+in the previous section. The code of \inputencoding{latin9}\lstinline!runFile!\inputencoding{utf8}
+assumes that the \inputencoding{latin9}\lstinline!Read!\inputencoding{utf8}
 operation is always applied to a \inputencoding{latin9}\lstinline!Path!\inputencoding{utf8}.
-However, this assumption is not enforced by the DSL. When combining
+However, this assumption is not enforced by the DSL. When composing
 a larger DSL program from separately defined parts, one could by mistake
 create an invalid DSL program such as \inputencoding{latin9}\lstinline!Read(Read(Val("file")))!\inputencoding{utf8}
 where the \inputencoding{latin9}\lstinline!Read!\inputencoding{utf8}
@@ -177,7 +179,7 @@ failed to compile. To achieve that, we need to use different Scala
 types for DSL programs returning a \inputencoding{latin9}\lstinline!String!\inputencoding{utf8}
 and a \inputencoding{latin9}\lstinline!Path!\inputencoding{utf8}.
 So, let us replace the type \inputencoding{latin9}\lstinline!PrgFile!\inputencoding{utf8}
-by the type constructor \inputencoding{latin9}\lstinline!PrgFile[A]!\inputencoding{utf8},
+by a type constructor \inputencoding{latin9}\lstinline!PrgFile[A]!\inputencoding{utf8},
 representing a DSL program that will return a value of type \inputencoding{latin9}\lstinline!A!\inputencoding{utf8}
 when we run it:\inputencoding{latin9}
 \begin{lstlisting}
@@ -194,8 +196,8 @@ def runFile[A]: PrgFile[A] => A = {
   case Read(p)  => new String(Files.readAllBytes(runFile(p)))
 }
 \end{lstlisting}
-\inputencoding{utf8}Our example DSL is type-safe now.\index{type safety} Invalid programs
-are rejected at compile time:\inputencoding{latin9}
+\inputencoding{utf8}Our example DSL is now fully type-safe.\index{type safety} Invalid
+programs are rejected at compile time:\inputencoding{latin9}
 \begin{lstlisting}
 val prgFile: PrgFile[String] = Read(Path(Read(Path(Val("config_location.txt")))))
 
@@ -214,24 +216,26 @@ Compilation Failed
 A similar problem exists in our DSL for complex numbers. The code
 of \inputencoding{latin9}\lstinline!runComplex!\inputencoding{utf8}
 assumes that the \inputencoding{latin9}\lstinline!Rotate!\inputencoding{utf8}
-operation is always applied to a phase, but the DSL does not enforce
-that assumption. Both arguments of the \inputencoding{latin9}\lstinline!Rotate!\inputencoding{utf8}
-operation are values of type \inputencoding{latin9}\lstinline!PrgComplex!\inputencoding{utf8},
-and the Scala compiler is unable to verify that the DSL is being used
-correctly. If the programmer uses an arbitrary complex number instead
-of a phase, the program will return an incorrect result without any
-indication of error:\inputencoding{latin9}
+operation is always applied to a \inputencoding{latin9}\lstinline!Phase!\inputencoding{utf8},
+but the DSL does not enforce that assumption. Both arguments of the
+\inputencoding{latin9}\lstinline!Rotate!\inputencoding{utf8} operation
+are values of type \inputencoding{latin9}\lstinline!PrgComplex!\inputencoding{utf8},
+and so the Scala compiler is unable to verify that the DSL is being
+used correctly. If the programmer uses a plain complex number (\inputencoding{latin9}\lstinline!Val!\inputencoding{utf8})
+instead of a \inputencoding{latin9}\lstinline!Phase!\inputencoding{utf8}
+value, the program will return an incorrect result \emph{without}
+any indication of error:\inputencoding{latin9}
 \begin{lstlisting}
-val prgComplex3: PrgComplex = Rotate(prgComplex1, Val(Complex(0, 1))) // Forgot Phase().
+val prgComplex3: PrgComplex = Rotate(prgComplex1, Val(Complex(0, 1)))     // Forgot Phase()!
 
-scala> runComplex(prgComplex3)
+scala> runComplex(prgComplex3)    // The result is incorrect, but there is no error message!
 val res5: Complex = Complex(11.0, -2.0)
 \end{lstlisting}
 \inputencoding{utf8}
 To achieve type safety, we add a type parameter to \inputencoding{latin9}\lstinline!PrgComplex!\inputencoding{utf8}.
 A DSL program of type \inputencoding{latin9}\lstinline!PrgComplex[A]!\inputencoding{utf8}
 will return a value of type \inputencoding{latin9}\lstinline!A!\inputencoding{utf8}
-when run. (So, the new DSL program will be able to compute values
+when run. (So, the new DSL programs will be able to compute values
 of any type, not only of type \inputencoding{latin9}\lstinline!Complex!\inputencoding{utf8}.)
 The new definitions of the case classes are:\inputencoding{latin9}
 \begin{lstlisting}
@@ -244,7 +248,8 @@ final case class Phase(p: PrgComplex[Complex])                         extends P
 final case class Rotate(p: PrgComplex[Complex], a: Phase)              extends PrgComplex[Complex]
 \end{lstlisting}
 \inputencoding{utf8}The revised code of \inputencoding{latin9}\lstinline!runComplex!\inputencoding{utf8}
-is simpler:\inputencoding{latin9}
+is clearer because phases are no longer wrapped in a \inputencoding{latin9}\lstinline!Complex!\inputencoding{utf8}
+type:\inputencoding{latin9}
 \begin{lstlisting}
 def runComplex[A]: PrgComplex[A] => A = {
   case Val(c)             => c
@@ -286,19 +291,19 @@ Compilation Failed
 
 \subsection{Stage 3: implementing bound variables}
 
-Another limitation of our DSLs is that they cannot define and use
-new variables within a DSL program. We also cannot use any non-DSL
-code, such as a library for file manipulation, a numerical algorithms
-library for complex numbers, or any other Scala code. 
+Another limitation of our DSLs is that we cannot define and use new
+variables within a DSL program. We also cannot use any non-DSL code,
+such as a library for file manipulation, a numerical algorithms library
+for complex numbers, or any other Scala code. 
 
-Both of these limitations would be removed if the DSL could support
-defining \emph{new Scala variables} and setting them to values computed
-within the DSL. We will then be able to add arbitrary Scala code working
+Both of these limitations would be removed if the DSL could define
+\emph{new Scala variables} and set them to values computed within
+the DSL. We would then be able to add arbitrary Scala code for working
 with those variables. Let us see how this feature may be implemented.
 
-As an example, consider the task of reading a file if it exists and
-reporting an error otherwise. A direct (non-DSL) code for this computation
-looks like this:\inputencoding{latin9}
+As an example, consider the task of reading a file only if it exists
+and reporting an error otherwise. A direct (non-DSL) code for this
+computation looks like this:\inputencoding{latin9}
 \begin{lstlisting}
 val p = Paths.get("config_location.txt")
 val result = if (Files.exists(p)) new String(Files.readAllBytes(p)) else "No file."
@@ -322,14 +327,14 @@ final case class Val[A](a: A) extends PrgFile[A]
 \inputencoding{utf8}We then replace \inputencoding{latin9}\lstinline!Read(p)!\inputencoding{utf8}
 by \inputencoding{latin9}\lstinline!Read(Val(p))!\inputencoding{utf8}
 in the code above. The code of \inputencoding{latin9}\lstinline!run!\inputencoding{utf8}
-is unchanged.
+remains unchanged.
 
 The second problem is that we are using \inputencoding{latin9}\lstinline!runFile!\inputencoding{utf8}
-in the middle of a DSL program. This will break the assumption that
-a DSL program merely describes the computations without executing
-them. The use of a specific \inputencoding{latin9}\lstinline!run!\inputencoding{utf8}
-function inside a DSL program will also prevent us from being able
-to apply a different runner to the entire DSL program.
+in the middle of a DSL program. This breaks the assumption that a
+DSL program merely describes the computations without executing them.
+The use of a specific runner inside a DSL program will also prevent
+us from being able to apply a different runner to the entire DSL program
+later.
 
 To solve this problem, we introduce a new DSL operation that binds
 Scala variables to values returned by other DSL operations. A standard
@@ -337,7 +342,7 @@ way of creating \index{bound variable}bound variables is by using
 those variables as arguments of nameless functions. So, let us consider
 the nameless function:\inputencoding{latin9}
 \begin{lstlisting}
-p => if (Files.exists(p)) Read(Val(p)) else Val("No file.")
+{ p => if (Files.exists(p)) Read(Val(p)) else Val("No file.") }
 \end{lstlisting}
 \inputencoding{utf8}This function creates a local variable \inputencoding{latin9}\lstinline!p!\inputencoding{utf8}
 and uses it directly in an expression of type \inputencoding{latin9}\lstinline!PrgFile[String]!\inputencoding{utf8}.
@@ -354,23 +359,25 @@ val prg: PrgFile[String] = Bind(prg2){ p => if (Files.exists(p)) Read(Val(p)) el
 \inputencoding{utf8}Here, the case class \inputencoding{latin9}\lstinline!Bind!\inputencoding{utf8}
 has two curried arguments: a value of type \inputencoding{latin9}\lstinline!PrgFile[JPath]!\inputencoding{utf8}
 and a function of type \inputencoding{latin9}\lstinline!JPath => PrgFile[String]!\inputencoding{utf8}.
-That function will be called at the time we call \inputencoding{latin9}\lstinline!runFile!\inputencoding{utf8}.
-At that time, the argument \inputencoding{latin9}\lstinline!p!\inputencoding{utf8}
+That function will be called by \inputencoding{latin9}\lstinline!runFile!\inputencoding{utf8}
+when we run the DSL program. At that time, the argument \inputencoding{latin9}\lstinline!p!\inputencoding{utf8}
 will be set to the value obtained by running \inputencoding{latin9}\lstinline!prg2!\inputencoding{utf8}.
-This is implemented in the new code for \inputencoding{latin9}\lstinline!runFile!\inputencoding{utf8}
-shown below.
+We will implement this logic in the new code for \inputencoding{latin9}\lstinline!runFile!\inputencoding{utf8}
+(shown below).
 
-In a different DSL program, we may need different types instead of
-\inputencoding{latin9}\lstinline!JPath!\inputencoding{utf8} and \inputencoding{latin9}\lstinline!String!\inputencoding{utf8}.
-So, let us replace those types by type parameters \inputencoding{latin9}\lstinline!A!\inputencoding{utf8}
-and \inputencoding{latin9}\lstinline!B!\inputencoding{utf8}. Note
-that the resulting type is \inputencoding{latin9}\lstinline!PrgFile[A]!\inputencoding{utf8}:\inputencoding{latin9}
+In a different DSL program, we may need to use different types instead
+of \inputencoding{latin9}\lstinline!String!\inputencoding{utf8} and
+\inputencoding{latin9}\lstinline!JPath!\inputencoding{utf8}. So,
+let us replace those types by type parameters \inputencoding{latin9}\lstinline!A!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!B!\inputencoding{utf8}. The
+declaration of the class \inputencoding{latin9}\lstinline!Bind!\inputencoding{utf8}
+becomes:\inputencoding{latin9}
 \begin{lstlisting}
 final case class Bind[A, B](pa: PrgFile[B])(f: B => PrgFile[A]) extends PrgFile[A]
 \end{lstlisting}
 \inputencoding{utf8}
 After adding the \inputencoding{latin9}\lstinline!Bind!\inputencoding{utf8}-handling
-code to the runner, the implementation of the DSL becomes:\inputencoding{latin9}
+code to the runner, the implementation of the DSL is:\inputencoding{latin9}
 \begin{lstlisting}
 sealed trait PrgFile[A]
 final case class Val[A](a: A)                                       extends PrgFile[A]
@@ -386,9 +393,9 @@ def runFile[A]: PrgFile[A] => A = {
 }
 \end{lstlisting}
 \inputencoding{utf8}
-Let us now explain certain features of Scala used in this DSL. Since
-the arguments of the \inputencoding{latin9}\lstinline!Bind[A, B]!\inputencoding{utf8}
-constructor are curried, the first curried argument (of type \inputencoding{latin9}\lstinline!PrgFile[B]!\inputencoding{utf8})
+Let us explain certain features of Scala used in this DSL. Since the
+arguments of the constructor \inputencoding{latin9}\lstinline!Bind[A, B]!\inputencoding{utf8}
+are curried, the first curried argument (of type \inputencoding{latin9}\lstinline!PrgFile[B]!\inputencoding{utf8})
 will allow the Scala compiler to determine the type parameter \inputencoding{latin9}\lstinline!B!\inputencoding{utf8}
 automatically. At the same time, \inputencoding{latin9}\lstinline!Bind!\inputencoding{utf8}\textsf{'}s
 second curried argument may be written as a nameless function in a
@@ -398,8 +405,8 @@ val prg: PrgFile[String] = Bind(prg2){ p => if (Files.exists(p)) Read(Val(p)) el
 \end{lstlisting}
 \inputencoding{utf8}Because the type parameter \inputencoding{latin9}\lstinline!B!\inputencoding{utf8}
 is already fixed, the argument \inputencoding{latin9}\lstinline!p!\inputencoding{utf8}
-may be written without a type annotation (in this case, it would be
-\inputencoding{latin9}\lstinline!p: JPath!\inputencoding{utf8}).
+may be written without a type annotation (in this case, it would have
+been \inputencoding{latin9}\lstinline!p:JPath!\inputencoding{utf8}).
 This makes the DSL easier to use. However, the underlying implementation
 becomes more complicated. Scala\textsf{'}s pattern matching syntax is limited
 to the first curried argument. So, the second curried argument of
@@ -416,20 +423,18 @@ type \inputencoding{latin9}\lstinline!B!\inputencoding{utf8} in the
 pattern \inputencoding{latin9}\lstinline!Bind(pa)!\inputencoding{utf8}.
 
 The new \inputencoding{latin9}\lstinline!Bind!\inputencoding{utf8}
-operation allows us to implement a part of the DSL program as a \emph{Scala
-function} that depends on the result computed by another part of the
-DSL program. Since \inputencoding{latin9}\lstinline!Bind!\inputencoding{utf8}
-contains arbitrary Scala code (a function of type \inputencoding{latin9}\lstinline!B => PrgFile[A]!\inputencoding{utf8}),
-we can now use non-DSL code as part of a DSL program, as long as it
-is enclosed inside a \inputencoding{latin9}\lstinline!Bind!\inputencoding{utf8}. 
-
-The body of the function inside \inputencoding{latin9}\lstinline!Bind!\inputencoding{utf8}
-will be evaluated only when the DSL program is run:\inputencoding{latin9}
+operation allows one part of a DSL program to use values computed
+by other parts. Since a \inputencoding{latin9}\lstinline!Bind!\inputencoding{utf8}
+value contains a \emph{Scala function} (of type \inputencoding{latin9}\lstinline!B => PrgFile[A]!\inputencoding{utf8}),
+that function may run arbitrary Scala code, not limited to DSL operations,
+in order to compute a result of type \inputencoding{latin9}\lstinline!PrgFile[A]!\inputencoding{utf8}.
+All non-DSL code is enclosed inside a \inputencoding{latin9}\lstinline!Bind!\inputencoding{utf8}
+and will be evaluated only when the DSL program is run:\inputencoding{latin9}
 \begin{lstlisting}
 scala> runFile(prg)
 res8: String = "version = 1"
 \end{lstlisting}
-\inputencoding{utf8} So, a value of type \inputencoding{latin9}\lstinline!PrgFile[A]!\inputencoding{utf8}
+\inputencoding{utf8} As before, a value of type \inputencoding{latin9}\lstinline!PrgFile[A]!\inputencoding{utf8}
 describes a computation but does not execute it.
 
 \subsection{Stage 4: refactoring to a monadic DSL}
@@ -658,7 +663,7 @@ final case class Op[F[_], A](op: F[A]) extends MonadDSL[F, A]  // Wrap custom op
 \end{lstlisting}
 \inputencoding{utf8}
 The runner for \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}
-needs to \textsf{``}run the effects\textsf{''} from the effect constructor \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}.
+needs to run the effects described by the effect constructor \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}.
 We try passing \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}\textsf{'}s
 runner as an additional curried argument to \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}\textsf{'}s
 runner:\inputencoding{latin9}
@@ -684,21 +689,21 @@ and cannot be used with type \inputencoding{latin9}\lstinline!B!\inputencoding{u
 
 To be able to use the effect runner with arbitrary types, the \inputencoding{latin9}\lstinline!runner!\inputencoding{utf8}
 argument must be of type \inputencoding{latin9}\lstinline!F[X] => X!\inputencoding{utf8}
-where \inputencoding{latin9}\lstinline!X!\inputencoding{utf8} is
-not known in advance. We notice that the type signatures of the effect
-runners \inputencoding{latin9}\lstinline!runComplexC!\inputencoding{utf8}
+where \inputencoding{latin9}\lstinline!X!\inputencoding{utf8} remains
+free and is \emph{not} known in advance. The type signatures of the
+effect runners \inputencoding{latin9}\lstinline!runComplexC!\inputencoding{utf8}
 and \inputencoding{latin9}\lstinline!runFileC!\inputencoding{utf8}
 already have that form:\inputencoding{latin9}
 \begin{lstlisting}
-def runComplexC[X]: PrgComplexC[X] => X    // PrgComplexC[X] => X with arbitrary X
-def runFileC[X]: PrgFileC[X] => X          // PrgFileC[X] => X with arbitrary X
+def runComplexC[X]: PrgComplexC[X] => X    // PrgComplexC[X] => X with arbitrary types X
+def runFileC[X]: PrgFileC[X] => X          // PrgFileC[X] => X with arbitrary types X
 \end{lstlisting}
-\inputencoding{utf8}We need to pass those functions as arguments to the \inputencoding{latin9}\lstinline!run!\inputencoding{utf8}
-function and keep the freedom provided by the type parameter \inputencoding{latin9}\lstinline!X!\inputencoding{utf8}. 
+\inputencoding{utf8}We need to pass those functions as arguments to \inputencoding{latin9}\lstinline!run!\inputencoding{utf8}
+while not losing the freedom provided by the type parameter \inputencoding{latin9}\lstinline!X!\inputencoding{utf8}. 
 
-To that end, we define a new type \inputencoding{latin9}\lstinline!Runner!\inputencoding{utf8}
-as a Scala trait encapsulating the type signature of the effect runners.
-The effect runners can then be declared as values of type \inputencoding{latin9}\lstinline!Runner!\inputencoding{utf8}:\inputencoding{latin9}
+To achieve that, we define a new type \inputencoding{latin9}\lstinline!Runner!\inputencoding{utf8}
+as a Scala trait encapsulating the type signature of an effect runner.
+The two effect runners can then be declared as values of type \inputencoding{latin9}\lstinline!Runner!\inputencoding{utf8}:\inputencoding{latin9}
 \begin{lstlisting}
 trait Runner[F[_]] { def run[X]: F[X] => X }
 val runnerComplex = new Runner[PrgComplexC] { def run[X]: PrgComplexC[X] => X = runComplexC[X] }
@@ -714,7 +719,7 @@ is:
 \]
 The universal quantifier ($\forall X$) indicates that a value of
 type \inputencoding{latin9}\lstinline!Runner[F]!\inputencoding{utf8}
-still has the freedom to use any type \inputencoding{latin9}\lstinline!X!\inputencoding{utf8}
+still has the freedom of using any type \inputencoding{latin9}\lstinline!X!\inputencoding{utf8}
 when the method \inputencoding{latin9}\lstinline!run!\inputencoding{utf8}
 is called.
 
@@ -756,28 +761,38 @@ res0: Complex = Complex(x = 2.000000000000001, y = 11.0)
 
 \section{The free monad}
 
-\subsection{The recipe for monadic DSLs}
+\subsection{A recipe for monadic DSLs}
 
 The previous section explained the motivation for defining the type
-constructor \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}.
-That type constructor is known as the \textsf{``}free monad\textsf{''}, for reasons
-we will discuss later. Let us now summarize the recipe for using \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}
-when we would like to add the monadic variable-binding functionality
-to a given DSL.
+constructor \inputencoding{latin9}\lstinline!MonadDSL[F[_], A]!\inputencoding{utf8}.
+That type constructor is called the \textsf{``}free monad on \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}\textsf{''},
+for reasons explained later in this chapter. The type \inputencoding{latin9}\lstinline!MonadDSL[F[_], A]!\inputencoding{utf8}
+supports the monad\textsf{'}s methods \inputencoding{latin9}\lstinline!map!\inputencoding{utf8},
+\inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8}, and
+\inputencoding{latin9}\lstinline!pure!\inputencoding{utf8}, which
+\inputencoding{latin9}\lstinline!F!\inputencoding{utf8} does not
+necessarily have. So, we may view \inputencoding{latin9}\lstinline!MonadDSL[F[_], A]!\inputencoding{utf8}
+as a special wrapper that adds the monadic variable-binding functionality
+to any given DSL.
+
+Below we will show that monadic DSL programs will satisfy a monad\textsf{'}s
+laws after the effects are run (but not necessarily before that!).
+Let us now summarize the recipe for using \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}
+in practice.
 
 Begin by writing down the types of the available operations in the
 DSL. The operations may be functions between fixed known types, such
 as $\text{Int}\rightarrow\text{Int}\rightarrow\text{String}$ or $\text{String}\rightarrow\bbnum 1$.
-Operations may be also functions parameterized by one or more arbitrary
-types, for example, $A\times\text{Int}\rightarrow\text{String}$ where
-$A$ is a type parameter. In every case, we need to write down the
-types in the form of a simple (non-curried) function, such as $P\rightarrow Q$,
-where $P$ and $Q$ are type expressions possibly depending on some
-type parameters.
+Operations may be also functions with type parameters, for example,
+$A\times\text{Int}\rightarrow\text{String}$ where $A$ is a type
+parameter. In every case, we need to write down the types in the form
+of a simple (non-curried) function, such as $P\rightarrow Q$, where
+$P$ and $Q$ are type expressions possibly depending on some type
+parameters.
 
 The next step is to define a new type constructor \inputencoding{latin9}\lstinline!F[_]!\inputencoding{utf8}
-that will be the effect constructor\index{effect constructor} of
-the DSL:\inputencoding{latin9}
+that will serve as the effect constructor\index{effect constructor}
+of the DSL:\inputencoding{latin9}
 \begin{lstlisting}
 sealed trait F[_]
 \end{lstlisting}
@@ -788,13 +803,13 @@ the corresponding case class as:\inputencoding{latin9}
 \begin{lstlisting}
 final case class SomeOperation(x: P) extends F[Q]
 \end{lstlisting}
-\inputencoding{utf8}The name \inputencoding{latin9}\lstinline!SomeOperation!\inputencoding{utf8}
-should be chosen for clarity.
+\inputencoding{utf8}The names of case classes (\inputencoding{latin9}\lstinline!SomeOperation!\inputencoding{utf8}
+and so on) should be chosen for clarity.
 
 It is an important part of the recipe that the result type (\inputencoding{latin9}\lstinline!Q!\inputencoding{utf8})
 is wrapped in the effect constructor \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}
 while the argument type (\inputencoding{latin9}\lstinline!P!\inputencoding{utf8})
-is not. For example, the \inputencoding{latin9}\lstinline!PrgFile!\inputencoding{utf8}
+is \emph{not}. For example, the \inputencoding{latin9}\lstinline!PrgFile!\inputencoding{utf8}
 DSL described in the previous section has two operations with types
 \inputencoding{latin9}\lstinline!String => JPath!\inputencoding{utf8}
 and \inputencoding{latin9}\lstinline!JPath => String!\inputencoding{utf8}.
@@ -807,8 +822,8 @@ final case class Read(p: JPath) extends PrgFileC[String]
 \end{lstlisting}
 \inputencoding{utf8}
 Typically, a type constructor \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}
-defined in this way is an \textsf{``}unfunctor\textsf{''}\index{unfunctor}. In the
-example shown above, \inputencoding{latin9}\lstinline!PrgFileC!\inputencoding{utf8}
+defined in this way will be an \textsf{``}unfunctor\textsf{''}\index{unfunctor}.
+In the example shown above, \inputencoding{latin9}\lstinline!PrgFileC!\inputencoding{utf8}
 cannot be a functor because it is impossible to create values of type
 \inputencoding{latin9}\lstinline!PrgFileC[A]!\inputencoding{utf8}
 with an arbitrary type \inputencoding{latin9}\lstinline!A!\inputencoding{utf8}
@@ -816,11 +831,13 @@ with an arbitrary type \inputencoding{latin9}\lstinline!A!\inputencoding{utf8}
 must be either \inputencoding{latin9}\lstinline!JPath!\inputencoding{utf8}
 or \inputencoding{latin9}\lstinline!String!\inputencoding{utf8}).
 However, in some cases the effect constructor \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}
-could be a lawful functor.
+could be itself a lawful functor.
 
-Next, we implement an \textsf{``}effect runner\textsf{''} for \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}.
-The effect runner must be a polymorphic function\index{polymorphic function}
-with the type signature $\forall X.\,F^{X}\rightarrow X$:\inputencoding{latin9}
+Next, we implement an \textsf{``}effect runner\textsf{''} \index{effect runner}for
+\inputencoding{latin9}\lstinline!F!\inputencoding{utf8}. An \textbf{effect
+runner} for an effect constructor \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}
+is a polymorphic function\index{polymorphic function} with the type
+signature $\forall X.\,F^{X}\rightarrow X$:\inputencoding{latin9}
 \begin{lstlisting}
 val runF: Runner[F] = new Runner[F] { def run[X]: F[X] => X = ??? }
 \end{lstlisting}
@@ -834,18 +851,19 @@ and \inputencoding{latin9}\lstinline!PrgFileC[String]!\inputencoding{utf8},
 not with arguments of type \inputencoding{latin9}\lstinline!F[X]!\inputencoding{utf8}
 with an arbitrary unknown \inputencoding{latin9}\lstinline!X!\inputencoding{utf8}:\inputencoding{latin9}
 \begin{lstlisting}
-val runFileDSL = new Runner[PrgFileC] { def run[X]: PrgFileC[X] => X = runFileC } ***check if this works
+val runnerFile = new Runner[PrgFileC] { def run[X]: (PrgFileC[X] => X) = runFileC[X] }
 \end{lstlisting}
 \inputencoding{utf8}Nevertheless, the runner\textsf{'}s type signature (\inputencoding{latin9}\lstinline!def run[X]: F[X] => X!\inputencoding{utf8})
 keeps a general type parameter \inputencoding{latin9}\lstinline!X!\inputencoding{utf8}.
 
-We can now define the monadic DSL as:\inputencoding{latin9}
+We now define the monadic DSL type (\inputencoding{latin9}\lstinline!MyDSL!\inputencoding{utf8})
+and its runner function (\inputencoding{latin9}\lstinline!runMyDSL!\inputencoding{utf8})
+as:\inputencoding{latin9}
 \begin{lstlisting}
 type MyDSL[A] = MonadDSL[F, A]
 def runMyDSL[A]: MyDSL[A] => A = MonadDSL.run(runF)
 \end{lstlisting}
-\inputencoding{utf8}DSL programs may be written using functor blocks. Each DSL operation
-needs to be wrapped in \inputencoding{latin9}\lstinline!Op!\inputencoding{utf8}:\inputencoding{latin9}
+\inputencoding{utf8}DSL programs may be written using functor blocks:\inputencoding{latin9}
 \begin{lstlisting}
 type FileDSL[A] = MonadDSL[PrgFileC, A]
 def runFileDSL[A]: FileDSL[A] => A = MonadDSL.run(runnerFile)
@@ -858,46 +876,80 @@ scala> runFileDSL(prgFile1)
 res0: String = "version = 1"
 \end{lstlisting}
 \inputencoding{utf8}
-{*}{*}{*} verify that this code works
+Note that each DSL operation needs to be wrapped in an \inputencoding{latin9}\lstinline!Op!\inputencoding{utf8}
+case class. To make the code shorter, we may define an implicit conversion
+from \inputencoding{latin9}\lstinline!PrgFileC[A]!\inputencoding{utf8}
+to \inputencoding{latin9}\lstinline!Op[A]!\inputencoding{utf8}:\inputencoding{latin9}
+\begin{lstlisting}
+implicit def toOp[A](p: PrgFileC[A]): Op[A] = Op(p) // *** check if this code actually works
+val prgFile2: FileDSL[String] = for { // Does it help if we begin the functor block with a Pure()?
+  x <- Path("config.txt")
+  y <- Read(x)
+} yield y
 
-\subsection{Preparing to handle errors after running a DSL program}
+scala> runFileDSL(prgFile1)
+res1: String = "version = 1"
+\end{lstlisting}
+\inputencoding{utf8}
 
-To handle errors, we want to evaluate \texttt{\textcolor{blue}{\footnotesize{}DSL{[}F{[}\_{]},
-A{]}}} to \texttt{\textcolor{blue}{\footnotesize{}Either{[}Err, A{]}}} 
+\subsection{Handling errors after running a DSL program}
 
-Suppose we have a value extractor of type $\text{Ex}^{F}\triangleq\forall A.\left(F^{A}\rightarrow\text{Err}+A\right)$
+In the code from the previous section, one may use different effect
+runners with \emph{the same} function \inputencoding{latin9}\lstinline!MonadDSL.run!\inputencoding{utf8}.
+We may apply \inputencoding{latin9}\lstinline!MonadDSL.run!\inputencoding{utf8}
+to any effect runner of type $\forall X.\,F^{X}\rightarrow X$ and
+obtain a monad runner of type \inputencoding{latin9}\lstinline!MonadDSL[F, A] => A!\inputencoding{utf8}.
 
-The code of the interpreter is almost unchanged:
+More generally, we may need to run the $F$-effects into \emph{another
+monad}. Given an effect runner of type $\forall X.\,F^{X}\rightarrow M^{X}$,
+where $M$ is some monad, we hope to obtain a general runner of type
+\inputencoding{latin9}\lstinline!MonadDSL[F, A] => M[A]!\inputencoding{utf8}.
 
-\texttt{\textcolor{blue}{\footnotesize{}def run{[}F{[}\_{]}, A{]}(extract: Ex{[}F{]})(prg: DSL{[}F,
-A{]}): Either{[}Err, A{]} =}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}prg match \{}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}    case b: Bind{[}F, \_,
-A{]} => b match \{ case Bind(p, f) => }}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}        run(extract)(p).flatMap(f
-andThen run(extract))}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}    \}}}\textcolor{darkgray}{\footnotesize{}
-    // Here, the .flatMap is from Either.}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}    case Val(a) => Right(a)}}\textcolor{darkgray}{\footnotesize{}
-// pure: A $\rightarrow$ Err + A}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}    case Ops(f) => extract(f)
-    }}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}\}}}{\footnotesize\par}
-
-The code of \texttt{\textcolor{blue}{\footnotesize{}run}} only uses
-\texttt{\textcolor{blue}{\footnotesize{}flatMap}} and \texttt{\textcolor{blue}{\footnotesize{}pure}}
-from \texttt{\textcolor{blue}{\footnotesize{}Either}} 
-
-So, we can generalize to any other monad $M^{A}$ instead of \texttt{\textcolor{blue}{\footnotesize{}Either{[}Err,
-A{]}}} 
-
+To see an example of using such general runners in practice, notice
+that the execution of $F$-effects may produce errors. For instance,
+the runner of the \inputencoding{latin9}\lstinline!PrgFile!\inputencoding{utf8}
+DSL will throw exceptions when files are not found or not readable.
+We may catch those exceptions with Scala\textsf{'}s standard \inputencoding{latin9}\lstinline!Try!\inputencoding{utf8}
+class. However, this means replacing the runner of type \inputencoding{latin9}\lstinline!PrgFileC[X] => X!\inputencoding{utf8}
+by a polymorphic function of type \inputencoding{latin9}\lstinline!PrgFileC[X] => Try[X]!\inputencoding{utf8}.
+For the \inputencoding{latin9}\lstinline!PrgFile!\inputencoding{utf8}
+DSL, the new code looks like this:\inputencoding{latin9}
+\begin{lstlisting}
+trait RunnerTry[F[_]] { def run[X]: F[X] => Try[X] }
+val runnerFileTry = new RunnerTry[PrgFileC] { def run[X]: PrgFileC[X] => Try[X] = p => Try(runFileC(p)) }
+\end{lstlisting}
+\inputencoding{utf8} The code of the \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}
+runner needs to be modified to accommodate the new type:\inputencoding{latin9}
+\begin{lstlisting}
+def runTry[F[_], A](runnerTry: RunnerTry[F]): MonadDSL[F, A] => Try[A] = {
+  case Val(a)          => Success(a)
+  case bind@Bind(pa)   => runTry(runner)(pa).flatMap(bind.f andThen runTry(runner)) // Use flatMap from Try.
+  case Op(op)          => runner.run(op)
+} *** check that this code works
+\end{lstlisting}
+\inputencoding{utf8}
+Let us now generalize this code to an arbitrary monad $M$ instead
+of \inputencoding{latin9}\lstinline!Try!\inputencoding{utf8}. The
+code of \inputencoding{latin9}\lstinline!runTry!\inputencoding{utf8}
+uses the \inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8}
+method of the \inputencoding{latin9}\lstinline!Try!\inputencoding{utf8}
+monad. The \inputencoding{latin9}\lstinline!Try!\inputencoding{utf8}
+monad\textsf{'}s \inputencoding{latin9}\lstinline!pure!\inputencoding{utf8}
+method is implemented by the \inputencoding{latin9}\lstinline!Success!\inputencoding{utf8}
+case class. So, we can generalize to another monad $M$ instead of
+\inputencoding{latin9}\lstinline!Try!\inputencoding{utf8} if we use
+$M$\textsf{'}s \inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8}
+and replace \inputencoding{latin9}\lstinline!Success!\inputencoding{utf8}
+by $M$\textsf{'}s \inputencoding{latin9}\lstinline!pure!\inputencoding{utf8}:\inputencoding{latin9}
+\begin{lstlisting}
+trait RunnerM[F[_], M[_]] { def run[X]: F[X] => M[X] }
+def runM[F[_], M[_]: Monad, A](runnerM: RunnerM[F, M]): MonadDSL[F, A] => M[A] = {
+  case Val(a)          => Monad[M].pure(a)
+  case bind@Bind(pa)   => runM(runner)(pa).flatMap(bind.f andThen runM(runner)) // Use flatMap from M.
+  case Op(op)          => runner.run(op)
+} *** check that this code works
+\end{lstlisting}
+\inputencoding{utf8}
 The resulting construction:
 
 Start with an \textsf{``}effects constructor\textsf{''} $F^{A}$ (often an unfunctor)
@@ -919,18 +971,17 @@ get a value $M^{A}$
 The type \inputencoding{latin9}\lstinline!MonadDSL[F, A]!\inputencoding{utf8}
 is called a \textbf{free monad} on\index{free monad} the type constructor
 \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}. The word
-\textsf{``}free\textsf{''} indicates that the type \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}
+\textsf{``}free\textsf{''} indicates that \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}
 is free of any domain-specific code and works equally well with every
 DSL. We may view \inputencoding{latin9}\lstinline!MonadDSL[F, A]!\inputencoding{utf8}
-as a wrapper that adds the monad\textsf{'}s functionality to any effect constructor
+as a wrapper that adds the monad\textsf{'}s functionality to any type constructor
 \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}. The monad\textsf{'}s
 methods (\inputencoding{latin9}\lstinline!pure!\inputencoding{utf8}
 and \inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8})
-merely create some data structures (case classes) in memory and do
-not cause any domain-specific effects or actions to be performed.
-The effects will be performed at a later time by an effect runner
-(\inputencoding{latin9}\lstinline!runF!\inputencoding{utf8}) when
-we apply \inputencoding{latin9}\lstinline!MonadDSL.run!\inputencoding{utf8}
+will create some data structures (nested case classes) in memory and
+will not perform any domain-specific effects or actions. The effects
+will be performed at a later time by an effect runner (\inputencoding{latin9}\lstinline!runF!\inputencoding{utf8})
+when we apply \inputencoding{latin9}\lstinline!MonadDSL.run!\inputencoding{utf8}
 to a DSL program.
 
 A monad must support the methods \inputencoding{latin9}\lstinline!pure!\inputencoding{utf8},
