@@ -57,8 +57,8 @@ It is important for a practicing functional programmer to be able to recognize a
 
 Applicative functors are not a feature of Haskell: they are the same in Scala, OCaml, or any other functional programming language.
 And yet, no standard computer science textbook explains applicative functors,
-motivates their definition and laws, gives important examples and explores their structure,
-or gives examples of a data structure that is not an applicative functor and explains why.
+motivates their definition and laws, explores their structure, gives examples of applicative functors,
+or examples of data structure that are not applicative functors and explains why.
 (Neither does any book on category theory or type theory mention applicative functors.)
 
 So far it appears that AFTT should be a mixture of certain areas of category theory, formal logic, and type theory.
