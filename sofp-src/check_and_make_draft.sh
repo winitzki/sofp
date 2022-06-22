@@ -8,10 +8,10 @@ name="sofp"
 # When changing the title of any chapter, make sure it is correctly updated in `draft_title_*` and in the `chapters` array below.
 
 # Expected total number of pages in the book draft:
-draft_pages=798
+draft_pages=790
 
 # The number of pages in each chapter:
-pagecounts=(3 17 42 34 24 49 43 12 63 54 63 62 53 27 148 5 5 6 3 6 6 3 6 48 21 1 2 1 1 7)
+pagecounts=(3 17 42 34 24 49 45 12 63 54 63 62 53 27 147 5 5 6 3 6 6 3 6 39 21 1 2 1 1 7)
 
 # To create the draft version that contains only proofread chapters:
 # cut out from here, including:
@@ -35,7 +35,7 @@ chapters=("Preface" "Mathematical formulas as code. I." \
  "Summary of the book" \
  "\`\`Applied functional type theory'': A proposal" "Essay: Software engineers and software artisans" \
  "Essay: Towards functional data engineering with Scala" "Essay: Why category theory" \
- "A Notations" "B Glossary of terms" "Inferring code from types." \
+ "A Notations" "B Glossary of terms" "Deriving code from types." \
  "D Parametricity theorem" "E Solutions of some exercises" "F A humorous disclaimer" "G GNU Free Documentation License" \
  "List of Tables" "List of Figures" "Index" "END_OF_BOOK")
 

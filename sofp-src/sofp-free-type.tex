@@ -13,453 +13,943 @@ design pattern. As a first motivation, we will look at how the free
 monad\index{free monad} emerges from elaborating the DSL pattern
 in the functional programming paradigm.
 
-\section{Motivation for the free monad: implement a DSL in five steps}
+\section{Motivation for the free monad: make a DSL in five stages}
 
-The DSL pattern separates the description of computations from the
-process of their evaluation. One defines a \textbf{DSL program}\index{DSL program}
+The main point of using a DSL is to separate the description of computations
+from the process of their evaluation. One writes a \textbf{DSL program}\index{DSL program}
 as a data structure that fully describes what computations and side
 effects need to be run but does not actually perform any of those
-computations and side-effects. The programmer begins by defining the
-type of DSL programs. Helper functions are implemented for creating
-the DSL program values and for combining several DSL programs into
-a larger one. Finally, one or more functions are written to interpret
-(or \textsf{``}run\textsf{''}) the DSL programs.
+computations or side-effects. Helper functions are implemented for
+creating the DSL program values, for combining several DSL programs
+into larger ones, and for interpreting (or \textsf{``}running\textsf{''}) DSL programs.
 
-This design pattern is known as an \textsf{``}embedded\textsf{''} DSL because it is
-implemented as a library in an existing programming language (e.g.,
-Scala), rather than as a separate new language. This chapter only
-considers embedded DSLs and calls them just \textsf{``}DSL'\textsf{'}s for brevity.
+This design pattern is known as an \textbf{embedded} \textbf{DSL}\index{embedded DSL},
+meaning that it is implemented as a library in an existing programming
+language (e.g., Scala), rather than as a separate new language. This
+chapter only considers embedded DSLs and calls them just \textsf{``}DSL'\textsf{'}s
+for brevity.
 
-We will look at two examples: a DSL for complex numbers and a DSL
-for file operations. We will refine and refactor our DSLs step by
-step to make them more powerful and safer to use. In this way, we
-will obtain the construction known as the free monad.
+We will look at two examples: a DSL for file operations and a DSL
+for complex numbers. Refining and refactoring these DSLs to make them
+more powerful and safer to use, we will obtain a construction known
+as the \textsf{``}free monad\textsf{''}.
 
-\subsection{Step 1: unevaluated expression trees}
+\subsection{Stage 1: unevaluated expression trees}
 
-Suppose we need to perform calculations with complex numbers. We could
-begin by implementing a simple data structure (\lstinline!case class Complex!)
-with some operations: 
-\begin{lstlisting}[mathescape=true]
-final case class Complex(x: Double, y: Double) {
-  def +(other: Complex): Complex = Complex(x + other.x, y + other.y)
-  def *(other: Complex): Complex =
-      Complex(x * other.x - y * other.y, x * other.y + y * other.x)
-  def conj: Complex = Complex(x, -y)
-}
-val a = Complex(1, 2)          // $\color{dkgreen}a = 1 + 2 i$
-val b = a * Complex(3, -4)     // $\color{dkgreen}b = (1 + 2 i)(3 - 4 i) = 11 + 2 i$
-val c = b.conj                 // $\color{dkgreen}c = 11 - 2 i$
-
-scala> c
-res0: Complex = Complex(11.0, -2.0)
-\end{lstlisting}
-
-Instead of running a complex-number program directly, the DSL pattern
-first creates a data structure that contains an \emph{unevaluated}
-expression tree for the program. Separate case classes are used for
-addition, multiplication, and conjugation, as well as for inserting
-a literal \lstinline!Complex! value:
-\begin{lstlisting}
-sealed trait PrgComplex
-final case class Add(p1: PrgComplex, p2: PrgComplex) extends PrgComplex
-final case class Mul(p1: PrgComplex, p2: PrgComplex) extends PrgComplex
-final case class Conj(p: PrgComplex)                 extends PrgComplex
-final case class Literal(c: Complex)                 extends PrgComplex
-
-val prgComplex: PrgComplex = Conj(
-  Mul(
-    Literal(Complex(1, 2)), Literal(Complex(3, -4))
-))
-\end{lstlisting}
-
-A simple interpreter for complex-number DSL programs can be written
-like this:
-\begin{lstlisting}
-def run: PrgComplex => Complex = {
-  case Literal(c)    => c
-  case Add(p1, p2)   => run(p1) + run(p2)
-  case Mul(p1, p2)   => run(p1) * run(p2)
-  case Conj(p)       => run(p).conj
-}
-\end{lstlisting}
-We can now use \lstinline!run! to perform the computation \lstinline!prgComplex!
-and get the result as a \lstinline!Complex! value:
-\begin{lstlisting}
-scala> run(prgComplex)
-res1: Complex = Complex(11.0, -2.0)
-\end{lstlisting}
-
-Although the DSL is simple, it already gives us several benefits.
-By representing complex-number calculations as DSL programs, which
-are values of type \lstinline!PrgComplex!, we can compose, verify,
-optimize, or transform those DSL programs before running them. We
-may also implement several runners in order to run the same computation
-in different ways: on GPUs, on a remote computer cluster, or with
-logging, debugging, benchmarking, and so on.
-
-As a second example, consider a DSL for file operations, such as reading
-and writing files at given file paths. Direct Scala code for such
-operations may look like this:
+The first example is a DSL for reading and writing files at given
+file paths. Direct Scala code for such operations may look like this:\inputencoding{latin9}
 \begin{lstlisting}
 import java.nio.file.{Files, Paths}
 val p = Paths.get("config_location.txt")
 val configLocation = Paths.get(new String(Files.readAllBytes(p)))
 val config = new String(Files.readAllBytes(configLocation))
 \end{lstlisting}
-The DSL will represent these operations by the case classes \lstinline!Literal!,
-\lstinline!Path!, and \lstinline!Read!:
+\inputencoding{utf8}The DSL will represent these operations by the case classes \inputencoding{latin9}\lstinline!Val!\inputencoding{utf8},
+\inputencoding{latin9}\lstinline!Path!\inputencoding{utf8}, and \inputencoding{latin9}\lstinline!Read!\inputencoding{utf8}:\inputencoding{latin9}
 \begin{lstlisting}
 sealed trait PrgFile
-final case class Literal(s: String) extends PrgFile
-final case class Path(p: PrgFile)   extends PrgFile
-final case class Read(p: PrgFile)   extends PrgFile
+final case class Val(s: String)   extends PrgFile
+final case class Path(p: PrgFile) extends PrgFile
+final case class Read(p: PrgFile) extends PrgFile
 
-val prgFile: PrgFile = Read(Path(Read(Path(Literal("config_location.txt")))))
+val prgFile: PrgFile = Read(Path(Read(Path(Val("config_location.txt")))))
 \end{lstlisting}
-As before, a DSL program contains an unevaluated expression tree describing
-the operations that need to be run. A runner will perform those operations
-and extract the final \lstinline!String! value:
+\inputencoding{utf8}A DSL program of type \inputencoding{latin9}\lstinline!PrgFile!\inputencoding{utf8}
+is a value consisting of many nested case classes. Those case classes
+represent an \emph{unevaluated} expression tree corresponding to the
+operations that need to be performed. To actually perform those operations
+and extract the final \inputencoding{latin9}\lstinline!String!\inputencoding{utf8}
+value, we use a \textsf{``}runner\textsf{''} function:\inputencoding{latin9}
 \begin{lstlisting}
-def run: PrgFile => String = {
-  case Literal(s)      => s
-  case Path(p)         => "path=" + run(p)                // For debugging.
-  case Read(Path(p))   => new String(Files.readAllBytes(Paths.get(run(p))))
-  case x => throw new Exception(s"Illegal PrgFile operation: $x")
+def runFile: PrgFile => String = {
+  case Val(s)          => s
+  case Path(p)         => "path=" + runFile(p)                // For debugging.
+  case Read(Path(p))   => new String(Files.readAllBytes(Paths.get(runFile(p))))
+  case x               => throw new Exception(s"Illegal PrgFile operation: $x")
 }
 \end{lstlisting}
-To test this code, prepare a file \lstinline!config.txt! containing
-the text \lstinline!version = 1! and a file \lstinline!config_location.txt!
-containing the text \lstinline!config.txt!. Then we can run the DSL
-program and get the result:
+\inputencoding{utf8}To test this code, prepare a file \inputencoding{latin9}\lstinline!config.txt!\inputencoding{utf8}
+containing the text \inputencoding{latin9}\lstinline!version = 1!\inputencoding{utf8}
+and a file \inputencoding{latin9}\lstinline!config_location.txt!\inputencoding{utf8}
+containing the text \inputencoding{latin9}\lstinline!config.txt!\inputencoding{utf8}.
+Then we can run the DSL program and get the result:\inputencoding{latin9}
 \begin{lstlisting}
-scala> run(prgFile)
+scala> runFile(prgFile)
 res2: String = "version = 1"
 \end{lstlisting}
+\inputencoding{utf8}
+The second example is a DSL for calculations with complex numbers.
+We could begin by implementing a data structure (\inputencoding{latin9}\lstinline!case class Complex!\inputencoding{utf8})
+with some operations: \inputencoding{latin9}
+\begin{lstlisting}[mathescape=true]
+final case class Complex(x: Double, y: Double) {
+  def +(other: Complex): Complex = Complex(x + other.x, y + other.y)
+  def *(other: Complex): Complex = Complex(x * other.x - y * other.y, x * other.y + y * other.x)
+  def conj: Complex = Complex(x, -y)
+  def phase: Double = math.atan2(y, x)         // Obtain the phase of a complex number.
+  def rotate(alpha: Double): Complex = this * Complex(math.cos(alpha), math.sin(alpha))
+}
 
+val a = Complex(1, 2)          // $\color{dkgreen}a = 1 + 2 i$
+val b = a * Complex(3, -4)     // $\color{dkgreen}b = (1 + 2 i)(3 - 4 i) = 11 + 2 i$
+val c = b.conj                 // $\color{dkgreen}c = 11 - 2 i$
 
-\subsection{Step 2: implementing type safety in the DSLs}
+scala> c
+res0: Complex = Complex(11.0, -2.0)
 
-The two DSLs defined in the previous section have an important shortcoming:
-they are not type-checked at compile time. This becomes clear by looking
-at the DSL program \lstinline!prgFile! shown above. The \lstinline!run!
-function assumes that the \lstinline!Read! operation is always applied
-to a \lstinline!Path!, but this is not enforced by the DSL. When
-combining a larger DSL program from separately defined parts, one
-could by mistake create an invalid DSL program such as \lstinline!Read(Read(Literal("file")))!
-where the \lstinline!Read! operation is used incorrectly. Running
-this program causes a run-time error:
-\begin{lstlisting}
-scala> run(Read(Read(Literal("file"))))
-java.lang.Exception: Illegal PrgFile operation: Read(Read(Literal(file)))
+scala> c.rotate(Complex(0, 1).phase) // Multiply by $\color{dkgreen}i$
+res1: Complex = Complex(2.000000000000001, 11.0)
 \end{lstlisting}
-All DSL program values are of the same type (\lstinline!PrgFile!)
+\inputencoding{utf8}
+Instead of running a complex-number program directly, the DSL pattern
+first creates a data structure that contains an unevaluated expression
+tree describing what needs to be computed. Separate case classes are
+used for different operations as well as for inserting a literal \inputencoding{latin9}\lstinline!Complex!\inputencoding{utf8}
+value (\inputencoding{latin9}\lstinline!Val!\inputencoding{utf8}):\inputencoding{latin9}
+\begin{lstlisting}
+sealed trait PrgComplex
+final case class Val(c: Complex)                      extends PrgComplex
+final case class Add(p1: PrgComplex, p2: PrgComplex)  extends PrgComplex
+final case class Mul(p1: PrgComplex, p2: PrgComplex)  extends PrgComplex
+final case class Conj(p: PrgComplex)                  extends PrgComplex
+final case class Phase(p: PrgComplex)                 extends PrgComplex
+final case class Rotate(p: PrgComplex, a: PrgComplex) extends PrgComplex
+
+val prgComplex1: PrgComplex = Conj(Mul(Val(Complex(1, 2)), Val(Complex(3, -4))))
+
+val prgComplex2: PrgComplex = Rotate(prgComplex1, Phase(Val(Complex(0, 1))))
+\end{lstlisting}
+\inputencoding{utf8}
+Complex-number calculations are now represented by nested case classes.
+A simple runner for the DSL programs of type \inputencoding{latin9}\lstinline!PrgComplex!\inputencoding{utf8}
+can be written like this:\inputencoding{latin9}
+\begin{lstlisting}
+def runComplex: PrgComplex => Complex = {
+  case Val(c)             => c
+  case Add(p1, p2)        => runComplex(p1) + runComplex(p2)
+  case Mul(p1, p2)        => runComplex(p1) * runComplex(p2)
+  case Conj(p)            => runComplex(p).conj
+  case Phase(p)           => Complex(runComplex(p).phase, 0) // Pretend the phase is a Complex value.
+  case Rotate(p, alpha)   => runComplex(p).rotate(runComplex(alpha).x) // Here alpha must be a phase.
+}
+\end{lstlisting}
+\inputencoding{utf8}We can now apply \inputencoding{latin9}\lstinline!runComplex!\inputencoding{utf8}
+to some DSL programs and get the results as \inputencoding{latin9}\lstinline!Complex!\inputencoding{utf8}
+values:\inputencoding{latin9}
+\begin{lstlisting}
+scala> runComplex(prgComplex1)
+res2: Complex = Complex(11.0, -2.0)
+
+scala> runComplex(prgComplex2)
+res3: Complex = Complex(2.000000000000001, 11.0)
+\end{lstlisting}
+\inputencoding{utf8}
+Although the DSLs are simple, they already give us several benefits.
+By representing file operations as values of type \inputencoding{latin9}\lstinline!PrgFile!\inputencoding{utf8}
+and complex-number calculations as values of type \inputencoding{latin9}\lstinline!PrgComplex!\inputencoding{utf8},
+we can compose, verify, or optimize our DSL programs \emph{before}
+running them. We may also implement different runners that execute
+the same DSL program on a remote computer, on a distributed file system,
+on GPUs instead of CPUs, in a test-only sandbox environment, or with
+logging, benchmarking, etc.
+
+\subsection{Stage 2: implementing type safety in the DSLs}
+
+The two DSLs defined in the previous section are not fully type-checked\index{type checking}
+at compile time. This becomes clear by looking at the DSL program
+\inputencoding{latin9}\lstinline!prgFile!\inputencoding{utf8} shown
+in the previous section. The code of \inputencoding{latin9}\lstinline!runFile!\inputencoding{utf8}
+assumes that the \inputencoding{latin9}\lstinline!Read!\inputencoding{utf8}
+operation is always applied to a \inputencoding{latin9}\lstinline!Path!\inputencoding{utf8}.
+However, this assumption is not enforced by the DSL. When composing
+a larger DSL program from separately defined parts, one could by mistake
+create an invalid DSL program such as \inputencoding{latin9}\lstinline!Read(Read(Val("file")))!\inputencoding{utf8}
+where the \inputencoding{latin9}\lstinline!Read!\inputencoding{utf8}
+operation is used incorrectly. Running this program causes a run-time
+error:\inputencoding{latin9}
+\begin{lstlisting}
+scala> runFile(Read(Read(Val("file"))))
+java.lang.Exception: Illegal PrgFile operation: Read(Read(Val(file)))
+\end{lstlisting}
+\inputencoding{utf8}All DSL program values are of the same type (\inputencoding{latin9}\lstinline!PrgFile!\inputencoding{utf8})
 regardless of their intended meaning. So, the Scala compiler cannot
-check that we are using the DSL correctly. It would be better if the
-DSL program \lstinline!Read(Read(Literal("file")))! failed to compile.
-To achieve that, we need to have different Scala types for DSL programs
-returning a \lstinline!String! and a \lstinline!Path!. So, let us
-replace the type \lstinline!PrgFile! by the type constructor \lstinline!PrgFile[A]!,
-representing a DSL program that will return a value of type \lstinline!A!
-when we run it:
+verify that we are using the DSL correctly. It would be better if
+the DSL program \inputencoding{latin9}\lstinline!Read(Read(Val("file")))!\inputencoding{utf8}
+failed to compile. To achieve that, we need to use different Scala
+types for DSL programs returning a \inputencoding{latin9}\lstinline!String!\inputencoding{utf8}
+and a \inputencoding{latin9}\lstinline!Path!\inputencoding{utf8}.
+So, let us replace the type \inputencoding{latin9}\lstinline!PrgFile!\inputencoding{utf8}
+by a type constructor \inputencoding{latin9}\lstinline!PrgFile[A]!\inputencoding{utf8},
+representing a DSL program that will return a value of type \inputencoding{latin9}\lstinline!A!\inputencoding{utf8}
+when we run it:\inputencoding{latin9}
 \begin{lstlisting}
 import java.nio.file.{Path => JPath}
 import java.nio.file.{Files, Paths}
 sealed trait PrgFile[A]
-final case class Literal(s: String)       extends PrgFile[String]
+final case class Val(s: String)           extends PrgFile[String]
 final case class Path(p: PrgFile[String]) extends PrgFile[JPath]
 final case class Read(p: PrgFile[JPath])  extends PrgFile[String]
 
-def run[A]: PrgFile[A] => A = {
-  case Literal(s) => s
-  case Path(p) => Paths.get(run(p))
-  case Read(p) => new String(Files.readAllBytes(run(p)))
+def runFile[A]: PrgFile[A] => A = {
+  case Val(s)   => s
+  case Path(p)  => Paths.get(runFile(p))
+  case Read(p)  => new String(Files.readAllBytes(runFile(p)))
 }
 \end{lstlisting}
-Our example DSL is type-safe now. Invalid programs are rejected at
-compile time:
+\inputencoding{utf8}Our example DSL is now fully type-safe.\index{type safety} Invalid
+programs are rejected at compile time:\inputencoding{latin9}
 \begin{lstlisting}
-val prgFile: PrgFile[String] = Read(Path(Read(Path(Literal("config_location.txt")))))
+val prgFile: PrgFile[String] = Read(Path(Read(Path(Val("config_location.txt")))))
 
-scala> run(prgFile)
-res2: String = "version = 1"
+scala> runFile(prgFile)
+res3: String = "version = 1"
 
-scala> run(Read(Read(Literal("file"))))
+scala> runFile(Read(Read(Val("file"))))
 type mismatch;
- found   : Literal
+ found   : Val
  required: PrgFile[java.nio.file.Path]
-val res3 = run(Read(Read(Literal("file"))))
+val res4 = runFile(Read(Read(Val("file"))))
                                 ^
 Compilation Failed 
 \end{lstlisting}
+\inputencoding{utf8}
+A similar problem exists in our DSL for complex numbers. The code
+of \inputencoding{latin9}\lstinline!runComplex!\inputencoding{utf8}
+assumes that the \inputencoding{latin9}\lstinline!Rotate!\inputencoding{utf8}
+operation is always applied to a \inputencoding{latin9}\lstinline!Phase!\inputencoding{utf8},
+but the DSL does not enforce that assumption. Both arguments of the
+\inputencoding{latin9}\lstinline!Rotate!\inputencoding{utf8} operation
+are values of type \inputencoding{latin9}\lstinline!PrgComplex!\inputencoding{utf8},
+and so the Scala compiler is unable to verify that the DSL is being
+used correctly. If the programmer uses a plain complex number (\inputencoding{latin9}\lstinline!Val!\inputencoding{utf8})
+instead of a \inputencoding{latin9}\lstinline!Phase!\inputencoding{utf8}
+value, the program will return an incorrect result \emph{without}
+any indication of error:\inputencoding{latin9}
+\begin{lstlisting}
+val prgComplex3: PrgComplex = Rotate(prgComplex1, Val(Complex(0, 1)))     // Forgot Phase()!
 
+scala> runComplex(prgComplex3)    // The result is incorrect, but there is no error message!
+val res5: Complex = Complex(11.0, -2.0)
+\end{lstlisting}
+\inputencoding{utf8}
+To achieve type safety, we add a type parameter to \inputencoding{latin9}\lstinline!PrgComplex!\inputencoding{utf8}.
+A DSL program of type \inputencoding{latin9}\lstinline!PrgComplex[A]!\inputencoding{utf8}
+will return a value of type \inputencoding{latin9}\lstinline!A!\inputencoding{utf8}
+when run. (So, the new DSL programs will be able to compute values
+of any type, not only of type \inputencoding{latin9}\lstinline!Complex!\inputencoding{utf8}.)
+The new definitions of the case classes are:\inputencoding{latin9}
+\begin{lstlisting}
+sealed trait PrgComplex[A]
+final case class Val(c: Complex)                                       extends PrgComplex[Complex]
+final case class Add(p1: PrgComplex[Complex], p2: PrgComplex[Complex]) extends PrgComplex[Complex]
+final case class Mul(p1: PrgComplex[Complex], p2: PrgComplex[Complex]) extends PrgComplex[Complex]
+final case class Conj(p: PrgComplex[Complex])                          extends PrgComplex[Complex]
+final case class Phase(p: PrgComplex[Complex])                         extends PrgComplex[Double]
+final case class Rotate(p: PrgComplex[Complex], a: Phase)              extends PrgComplex[Complex]
+\end{lstlisting}
+\inputencoding{utf8}The revised code of \inputencoding{latin9}\lstinline!runComplex!\inputencoding{utf8}
+is clearer because phases are no longer wrapped in a \inputencoding{latin9}\lstinline!Complex!\inputencoding{utf8}
+type:\inputencoding{latin9}
+\begin{lstlisting}
+def runComplex[A]: PrgComplex[A] => A = {
+  case Val(c)             => c
+  case Add(p1, p2)        => runComplex(p1) + runComplex(p2)
+  case Mul(p1, p2)        => runComplex(p1) * runComplex(p2)
+  case Conj(p)            => runComplex(p).conj
+  case Phase(p)           => runComplex(p).phase
+  case Rotate(p, alpha)   => runComplex(p).rotate(runComplex(alpha))
+}
+\end{lstlisting}
+\inputencoding{utf8}The example programs, \inputencoding{latin9}\lstinline!prgComplex1!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!prgComplex2!\inputencoding{utf8},
+do not change except for their type:\inputencoding{latin9}
+\begin{lstlisting}
+val prgComplex1: PrgComplex[Complex] = Conj(Mul(Val(Complex(1, 2)), Val(Complex(3, -4))))
 
-\subsection{Step 3: implementing bound variables}
+val prgComplex2: PrgComplex[Complex] = Rotate(prgComplex1, Phase(Val(Complex(0, 1))))
 
-Another limitation of our DSLs is that they cannot define and use
-new variables within a DSL program. We also cannot use any non-DSL
-code, such as a numerical algorithms library for complex numbers,
-a library for file manipulation, or any other Scala code. 
+scala> runComplex(prgComplex1)
+res6: Complex = Complex(x = 11.0, y = -2.0)
 
-Both of these limitations would be removed if the DSL could support
-defining \emph{new Scala variables} and setting them to values computed
-within the DSL. We will then be able to add arbitrary Scala code working
+scala> runComplex(prgComplex2)
+res7: Complex = Complex(x = 2.000000000000001, y = 11.0)
+\end{lstlisting}
+\inputencoding{utf8}Since \inputencoding{latin9}\lstinline!Rotate!\inputencoding{utf8}
+now requires a \inputencoding{latin9}\lstinline!PrgComplex[Double]!\inputencoding{utf8},
+forgetting to use \inputencoding{latin9}\lstinline!Phase!\inputencoding{utf8}
+will cause a type error:\inputencoding{latin9}
+\begin{lstlisting}
+scala> val prgComplex3 = Rotate(prgComplex1, Val(Complex(0, 1)))
+<console>:1: type mismatch;
+ found   : Val
+ required: PrgComplex[Double]                                                              
+  case Phase(p)           => runComplex(p)
+                                       ^ 
+Compilation Failed
+\end{lstlisting}
+\inputencoding{utf8}
+
+\subsection{Stage 3: implementing bound variables}
+
+Another limitation of our DSLs is that we cannot define and use new
+variables within a DSL program. We also cannot use any non-DSL code,
+such as a library for file manipulation, a numerical algorithms library
+for complex numbers, or any other Scala code. 
+
+Both of these limitations would be removed if the DSL could define
+\emph{new Scala variables} and set them to values computed within
+the DSL. We would then be able to add arbitrary Scala code for working
 with those variables. Let us see how this feature may be implemented.
 
-As an example, consider the task of reading a file if it exists and
-reporting an error otherwise. A direct (non-DSL) code for this computation
-looks like this:
+As an example, consider the task of reading a file only if it exists
+and reporting an error otherwise. A direct (non-DSL) code for this
+computation looks like this:\inputencoding{latin9}
 \begin{lstlisting}
-val p = Paths.get("config.txt")
-val result = if (Files.exists(p)) new String(Files.readAllBytes(p)) else "File not found"
+val p = Paths.get("config_location.txt")
+val result = if (Files.exists(p)) new String(Files.readAllBytes(p)) else "No file."
 \end{lstlisting}
-Trying to translate the above code to the \lstinline!PrgFile! DSL,
-we find that we need to set the Scala variable \lstinline!p! to the
-path computed by a previous operation. Here is a first attempt:
+\inputencoding{utf8}Trying to translate the above code to the \inputencoding{latin9}\lstinline!PrgFile!\inputencoding{utf8}
+DSL, we find that we need to set the Scala variable \inputencoding{latin9}\lstinline!p!\inputencoding{utf8}
+to the path computed by a previous operation. Here is a first attempt:\inputencoding{latin9}
 \begin{lstlisting}
-val p: JPath = run(Path(Literal("config.txt")))
-val prg: PrgFile[String] = if (Files.exists(p)) Read(p) else Literal("File not found")
+val p: JPath = runFile(Path(Val("config_location.txt")))
+val prg: PrgFile[String] = if (Files.exists(p)) Read(p) else Val("No file.")
 \end{lstlisting}
-There are two problems with this code. First, the code \lstinline!Read(p)!
-does not compile because the argument of \lstinline!Read! should
-be a \lstinline!PrgFile[JPath]! rather than just a \lstinline!JPath!.
-Second, it is undesirable to use \lstinline!run! in the middle of
-a DSL program. This will prevent us from running the same code through
-different \lstinline!run! functions.
+\inputencoding{utf8}There are two problems with this code. The first problem is that \inputencoding{latin9}\lstinline!Read(p)!\inputencoding{utf8}
+does not compile because the argument of \inputencoding{latin9}\lstinline!Read!\inputencoding{utf8}
+should be a \inputencoding{latin9}\lstinline!PrgFile[JPath]!\inputencoding{utf8}
+rather than just a \inputencoding{latin9}\lstinline!JPath!\inputencoding{utf8}.
+To solve this problem, we generalize the \inputencoding{latin9}\lstinline!Val!\inputencoding{utf8}
+class to hold values of arbitrary type:\inputencoding{latin9}
+\begin{lstlisting}
+final case class Val[A](a: A) extends PrgFile[A]
+\end{lstlisting}
+\inputencoding{utf8}We then replace \inputencoding{latin9}\lstinline!Read(p)!\inputencoding{utf8}
+by \inputencoding{latin9}\lstinline!Read(Val(p))!\inputencoding{utf8}
+in the code above. The code of \inputencoding{latin9}\lstinline!run!\inputencoding{utf8}
+remains unchanged.
 
-The first problem is solved if we generalize the \lstinline!Literal!
-class to hold values of arbitrary type:
-\begin{lstlisting}
-final case class Literal[A](a: A) extends PrgFile[A]
-\end{lstlisting}
-We then replace \lstinline!Read(p)! by \lstinline!Read(Literal(p))!
-in the code above. The code of \lstinline!run! is unchanged.
+The second problem is that we are using \inputencoding{latin9}\lstinline!runFile!\inputencoding{utf8}
+in the middle of a DSL program. This breaks the assumption that a
+DSL program merely describes the computations without executing them.
+The use of a specific runner inside a DSL program will also prevent
+us from being able to apply a different runner to the entire DSL program
+later.
 
-To solve the second problem, we need to introduce a new DSL operation
-that binds Scala variables to values returned by other DSL operations.
-A standard way of creating \index{bound variable}bound variables
-is by using those variables as arguments of nameless functions. So,
-let us consider the nameless function:
+To solve this problem, we introduce a new DSL operation that binds
+Scala variables to values returned by other DSL operations. A standard
+way of creating \index{bound variable}bound variables is by using
+those variables as arguments of nameless functions. So, let us consider
+the nameless function:\inputencoding{latin9}
 \begin{lstlisting}
-p => if (Files.exists(p)) Read(Literal(p)) else Literal("File not found")
+{ p => if (Files.exists(p)) Read(Val(p)) else Val("No file.") }
 \end{lstlisting}
-This function creates a local variable \lstinline!p! and uses it
-directly in an expression of type \lstinline!PrgFile[String]!. We
-can call this function at the time when the entire DSL program is
-run. So, we can avoid the \lstinline!run! call in the code \lstinline!val p = run(...)!
-and instead introduce a new DSL operation that we will call \lstinline!Bind!.
-The above code that computes \lstinline!p! and \lstinline!prg! is
-replaced by:
+\inputencoding{utf8}This function creates a local variable \inputencoding{latin9}\lstinline!p!\inputencoding{utf8}
+and uses it directly in an expression of type \inputencoding{latin9}\lstinline!PrgFile[String]!\inputencoding{utf8}.
+We can call this function at the time when the entire DSL program
+is run. So, we replace the code \inputencoding{latin9}\lstinline!val p = runFile(...)!\inputencoding{utf8}
+by a new DSL operation that we will call \inputencoding{latin9}\lstinline!Bind!\inputencoding{utf8}.
+The above code that computes \inputencoding{latin9}\lstinline!p!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!prg!\inputencoding{utf8} is
+replaced by:\inputencoding{latin9}
 \begin{lstlisting}
-val prg2: PrgFile[JPath] = Path(Literal("config.txt"))
-val prg: PrgFile[String] = Bind(prg2, p => if (Files.exists(p)) Read(p) else Literal("File not found"))
+val prg2: PrgFile[JPath] = Path(Val("config.txt"))
+val prg: PrgFile[String] = Bind(prg2){ p => if (Files.exists(p)) Read(Val(p)) else Val("No file.") }
 \end{lstlisting}
-Here, the case class \lstinline!Bind! has two parts: a value of type
-\lstinline!PrgFile[JPath]! and a function of type \lstinline!JPath => PrgFile[String]!.
-That function will be called, at the time we call \lstinline!run!,
-and the argument \lstinline!p! will be set to the value returned
-by \lstinline!prg2!. This is implemented in the new code for \lstinline!run!
-shown below.
+\inputencoding{utf8}Here, the case class \inputencoding{latin9}\lstinline!Bind!\inputencoding{utf8}
+has two curried arguments: a value of type \inputencoding{latin9}\lstinline!PrgFile[JPath]!\inputencoding{utf8}
+and a function of type \inputencoding{latin9}\lstinline!JPath => PrgFile[String]!\inputencoding{utf8}.
+That function will be called by \inputencoding{latin9}\lstinline!runFile!\inputencoding{utf8}
+when we run the DSL program. At that time, the argument \inputencoding{latin9}\lstinline!p!\inputencoding{utf8}
+will be set to the value obtained by running \inputencoding{latin9}\lstinline!prg2!\inputencoding{utf8}.
+We will implement this logic in the new code for \inputencoding{latin9}\lstinline!runFile!\inputencoding{utf8}
+(shown below).
 
-In a different DSL program, we may need different types instead of
-\lstinline!JPath! and \lstinline!String!. So, let us replace those
-types by type parameters \lstinline!A! and \lstinline!B!. Note that
-the resulting type is \lstinline!PrgFile[B]!:
+In a different DSL program, we may need to use different types instead
+of \inputencoding{latin9}\lstinline!String!\inputencoding{utf8} and
+\inputencoding{latin9}\lstinline!JPath!\inputencoding{utf8}. So,
+let us replace those types by type parameters \inputencoding{latin9}\lstinline!A!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!B!\inputencoding{utf8}. The
+declaration of the class \inputencoding{latin9}\lstinline!Bind!\inputencoding{utf8}
+becomes:\inputencoding{latin9}
 \begin{lstlisting}
-final case class Bind[A, B](pa: PrgFile[A], f: A => PrgFile[B]) extends PrgFile[B]
+final case class Bind[A, B](pa: PrgFile[B])(f: B => PrgFile[A]) extends PrgFile[A]
 \end{lstlisting}
-
-After adding the \lstinline!Bind!-handling code to the runner, the
-implementation of the DSL becomes:
+\inputencoding{utf8}
+After adding the \inputencoding{latin9}\lstinline!Bind!\inputencoding{utf8}-handling
+code to the runner, the implementation of the DSL is:\inputencoding{latin9}
 \begin{lstlisting}
 sealed trait PrgFile[A]
-final case class Literal[A](a: A) extends PrgFile[A]
-final case class Bind[A, B](pa: PrgFile[A], f: A => PrgFile[B]) extends PrgFile[B]
-final case class Path(p: PrgFile[String]) extends PrgFile[JPath]
-final case class Read(p: PrgFile[JPath]) extends PrgFile[String]
+final case class Val[A](a: A)                                       extends PrgFile[A]
+final case class Bind[A, B](pa: PrgFile[B])(val f: B => PrgFile[A]) extends PrgFile[A]
+final case class Path(p: PrgFile[String])                           extends PrgFile[JPath]
+final case class Read(p: PrgFile[JPath])                            extends PrgFile[String]
 
-def run[A]: PrgFile[A] => A = {
-  case Literal(a)    => a
-  case Bind(pa, f)   => f(run(pa))
-  case Path(p)       => Paths.get(run(p))
-  case Read(p)       => new String(Files.readAllBytes(run(p)))
+def runFile[A]: PrgFile[A] => A = {
+  case Val(a)          => a
+  case bind@Bind(pa)   => runFile(bind.f(runFile(pa)))
+  case Path(p)         => Paths.get(runFile(p))
+  case Read(p)         => new String(Files.readAllBytes(runFile(p)))
 }
 \end{lstlisting}
+\inputencoding{utf8}
+Let us explain certain features of Scala used in this DSL. Since the
+arguments of the constructor \inputencoding{latin9}\lstinline!Bind[A, B]!\inputencoding{utf8}
+are curried, the first curried argument (of type \inputencoding{latin9}\lstinline!PrgFile[B]!\inputencoding{utf8})
+will allow the Scala compiler to determine the type parameter \inputencoding{latin9}\lstinline!B!\inputencoding{utf8}
+automatically. At the same time, \inputencoding{latin9}\lstinline!Bind!\inputencoding{utf8}\textsf{'}s
+second curried argument may be written as a nameless function in a
+separate set of braces:\inputencoding{latin9}
+\begin{lstlisting}
+val prg: PrgFile[String] = Bind(prg2){ p => if (Files.exists(p)) Read(Val(p)) else Val("No file.") }
+\end{lstlisting}
+\inputencoding{utf8}Because the type parameter \inputencoding{latin9}\lstinline!B!\inputencoding{utf8}
+is already fixed, the argument \inputencoding{latin9}\lstinline!p!\inputencoding{utf8}
+may be written without a type annotation (in this case, it would have
+been \inputencoding{latin9}\lstinline!p:JPath!\inputencoding{utf8}).
+This makes the DSL easier to use. However, the underlying implementation
+becomes more complicated. Scala\textsf{'}s pattern matching syntax is limited
+to the first curried argument. So, the second curried argument of
+\inputencoding{latin9}\lstinline!Bind!\inputencoding{utf8} needs
+a \inputencoding{latin9}\lstinline!val!\inputencoding{utf8} declaration
+and is accessed using another pattern variable (here called \inputencoding{latin9}\lstinline!bind!\inputencoding{utf8}).
+Finally, the type parameters \inputencoding{latin9}\lstinline!A!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!B!\inputencoding{utf8} are defined
+such that \inputencoding{latin9}\lstinline!Bind[A, B]!\inputencoding{utf8}
+is a subtype of \inputencoding{latin9}\lstinline!PrgFile[A]!\inputencoding{utf8}
+and not of \inputencoding{latin9}\lstinline!PrgFile[B]!\inputencoding{utf8}.
+This allows Scala\textsf{'}s type checking to handle correctly the unknown
+type \inputencoding{latin9}\lstinline!B!\inputencoding{utf8} in the
+pattern \inputencoding{latin9}\lstinline!Bind(pa)!\inputencoding{utf8}.
 
-The new \lstinline!Bind! operation allows us to implement a part
-of the DSL program as a \emph{Scala function} that depends on the
-result computed by another part of the DSL program. Since \lstinline!Bind!
-contains arbitrary Scala code (a function of type \lstinline!A => PrgFile[B]!),
-we can now use non-DSL code as part of a DSL program, as long as it
-is enclosed inside a \lstinline!Bind!.
+The new \inputencoding{latin9}\lstinline!Bind!\inputencoding{utf8}
+operation allows one part of a DSL program to use values computed
+by other parts. Since a \inputencoding{latin9}\lstinline!Bind!\inputencoding{utf8}
+value contains a \emph{Scala function} (of type \inputencoding{latin9}\lstinline!B => PrgFile[A]!\inputencoding{utf8}),
+that function may run arbitrary Scala code, not limited to DSL operations,
+in order to compute a result of type \inputencoding{latin9}\lstinline!PrgFile[A]!\inputencoding{utf8}.
+All non-DSL code is enclosed inside a \inputencoding{latin9}\lstinline!Bind!\inputencoding{utf8}
+and will be evaluated only when the DSL program is run:\inputencoding{latin9}
+\begin{lstlisting}
+scala> runFile(prg)
+res8: String = "version = 1"
+\end{lstlisting}
+\inputencoding{utf8} As before, a value of type \inputencoding{latin9}\lstinline!PrgFile[A]!\inputencoding{utf8}
+describes a computation but does not execute it.
 
-\subsection{Step 4: arriving at a monadic DSL}
+\subsection{Stage 4: refactoring to a monadic DSL}
 
-The key observation is that \lstinline!Bind! and \lstinline!Literal!
-have the same type signatures as the standard \lstinline!flatMap!
-and \lstinline!pure! methods of a monad. For convenience, let us
-define those methods on the \lstinline!PrgFile! class:
+The next observation is that \inputencoding{latin9}\lstinline!Bind!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!Val!\inputencoding{utf8} have
+the same type signatures as the standard \inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!pure!\inputencoding{utf8} methods
+of a monad. For convenience, let us define those methods on the \inputencoding{latin9}\lstinline!PrgFile!\inputencoding{utf8}
+class:\inputencoding{latin9}
 \begin{lstlisting}
 sealed trait PrgFile[A] {
-  def flatMap[B](f: A => Prg[B]): Prg[B] = Bind(this, f)
-  def map[B](f: A => B): PrgFile[B] = Bind(this, f andThen PrgFile.pure)
+  def flatMap[B](f: A => PrgFile[B]): PrgFile[B] = Bind(this)(f)
+  def map[B](f: A => B): PrgFile[B] = Bind(this)(f andThen PrgFile.pure)
 }
+final case class Val[A](a: A)                                       extends PrgFile[A]
+final case class Bind[A, B](pa: PrgFile[B])(val f: B => PrgFile[A]) extends PrgFile[A]
+final case class Path(p: PrgFile[String])                           extends PrgFile[JPath]
+final case class Read(p: PrgFile[JPath])                            extends PrgFile[String]
+
 object PrgFile {
-  def pure[A](a: A): PrgFile[A] = Literal(a) 
+  def pure[A](a: A): PrgFile[A] = Val(a) 
 }
 \end{lstlisting}
-Here we defined \lstinline!map! through \lstinline!flatMap! by analogy
-with the right identity law of monads.
+\inputencoding{utf8}Here we defined \inputencoding{latin9}\lstinline!map!\inputencoding{utf8}
+through \inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8}
+by analogy with the right identity law of monads.
 
-Just like other DSL operations, the \lstinline!flatMap! and \lstinline!pure!
-methods do not run or evaluate any parts of the DSL program. They
-merely create some nested data structures containing not-yet-called
-functions. The necessary logic will be executed only when the \lstinline!run!
-method is invoked to convert the entire DSL program to a result value.
+Like other DSL operations, the methods \inputencoding{latin9}\lstinline!map!\inputencoding{utf8},
+\inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8}, and
+\inputencoding{latin9}\lstinline!pure!\inputencoding{utf8} do not
+run or evaluate any parts of a DSL program. They only create some
+nested data structures containing not-yet-called functions. The necessary
+logic will be executed when the \inputencoding{latin9}\lstinline!run!\inputencoding{utf8}
+method is invoked. At that time, the entire DSL program will be converted
+into a result value.
 
-Nevertheless, DSL programs can now be written as functor blocks:
+Because \inputencoding{latin9}\lstinline!map!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8}
+are defined, DSL programs can now be written as functor blocks:\inputencoding{latin9}
 \begin{lstlisting}
 val prg: PrgFile[String] = for {
-  p <- Path(Literal("config.txt"))
-  r <- if (Files.exists(p)) Read(p) else Literal("File not found")
+  p <- Path(Val("config.txt"))
+  r <- if (Files.exists(p)) Read(Val(p)) else Val("No file.")
 } yield r
 \end{lstlisting}
-Longer DSL programs may be composed from shorter ones:
+\inputencoding{utf8}Longer DSL programs may be composed from shorter ones:\inputencoding{latin9}
 \begin{lstlisting}
-def readPath(filename: String): PrgFile[String] = for {
-  path <- Path(Literal(filename))
-  text <- if (Files.exists(path)) Read(path) else Literal("File not found")
+def readFileContents(filename: String): PrgFile[String] = for {
+  path <- Path(Val(filename))
+  text <- if (Files.exists(path)) Read(Val(path)) else Val("No file.")
 } yield text
 
 val prg2: PrgFile[String] = for {
-  str <- readPath("config.txt")
-  result <- if (str.nonEmpty) readPath(str) else PrgFile.pure("Error: empty filename")
+  str <- readFileContents("config.txt")
+  result <- if (str.nonEmpty) readFileContents(str) else Val("No filename.")
 } yield result
+
+scala> runFile(prg2)
+res9 : String = "version = 1"
 \end{lstlisting}
-
-
-\subsection{Step 5: refactoring to reuse common code}
-
-Recall our first example (a DSL for complex numbers) and rewrite it
-in a similar way:
+\inputencoding{utf8}
+Another benefit of the monadic refactoring is that \inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8}
+provides a general way of applying a file operation to a value wrapped
+under \inputencoding{latin9}\lstinline!PrgFile!\inputencoding{utf8}.
+So, we may simplify the case classes \inputencoding{latin9}\lstinline!Path!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!Read!\inputencoding{utf8} by
+removing the \inputencoding{latin9}\lstinline!PrgFile!\inputencoding{utf8}
+wrapping:\inputencoding{latin9}
 \begin{lstlisting}
-sealed trait PrgComplex[A]
-final case class Literal[A](a: A) extends PrgComplex[A]
-final case class Bind[A, B](pa: PrgComplex[A], f: A => PrgComplex[B]) extends PrgComplex[B]
-final case class Add(x: PrgComplex[Complex], y: PrgComplex[Complex]) extends PrgComplex[Complex]
-final case class Mul(x: PrgComplex[Complex], y: PrgComplex[Complex]) extends PrgComplex[Complex]
-final case class Conj(x: PrgComplex[Complex]) extends PrgComplex[Complex]
-
-def run[A]: PrgComplex[A] => A = {
-  case Literal(a)    => a
-  case Bind(pa, f)   => f(run(pa))
-  case Add(p1, p2)   => run(p1) + run(p2)
-  case Mul(p1, p2)   => run(p1) * run(p2)
-  case Conj(p)       => run(p).conj
+final case class Path(p: String) extends PrgFile[JPath]
+final case class Read(p: JPath)  extends PrgFile[String]
+\end{lstlisting}
+\inputencoding{utf8}This simplifies the usage of the DSL since we may write, e.g., just
+\inputencoding{latin9}\lstinline!Read(path)!\inputencoding{utf8}
+instead of \inputencoding{latin9}\lstinline!Read(Val(path))!\inputencoding{utf8}.
+The code of \inputencoding{latin9}\lstinline!runFile!\inputencoding{utf8}
+is also shortened:\inputencoding{latin9}
+\begin{lstlisting}
+def runFile[A]: PrgFile[A] => A = {
+  case Val(a)          => a
+  case bind@Bind(pa)   => runFile(bind.f(runFile(pa)))
+  case Path(p)         => Paths.get(p)
+  case Read(p)         => new String(Files.readAllBytes(p))
 }
 \end{lstlisting}
+\inputencoding{utf8}
 
-Comparing the code of \lstinline!PrgFile! and \lstinline!PrgComplex!,
-we notice that the the \lstinline!Literal! and \lstinline!Bind!
-operations are implemented in the same way. The differences are in
-the code for operations specific to file handling or to complex numbers.
-So, let us refactor these data structures so that the domain-specific
-operations are separated and the common code may be reused. We will
-gather all the domain-specific operations in a separate type constructor
-that we call the \index{effect constructor}\textbf{effect constructor}.
-The common code will then use the effect constructor as a type parameter.
-Let us now refactor the two example DSLs in this way.
+\subsection{Stage 5: refactoring to reuse common code}
 
-{*}{*}{*}is it Ops(f: F{[}A{]}) and why not Ops(f: F{[}Prg{[}A{]}{]})???
-What about the complex-numbers example?
+Let us rewrite our second example (a DSL for complex numbers) in the
+same way:\inputencoding{latin9}
+\begin{lstlisting}
+sealed trait PrgComplex[A] {
+  def flatMap[B](f: A => PrgComplex[B]): PrgComplex[B] = Bind(this)(f)
+  def map[B](f: A => B): PrgComplex[B] = Bind(this)(f andThen PrgComplex.pure)
+}
+object PrgComplex {
+  def pure[A](a: A): PrgComplex[A] = Val(a)
+}
 
-\texttt{\textcolor{blue}{\footnotesize{}sealed trait Prg{[}A{]} \{
-def flatMap ... \}}}\textcolor{darkgray}{\footnotesize{} // no code
-changes}{\footnotesize\par}
+final case class Val[A](a: A)                                             extends PrgComplex[A]
+final case class Bind[A, B](pa: PrgComplex[B])(val f: B => PrgComplex[A]) extends PrgComplex[A]
+final case class Add(x: Complex, y: Complex)                              extends PrgComplex[Complex]
+final case class Mul(x: Complex, y: Complex)                              extends PrgComplex[Complex]
+final case class Conj(x: Complex)                                         extends PrgComplex[Complex]
+final case class Phase(p: Complex)                                        extends PrgComplex[Double]
+final case class Rotate(p: Complex, p: Phase)                             extends PrgComplex[Complex]
 
-\texttt{\textcolor{blue}{\footnotesize{}case class Bind{[}A, B{]}(p: Prg{[}A{]},
-f: A$\rightarrow$Prg{[}B{]}) extends Prg{[}B{]}}}{\footnotesize\par}
+def runComplex[A]: PrgComplex[A] => A = {
+  case Val(a)                => a
+  case bind@Bind(pa)         => runComplex(bind.f(runComplex(pa)))
+  case Add(p1, p2)           => p1 + p2
+  case Mul(p1, p2)           => p1 * p2
+  case Conj(p)               => p.conj
+  case Phase(p)              => p.phase
+  case Rotate(p, Phase(a))   => p.rotate(a.phase)
+}
+\end{lstlisting}
+\inputencoding{utf8}
+Comparing the code of \inputencoding{latin9}\lstinline!runFile!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!runComplex!\inputencoding{utf8},
+we notice that the \inputencoding{latin9}\lstinline!Val!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!Bind!\inputencoding{utf8} operations
+are implemented in the same way. The differences are in the code for
+operations specific to file handling or to complex numbers. So, let
+us refactor these data structures, separating the domain-specific
+operations and reusing the common code. We can gather all the domain-specific
+operations in a new type constructor that we call an \index{effect constructor}\textbf{effect
+constructor}. The common code will then use the effect constructor
+as a type parameter. Let us now refactor the two example DSLs in this
+manner.
 
-\texttt{\textcolor{blue}{\footnotesize{}case class Literal{[}A{]}(a: A)
-extends Prg{[}A{]}}}{\footnotesize\par}
+The effect constructor for the \inputencoding{latin9}\lstinline!PrgFile!\inputencoding{utf8}
+DSL should contain the operations \inputencoding{latin9}\lstinline!Path!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!Read!\inputencoding{utf8}. Let
+us copy the existing case classes for these operations but rename
+their parent type to \inputencoding{latin9}\lstinline!PrgFileC!\inputencoding{utf8}.
+We will also move the relevant parts of \inputencoding{latin9}\lstinline!runFile!\inputencoding{utf8}
+into a new function (\inputencoding{latin9}\lstinline!runFileC!\inputencoding{utf8})
+that we call an \textbf{effect runner}\index{effect runner}:\inputencoding{latin9}
+\begin{lstlisting}
+sealed trait PrgFileC[A]
+final case class Path(p: String) extends PrgFileC[JPath]
+final case class Read(p: JPath)  extends PrgFileC[String]
+  
+def runFileC[A]: PrgFileC[A] => A = {
+  case Path(p)   => Paths.get(p)
+  case Read(p)   => new String(Files.readAllBytes(p))
+}
+\end{lstlisting}
+\inputencoding{utf8}The code of \inputencoding{latin9}\lstinline!PrgFile!\inputencoding{utf8}
+becomes shorter since we moved some code out of it:\inputencoding{latin9}
+\begin{lstlisting}
+// The same code for sealed trait PrgFile[A] and object PrgFile.
+// The case classes are changed to:
+final case class Val[A](a: A) extends PrgFile[A]
+final case class Bind[A, B](pa: PrgFile[B])(val f: B => PrgFile[A]) extends PrgFile[A]
+final case class Op[A](op: PrgFileC[A]) extends PrgFile[A]  // Wrap custom operations.
 
-\texttt{\textcolor{blue}{\footnotesize{}type Complex = (Double, Double)}}\textcolor{darkgray}{\footnotesize{}
-// custom code starts here}{\footnotesize\par}
+def runFile[A]: PrgFile[A] => A = {
+  case Val(a)          => a
+  case bind@Bind(pa)   => runFile(bind.f(runFile(pa)))
+  case Op(op)          => runFileC(op) // Run the custom operation and get the result.
+}
+\end{lstlisting}
+\inputencoding{utf8}
+The code of \inputencoding{latin9}\lstinline!PrgComplex!\inputencoding{utf8}
+is refactored in a similar way:\inputencoding{latin9}
+\begin{lstlisting}
+// The same code for `sealed trait PrgComplex[A]` and `object PrgComplex`.
+// The case classes are changed to:
+final case class Val[A](a: A) extends PrgComplex[A]
+final case class Bind[A, B](pa: PrgComplex[B])(val f: B => PrgComplex[A]) extends PrgComplex[A]
+final case class Op[A](op: PrgComplexC[A]) extends PrgComplex[A]     // Wrap custom operations.
 
-\texttt{\textcolor{blue}{\footnotesize{}case class Str(s: String)
-extends Prg{[}Complex{]}}}{\footnotesize\par}
+def runComplex[A]: PrgComplex[A] => A = {
+  case Val(a)             => a
+  case bind@Bind(pa)      => runComplex(bind.f(runComplex(pa)))
+  case Op(op)             => runComplexC(op)    // Run the custom operation and get the result.
 
-\texttt{\textcolor{blue}{\footnotesize{}case class Mul(c1: Complex,
-C2: Complex) extends Prg{[}Complex{]}}}{\footnotesize\par}
+sealed trait PrgComplexC[A]
+final case class Add(x: Complex, y: Complex)      extends PrgComplexC[Complex]
+final case class Mul(x: Complex, y: Complex)      extends PrgComplexC[Complex]
+final case class Conj(x: Complex)                 extends PrgComplexC[Complex]
+final case class Phase(p: Complex)                extends PrgComplexC[Double]
+final case class Rotate(p: Complex, alpha: Phase) extends PrgComplexC[Complex]
+ 
+def runComplexC[A]: PrgComplexC[A] => A = {
+  case Add(p1, p2)           => p1 + p2
+  case Mul(p1, p2)           => p1 * p2
+  case Conj(p)               => p.conj
+  case Phase(p)              => p.phase
+  case Rotate(p, Phase(a))   => p.rotate(a.phase)
+}
+\end{lstlisting}
+\inputencoding{utf8}
+The code of \inputencoding{latin9}\lstinline!PrgComplex!\inputencoding{utf8}
+is now the same as the code of \inputencoding{latin9}\lstinline!PrgFile!\inputencoding{utf8}
+except for using a different effect constructor (\inputencoding{latin9}\lstinline!PrgComplexC!\inputencoding{utf8}
+instead of \inputencoding{latin9}\lstinline!PrgFileC!\inputencoding{utf8})
+and the corresponding runner (\inputencoding{latin9}\lstinline!runComplexC!\inputencoding{utf8}
+instead of \inputencoding{latin9}\lstinline!runFileC!\inputencoding{utf8}).
+The effect constructor and its runner encapsulate the entire domain-specific
+logic. The code in the classes \inputencoding{latin9}\lstinline!PrgComplex!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!PrgFile!\inputencoding{utf8}
+is only concerned with providing the monadic functionality to the
+DSL. We can replace those two classes by a single class (called, say,
+\inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}) that
+takes the effect constructor as a \emph{type parameter} \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}.
+Since the type parameter \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}
+is itself a type constructor, we must declare it via the Scala syntax
+\inputencoding{latin9}\lstinline!F[_]!\inputencoding{utf8}. The code
+is:\inputencoding{latin9}
+\begin{lstlisting}
+sealed trait MonadDSL[F[_], A] {
+  def flatMap[B](f: A => MonadDSL[F, B]): MonadDSL[F, B] = Bind(this)(f)
+  def map[B](f: A => B): MonadDSL[F, B] = Bind(this)(f andThen MonadDSL.pure)
+}
+object MonadDSL {
+  def pure[F[_], A](a: A): MonadDSL[F, A] = Val(a)
+}
+final case class Val[F[_], A](a: A) extends MonadDSL[F, A]
+final case class Bind[F[_], A, B](pa: MonadDSL[F, B])(val f: B => MonadDSL[F, A]) extends MonadDSL[F, A]
+final case class Op[F[_], A](op: F[A]) extends MonadDSL[F, A]  // Wrap custom operations.
+\end{lstlisting}
+\inputencoding{utf8}
+The runner for \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}
+needs to run the effects described by the effect constructor \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}.
+We try passing \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}\textsf{'}s
+runner as an additional curried argument to \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}\textsf{'}s
+runner:\inputencoding{latin9}
+\begin{lstlisting}
+def run[F[_], A](runner: F[A] => A): MonadDSL[F, A] => A = { // This code does not compile.
+  case Val(a)          => a
+  case bind@Bind(pa)   => run(runner)(bind.f(run(runner)(pa)))
+  case Op(op)          => runner(op)
+}
+\end{lstlisting}
+\inputencoding{utf8}However, this code gives a type error. The type of \inputencoding{latin9}\lstinline!bind.f!\inputencoding{utf8}
+is \inputencoding{latin9}\lstinline!B => MonadDSL[F, A]!\inputencoding{utf8},
+so the argument of \inputencoding{latin9}\lstinline!bind.f!\inputencoding{utf8}
+must have type \inputencoding{latin9}\lstinline!B!\inputencoding{utf8}.
+A value of type \inputencoding{latin9}\lstinline!B!\inputencoding{utf8}
+will be produced by \inputencoding{latin9}\lstinline!run(runner)(pa)!\inputencoding{utf8}
+only if we set type parameters as \inputencoding{latin9}\lstinline!run[F, B]!\inputencoding{utf8},
+and only if \inputencoding{latin9}\lstinline!runner!\inputencoding{utf8}
+has type \inputencoding{latin9}\lstinline!F[B] => B!\inputencoding{utf8}.
+But the given argument \inputencoding{latin9}\lstinline!runner!\inputencoding{utf8}
+has a fixed type \inputencoding{latin9}\lstinline!F[A] => A!\inputencoding{utf8}
+and cannot be used with type \inputencoding{latin9}\lstinline!B!\inputencoding{utf8}.
 
-\texttt{\textcolor{blue}{\footnotesize{}case class Conj(c: Complex)
-extends Prg{[}Complex{]}}}{\footnotesize\par}
+To be able to use the effect runner with arbitrary types, the \inputencoding{latin9}\lstinline!runner!\inputencoding{utf8}
+argument must be of type \inputencoding{latin9}\lstinline!F[X] => X!\inputencoding{utf8}
+where \inputencoding{latin9}\lstinline!X!\inputencoding{utf8} remains
+free and is \emph{not} known in advance. The type signatures of the
+effect runners \inputencoding{latin9}\lstinline!runComplexC!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!runFileC!\inputencoding{utf8}
+already have that form:\inputencoding{latin9}
+\begin{lstlisting}
+def runComplexC[X]: PrgComplexC[X] => X    // PrgComplexC[X] => X with arbitrary types X
+def runFileC[X]: PrgFileC[X] => X          // PrgFileC[X] => X with arbitrary types X
+\end{lstlisting}
+\inputencoding{utf8}We need to pass those functions as arguments to \inputencoding{latin9}\lstinline!run!\inputencoding{utf8}
+while not losing the freedom provided by the type parameter \inputencoding{latin9}\lstinline!X!\inputencoding{utf8}. 
 
-Refactor this DSL to separate common code from custom code:
+To achieve that, we define a new type \inputencoding{latin9}\lstinline!Runner!\inputencoding{utf8}
+as a Scala trait encapsulating the type signature of an effect runner.
+The two effect runners can then be declared as values of type \inputencoding{latin9}\lstinline!Runner!\inputencoding{utf8}:\inputencoding{latin9}
+\begin{lstlisting}
+trait Runner[F[_]] { def run[X]: F[X] => X }
+val runnerComplex = new Runner[PrgComplexC] { def run[X]: PrgComplexC[X] => X = runComplexC[X] }
+val runnerFile = new Runner[PrgFileC] { def run[X]: PrgFileC[X] => X = runFileC[X] } 
+\end{lstlisting}
+\inputencoding{utf8}
+Function values that encapsulate a type parameter are called \textbf{polymorphic
+functions}\index{polymorphic function}. The type notation for the
+type \inputencoding{latin9}\lstinline!Runner!\inputencoding{utf8}
+is:
+\[
+\text{Runner}^{F}\triangleq\forall X.\,F^{X}\rightarrow X\quad.
+\]
+The universal quantifier ($\forall X$) indicates that a value of
+type \inputencoding{latin9}\lstinline!Runner[F]!\inputencoding{utf8}
+still has the freedom of using any type \inputencoding{latin9}\lstinline!X!\inputencoding{utf8}
+when the method \inputencoding{latin9}\lstinline!run!\inputencoding{utf8}
+is called.
 
-\texttt{\textcolor{blue}{\footnotesize{}sealed trait DSL{[}F{[}\_{]},
-A{]} \{ def flatMap ... \}}}\textcolor{darkgray}{\footnotesize{} //
-no code changes}{\footnotesize\par}
+In Scala 3, the type of an effect runner is written in a shorter syntax:\inputencoding{latin9}
+\begin{lstlisting}
+type Runner[F[_]] = [X] => F[X] => X
+\end{lstlisting}
+\inputencoding{utf8}This corresponds to the type notation $\forall X.\,F^{X}\rightarrow X$.
+The programmer does not need to declare a trait \inputencoding{latin9}\lstinline!Runner!\inputencoding{utf8}
+in Scala 3 because the compiler does that automatically for polymorphic
+functions.
 
-\texttt{\textcolor{blue}{\footnotesize{}type Prg{[}A{]} = DSL{[}F,
-A{]}}}\textcolor{darkgray}{\footnotesize{} // just for convenience}{\footnotesize\par}
+Using the \inputencoding{latin9}\lstinline!Runner!\inputencoding{utf8}
+type, we rewrite the code for the function \inputencoding{latin9}\lstinline!run!\inputencoding{utf8}
+as:\inputencoding{latin9}
+\begin{lstlisting}
+def run[F[_], A](runner: Runner[F]): MonadDSL[F, A] => A = {
+  case Val(a)          => a
+  case bind@Bind(pa)   => run(runner)(bind.f(run(runner)(pa)))
+  case Op(op)          => runner.run(op)
+}
+\end{lstlisting}
+\inputencoding{utf8}We can now define \inputencoding{latin9}\lstinline!PrgComplex!\inputencoding{utf8}
+through \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}
+and run some tests:\inputencoding{latin9}
+\begin{lstlisting}
+type PrgComplex[A] = MonadDSL[PrgComplexC, A]
+val prgComplex: PrgComplex[Complex] = for {
+  x <- Op(Add(Complex(1, 1), Complex(0, 1)))
+  y <- Op(Mul(x, Complex(3, -4)))
+  z <- Op(Conj(y))
+  r <- Op(Rotate(x, Phase(Complex(0, 1))))
+} yield r
 
-\texttt{\textcolor{blue}{\footnotesize{}case class Bind{[}A, B{]}(p: Prg{[}A{]},
-f: A$\rightarrow$Prg{[}B{]}) extends Prg{[}B{]}}}{\footnotesize\par}
+scala> runComplex(runnerComplex)(prgComplex2)
+res0: Complex = Complex(x = 2.000000000000001, y = 11.0)
+\end{lstlisting}
+\inputencoding{utf8}
 
-\texttt{\textcolor{blue}{\footnotesize{}case class Literal{[}A{]}(a: A)
-extends Prg{[}A{]}}}{\footnotesize\par}
+\section{The free monad}
 
-\texttt{\textcolor{blue}{\footnotesize{}case class Ops{[}A{]}(f: F{[}A{]})
-extends Prg{[}A{]}}}\textcolor{darkgray}{\footnotesize{} // custom
-operations here}{\footnotesize\par}
+\subsection{A recipe for monadic DSLs}
 
-Interpreter is parameterized by a \textsf{``}value extractor\textsf{''} {\footnotesize{}$\text{Ex}^{F}\triangleq\forall A.\left(F^{A}\rightarrow A\right)$}{\footnotesize\par}
+The previous section explained the motivation for defining the type
+constructor \inputencoding{latin9}\lstinline!MonadDSL[F[_], A]!\inputencoding{utf8}.
+That type constructor is called the \textsf{``}free monad on \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}\textsf{''},
+for reasons explained later in this chapter. The type \inputencoding{latin9}\lstinline!MonadDSL[F[_], A]!\inputencoding{utf8}
+supports the monad\textsf{'}s methods \inputencoding{latin9}\lstinline!map!\inputencoding{utf8},
+\inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8}, and
+\inputencoding{latin9}\lstinline!pure!\inputencoding{utf8}, which
+\inputencoding{latin9}\lstinline!F!\inputencoding{utf8} does not
+necessarily have. So, we may view \inputencoding{latin9}\lstinline!MonadDSL[F[_], A]!\inputencoding{utf8}
+as a special wrapper that adds the monadic variable-binding functionality
+to any given DSL.
 
-\texttt{\textcolor{blue}{\footnotesize{}def run{[}F{[}\_{]}, A{]}(ex: Ex{[}F{]})(prg: DSL{[}F,
-A{]}): A = ...}}{\footnotesize\par}
+Below we will show that monadic DSL programs will satisfy a monad\textsf{'}s
+laws after the effects are run (but not necessarily before that!).
+Let us now summarize the recipe for using \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}
+in practice.
 
-The constructor \texttt{\textcolor{blue}{\footnotesize{}DSL{[}F{[}\_{]},
-A{]}}} is called a \textbf{free monad} over \texttt{\textcolor{blue}{\footnotesize{}F}} 
+Begin by writing down the types of the available operations in the
+DSL. The operations may be functions between fixed known types, such
+as $\text{Int}\rightarrow\text{Int}\rightarrow\text{String}$ or $\text{String}\rightarrow\bbnum 1$.
+Operations may be also functions with type parameters, for example,
+$A\times\text{Int}\rightarrow\text{String}$ where $A$ is a type
+parameter. In every case, we need to write down the types in the form
+of a simple (non-curried) function, such as $P\rightarrow Q$, where
+$P$ and $Q$ are type expressions possibly depending on some type
+parameters.
 
-\subsection{Interpreting a DSL: handling errors}
+The next step is to define a new type constructor \inputencoding{latin9}\lstinline!F[_]!\inputencoding{utf8}
+that will serve as the effect constructor\index{effect constructor}
+of the DSL:\inputencoding{latin9}
+\begin{lstlisting}
+sealed trait F[_]
+\end{lstlisting}
+\inputencoding{utf8} The effect constructor \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}
+will be a disjunctive type whose parts correspond to each of the DSL
+operations. For every operation with type $P\rightarrow Q$, define
+the corresponding case class as:\inputencoding{latin9}
+\begin{lstlisting}
+final case class SomeOperation(x: P) extends F[Q]
+\end{lstlisting}
+\inputencoding{utf8}The names of case classes (\inputencoding{latin9}\lstinline!SomeOperation!\inputencoding{utf8}
+and so on) should be chosen for clarity.
 
-To handle errors, we want to evaluate \texttt{\textcolor{blue}{\footnotesize{}DSL{[}F{[}\_{]},
-A{]}}} to \texttt{\textcolor{blue}{\footnotesize{}Either{[}Err, A{]}}} 
+It is an important part of the recipe that the result type (\inputencoding{latin9}\lstinline!Q!\inputencoding{utf8})
+is wrapped in the effect constructor \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}
+while the argument type (\inputencoding{latin9}\lstinline!P!\inputencoding{utf8})
+is \emph{not}. For example, the \inputencoding{latin9}\lstinline!PrgFile!\inputencoding{utf8}
+DSL described in the previous section has two operations with types
+\inputencoding{latin9}\lstinline!String => JPath!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!JPath => String!\inputencoding{utf8}.
+The corresponding effect constructor (\inputencoding{latin9}\lstinline!PrgFileC!\inputencoding{utf8})
+is defined by:\inputencoding{latin9}
+\begin{lstlisting}
+sealed trait PrgFileC[_]
+final case class Path(p: String) extends PrgFileC[JPath]
+final case class Read(p: JPath) extends PrgFileC[String]
+\end{lstlisting}
+\inputencoding{utf8}
+Typically, a type constructor \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}
+defined in this way will be an \textsf{``}unfunctor\textsf{''}\index{unfunctor}.
+In the example shown above, \inputencoding{latin9}\lstinline!PrgFileC!\inputencoding{utf8}
+cannot be a functor because it is impossible to create values of type
+\inputencoding{latin9}\lstinline!PrgFileC[A]!\inputencoding{utf8}
+with an arbitrary type \inputencoding{latin9}\lstinline!A!\inputencoding{utf8}
+(the type \inputencoding{latin9}\lstinline!A!\inputencoding{utf8}
+must be either \inputencoding{latin9}\lstinline!JPath!\inputencoding{utf8}
+or \inputencoding{latin9}\lstinline!String!\inputencoding{utf8}).
+However, in some cases the effect constructor \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}
+could be itself a lawful functor.
 
-Suppose we have a value extractor of type $\text{Ex}^{F}\triangleq\forall A.\left(F^{A}\rightarrow\text{Err}+A\right)$
+Next, we implement an \textsf{``}effect runner\textsf{''} \index{effect runner}for
+\inputencoding{latin9}\lstinline!F!\inputencoding{utf8}. An \textbf{effect
+runner} for an effect constructor \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}
+is a polymorphic function\index{polymorphic function} with the type
+signature $\forall X.\,F^{X}\rightarrow X$:\inputencoding{latin9}
+\begin{lstlisting}
+val runF: Runner[F] = new Runner[F] { def run[X]: F[X] => X = ??? }
+\end{lstlisting}
+\inputencoding{utf8}If the definition of \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}
+allows only certain types \inputencoding{latin9}\lstinline!A!\inputencoding{utf8}
+in values of type \inputencoding{latin9}\lstinline!F[A]!\inputencoding{utf8}
+then the runner only needs to work for those types. In the example
+shown above, the runner only needs to work with arguments of types
+\inputencoding{latin9}\lstinline!PrgFileC[JPath]!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!PrgFileC[String]!\inputencoding{utf8},
+not with arguments of type \inputencoding{latin9}\lstinline!F[X]!\inputencoding{utf8}
+with an arbitrary unknown \inputencoding{latin9}\lstinline!X!\inputencoding{utf8}:\inputencoding{latin9}
+\begin{lstlisting}
+val runnerFile = new Runner[PrgFileC] { def run[X]: (PrgFileC[X] => X) = runFileC[X] }
+\end{lstlisting}
+\inputencoding{utf8}Nevertheless, the runner\textsf{'}s type signature (\inputencoding{latin9}\lstinline!def run[X]: F[X] => X!\inputencoding{utf8})
+keeps a general type parameter \inputencoding{latin9}\lstinline!X!\inputencoding{utf8}.
 
-The code of the interpreter is almost unchanged:
+We now define the monadic DSL type (\inputencoding{latin9}\lstinline!MyDSL!\inputencoding{utf8})
+and its runner function (\inputencoding{latin9}\lstinline!runMyDSL!\inputencoding{utf8})
+as:\inputencoding{latin9}
+\begin{lstlisting}
+type MyDSL[A] = MonadDSL[F, A]
+def runMyDSL[A]: MyDSL[A] => A = MonadDSL.run(runF)
+\end{lstlisting}
+\inputencoding{utf8}DSL programs may be written using functor blocks:\inputencoding{latin9}
+\begin{lstlisting}
+type FileDSL[A] = MonadDSL[PrgFileC, A]
+def runFileDSL[A]: FileDSL[A] => A = MonadDSL.run(runnerFile)
+val prgFile1: FileDSL[String] = for {
+  x <- Op(Path("config.txt"))
+  y <- Op(Read(x))
+} yield y
 
-\texttt{\textcolor{blue}{\footnotesize{}def run{[}F{[}\_{]}, A{]}(extract: Ex{[}F{]})(prg: DSL{[}F,
-A{]}): Either{[}Err, A{]} =}}{\footnotesize\par}
+scala> runFileDSL(prgFile1)
+res0: String = "version = 1"
+\end{lstlisting}
+\inputencoding{utf8}
+Note that each DSL operation needs to be wrapped in an \inputencoding{latin9}\lstinline!Op!\inputencoding{utf8}
+case class. To make the code shorter, we may define an implicit conversion
+from \inputencoding{latin9}\lstinline!PrgFileC[A]!\inputencoding{utf8}
+to \inputencoding{latin9}\lstinline!Op[A]!\inputencoding{utf8}:\inputencoding{latin9}
+\begin{lstlisting}
+implicit def toOp[A](p: PrgFileC[A]): Op[A] = Op(p) // *** check if this code actually works
+val prgFile2: FileDSL[String] = for { // Does it help if we begin the functor block with a Pure()?
+  x <- Path("config.txt")
+  y <- Read(x)
+} yield y
 
-\texttt{\textcolor{blue}{\footnotesize{}prg match \{}}{\footnotesize\par}
+scala> runFileDSL(prgFile1)
+res1: String = "version = 1"
+\end{lstlisting}
+\inputencoding{utf8}
 
-\texttt{\textcolor{blue}{\footnotesize{}    case b: Bind{[}F, \_,
-A{]} => b match \{ case Bind(p, f) => }}{\footnotesize\par}
+\subsection{Handling errors after running a DSL program}
 
-\texttt{\textcolor{blue}{\footnotesize{}        run(extract)(p).flatMap(f
-andThen run(extract))}}{\footnotesize\par}
+In the code from the previous section, one may use different effect
+runners with \emph{the same} function \inputencoding{latin9}\lstinline!MonadDSL.run!\inputencoding{utf8}.
+We may apply \inputencoding{latin9}\lstinline!MonadDSL.run!\inputencoding{utf8}
+to any effect runner of type $\forall X.\,F^{X}\rightarrow X$ and
+obtain a monad runner of type \inputencoding{latin9}\lstinline!MonadDSL[F, A] => A!\inputencoding{utf8}.
 
-\texttt{\textcolor{blue}{\footnotesize{}    \}}}\textcolor{darkgray}{\footnotesize{}
-    // Here, the .flatMap is from Either.}{\footnotesize\par}
+More generally, we may need to run the $F$-effects into \emph{another
+monad}. Given an effect runner of type $\forall X.\,F^{X}\rightarrow M^{X}$,
+where $M$ is some monad, we hope to obtain a general runner of type
+\inputencoding{latin9}\lstinline!MonadDSL[F, A] => M[A]!\inputencoding{utf8}.
 
-\texttt{\textcolor{blue}{\footnotesize{}    case Literal(a) => Right(a)}}\textcolor{darkgray}{\footnotesize{}
-// pure: A $\rightarrow$ Err + A}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}    case Ops(f) => extract(f)
-    }}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}\}}}{\footnotesize\par}
-
-The code of \texttt{\textcolor{blue}{\footnotesize{}run}} only uses
-\texttt{\textcolor{blue}{\footnotesize{}flatMap}} and \texttt{\textcolor{blue}{\footnotesize{}pure}}
-from \texttt{\textcolor{blue}{\footnotesize{}Either}} 
-
-We can generalize to any other monad $M^{A}$ instead of \texttt{\textcolor{blue}{\footnotesize{}Either{[}Err,
-A{]}}} 
-
+To see an example of using such general runners in practice, notice
+that the execution of $F$-effects may produce errors. For instance,
+the runner of the \inputencoding{latin9}\lstinline!PrgFile!\inputencoding{utf8}
+DSL will throw exceptions when files are not found or not readable.
+We may catch those exceptions with Scala\textsf{'}s standard \inputencoding{latin9}\lstinline!Try!\inputencoding{utf8}
+class. However, this means replacing the runner of type \inputencoding{latin9}\lstinline!PrgFileC[X] => X!\inputencoding{utf8}
+by a polymorphic function of type \inputencoding{latin9}\lstinline!PrgFileC[X] => Try[X]!\inputencoding{utf8}.
+For the \inputencoding{latin9}\lstinline!PrgFile!\inputencoding{utf8}
+DSL, the new code looks like this:\inputencoding{latin9}
+\begin{lstlisting}
+trait RunnerTry[F[_]] { def run[X]: F[X] => Try[X] }
+val runnerFileTry = new RunnerTry[PrgFileC] { def run[X]: PrgFileC[X] => Try[X] = p => Try(runFileC(p)) }
+\end{lstlisting}
+\inputencoding{utf8} The code of the \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}
+runner needs to be modified to accommodate the new type:\inputencoding{latin9}
+\begin{lstlisting}
+def runTry[F[_], A](runnerTry: RunnerTry[F]): MonadDSL[F, A] => Try[A] = {
+  case Val(a)          => Success(a)
+  case bind@Bind(pa)   => runTry(runner)(pa).flatMap(bind.f andThen runTry(runner)) // Use flatMap from Try.
+  case Op(op)          => runner.run(op)
+} *** check that this code works
+\end{lstlisting}
+\inputencoding{utf8}
+Let us now generalize this code to an arbitrary monad $M$ instead
+of \inputencoding{latin9}\lstinline!Try!\inputencoding{utf8}. The
+code of \inputencoding{latin9}\lstinline!runTry!\inputencoding{utf8}
+uses the \inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8}
+method of the \inputencoding{latin9}\lstinline!Try!\inputencoding{utf8}
+monad. The \inputencoding{latin9}\lstinline!Try!\inputencoding{utf8}
+monad\textsf{'}s \inputencoding{latin9}\lstinline!pure!\inputencoding{utf8}
+method is implemented by the \inputencoding{latin9}\lstinline!Success!\inputencoding{utf8}
+case class. So, we can generalize to another monad $M$ instead of
+\inputencoding{latin9}\lstinline!Try!\inputencoding{utf8} if we use
+$M$\textsf{'}s \inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8}
+and replace \inputencoding{latin9}\lstinline!Success!\inputencoding{utf8}
+by $M$\textsf{'}s \inputencoding{latin9}\lstinline!pure!\inputencoding{utf8}:\inputencoding{latin9}
+\begin{lstlisting}
+trait RunnerM[F[_], M[_]] { def run[X]: F[X] => M[X] }
+def runM[F[_], M[_]: Monad, A](runnerM: RunnerM[F, M]): MonadDSL[F, A] => M[A] = {
+  case Val(a)          => Monad[M].pure(a)
+  case bind@Bind(pa)   => runM(runner)(pa).flatMap(bind.f andThen runM(runner)) // Use flatMap from M.
+  case Op(op)          => runner.run(op)
+} *** check that this code works
+\end{lstlisting}
+\inputencoding{utf8}
 The resulting construction:
 
 Start with an \textsf{``}effects constructor\textsf{''} $F^{A}$ (often an unfunctor)
@@ -476,34 +966,36 @@ $\text{ex}^{X}:F^{X}\rightarrow M^{X}$
 Run the program with the extractor: \texttt{\textcolor{blue}{\footnotesize{}run(ex)(prg)}};
 get a value $M^{A}$
 
-\section{Slides}
+\subsection{The free monad in the raw tree encoding}
 
-\paragraph{The interpreter pattern VIII. Monadic DSLs: summary}
+The type \inputencoding{latin9}\lstinline!MonadDSL[F, A]!\inputencoding{utf8}
+is called a \textbf{free monad} on\index{free monad} the type constructor
+\inputencoding{latin9}\lstinline!F!\inputencoding{utf8}. The word
+\textsf{``}free\textsf{''} indicates that \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}
+is free of any domain-specific code and works equally well with every
+DSL. We may view \inputencoding{latin9}\lstinline!MonadDSL[F, A]!\inputencoding{utf8}
+as a wrapper that adds the monad\textsf{'}s functionality to any type constructor
+\inputencoding{latin9}\lstinline!F!\inputencoding{utf8}. The monad\textsf{'}s
+methods (\inputencoding{latin9}\lstinline!pure!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8})
+will create some data structures (nested case classes) in memory and
+will not perform any domain-specific effects or actions. The effects
+will be performed at a later time by an effect runner (\inputencoding{latin9}\lstinline!runF!\inputencoding{utf8})
+when we apply \inputencoding{latin9}\lstinline!MonadDSL.run!\inputencoding{utf8}
+to a DSL program.
 
-Begin with a number of operations, which are typically functions of
-fixed known types such as $A_{1}\rightarrow B_{1}$, $A_{2}\rightarrow B_{2}$
-etc.
-
-Define a type constructor (typically not a functor) encapsulating
-all the operations as case classes, with or without type parameters
-
-\texttt{\textcolor{blue}{\footnotesize{}sealed trait F{[}A{]}}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}case class Op1(a1: A1) extends
-F{[}B1{]}}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}case class Op2(a1: A2) extends
-F{[}B2{]}}}{\footnotesize\par}
-
-Use \texttt{\textcolor{blue}{\footnotesize{}DSL{[}F,A{]}}} with this
-\texttt{\textcolor{blue}{\footnotesize{}F}} to write monadic DSL programs
-\texttt{\textcolor{blue}{\footnotesize{}prg:~DSL{[}F,A{]}}} 
-
-Choose a target monad \texttt{\textcolor{blue}{\footnotesize{}M{[}A{]}}}
-and implement an extractor \texttt{\textcolor{blue}{\footnotesize{}ex:F{[}A{]}$\rightarrow$M{[}A{]}}} 
-
-Run the program with the extractor, \texttt{\textcolor{blue}{\footnotesize{}val
-res:~M{[}A{]} = run(ex)(prg)}} 
+A monad must support the methods \inputencoding{latin9}\lstinline!pure!\inputencoding{utf8},
+\inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8}, and
+\inputencoding{latin9}\lstinline!map!\inputencoding{utf8}. The effect
+constructor \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}
+often does not support these methods. To see how \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}
+is able to convert \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}
+into a monad, let us look at the types used by \inputencoding{latin9}\lstinline!MonadDSL[F, A]!\inputencoding{utf8}.
+For brevity, we will use the type notation:
+\[
+\text{MonadDSL}^{F,A}\triangleq A+F^{A}+\exists B.\,F^{B}\times(B\rightarrow F^{A})\quad.***
+\]
+ So, the {*}{*}{*}
 
 Further directions (out of scope for this chapter):
 
@@ -518,10 +1010,13 @@ monad API, we can use monad transformers on it
 
 Can combine two or more DSLs in a disjunction: $\text{DSL}^{F+G+H,A}$
 
+\section{Slides}
 
 \paragraph{Monad laws for DSL programs}
 
-Monad laws hold for DSL programs only after evaluating them
+Monad laws hold for DSL programs only after evaluating them; when
+DSL is defined as an unevaluated tree, monad laws do not hold for
+that tree
 
 Consider the law $\text{flm}\left(\text{pure}\right)=\text{id}$;
 both functions $\text{DSL}^{F,A}\rightarrow\text{DSL}^{F,A}$
@@ -530,7 +1025,7 @@ Apply both sides to some $\text{prg}:\text{DSL}^{F,A}$ and get the
 new value
 
 \texttt{\textcolor{blue}{\footnotesize{}prg.flatMap(pure) == Bind(prg,
-a $\rightarrow$ Literal(a))}}{\footnotesize\par}
+a $\rightarrow$ Val(a))}}{\footnotesize\par}
 
 This new value is \emph{not equal} to \texttt{\textcolor{blue}{\footnotesize{}prg}},
 so this monad law fails!
@@ -541,10 +1036,10 @@ After interpreting this program into a target monad $M^{A}$, the
 law holds:
 
 \texttt{\textcolor{blue}{\footnotesize{}run(ex)(prg).flatMap((a $\rightarrow$
-Literal(a)) andThen run(ex)) }}{\footnotesize\par}
+Val(a)) andThen run(ex)) }}{\footnotesize\par}
 
 \texttt{\textcolor{blue}{\footnotesize{}  == run(ex)(prg).flatMap(a
-$\rightarrow$ run(ex)(Literal(a)) }}{\footnotesize\par}
+$\rightarrow$ run(ex)(Val(a)) }}{\footnotesize\par}
 
 \texttt{\textcolor{blue}{\footnotesize{}  == run(ex)(prg).flatMap(a
 $\rightarrow$ pure(a))}}{\footnotesize\par}
@@ -557,53 +1052,49 @@ All other laws also hold after interpreting into a lawful monad $M^{A}$
 
 The monad law violations are \textsf{``}not observable\textsf{''}
 
-{*}{*}{*}\footnote{\textsf{``}A function \lstinline!launch()! that launches real-world missiles
-can run out of missiles.\textsf{''} (A quote attributed to \index{Simon Peyton Jones}Simon
-Peyton Jones.)}
-
+{*}{*}{*}\footnote{\textsf{``}A function \inputencoding{latin9}\lstinline!launch()!\inputencoding{utf8}
+that launches real-world missiles can run out of missiles.\textsf{''} (A quote
+attributed to \index{Simon Peyton Jones}Simon Peyton Jones.)}
 
 \paragraph{Free constructions in mathematics: Example I}
 
-\begin{comment}
-Consider the Russian letter \foreignlanguage{russian}{\textcyr{\cyrc}}
-(ts\`{e}) and the Chinese word \shui~(shu\textipa{\v i})
+Consider the Cyrillic letter \foreignlanguage{russian}{ц} (ts\`{e})
+and the Chinese word \shui~(shu\textipa{\v i})
 
-We want to \emph{multiply} \foreignlanguage{russian}{\textcyr{\cyrc}}
-by \shui. Multiply how?
+We want to \emph{multiply} \foreignlanguage{russian}{ц} by \shui.
+Multiply how?
 
 Say, we want an associative (but noncommutative) product of them
 
-So we want to define a \emph{semigroup} that \emph{contains} \foreignlanguage{russian}{\textcyr{\cyrc}}
+So we want to define a \emph{semigroup} that \emph{contains} \foreignlanguage{russian}{ц}
 and \shui~as elements
 
-while we still know nothing about \foreignlanguage{russian}{\textcyr{\cyrc}}
-and \shui
+while we still know nothing about \foreignlanguage{russian}{ц} and
+\shui
 
-Consider the set of all \emph{unevaluated expressions} such as \foreignlanguage{russian}{\textcyr{\cyrc}}$\cdot$\shui$\cdot$\shui$\cdot$\foreignlanguage{russian}{\textcyr{\cyrc}}$\cdot$\shui
+Consider the set of all \emph{unevaluated expressions} such as \foreignlanguage{russian}{ц}$\cdot$\shui$\cdot$\shui$\cdot$\foreignlanguage{russian}{ц}$\cdot$\shui
 
-Here \foreignlanguage{russian}{\textcyr{\cyrc}}$\cdot$\shui~is
-different from \shui$\cdot$\foreignlanguage{russian}{\textcyr{\cyrc}}
-but $\left(a\cdot b\right)\cdot c=a\cdot\left(b\cdot c\right)$
+Here \foreignlanguage{russian}{ц}$\cdot$\shui~is different from
+\shui$\cdot$\foreignlanguage{russian}{ц} but $\left(a\cdot b\right)\cdot c=a\cdot\left(b\cdot c\right)$
 
 All these expressions form a \textbf{free semigroup} generated by
-\foreignlanguage{russian}{\textcyr{\cyrc}} and \shui
+\foreignlanguage{russian}{ц} and \shui
 
-This is the most unrestricted semigroup that contains \foreignlanguage{russian}{\textcyr{\cyrc}}
+This is the most unrestricted semigroup that contains \foreignlanguage{russian}{ц}
 and \shui
 
-Example calculation: (\shui$\cdot$\shui)$\cdot$(\foreignlanguage{russian}{\textcyr{\cyrc}}$\cdot$\shui)$\cdot$\foreignlanguage{russian}{\textcyr{\cyrc}}
-$=$ \shui$\cdot$\shui$\cdot$\foreignlanguage{russian}{\textcyr{\cyrc}}$\cdot$\shui$\cdot$\foreignlanguage{russian}{\textcyr{\cyrc}}
+Example calculation: (\shui$\cdot$\shui)$\cdot$(\foreignlanguage{russian}{ц}$\cdot$\shui)$\cdot$\foreignlanguage{russian}{ц}
+$=$ \shui$\cdot$\shui$\cdot$\foreignlanguage{russian}{ц}$\cdot$\shui$\cdot$\foreignlanguage{russian}{ц}
 
 How to represent this as a data type:
 
-\textbf{Tree encoding}: the full expression tree: (((\shui,\shui),(\foreignlanguage{russian}{\textcyr{\cyrc}},\shui)),\foreignlanguage{russian}{\textcyr{\cyrc}})
+\textbf{Tree encoding}: the full expression tree: (((\shui,\shui),(\foreignlanguage{russian}{ц},\shui)),\foreignlanguage{russian}{ц})
 
 Implement the operation $a\cdot b$ as pair constructor (easy)
 
-\textbf{Reduced encoding}, as a \textsf{``}smart\textsf{''} structure: List(\shui,\shui,\foreignlanguage{russian}{\textcyr{\cyrc}},\shui,\foreignlanguage{russian}{\textcyr{\cyrc}})
+\textbf{Reduced encoding}, as a \textsf{``}smart\textsf{''} structure: List(\shui,\shui,\foreignlanguage{russian}{ц},\shui,\foreignlanguage{russian}{ц})
 
 Implement $a\cdot b$ by concatenating the lists (more expensive)
-\end{comment}
 
 
 \paragraph{Free constructions in mathematics: Example II}
@@ -1015,11 +1506,9 @@ Particular case: $Z\triangleq A$, have $a:A$ and build $a\times\text{id}^{:A\rig
 \texttt{\textcolor{blue}{\footnotesize{}def a2p{[}A{]}(a: A): P{[}A{]}
 = PZ{[}A, A{]}(a, identity)}}{\footnotesize\par}
 
-Cannot extract $Z$ out of $P^{A}$ \textendash{} the type $Z$ is
-hidden
+Cannot extract $Z$ out of $P^{A}$ – the type $Z$ is hidden
 
-\emph{Can} extract $A$ out of $P^{A}$ \textendash{} do not need
-to know $Z$
+\emph{Can} extract $A$ out of $P^{A}$ – do not need to know $Z$
 
 \texttt{\textcolor{blue}{\footnotesize{}def p2a{[}A{]}: P{[}A{]} $\rightarrow$
 A = \{ case PZ(z, f) $\rightarrow$ f(z) \}}}{\footnotesize\par}
@@ -1171,13 +1660,13 @@ the actual type $S$ on which we use the Church encoding (i.e. a non-free,
 lawful semigroup)
 
 To show equivalence between FSZ and Chz, write code for the type ChZ
-and the two directions of the isomorphism,
+and the two directions of the isomorphism,\inputencoding{latin9}
 \begin{lstlisting}
 trait FSCh[Z] { def run[S](empty: Z => S, combine: (S, S) => S): S }
 def fsz2ch[Z](fsz: NEList[Z]): FSCh[Z] = ???
 def ch2fsz[Z](ch: FSCh[Z]): NEList[Z] = ???
 \end{lstlisting}
-
+\inputencoding{utf8}
 
 \paragraph{Church encoding V: Type classes}
 
@@ -1249,7 +1738,7 @@ Which of the possible encodings to use?
 
 Tree encoding, reduced encodings, Church encoding
 
-What are the laws for the{\footnotesize{} $\text{FreeC}^{F,A}$} \textendash{}
+What are the laws for the{\footnotesize{} $\text{FreeC}^{F,A}$} –
 \textsf{``}free instance of $C$ over $F$\textsf{''}?
 
 For all $F^{\bullet}$, must have \texttt{\textcolor{blue}{\footnotesize{}wrap{[}A{]}}}
@@ -1574,7 +2063,7 @@ law 2: {\footnotesize{}$\text{fmap}\,f\bef\text{run}\,g=\text{run}\left(f\bef g\
 For any $P^{:C},Q^{:C},g^{:Z\rightarrow P}$, and a typeclass-preserving
 $f^{:P\rightarrow Q}$, we have{\footnotesize{}
 \[
-\text{run}^{P}(g)\bef f=\text{run}^{Q}\left(g\bef f\right)\quad\quad\text{\textendash\ \textquotedblleft universal property\textquotedblright\ of }\text{run}
+\text{run}^{P}(g)\bef f=\text{run}^{Q}\left(g\bef f\right)\quad\quad\text{– \textsf{``}universal property\textsf{''} of }\text{run}
 \]
 \[
 \xymatrix{\xyScaleY{2.0pc}\xyScaleX{3pc}\text{FreeC}^{Z}\ar[d]\sb(0.4){\text{run}^{P}(g^{:Z\rightarrow P})}\ar[rd]\sp(0.55){\quad\text{run}^{Q}(g\bef f)} &  &  & C^{P}\ar[d]\sb(0.4){\text{fmap}_{S}f}\ar[r]\sp(0.5){\text{ops}_{P}} & P\ar[d]\sb(0.4){f}\\
@@ -1595,8 +2084,7 @@ methods $C^{X}\rightarrow X$
 We would like to combine generating constructors $Z_{1}$, $Z_{2}$,
 etc.
 
-In a monadic DSL \textendash{} combine different operations defined
-separately
+In a monadic DSL – combine different operations defined separately
 
 Note: monads do not compose in general
 
@@ -1675,22 +2163,22 @@ sequential chain
 \subsubsection{Exercise \label{subsec:Exercise-free-monad-example}\ref{subsec:Exercise-free-monad-example}\index{exercises}}
 
 The \textbf{interactive input-output}\index{monads!interactive input-output monad}
-monad is defined recursively by:
+monad is defined recursively by:\inputencoding{latin9}
 \begin{lstlisting}
 sealed trait TIO[A]
 final case class Pure[A](a: A) extends TIO[A]
 final case class Read[A](read: P => TIO[A]) extends TIO[A]
 final case class Write[A](output: Q, next: TIO[A]) extends TIO[A]
 \end{lstlisting}
-In the type notation, this is written as:
+\inputencoding{utf8}In the type notation, this is written as:
 \[
 \text{TIO}^{A}\triangleq A+(P\rightarrow\text{TIO}^{A})+Q\times\text{TIO}^{A}\quad,
 \]
-Here $P$ and $Q$ are fixed types. The monad \lstinline!TIO! represents
-computations that may consume an input value of type $P$ or produce
-an output value of type $Q$. Use the free monad construction to show
-that \lstinline!TIO! is a lawful monad. Implement a monad instance
-for \lstinline!TIO!.
+Here $P$ and $Q$ are fixed types. The monad \inputencoding{latin9}\lstinline!TIO!\inputencoding{utf8}
+represents computations that may consume an input value of type $P$
+or produce an output value of type $Q$. Use the free monad construction
+to show that \inputencoding{latin9}\lstinline!TIO!\inputencoding{utf8}
+is a lawful monad. Implement a monad instance for \inputencoding{latin9}\lstinline!TIO!\inputencoding{utf8}.
 
 \subsubsection{Exercise \label{subsec:Exercise-free-type-1}\ref{subsec:Exercise-free-type-1}}
 
@@ -1712,22 +2200,24 @@ $Z$.
 
 \subsubsection{Exercise \label{subsec:Exercise-free-type-3}\ref{subsec:Exercise-free-type-3}}
 
-\textbf{(a)} Implement a monadic DSL with operations \lstinline!put: A => Unit!
-and \lstinline!get: Unit => A!. These operations should store and
-retrieve a state value of type \lstinline!A!. Test on some example
-programs written in that DSL. 
+\textbf{(a)} Implement a monadic DSL with operations \inputencoding{latin9}\lstinline!put: A => Unit!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!get: Unit => A!\inputencoding{utf8}.
+These operations should store and retrieve a state value of type \inputencoding{latin9}\lstinline!A!\inputencoding{utf8}.
+Test on some example programs written in that DSL. 
 
-\textbf{(b)} Implement a monadic DSL with operations \lstinline!put: A => Unit!,
-\lstinline!get: Unit => Option[A]!, and \lstinline!clear: Unit => Unit!.
-These operations should store and retrieve a state value of type \lstinline!A!.
-Running \lstinline!clear! should delete the state value. When there
-is no state value, \lstinline!get! should return \lstinline!None!.
+\textbf{(b)} Implement a monadic DSL with operations \inputencoding{latin9}\lstinline!put: A => Unit!\inputencoding{utf8},
+\inputencoding{latin9}\lstinline!get: Unit => Option[A]!\inputencoding{utf8},
+and \inputencoding{latin9}\lstinline!clear: Unit => Unit!\inputencoding{utf8}.
+These operations should store and retrieve a state value of type \inputencoding{latin9}\lstinline!A!\inputencoding{utf8}.
+Running \inputencoding{latin9}\lstinline!clear!\inputencoding{utf8}
+should delete the state value. When there is no state value, \inputencoding{latin9}\lstinline!get!\inputencoding{utf8}
+should return \inputencoding{latin9}\lstinline!None!\inputencoding{utf8}.
 Test on some example programs.
 
 \subsubsection{Exercise \label{subsec:Exercise-free-type-4}\ref{subsec:Exercise-free-type-4}}
 
 Implement the Church encoding of the type constructor $P^{A}\triangleq\text{Int}+A\times A$.
-For the resulting type constructor, implement a \lstinline!Functor!
+For the resulting type constructor, implement a \inputencoding{latin9}\lstinline!Functor!\inputencoding{utf8}
 instance.
 
 \subsubsection{Exercise \label{subsec:Exercise-free-type-5}\ref{subsec:Exercise-free-type-5}}
@@ -1740,10 +2230,12 @@ the Church encoding.
 \subsubsection{Exercise \label{subsec:Exercise-free-type-6}\ref{subsec:Exercise-free-type-6}}
 
 Assuming that $F^{\bullet}$ is a functor, define $Q^{A}\triangleq\exists Z.F^{Z}\times\left(Z\rightarrow A\right)$
-and implement \lstinline!f2q!$:F^{A}\rightarrow Q^{A}$ and \lstinline!q2f!$:Q^{A}\rightarrow F^{A}$.
+and implement \inputencoding{latin9}\lstinline!f2q!\inputencoding{utf8}$:F^{A}\rightarrow Q^{A}$
+and \inputencoding{latin9}\lstinline!q2f!\inputencoding{utf8}$:Q^{A}\rightarrow F^{A}$.
 Show that these functions are natural transformations, and that they
 are inverses of each other \textsf{``}observationally\textsf{''}, i.e., after applying
-\lstinline!q2f! in order to compare values of $Q^{A}$.
+\inputencoding{latin9}\lstinline!q2f!\inputencoding{utf8} in order
+to compare values of $Q^{A}$.
 
 \subsubsection{Exercise \label{subsec:Exercise-free-type-7}\ref{subsec:Exercise-free-type-7}}
 
@@ -1821,10 +2313,9 @@ $F$ while preserving the free monad operations.
 
 \subsubsection{Statement \label{subsec:Statement-free-monad-monadic-naturality}\ref{subsec:Statement-free-monad-monadic-naturality}}
 
-The free monad $\text{Free}^{F}$ is natural in the functor $F$:
-for any functor $G$ and any natural transformation $\phi:F^{A}\rightarrow G^{A}$,
+For any functor $G$ and any natural transformation $\phi:F^{A}\rightarrow G^{A}$,
 the corresponding transformation $\psi(\phi):\text{Free}^{F,A}\rightarrow\text{Free}^{G,A}$
-defined by
+defined by:
 \[
 \psi(\phi):\text{Free}^{F,A}\rightarrow\text{Free}^{G,A}\quad,\quad\quad\psi\triangleq\,\begin{array}{|c||cc|}
  & A & G^{\text{Free}^{G,A}}\\
@@ -1832,7 +2323,8 @@ defined by
 F^{\text{Free}^{F,A}} & \bbnum 0 & \overline{\psi}^{\uparrow F}\bef\phi
 \end{array}
 \]
-is a monad morphism.
+is a monad morphism. In other words, the free monad $\text{Free}^{F}$
+is natural in the functor $F$. 
 
 \subparagraph{Proof}
 
@@ -1917,7 +2409,7 @@ So, it remains to show that
 (\overline{\psi}^{\uparrow P}\bef\overline{\psi}\bef\text{ftn}_{Q}\big)^{\uparrow F}\bef\phi\overset{?}{=}\overline{\psi}^{\uparrow P\uparrow F}\bef\overline{\psi}^{\uparrow F}\bef\phi\bef\overline{\text{ftn}}_{Q}^{\uparrow G}\quad.
 \]
 This holds due to the naturality law of $\phi$, in the form $\phi\bef f^{\uparrow G}=f^{\uparrow F}\bef\phi$.
-This concludes the proof.
+$\square$
 
 Heuristically, a free monad on a functor $F$ will wrap $F$ in a
 more complicated type constructor such that the resulting type has
@@ -1942,6 +2434,8 @@ F^{T^{A}} & \overline{p}^{\uparrow F}\bef\text{ftn}_{F}
 
 \textbf{(b)} The function $q:F^{A}\rightarrow T^{A}$ defined by $q(f)\triangleq\bbnum 0+f\triangleright(a^{:A}\rightarrow a+\bbnum 0)^{\uparrow F}$
 is \emph{not} a monad morphism.
+
+{*}{*}{*} but $q\bef f=\text{id}$?
 
 \subparagraph{Proof}
 
@@ -2019,14 +2513,30 @@ cannot equal  $\bbnum 0+\text{pu}_{F}(a+\bbnum 0)$.
 
 \section{Working with quantified types}
 
+{*}{*}{*}Move all this to an appendix?
+
+In the notation used in this book, there is a key difference between
+the quantified type $\forall X.\,F^{X}$ and the type expression $F^{X}$
+that contains the type parameter $X$. In both cases, $X$ is a completely
+unknown type parameter, and an example of Scala code implementing
+those types would be:\inputencoding{latin9}
+\begin{lstlisting}
+def f[X]: F[X] = ???
+\end{lstlisting}
+\inputencoding{utf8}However, the type quantifier $\forall X$ implies that all values
+of type $\forall X.\,F^{X}$ must be implemented via fully parametric
+code. The code of the function \inputencoding{latin9}\lstinline!f[X]!\inputencoding{utf8}
+may not make decisions based on the actual type passed at run time
+as the type parameter \inputencoding{latin9}\lstinline!X!\inputencoding{utf8}
+into the function. The assumption of full parametricity enables us
+to reason about quantified types in a special way. This section explores
+the techniques of this reasoning.
+
 \subsection{The Yoneda identities}
 
 The following statement shows that the equivalence between the type
 $\forall X.\,\left(A\rightarrow X\right)\rightarrow X$ and the type
-$A$ can be generalized to involve an arbitrary functor $F$. The
-Church encoding of a simple type is then regarded as a particular
-case of the Yoneda identity where the functor $F$ is chosen as the
-identity functor.
+$A$ can be generalized to involve an arbitrary functor $F$.
 
 \subsubsection{Statement \label{subsec:Statement-covariant-yoneda-identity-for-types}\ref{subsec:Statement-covariant-yoneda-identity-for-types}
 (covariant Yoneda identity)\index{Yoneda identity!covariant}}
@@ -2041,7 +2551,7 @@ are implemented using fully parametric code.)
 \subparagraph{Proof}
 
 The isomorphism between the two types is implemented via two functions
-\lstinline!toC! and \lstinline!fromC!:
+\inputencoding{latin9}\lstinline!toC!\inputencoding{utf8} and \inputencoding{latin9}\lstinline!fromC!\inputencoding{utf8}:
 \begin{align*}
 \text{toC}:F^{A}\rightarrow\forall X.\,(A\rightarrow X)\rightarrow F^{X}\quad, & \quad\quad\text{toC}\triangleq p^{:F^{A}}\rightarrow\forall X.\,g^{:A\rightarrow X}\rightarrow p\triangleright g^{\uparrow F}\quad,\\
 \text{fromC}:(\forall X.\,(A\rightarrow X)\rightarrow F^{X})\rightarrow F^{A}\quad, & \quad\quad\text{fromC}\triangleq q^{:\forall X.\,(A\rightarrow X)\rightarrow F^{X}}\rightarrow q^{A}(\text{id}^{:A\rightarrow A})\quad.
@@ -2081,8 +2591,8 @@ sides to an arbitrary $p^{:F^{A}}$:
  & =(g^{:A\rightarrow A}\rightarrow p\triangleright g^{\uparrow F})(\text{id}^{:A\rightarrow A})=p\triangleright\text{id}^{\uparrow F}=p\quad.
 \end{align*}
 It remains to check that the function $q^{X}\triangleq g^{:A\rightarrow X}\rightarrow p\triangleright g^{\uparrow F}$,
-used as an argument of \lstinline!fromC!, is always a natural transformation.
-To verify the naturality law~(\ref{eq:assumed-naturality-of-argument-q}):
+used as an argument of \inputencoding{latin9}\lstinline!fromC!\inputencoding{utf8},
+is always a natural transformation. To verify the naturality law~(\ref{eq:assumed-naturality-of-argument-q}):
 \begin{align*}
 {\color{greenunder}\text{expect to equal }q^{C}(r\bef f):}\quad & q^{B}(r)\triangleright f^{\uparrow F}=p\triangleright r^{\uparrow F}\triangleright f^{\uparrow F}=p\triangleright r^{\uparrow F}\bef f^{\uparrow F}=p\triangleright(r\bef f)^{\uparrow F}=q^{C}(r\bef f)\quad.
 \end{align*}
@@ -2102,7 +2612,7 @@ and $H^{\bullet}$.
 \subparagraph{Proof}
 
 The isomorphism between the two types is implemented via two functions
-\lstinline!toC! and \lstinline!fromC!:
+\inputencoding{latin9}\lstinline!toC!\inputencoding{utf8} and \inputencoding{latin9}\lstinline!fromC!\inputencoding{utf8}:
 \begin{align*}
 \text{toC}:H^{A}\rightarrow\forall X.\,(X\rightarrow A)\rightarrow H^{X}\quad, & \quad\quad\text{toC}\triangleq p^{:H^{A}}\rightarrow\forall X.\,g^{:X\rightarrow A}\rightarrow p\triangleright g^{\downarrow H}\quad,\\
 \text{fromC}:(\forall X.\,(X\rightarrow A)\rightarrow H^{X})\rightarrow H^{A}\quad, & \quad\quad\text{fromC}\triangleq q^{:\forall X.\,(X\rightarrow A)\rightarrow H^{X}}\rightarrow q^{A}(\text{id}^{:A\rightarrow A})\quad.
@@ -2140,8 +2650,8 @@ sides to an arbitrary $p^{:H^{A}}$:
  & =(g^{:A\rightarrow A}\rightarrow p\triangleright g^{\downarrow H})(\text{id}^{:A\rightarrow A})=p\triangleright\text{id}^{\downarrow H}=p\quad.
 \end{align*}
 Finally, we check that the function $q^{X}\triangleq g^{:X\rightarrow A}\rightarrow p\triangleright g^{\downarrow H}$,
-used as an argument of \lstinline!fromC!, is always a natural transformation.
-To verify the naturality law~(\ref{eq:assumed-naturality-of-argument-q-contravariant}):
+used as an argument of \inputencoding{latin9}\lstinline!fromC!\inputencoding{utf8},
+is always a natural transformation. To verify the naturality law~(\ref{eq:assumed-naturality-of-argument-q-contravariant}):
 \begin{align*}
 {\color{greenunder}\text{expect to equal }q^{C}(f\bef r):}\quad & q^{B}(r)\triangleright f^{\downarrow H}=p\triangleright r^{\downarrow H}\bef f^{\downarrow H}=p\triangleright(f\bef r)^{\downarrow H}=q^{C}(f\bef r)\quad.
 \end{align*}
@@ -2155,13 +2665,14 @@ constructor:
 (covariant Yoneda identity for functors)\index{Yoneda identity!for functors}}
 
 Assume that $P^{\bullet}$ is any type constructor and $S^{F}$ is
-a higher-order functor, i.e., $S$ depends covariantly on an arbitrary
-type constructor $F^{\bullet}$. (An example of such $S$ is $S^{F}\triangleq F^{\text{Int}}\times F^{\text{String}}$.)
+a higher-order functor\index{functor!higher-order}\index{higher-order functor},
+i.e., $S$ depends covariantly on an arbitrary type constructor $F^{\bullet}$.
+(An example of such $S$ is $S^{F}\triangleq F^{\text{Int}}\times F^{\text{String}}$.)
 Then the type $S^{P}$ is equivalent to the function type $\forall F^{\bullet}.\,(P^{\bullet}\leadsto F^{\bullet})\rightarrow S^{F}$,
 where the function is required to be natural in the parameter $F^{\bullet}$
-(while its argument, of type $P^{\bullet}\leadsto F^{\bullet}$, is
-\emph{not} required to be a natural transformation since $P$ and
-$F$ are not required to be functors). The corresponding naturality
+(while its argument, a function of type $P^{\bullet}\leadsto F^{\bullet}$,
+is \emph{not} required to be a natural transformation because $P$
+and $F$ are not required to be functors). The corresponding naturality
 law for functions $\sigma$ of type $\forall F^{\bullet}.\,(P^{\bullet}\leadsto F^{\bullet})\rightarrow S^{F}$
 involves arbitrary type constructors $Q^{\bullet}$, $R^{\bullet}$,
 and arbitrary functions $f:P^{\bullet}\leadsto Q^{\bullet}$ and $g:Q^{\bullet}\leadsto R^{\bullet}$,
@@ -2175,8 +2686,8 @@ the higher-order functor $S$.
 
 \subparagraph{Proof}
 
-The isomorphism is implemented via two functions \lstinline!toC!
-and \lstinline!fromC!,
+The isomorphism is implemented via two functions \inputencoding{latin9}\lstinline!toC!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!fromC!\inputencoding{utf8},
 \begin{align*}
 \text{toC}:S^{P}\rightarrow\forall F.\,(P\leadsto F)\rightarrow S^{F}\quad, & \quad\quad\text{toC}\triangleq s^{:S^{P}}\rightarrow\forall F.\,g^{:P\leadsto F}\rightarrow s\triangleright g^{\uparrow S}\quad,\\
 \text{fromC}:(\forall F.\,(P\leadsto F)\rightarrow S^{F})\rightarrow S^{P}\quad, & \quad\quad\text{fromC}\triangleq\sigma^{:\forall F.\,(P\leadsto F)\rightarrow S^{F}}\rightarrow\sigma^{P}(\text{id}^{:P\leadsto P})\quad.
@@ -2208,8 +2719,8 @@ sides to an arbitrary $s^{:S^{P}}$:
  & =(g^{:P\leadsto P}\rightarrow s\triangleright g^{\uparrow S})(\text{id}^{:P\leadsto P})=s\triangleright\text{id}^{\uparrow S}=s\quad.
 \end{align*}
 It remains to check that the function $\sigma^{F}\triangleq g^{:P\leadsto F}\rightarrow s\triangleright g^{\uparrow S}$,
-used as an argument of \lstinline!fromC!, is natural in $F$. To
-verify the naturality law~(\ref{eq:assumed-naturality-of-argument-sigma}):
+used as an argument of \inputencoding{latin9}\lstinline!fromC!\inputencoding{utf8},
+is natural in $F$. To verify the naturality law~(\ref{eq:assumed-naturality-of-argument-sigma}):
 \begin{align*}
 {\color{greenunder}\text{expect to equal }\sigma^{R}(f\bef g):}\quad & \sigma^{Q}(f)\bef g^{\uparrow S}=s\triangleright f^{\uparrow S}\bef g^{\uparrow S}=s\triangleright(f\bef g)^{\uparrow S}=\sigma^{R}(f\bef g)\quad.
 \end{align*}
@@ -2217,8 +2728,8 @@ verify the naturality law~(\ref{eq:assumed-naturality-of-argument-sigma}):
 
 \subsection{Recursive type equations with different fixpoints}
 
-A recursive type is usually defined as a fixpoint of a functor; that
-is, a solution of a type equation\index{recursive type equation}
+A recursive type is usually defined as a \textbf{fixpoint} of\index{fixpoint of a functor}
+a functor; that is, a solution of a type equation\index{recursive type equation}
 of the form $T\cong F^{T}$, where $F$ is a \textsf{``}structure functor\textsf{''}
 that specifies the details of the type recursion. A solution of the
 type equation $T\cong F^{T}$ is a type $T$ that is equivalent to
@@ -2228,7 +2739,7 @@ $F^{T}$ via two isomorphisms:
 \]
 Section~\ref{subsec:Recursive-types-and-the-existence-of-their-values}
 gave a condition for implementability of such types $T$. We will
-now consider the question of whether there can be several fixpoint
+now consider the question of whether there can be several fixpoints
 $T$.
 
 If a functor has several \emph{inequivalent} fixpoints $T_{1}$, $T_{2}$,
@@ -2255,9 +2766,9 @@ yielding new values of type $A$ if we keep requesting the next elements
 of the list.
 
 To see that the fixpoint equation~(\ref{eq:fixpoint-type-equation-for-oncall-list})
-has (at least) three inequivalent solutions, consider a function \lstinline!toList!
-that converts a value of type $L^{A}$ into a sequence of type \lstinline!List[A]!,
-whose elements are eagerly evaluated. The function \lstinline!toList!
+has (at least) three inequivalent solutions, consider a function \inputencoding{latin9}\lstinline!toList!\inputencoding{utf8}
+that converts a value of type $L^{A}$ into a sequence of type \inputencoding{latin9}\lstinline!List[A]!\inputencoding{utf8},
+whose elements are eagerly evaluated. The function \inputencoding{latin9}\lstinline!toList!\inputencoding{utf8}
 keeps recursively requesting new elements of the on-call list and
 accumulates the resulting values of type $A$:
 \[
@@ -2267,11 +2778,12 @@ accumulates the resulting values of type $A$:
 \bbnum 1\rightarrow A\times L^{A} & \bbnum 0 & p\rightarrow p(1)\triangleright(\text{id}\boxtimes\overline{\text{toList}})
 \end{array}\quad.
 \]
-Does this function terminate? It is clear that \lstinline!toList!
+Does this function terminate? It is clear that \inputencoding{latin9}\lstinline!toList!\inputencoding{utf8}
 will terminate only if the on-call list eventually stops yielding
 new values of type $A$. On the other hand, if the on-call list never
-stops yielding new values of type $A$, the function \lstinline!toList!
-will not terminate. So, \lstinline!toList! must be a partial function. 
+stops yielding new values of type $A$, the function \inputencoding{latin9}\lstinline!toList!\inputencoding{utf8}
+will not terminate. So, \inputencoding{latin9}\lstinline!toList!\inputencoding{utf8}
+must be a partial function. 
 
 Let us denote by $L_{\text{fin}}^{A}$ the type corresponding to \textsf{``}finite\textsf{''}
 on-call lists, i.e., on-call lists that eventually stop yielding new
@@ -2286,24 +2798,25 @@ and $\text{fromList}:\text{List}^{A}\rightarrow L_{\text{fin}}^{A}$.
 
 Let us also denote by $L_{\text{inf}}^{A}$ the type corresponding
 to \textsf{``}infinite\textsf{''} on-call lists, i.e., those that \emph{never} stop
-yielding new values of type $A$. The function \lstinline!toList!
+yielding new values of type $A$. The function \inputencoding{latin9}\lstinline!toList!\inputencoding{utf8}
 does not terminate for arguments of type $L_{\text{inf}}^{A}$, because
 a list (of type $\text{List}^{A}$) cannot contain infinitely many
 values. So, the types $L_{\text{fin}}^{A}$ and $L_{\text{inf}}^{A}$
 are \emph{not} equivalent. Were they equivalent, we would have an
 isomorphism $q:L_{\text{inf}}^{A}\rightarrow L_{\text{fin}}^{A}$,
-and then we could compose $q$ with \lstinline!toList! to obtain
-a function $\text{toList}:L_{\text{inf}}^{A}\rightarrow\text{List}^{A}$
+and then we could compose $q$ with \inputencoding{latin9}\lstinline!toList!\inputencoding{utf8}
+to obtain a function $\text{toList}:L_{\text{inf}}^{A}\rightarrow\text{List}^{A}$
 that terminates, which is impossible.
 
 To show that both types ($L_{\text{fin}}^{A}$ and $L_{\text{inf}}^{A}$)
 satisfy the fixpoint type equation~(\ref{eq:fixpoint-type-equation-for-oncall-list}),
-we can implement the corresponding isomorphisms \lstinline!fix! and
-\lstinline!unfix!. Each of these functions will either add or remove
-one element at the beginning of the list. These operations keep finite
-lists finite and infinite lists infinite. So, a composition (such
-as, $\text{unfix}\bef\text{fix}$) of these isomorphisms will act
-as an identity function on $L_{\text{fin}}^{A}$ or on $L_{\text{inf}}^{A}$.
+we can implement the corresponding isomorphisms \inputencoding{latin9}\lstinline!fix!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!unfix!\inputencoding{utf8}.
+Each of these functions will either add or remove one element at the
+beginning of the list. These operations keep finite lists finite and
+infinite lists infinite. So, a composition (such as, $\text{unfix}\bef\text{fix}$)
+of these isomorphisms will act as an identity function on $L_{\text{fin}}^{A}$
+or on $L_{\text{inf}}^{A}$.
 
 The type $L^{A}$ is an on-call list that may or may not terminate.
 So, $L^{A}$ is equivalent to a disjunction $L_{\text{fin}}^{A}+L_{\text{inf}}^{A}$.
@@ -2348,11 +2861,11 @@ more useful Church encoding for $T$ is:
 T\cong\forall X.\,(F^{X}\rightarrow X)\rightarrow X\quad\text{if the type }T\text{ is defined by }T\triangleq F^{T}\quad.\label{eq:Church-encoding-recursive-type}
 \end{equation}
 The Scala code for the type $\forall X.\,(F^{X}\rightarrow X)\rightarrow X$
-is:
+is:\inputencoding{latin9}
 \begin{lstlisting}
 trait TC[F[_]] { def run[X](fold: F[X] => X): X }
 \end{lstlisting}
-In this section, we will study the type equivalence~(\ref{eq:Church-encoding-recursive-type}).
+\inputencoding{utf8}In this section, we will study the type equivalence~(\ref{eq:Church-encoding-recursive-type}).
 
 Note that the Yoneda lemma cannot be used to prove Eq.~(\ref{eq:Church-encoding-recursive-type}).
 The Yoneda lemma only applies to types of the form $\forall X.\,(A\rightarrow X)\rightarrow F^{X}$,
@@ -2387,8 +2900,8 @@ We will use typed holes to derive the code for the isomorphisms
 \[
 \text{fix}:F^{T}\rightarrow T\quad,\quad\quad\text{unfix}:T\rightarrow F^{T}\quad.
 \]
-Begin by writing out the type signature of \lstinline!fix! and an
-implementation with a typed hole:
+Begin by writing out the type signature of \inputencoding{latin9}\lstinline!fix!\inputencoding{utf8}
+and an implementation with a typed hole:
 \begin{align*}
  & \text{fix}:F^{\forall X.\,(F^{X}\rightarrow X)\rightarrow X}\rightarrow\forall Y.\,(F^{Y}\rightarrow Y)\rightarrow Y\quad,\\
  & \text{fix}\triangleq f^{:F^{\forall X.\,(F^{X}\rightarrow X)\rightarrow X}}\rightarrow\forall Y.\,q^{:F^{Y}\rightarrow Y}\rightarrow\text{???}^{:Y}\quad.
@@ -2399,7 +2912,7 @@ an argument of type $F^{Y}$:
 \text{fix}=f^{:F^{\forall X.\,(F^{X}\rightarrow X)\rightarrow X}}\rightarrow\forall Y.\,q^{:F^{Y}\rightarrow Y}\rightarrow\big(\text{???}^{:F^{Y}}\big)\triangleright q\quad.
 \]
 The functor $F$ is arbitrary, so the only way of computing a value
-of type $F^{Y}$ is to use the given value $f$ with a \lstinline!map!
+of type $F^{Y}$ is to use the given value $f$ with a \inputencoding{latin9}\lstinline!map!\inputencoding{utf8}
 method (the only method we can use with any functor $F$):
 \[
 \text{???}^{:F^{Y}}=f\triangleright(p^{:\forall X.\,(F^{X}\rightarrow X)\rightarrow X}\rightarrow\text{???}^{:Y})^{\uparrow F}\quad.
@@ -2410,12 +2923,12 @@ given value $q^{:F^{Y}\rightarrow Y}$ to fill the typed hole:
 \[
 \text{???}^{:F^{Y}}=f\triangleright(p^{:\forall X.\,(F^{X}\rightarrow X)\rightarrow X}\rightarrow q\triangleright p^{Y})^{\uparrow F}\quad.
 \]
-This allows us to complete the code of \lstinline!fix!:
+This allows us to complete the code of \inputencoding{latin9}\lstinline!fix!\inputencoding{utf8}:
 \[
 \text{fix}\triangleq f^{:F^{\forall X.\,(F^{X}\rightarrow X)\rightarrow X}}\rightarrow\forall Y.\,q^{:F^{Y}\rightarrow Y}\rightarrow f\triangleright\big(p^{:\forall X.\,(F^{X}\rightarrow X)\rightarrow X}\rightarrow q\triangleright p^{Y}\big)^{\uparrow F}\triangleright q\quad.
 \]
 
-We turn to implementing \lstinline!unfix!:
+We turn to implementing \inputencoding{latin9}\lstinline!unfix!\inputencoding{utf8}:
 \begin{align*}
  & \text{unfix}:\big(\forall Y.\,(F^{Y}\rightarrow Y)\rightarrow Y\big)\rightarrow F^{\forall X.\,(F^{X}\rightarrow X)\rightarrow X\big)}\quad,\\
  & \text{unfix}\triangleq t^{:\forall Y.\,(F^{Y}\rightarrow Y)\rightarrow Y}\rightarrow\text{???}^{:F^{T}}\quad.
@@ -2426,12 +2939,14 @@ apply $t^{Y}$ while setting the type parameter $Y$ to $F^{T}$:
 \text{unfix}=t^{:\forall Y.\,(F^{Y}\rightarrow Y)\rightarrow Y}\rightarrow t^{F^{T}}\big(\text{???}^{:F^{F^{T}}\rightarrow F^{T}}\big)\quad.
 \]
 We can now fill the typed hole $\text{???}^{:F^{F^{T}}\rightarrow F^{T}}$
-by lifting \lstinline!fix! to the functor $F$:
+by lifting \inputencoding{latin9}\lstinline!fix!\inputencoding{utf8}
+to the functor $F$:
 \[
 \text{unfix}\triangleq t^{:\forall Y.\,(F^{Y}\rightarrow Y)\rightarrow Y}\rightarrow t^{F^{T}}\big(\text{fix}^{\uparrow F}\big)\quad.
 \]
 
-It remains to show that \lstinline!fix! and \lstinline!unfix! are
+It remains to show that \inputencoding{latin9}\lstinline!fix!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!unfix!\inputencoding{utf8} are
 inverses. Start with one direction:
 \begin{align*}
 {\color{greenunder}\text{expect to equal }t:}\quad & t^{:T}\triangleright\text{unfix}\bef\text{fix}=t^{F^{T}}(\text{fix}^{\uparrow F})\triangleright\text{fix}\\
@@ -2528,14 +3043,14 @@ The two sides are now equal. $\square$
 A curious property of the type $T$ is that it is a function with
 argument of type $F^{X}\rightarrow X$, where $X$ can be any type,
 including $T$ itself. But we already have a function of type $F^{T}\rightarrow T$;
-it is the function \lstinline!fix!. So, applying a value $t$ of
-type $T$ to the function \lstinline!fix! yields again a value of
-type $T$. As the next statement shows, that value is the same as
-$t$:
+it is the function \inputencoding{latin9}\lstinline!fix!\inputencoding{utf8}.
+So, applying a value $t$ of type $T$ to the function \inputencoding{latin9}\lstinline!fix!\inputencoding{utf8}
+yields again a value of type $T$. As the next statement shows, that
+value is the same as $t$:
 
 \subsubsection{Statement \label{subsec:Statement-strong-dinaturality-property-of-fix}\ref{subsec:Statement-strong-dinaturality-property-of-fix}}
 
-Consider the Church-encoded type $T$ and the function \lstinline!fix!
+Consider the Church-encoded type $T$ and the function \inputencoding{latin9}\lstinline!fix!\inputencoding{utf8}
 defined in Statement~\ref{subsec:Statement-Church-encoding-recursive-type-covariant}.
 It follows from the strong dinaturality law\footnote{\index{Dan Doel}Dan Doel gave a proof using relational parametricity:
 see \texttt{\href{https://cs.stackexchange.com/questions/131901/}{https://cs.stackexchange.com/questions/131901/}}} for any value $t^{:T}$ that 
@@ -2583,9 +3098,9 @@ This is equal to the left-hand side after renaming $s$ to $u$. $\square$
 The Church encoding $T\triangleq\forall X.\,(F^{X}\rightarrow X)\rightarrow X$
 of the fixpoint has a special property: for any other fixpoint $R$,
 there is a unique fixpoint-preserving map $T\rightarrow R$ called
-a catamorphism\index{catamorphism}. To define that map, assume that
-the fixpoint $R$ has a known function $\text{fix}_{R}:F^{R}\rightarrow R$
-and write
+a \textbf{catamorphism}\index{catamorphism}. To define that map,
+assume that the fixpoint $R$ has a known function $\text{fix}_{R}:F^{R}\rightarrow R$
+and write:
 \[
 \text{cata}:T\rightarrow R\quad,\quad\quad\text{cata}\triangleq t^{:\forall X.\,(F^{X}\rightarrow X)\rightarrow X}\rightarrow\text{fix}_{R}\triangleright t^{R}\quad.
 \]
@@ -2593,11 +3108,11 @@ and write
 
 \subsubsection{Statement \label{subsec:Statement-catamorphism-church-encoding}\ref{subsec:Statement-catamorphism-church-encoding}}
 
-\textbf{(a)} The function \lstinline!cata! (defined above) is a fixpoint-preserving
-map.
+\textbf{(a)} The function \inputencoding{latin9}\lstinline!cata!\inputencoding{utf8}
+(defined above) is a fixpoint-preserving map.
 
 \textbf{(b)} Any other fixpoint-preserving function of type $T\rightarrow R$
-is equal to \lstinline!cata!.
+is equal to \inputencoding{latin9}\lstinline!cata!\inputencoding{utf8}.
 
 \subparagraph{Proof}
 
@@ -2625,18 +3140,21 @@ hold:
 
 $\square$
 
-Note that the Scala type \lstinline!Any! closely corresponds to the
-type $\exists X.\,X$, which is observationally equivalent to \lstinline!Unit!
-. The advantage of using \lstinline!Any! instead of \lstinline!Unit!
-is that \lstinline!Any! is a supertype of \emph{all} Scala types.
-Indeed, for any type $T$ there is an injective function $T\rightarrow\exists X.\:X$,
-This function corresponds to a function of type \lstinline!T => Any!
-in Scala:
+Note that the Scala type \inputencoding{latin9}\lstinline!Any!\inputencoding{utf8}
+closely corresponds to the type $\exists X.\,X$, which is observationally
+equivalent to \inputencoding{latin9}\lstinline!Unit!\inputencoding{utf8}
+. The advantage of using \inputencoding{latin9}\lstinline!Any!\inputencoding{utf8}
+instead of \inputencoding{latin9}\lstinline!Unit!\inputencoding{utf8}
+is that \inputencoding{latin9}\lstinline!Any!\inputencoding{utf8}
+is a supertype of \emph{all} Scala types. Indeed, for any type $T$
+there is an injective function $T\rightarrow\exists X.\,X$, This
+function corresponds to a function of type \inputencoding{latin9}\lstinline!T => Any!\inputencoding{utf8}
+in Scala:\inputencoding{latin9}
 \begin{lstlisting}
 def toAny[T](t: T): Any = t
 \end{lstlisting}
- This is just an identity function that relabels the types; so, this
-function establishes the subtyping relation \lstinline!T <: Any!.
+\inputencoding{utf8} This is just an identity function that relabels the types; so, this
+function establishes the subtyping relation \inputencoding{latin9}\lstinline!T <: Any!\inputencoding{utf8}.
 
 \section{Discussion}
 
@@ -2664,7 +3182,7 @@ The same holds when $F$ is an exponential-polynomial contrafunctor.
 \subsubsection{Statement \label{subsec:Statement-existential-quandifier-via-Church-encoding}\ref{subsec:Statement-existential-quandifier-via-Church-encoding}}
 
 \textbf{(a)} For any profunctor $P^{X,Y}$, the types $\exists A.\,P^{A,A}$
-and $\forall B.\,(\forall A.\,P^{A,A}\rightarrow B)\rightarrow B$
+and $\forall B.\,(\forall A.\,(P^{A,A}\rightarrow B))\rightarrow B$
 are equivalent when restricted to fully parametric implementations.
 
 \textbf{(b)} Without the outer quantifier ($\forall B$), this property
@@ -2776,13 +3294,13 @@ a scholar function from a Scala variable STR to another tree and so
 this is how I implement this domain-specific language again we I have
 a seal trade program or probe which now has four case classes and
 the three case classes here are the ones that I would need to implement
-functionality so for example I need literal strings so I'll represent
-that with this literal case class I need paths whose contents are
-maybe programs again because I don't know path can be computed and
-I need to read again I need to read something which could be another
-DSL program so that\textsf{'}s what I do in these three case classes and I
-also had a case class bind which represents binding enum DSL variable
-to a value which is computed when you run the DSL and then so I have
+functionality so for example I need Val strings so I'll represent
+that with this Val case class I need paths whose contents are maybe
+programs again because I don't know path can be computed and I need
+to read again I need to read something which could be another DSL
+program so that\textsf{'}s what I do in these three case classes and I also
+had a case class bind which represents binding enum DSL variable to
+a value which is computed when you run the DSL and then so I have
 the first part of this case class is a DSL program which when run
 will give me a value of type string and the second part of the case
 class is a function from string to another DSL programmer so this
@@ -2792,37 +3310,37 @@ Scala code in principle in the code of this function including conditions
 or creating another dsl program by using the values of these variables
 in an arbitrary way so this variable will be the argument of F so
 here is an example I make a bind so this entire thing becomes a blind
-of this which is read path literal file and this which is a scholar
-function that executes my conditional computation and then returns
-a value of type program again so it returns a DSL program so this
-is a function that takes a string and returns a program so that is
-how I can easily implement the requirement that the DSL should express
-variable binding conditional computations arbitrary Scala code in
-those calculations and using the scala variables such as this one
-in creating expression trees so I still have an expression tree this
-entire thing is still expression tree and still undervalued but now
-I have a lot more flexibility in what sort of computations I can implement
-with the DSL the interpreter for the DSL will still have the same
-type signature it will be perhaps slightly more complicated so let\textsf{'}s
-look at a code examples so first the DSL for complex numbers which
-is what we saw before so the only interesting code here is in running
-a DSL program and here\textsf{'}s how we run we basically take the value of
-the program which is going to be one of these three case classes and
-we match it in each case we run what\textsf{'}s inside so in this strain case
-the inside is a definition of a complex number by string such as this
-one we need to parse it so I have some regular expression that I parse
-this with and the result is going to be one value than a sign and
-another value and then I create a complex number out of that a multiplication
-is a standard formula for complex multiplication but notice that both
-of these are programs so the mall case class contains two programs
-that first have to be run in order to get a complex numbers out of
-them and then I execute a complex multiplication similarly the conjugate
-operation first I have to run the program that is the argument here
-and then I execute the operation so here\textsf{'}s a test conjugate of multiply
-of this which is equal to this complex number so in order to get it
-I do run of program so when I do this nothing is wrong yet it\textsf{'}s a
-data structure and I could have code that for example simplifies this
-in some way maybe or prints it or whatever it\textsf{'}s a data structure that
+of this which is read path Val file and this which is a scholar function
+that executes my conditional computation and then returns a value
+of type program again so it returns a DSL program so this is a function
+that takes a string and returns a program so that is how I can easily
+implement the requirement that the DSL should express variable binding
+conditional computations arbitrary Scala code in those calculations
+and using the scala variables such as this one in creating expression
+trees so I still have an expression tree this entire thing is still
+expression tree and still undervalued but now I have a lot more flexibility
+in what sort of computations I can implement with the DSL the interpreter
+for the DSL will still have the same type signature it will be perhaps
+slightly more complicated so let\textsf{'}s look at a code examples so first
+the DSL for complex numbers which is what we saw before so the only
+interesting code here is in running a DSL program and here\textsf{'}s how we
+run we basically take the value of the program which is going to be
+one of these three case classes and we match it in each case we run
+what\textsf{'}s inside so in this strain case the inside is a definition of
+a complex number by string such as this one we need to parse it so
+I have some regular expression that I parse this with and the result
+is going to be one value than a sign and another value and then I
+create a complex number out of that a multiplication is a standard
+formula for complex multiplication but notice that both of these are
+programs so the mall case class contains two programs that first have
+to be run in order to get a complex numbers out of them and then I
+execute a complex multiplication similarly the conjugate operation
+first I have to run the program that is the argument here and then
+I execute the operation so here\textsf{'}s a test conjugate of multiply of
+this which is equal to this complex number so in order to get it I
+do run of program so when I do this nothing is wrong yet it\textsf{'}s a data
+structure and I could have code that for example simplifies this in
+some way maybe or prints it or whatever it\textsf{'}s a data structure that
 is available for me to work with I could type set this in latex if
 I wanted to before running it so then I also can run it so this is
 the power of the interpreter pattern let\textsf{'}s look at implementing the
@@ -2858,7 +3376,7 @@ of a read is not a path as a string and the program doesn't know about
 it and just it gives us an exception key not found text which is a
 kind of a runtime exception since we don't have a file named text
 in our file system but this should not be the error the error should
-be you cannot read a literal string you must read a class on the file
+be you cannot read a Val string you must read a class on the file
 system which would have been a type error if this were a type safe
 language so that\textsf{'}s the next concern our DSL so far has no type safety
 every value in it is a program and it\textsf{'}s evaluated per string so what
@@ -2876,19 +3394,19 @@ argument of bind is a program that has a string result and a function
 will take that result and output another program with string result
 whereas previously bind had a program and this function returned the
 program now we explicitly demand the result must be of type string
-and then we can apply F to that result so literal will also give us
-a program returning a string and path will take a program that returns
+and then we can apply F to that result so Val will also give us a
+program returning a string and path will take a program that returns
 a string but it will heal the program that has the past in Iowa file
 path type in other words it\textsf{'}s not a program returning string and the
 read will take that kind of program and return a program that evaluates
 the string so in this way we can achieve type safety so the program
 remains mostly the same except for the type the interpreter remains
 mostly the same except now it has type safety let\textsf{'}s see how that works
-now so let\textsf{'}s implement instead of ni�o Java file types let\textsf{'}s just
+now so let\textsf{'}s implement instead of niño Java file types let\textsf{'}s just
 have a mock type that represents a file path so now how do we implement
 run you know it\textsf{'}s the same except now it\textsf{'}s impossible to have pass
 in a program of type string so the program of type strain can only
-be by and literal or read it cannot be a path because that\textsf{'}s a program
+be by and Val or read it cannot be a path because that\textsf{'}s a program
 of type the are G of F path so we don't need this case here and instead
 we just implement directly this case where we have a read of the text
 because there is nothing else we can have so now the code is type
@@ -2904,111 +3422,110 @@ the string type is very special and limiting us so for example we
 cannot do this we must have a program that returns at rest so we cannot
 directly read the past and if we wanted to compute this path using
 a scholar program then we cannot convert this into a program of path
-because there is no way to do that literal can only take a string
-and extends program of string so let\textsf{'}s fix these problems now so first
-of all let\textsf{'}s make literal a fully parameterize declaration so that
-it\textsf{'}s literal of a and it returns program of a for any a and secondly
-let\textsf{'}s replace this string by a parameter a as well so that would be
-a parameter even will be an aid to program of B so we want to now
-have arbitrary types instead of string here so we introduce two type
-parameters in Bound and we will have this generality everything else
-stays the same and except we get rid of this program of string and
-program of path because now we have a literal and the literal can
-always convert a string into a program of strain in the path into
-a program of path with no problem so we don't need to have programs
-as types here if we need this kind of thing we just bind a variable
-and we'll get get what we need so now this is an interesting type
-because the signatures of bind and literal are very similar to signatures
-of flat map and pure if you look at this carefully so literal is of
-type a to program of a bind is of this type program of a a to program
-of B and it returns program will be so if we imagine that this is
-a function from here to here then this is going to be just type signature
-flatmap and actually it is in some sense a function binding dot apply
-is a function that takes these as arguments and returns a value of
-this type except it\textsf{'}s not just any function so type constructor so
-this function is defined in a special way so essentially this type
-has methods of type signature flat map and pure it looks like this
-type is a moment so let\textsf{'}s actually define these methods flat map map
-and pure and it\textsf{'}s very easy to do that flat map will just create a
-data structure with the case class bind map we defined automatically
-by a flat map on theorem as we know that in a wallet you can define
-Maps through flat map and pure the pure is defined as just literal
-case closed so these methods don't actually compute anything they
-don't run the DSL they create further unevaluated data structures
-in other words these methods create DSL programs out of previously
-defined DSL programs these are combinators innocence but usually says
-then the combinators data are functions that take values of some type
-and circle those and create new values of the same type the advantage
-of Khalid affined in flat map map and pure is that we can write the
-assault programs as functor blocks and we can compose them very easily
-so for example if you look at the previous program we have a bit of
-a repetition to have this read past literal which we are using twice
-so how can we reuse that well they are easily make a function that
-returns a string value program like this so we take a path we read
-that files contents and this is a standard Scala syntax for the Thunderer
-block as I call it for yield block and we can use this syntax now
-because we have defined flat map and map in the program trade and
-now we can easily combine and reuse the mimetic values in another
-factor block so we can write this code as functor blocks as we would
-do with any other moaner let\textsf{'}s see what the interpreter looks like
-for this one I think DSL now I have full dramatization of types defined
-viewer and map and flatmap and before as a shown in the slide now
-there is a bit of ugliness in the runner because of the problems with
-type pattern matching scholar has this problem where you want to have
-image at least closet has type parameters it\textsf{'}s not easy to do that
-so I have to do a bit of dancing around first I match the bind and
-then I imagine a result I cannot put I parameters here that won't
-compile I think maybe it will but I wasn't able to do it right let
-me see if I can do it in one go Ashley you can see this was entirely
-wrong a great simplification maybe my idea is not the literal and
-other things are the same except now I have to do typecast so again
-Scala is not great when you have to do type parameters on a case class
-and the dual match expression so that\textsf{'}s a bit of ugliness but that\textsf{'}s
-not so bad perhaps so let\textsf{'}s see that all of this actually works and
-so now we are pretty happy we can a monadic DSL now it\textsf{'}s perhaps a
-little too cumbersome because you need to define all these things
-every time so if I wanted to define a DSL for complex numbers in the
-same way as this DSL then I would have to add the bind and the literal
-and these definitions every time so I would have to repeat this code
-every time note that there are no code changes between this DSL for
-the file operations and this DSL for complex numbers up to here so
-this is completely the same the custom code starts later when we define
-some more case classes so let\textsf{'}s refactor the DSL so that the common
-code is separated and the custom code is just wrapped in some type
-constructor called F so here\textsf{'}s how we do that we say there\textsf{'}s a DSL
-type constructor that is paralyzed by the type a is minus 1 and it
-type constructor F that will encapsulate always custom code so the
-type constructor F will have the definition like this just like our
-first first try at DSL so this could be once we add the type parameter
-this could be the type constructor F and then we define just the typeclass
-the case classes that are necessary to implement the moon add functionality
-to bind and literal case classes and then we have this case class
-ops for operations which contain a value of type F of n and so this
-is a wrapper over whatever custom operations we have in our DSL and
-notice here DSL does not have programmers parameters here has the
-complex as parameters it\textsf{'}s up to us we could have programmers parameters
-it\textsf{'}s a matter of convenience what important in it but whatever that
-is it\textsf{'}s going to be encapsulated now in the case class ops so this
-entire code is going to be generic in operations of your DSL so the
-type constructor F represents the operations of the DSL and power
-the our tech constructor DSL is a melodic DSL is permit rised by that
-tightness factor f so this car is now engineered in the operations
-of your Union now the cost of this is that the interpreter now needs
-to know how to interpret your operations so you have to write extra
-code as opposed to hard coding is you just write extra code that converts
-your operations to values so you evaluate your operation so for example
-this operation would be the domain specific part inside this F type
-constructor it needs to be evaluated to yield this path so let\textsf{'}s see
-how that works so the DSL will be general so all this part of code
-is generic it does not depend on the domain all the domain-specific
-operations are encapsulated by the type constructor S which is defined
-later in a different place of your code so in this way we penalize
-by this type constructor in this code is fully generic in any domain
-so now we need to have the extractor the value extractor were evaluated
-for your domain so this needs to be a function as I showed of this
-type I would like to emphasize of this type is actually parameterize
-by a typewriter a inside the expression it is not business for all
-a I quantifier needs to be inside here it cannot be over there when
+because there is no way to do that Val can only take a string and
+extends program of string so let\textsf{'}s fix these problems now so first
+of all let\textsf{'}s make Val a fully parameterize declaration so that it\textsf{'}s
+Val of a and it returns program of a for any a and secondly let\textsf{'}s
+replace this string by a parameter a as well so that would be a parameter
+even will be an aid to program of B so we want to now have arbitrary
+types instead of string here so we introduce two type parameters in
+Bound and we will have this generality everything else stays the same
+and except we get rid of this program of string and program of path
+because now we have a Val and the Val can always convert a string
+into a program of strain in the path into a program of path with no
+problem so we don't need to have programs as types here if we need
+this kind of thing we just bind a variable and we'll get get what
+we need so now this is an interesting type because the signatures
+of bind and Val are very similar to signatures of flat map and pure
+if you look at this carefully so Val is of type a to program of a
+bind is of this type program of a a to program of B and it returns
+program will be so if we imagine that this is a function from here
+to here then this is going to be just type signature flatmap and actually
+it is in some sense a function binding dot apply is a function that
+takes these as arguments and returns a value of this type except it\textsf{'}s
+not just any function so type constructor so this function is defined
+in a special way so essentially this type has methods of type signature
+flat map and pure it looks like this type is a moment so let\textsf{'}s actually
+define these methods flat map map and pure and it\textsf{'}s very easy to do
+that flat map will just create a data structure with the case class
+bind map we defined automatically by a flat map on theorem as we know
+that in a wallet you can define Maps through flat map and pure the
+pure is defined as just Val case closed so these methods don't actually
+compute anything they don't run the DSL they create further unevaluated
+data structures in other words these methods create DSL programs out
+of previously defined DSL programs these are combinators innocence
+but usually says then the combinators data are functions that take
+values of some type and circle those and create new values of the
+same type the advantage of Khalid affined in flat map map and pure
+is that we can write the assault programs as functor blocks and we
+can compose them very easily so for example if you look at the previous
+program we have a bit of a repetition to have this read past Val which
+we are using twice so how can we reuse that well they are easily make
+a function that returns a string value program like this so we take
+a path we read that files contents and this is a standard Scala syntax
+for the Thunderer block as I call it for yield block and we can use
+this syntax now because we have defined flat map and map in the program
+trade and now we can easily combine and reuse the mimetic values in
+another factor block so we can write this code as functor blocks as
+we would do with any other moaner let\textsf{'}s see what the interpreter looks
+like for this one I think DSL now I have full dramatization of types
+defined viewer and map and flatmap and before as a shown in the slide
+now there is a bit of ugliness in the runner because of the problems
+with type pattern matching scholar has this problem where you want
+to have image at least closet has type parameters it\textsf{'}s not easy to
+do that so I have to do a bit of dancing around first I match the
+bind and then I imagine a result I cannot put I parameters here that
+won't compile I think maybe it will but I wasn't able to do it right
+let me see if I can do it in one go Ashley you can see this was entirely
+wrong a great simplification maybe my idea is not the Val and other
+things are the same except now I have to do typecast so again Scala
+is not great when you have to do type parameters on a case class and
+the dual match expression so that\textsf{'}s a bit of ugliness but that\textsf{'}s not
+so bad perhaps so let\textsf{'}s see that all of this actually works and so
+now we are pretty happy we can a monadic DSL now it\textsf{'}s perhaps a little
+too cumbersome because you need to define all these things every time
+so if I wanted to define a DSL for complex numbers in the same way
+as this DSL then I would have to add the bind and the Val and these
+definitions every time so I would have to repeat this code every time
+note that there are no code changes between this DSL for the file
+operations and this DSL for complex numbers up to here so this is
+completely the same the custom code starts later when we define some
+more case classes so let\textsf{'}s refactor the DSL so that the common code
+is separated and the custom code is just wrapped in some type constructor
+called F so here\textsf{'}s how we do that we say there\textsf{'}s a DSL type constructor
+that is paralyzed by the type a is minus 1 and it type constructor
+F that will encapsulate always custom code so the type constructor
+F will have the definition like this just like our first first try
+at DSL so this could be once we add the type parameter this could
+be the type constructor F and then we define just the typeclass the
+case classes that are necessary to implement the moon add functionality
+to bind and Val case classes and then we have this case class ops
+for operations which contain a value of type F of n and so this is
+a wrapper over whatever custom operations we have in our DSL and notice
+here DSL does not have programmers parameters here has the complex
+as parameters it\textsf{'}s up to us we could have programmers parameters it\textsf{'}s
+a matter of convenience what important in it but whatever that is
+it\textsf{'}s going to be encapsulated now in the case class ops so this entire
+code is going to be generic in operations of your DSL so the type
+constructor F represents the operations of the DSL and power the our
+tech constructor DSL is a melodic DSL is permit rised by that tightness
+factor f so this car is now engineered in the operations of your Union
+now the cost of this is that the interpreter now needs to know how
+to interpret your operations so you have to write extra code as opposed
+to hard coding is you just write extra code that converts your operations
+to values so you evaluate your operation so for example this operation
+would be the domain specific part inside this F type constructor it
+needs to be evaluated to yield this path so let\textsf{'}s see how that works
+so the DSL will be general so all this part of code is generic it
+does not depend on the domain all the domain-specific operations are
+encapsulated by the type constructor S which is defined later in a
+different place of your code so in this way we penalize by this type
+constructor in this code is fully generic in any domain so now we
+need to have the extractor the value extractor were evaluated for
+your domain so this needs to be a function as I showed of this type
+I would like to emphasize of this type is actually parameterize by
+a typewriter a inside the expression it is not business for all a
+I quantifier needs to be inside here it cannot be over there when
 the reason is that when we run the DSL it takes a program that evaluates
 a value of type a but intermediate steps could have different types
 it could be that in order to compute a value of type a you first need
@@ -3039,7 +3556,7 @@ language this program is not a factor because we have specific types
 here now we do have a map function but only on the entire DSL the
 F will only encapsulate these two case classes because we are now
 separating the custom code from the generic monadic wrapper the binding
-literal and the F type constructor will only encapsulate the domain-specific
+Val and the F type constructor will only encapsulate the domain-specific
 code which has specific types here and does not have a map method
 so it cannot be a functor it\textsf{'}s a partial type two type function that\textsf{'}s
 only defined for specific type parameters and that cannot be a factor
@@ -3065,8 +3582,8 @@ really not there\textsf{'}s necessarily the same as this a so let\textsf{'}s see
 how we use this so we now define a type constructor just for the custom
 file operations so this is going to be the F here so we called File
 ops and now this is just the domain-specific operations there are
-no bind case constants were literally classes we don't need those
-those are going to be provided generically extractor needs to be defined
+no bind case constants were Vally classes we don't need those those
+are going to be provided generically extractor needs to be defined
 only for these so this is the domain specific code how to read files
 how to create file paths or verify them or whatever this needs to
 be so this is going to be actual domain specific code and then how
@@ -3088,8 +3605,8 @@ evaluate it to either of error and a all we need to do is to provide
 a different extractor an extractor would be of this type so instead
 of going FA to a and goes to fheo some error type was in it and the
 code of the interpreter is almost unchanged except so this is the
-same except the pure needs to put the or the literal case cause it\textsf{'}s
-a pure function in the Monad it needs to put this into the right or
+same except the pure needs to put the or the Val case cause it\textsf{'}s a
+pure function in the Monad it needs to put this into the right or
 the either and the bind needs to use the flat map on the either other
 than that it\textsf{'}s exactly the same so how does this code work well it
 goes through the expression tree when it finds the bind expression
@@ -3230,7 +3747,7 @@ of flatmap and mount all they do is put more case classes on top of
 things they don't actually simplify anything ever so for this reason
 it cannot simplify this to PRT it will create a new bind and all the
 other monad operations will create new case classes and never reduce
-anything so basically the laws fail if you demand that they hold literally
+anything so basically the laws fail if you demand that they hold Vally
 like this so our data structure DSL is not a lawful munna it does
 not satisfy the laws but once you interpret this data structure into
 a target monad and assuming that this monad satisfies the Lord then
@@ -3240,21 +3757,21 @@ you run this value if you apply a run to this and by definition of
 the code it needs to first run this and then apply flatmap with this
 function and then run the results of this function so that is the
 code and if we now symbolically evaluate this code will find that
-the runner of the literal it will just give you a write of a let\textsf{'}s
-say in the ether moment it will be really pure of a in general but
-I'm just substituting the code from the previous line and because
-this is a pure for the either moment the either moment has the wall
-satisfied and so flat map of error is identity and so the result will
-be equal to running the program PRG so in this way assuming that the
-laws will hold for the monel m this both sides when we run them will
-won't be the same so all other laws also hold I will show that next
-but think about what it means it means that the violations of the
-Monad laws that this data structure has are not observable once you
-run the computation so the data structure and they have some extra
-information inside that gets computed away it gets reduced or simplified
-when you run or when you evaluate this into or interpret this into
-some target unit so in this sense I would say that the moral law violations
-are not observable when you actually observe or run or interpret this
+the runner of the Val it will just give you a write of a let\textsf{'}s say
+in the ether moment it will be really pure of a in general but I'm
+just substituting the code from the previous line and because this
+is a pure for the either moment the either moment has the wall satisfied
+and so flat map of error is identity and so the result will be equal
+to running the program PRG so in this way assuming that the laws will
+hold for the monel m this both sides when we run them will won't be
+the same so all other laws also hold I will show that next but think
+about what it means it means that the violations of the Monad laws
+that this data structure has are not observable once you run the computation
+so the data structure and they have some extra information inside
+that gets computed away it gets reduced or simplified when you run
+or when you evaluate this into or interpret this into some target
+unit so in this sense I would say that the moral law violations are
+not observable when you actually observe or run or interpret this
 program there are no violations so these violations are hidden somewhere
 in this data structure and they don't change the results they don't
 make the results invalid and so it\textsf{'}s okay to have those violations
@@ -3298,7 +3815,7 @@ identity long let\textsf{'}s look at the left identity law this it needs to
 be verified we have apply run to both sides and we have to show that
 run of this is equal to run of that so let\textsf{'}s evaluate the run if we
 do the pure flat map then this is translated into that we run that
-get run of literal which is just M of pure so you have a pure followed
+get run of Val which is just M of pure so you have a pure followed
 by flat map of this but pure followed by flat map is going to be in
 the Monon m and that is equivalent to just this function which is
 G so that\textsf{'}s why the run of the two sides is the same because the run
