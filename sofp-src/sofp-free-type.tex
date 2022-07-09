@@ -448,7 +448,7 @@ class:\inputencoding{latin9}
 \begin{lstlisting}
 sealed trait PrgFile[A] {
   def flatMap[B](f: A => PrgFile[B]): PrgFile[B] = Bind(this)(f)
-  def map[B](f: A => B): PrgFile[B] = Bind(this)(f andThen PrgFile.pure)
+  def map[B](f: A => B): PrgFile[B] = flatMap(f andThen PrgFile.pure)
 }
 final case class Val[A](a: A)                                       extends PrgFile[A]
 final case class Bind[A, B](pa: PrgFile[B])(val f: B => PrgFile[A]) extends PrgFile[A]
@@ -530,7 +530,7 @@ same way:\inputencoding{latin9}
 \begin{lstlisting}
 sealed trait PrgComplex[A] {
   def flatMap[B](f: A => PrgComplex[B]): PrgComplex[B] = Bind(this)(f)
-  def map[B](f: A => B): PrgComplex[B] = Bind(this)(f andThen PrgComplex.pure)
+  def map[B](f: A => B): PrgComplex[B] = flatMap(f andThen PrgComplex.pure)
 }
 object PrgComplex {
   def pure[A](a: A): PrgComplex[A] = Val(a)
@@ -652,14 +652,14 @@ is:\inputencoding{latin9}
 \begin{lstlisting}
 sealed trait MonadDSL[F[_], A] {
   def flatMap[B](f: A => MonadDSL[F, B]): MonadDSL[F, B] = Bind(this)(f)
-  def map[B](f: A => B): MonadDSL[F, B] = Bind(this)(f andThen MonadDSL.pure)
+  def map[B](f: A => B): MonadDSL[F, B] = flatMap(f andThen MonadDSL.pure)
 }
 object MonadDSL {
   def pure[F[_], A](a: A): MonadDSL[F, A] = Val(a)
 }
 final case class Val[F[_], A](a: A) extends MonadDSL[F, A]
 final case class Bind[F[_], A, B](pa: MonadDSL[F, B])(val f: B => MonadDSL[F, A]) extends MonadDSL[F, A]
-final case class Op[F[_], A](op: F[A]) extends MonadDSL[F, A]  // Wrap custom operations.
+final case class Op[F[_], A](op: F[A]) extends MonadDSL[F, A] // Wrap all domain-specific operations.
 \end{lstlisting}
 \inputencoding{utf8}
 The runner for \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}
@@ -759,9 +759,7 @@ res0: Complex = Complex(x = 2.000000000000001, y = 11.0)
 \end{lstlisting}
 \inputencoding{utf8}
 
-\section{The free monad}
-
-\subsection{A recipe for monadic DSLs}
+\subsection{A first recipe for monadic DSLs}
 
 The previous section explained the motivation for defining the type
 constructor \inputencoding{latin9}\lstinline!MonadDSL[F[_], A]!\inputencoding{utf8}.
@@ -797,14 +795,14 @@ of the DSL:\inputencoding{latin9}
 sealed trait F[_]
 \end{lstlisting}
 \inputencoding{utf8} The effect constructor \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}
-will be a disjunctive type whose parts correspond to each of the DSL
-operations. For every operation with type $P\rightarrow Q$, define
-the corresponding case class as:\inputencoding{latin9}
+will be a disjunctive type whose parts correspond to each of the domain-specific
+operations. For an operation with type $P\rightarrow Q$, define the
+corresponding case class as:\inputencoding{latin9}
 \begin{lstlisting}
-final case class SomeOperation(x: P) extends F[Q]
+final case class ReadPWriteQ(x: P) extends F[Q]
 \end{lstlisting}
-\inputencoding{utf8}The names of case classes (\inputencoding{latin9}\lstinline!SomeOperation!\inputencoding{utf8}
-and so on) should be chosen for clarity.
+\inputencoding{utf8}The names of case classes (such as \inputencoding{latin9}\lstinline!ReadPWriteQ!\inputencoding{utf8})
+may be chosen for clarity.
 
 It is an important part of the recipe that the result type (\inputencoding{latin9}\lstinline!Q!\inputencoding{utf8})
 is wrapped in the effect constructor \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}
@@ -818,7 +816,7 @@ is defined by:\inputencoding{latin9}
 \begin{lstlisting}
 sealed trait PrgFileC[_]
 final case class Path(p: String) extends PrgFileC[JPath]
-final case class Read(p: JPath) extends PrgFileC[String]
+final case class Read(p: JPath)  extends PrgFileC[String]
 \end{lstlisting}
 \inputencoding{utf8}
 Typically, a type constructor \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}
@@ -844,18 +842,21 @@ val runF: Runner[F] = new Runner[F] { def run[X]: F[X] => X = ??? }
 \inputencoding{utf8}If the definition of \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}
 allows only certain types \inputencoding{latin9}\lstinline!A!\inputencoding{utf8}
 in values of type \inputencoding{latin9}\lstinline!F[A]!\inputencoding{utf8}
-then the runner only needs to work for those types. In the example
-shown above, the runner only needs to work with arguments of types
-\inputencoding{latin9}\lstinline!PrgFileC[JPath]!\inputencoding{utf8}
-and \inputencoding{latin9}\lstinline!PrgFileC[String]!\inputencoding{utf8},
-not with arguments of type \inputencoding{latin9}\lstinline!F[X]!\inputencoding{utf8}
-with an arbitrary unknown \inputencoding{latin9}\lstinline!X!\inputencoding{utf8}:\inputencoding{latin9}
+then the runner only needs to work for those types. In the \inputencoding{latin9}\lstinline!PrgFile!\inputencoding{utf8}
+DSL, the runner only needs to work with arguments of types \inputencoding{latin9}\lstinline!PrgFileC[JPath]!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!PrgFileC[String]!\inputencoding{utf8}
+because those are the only allowed types of values that can be wrapped
+by the unfunctor \inputencoding{latin9}\lstinline!PrgFileC!\inputencoding{utf8}.
+The runner will never be given an argument of type \inputencoding{latin9}\lstinline!PrgFile[X]!\inputencoding{utf8}
+with an arbitrary unknown \inputencoding{latin9}\lstinline!X!\inputencoding{utf8}.
+However, different effect constructors may have different allowed
+types, and \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}
+needs to be able to work with any effect constructor. So, the runner\textsf{'}s
+type signature still needs a general type parameter \inputencoding{latin9}\lstinline!X!\inputencoding{utf8}:\inputencoding{latin9}
 \begin{lstlisting}
 val runnerFile = new Runner[PrgFileC] { def run[X]: (PrgFileC[X] => X) = runFileC[X] }
 \end{lstlisting}
-\inputencoding{utf8}Nevertheless, the runner\textsf{'}s type signature (\inputencoding{latin9}\lstinline!def run[X]: F[X] => X!\inputencoding{utf8})
-keeps a general type parameter \inputencoding{latin9}\lstinline!X!\inputencoding{utf8}.
-
+\inputencoding{utf8}
 We now define the monadic DSL type (\inputencoding{latin9}\lstinline!MyDSL!\inputencoding{utf8})
 and its runner function (\inputencoding{latin9}\lstinline!runMyDSL!\inputencoding{utf8})
 as:\inputencoding{latin9}
@@ -891,8 +892,88 @@ scala> runFileDSL(prgFile1)
 res1: String = "version = 1"
 \end{lstlisting}
 \inputencoding{utf8}
+Does the type constructor \inputencoding{latin9}\lstinline!MonadDSL[F, A]!\inputencoding{utf8}
+satisfy the laws of the monad? We can quickly find out that it does
+\emph{not}. The left identity law of \inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8}
+fails:\inputencoding{latin9}
+\begin{lstlisting}
+MonadDSL.pure(a).flatMap(f) == Bind(Val(a))(f) // This should equal f(a) by the left identity law.
+\end{lstlisting}
+\inputencoding{utf8}However, the law will hold \emph{after} we apply a runner function
+to both sides. For brevity, let us denote \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}\textsf{'}s
+runner function by \inputencoding{latin9}\lstinline!r(x)!\inputencoding{utf8}
+instead of \inputencoding{latin9}\lstinline!run(runner)(x)!\inputencoding{utf8}.
+The code of \inputencoding{latin9}\lstinline!run!\inputencoding{utf8}
+shows that \inputencoding{latin9}\lstinline!r(Bind(p)(f)) == r(f(r(p)))!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!r(Val(a)) == a!\inputencoding{utf8}.
+Then we find that both sides of the law give \inputencoding{latin9}\lstinline!r(f(a))!\inputencoding{utf8}
+when run:\inputencoding{latin9}
+\begin{lstlisting}
+r(MonadDSL.pure(a).flatMap(f)) == r(Bind(Val(a))(f)) == r(f(a))
+\end{lstlisting}
+\inputencoding{utf8}
+The associativity law~(\ref{eq:associativity-law-flatMap}) of \inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8}
+also does not hold directly for \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}
+values but will hold after a \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}
+program has been run. To see that, first compare the two sides of
+the law~(\ref{eq:associativity-law-flatMap}):\inputencoding{latin9}
+\begin{lstlisting}
+/* left-hand side:  */   p.flatMap(x => f(x).flatMap(g)) == Bind(p)(x => Bind(f(x))(g))
+/* right-hand side: */   p.flatMap(f).flatMap(g) == Bind(Bind(p)(f))(g)
+\end{lstlisting}
+\inputencoding{utf8}The law fails since the two data structures are not the same. When
+we apply a runner \inputencoding{latin9}\lstinline!r!\inputencoding{utf8}
+to both sides, we get:\inputencoding{latin9}
+\begin{lstlisting}
+/* left-hand side:  */   r(Bind(p)(x => Bind(f(x))(g))) == r(Bind(f(r(p)))(g)) == r(g(r(f(r(p)))))  
+/* right-hand side: */   r(Bind(Bind(p)(f))(g)) == r(g(r(Bind(p)(f)))) == r(g(r(f(r(p)))))
+\end{lstlisting}
+\inputencoding{utf8}
+We may say that failures of the monad laws are \textsf{``}not observable\textsf{''}
+since the laws will hold after running the DSL programs.
 
-\subsection{Handling errors after running a DSL program}
+Could we implement \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}\textsf{'}s
+\inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8} method
+differently so that the monad laws already hold before applying a
+runner? To satisfy the left identity law, we need to avoid creating
+a nested structure of the form \inputencoding{latin9}\lstinline!Bind(Val(a))!\inputencoding{utf8}
+when applying \inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8}
+to a value of the form \inputencoding{latin9}\lstinline!Val(a)!\inputencoding{utf8}.
+Instead, \inputencoding{latin9}\lstinline!Val(a).flatMap(f)!\inputencoding{utf8}
+should return \inputencoding{latin9}\lstinline!f(a)!\inputencoding{utf8}
+as required by the left identity law. To satisfy the associativity
+law, we need to avoid creating a nested structure of the form \inputencoding{latin9}\lstinline!Bind(Bind(...))!\inputencoding{utf8}
+when applying \inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8}
+to a \inputencoding{latin9}\lstinline!Bind!\inputencoding{utf8} value.
+Instead, applying \inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8}
+to \inputencoding{latin9}\lstinline!Bind!\inputencoding{utf8} should
+directly return the value required by the associativity law. The new
+code of \inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8}
+is:\inputencoding{latin9}
+\begin{lstlisting}
+sealed trait MonadDSL[F[_], A] { *** check that this code works
+  def flatMap[B](f: A => MonadDSL[F, B]): MonadDSL[F, B] = this match {
+    case Val(a)          => f(a)
+    case bind@Bind(pa)   => Bind(pa)(x => Bind(bind.f(x))(f))
+    case _               => Bind(this)(f)
+  }
+  ... // Other code remains unchanged.
+}
+\end{lstlisting}
+\inputencoding{utf8}The resulting code will create fewer nested case classes in memory,
+which may also improve performance.
+
+Unlike other laws, the right identity law holds for any value \inputencoding{latin9}\lstinline!p!\inputencoding{utf8}
+of type \inputencoding{latin9}\lstinline!MonadDSL[F, A]!\inputencoding{utf8}:\inputencoding{latin9}
+\begin{lstlisting}
+p.flatMap(f andThen MonadDSL.pure) == p.map(f)
+\end{lstlisting}
+\inputencoding{utf8}The reason is that our current code implements \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}\textsf{'}s
+\inputencoding{latin9}\lstinline!map!\inputencoding{utf8} method
+via \inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8}
+in exactly this way. 
+
+\subsection{Running a DSL program into another monad: Handling errors}
 
 In the code from the previous section, one may use different effect
 runners with \emph{the same} function \inputencoding{latin9}\lstinline!MonadDSL.run!\inputencoding{utf8}.
@@ -902,18 +983,19 @@ obtain a monad runner of type \inputencoding{latin9}\lstinline!MonadDSL[F, A] =>
 
 More generally, we may need to run the $F$-effects into \emph{another
 monad}. Given an effect runner of type $\forall X.\,F^{X}\rightarrow M^{X}$,
-where $M$ is some monad, we hope to obtain a general runner of type
-\inputencoding{latin9}\lstinline!MonadDSL[F, A] => M[A]!\inputencoding{utf8}.
+where $M$ is some monad, we hope to obtain a general runner with
+type signature $\forall A.\,\text{MonadDSL}^{F,A}\rightarrow M^{A}$.
 
-To see an example of using such general runners in practice, notice
-that the execution of $F$-effects may produce errors. For instance,
-the runner of the \inputencoding{latin9}\lstinline!PrgFile!\inputencoding{utf8}
-DSL will throw exceptions when files are not found or not readable.
+To see an example of using such general runners in practice, note
+that the execution of $F$-effects may produce errors.\footnote{\index{jokes}\textsf{``}A function that launches real-world missiles can
+run out of missiles.\textsf{''} (A quote attributed to \index{Simon Peyton Jones}Simon
+Peyton Jones.)} For instance, the code of \inputencoding{latin9}\lstinline!runFileC!\inputencoding{utf8}
+(the runner for the \inputencoding{latin9}\lstinline!PrgFile!\inputencoding{utf8}
+DSL) will throw exceptions when files are not found or not readable.
 We may catch those exceptions with Scala\textsf{'}s standard \inputencoding{latin9}\lstinline!Try!\inputencoding{utf8}
-class. However, this means replacing the runner of type \inputencoding{latin9}\lstinline!PrgFileC[X] => X!\inputencoding{utf8}
+class. We will then need to replace a runner of type \inputencoding{latin9}\lstinline!PrgFileC[X] => X!\inputencoding{utf8}
 by a polymorphic function of type \inputencoding{latin9}\lstinline!PrgFileC[X] => Try[X]!\inputencoding{utf8}.
-For the \inputencoding{latin9}\lstinline!PrgFile!\inputencoding{utf8}
-DSL, the new code looks like this:\inputencoding{latin9}
+The new code looks like this:\inputencoding{latin9}
 \begin{lstlisting}
 trait RunnerTry[F[_]] { def run[X]: F[X] => Try[X] }
 val runnerFileTry = new RunnerTry[PrgFileC] { def run[X]: PrgFileC[X] => Try[X] = p => Try(runFileC(p)) }
@@ -928,18 +1010,18 @@ def runTry[F[_], A](runnerTry: RunnerTry[F]): MonadDSL[F, A] => Try[A] = {
 } *** check that this code works
 \end{lstlisting}
 \inputencoding{utf8}
-Let us now generalize this code to an arbitrary monad $M$ instead
-of \inputencoding{latin9}\lstinline!Try!\inputencoding{utf8}. The
-code of \inputencoding{latin9}\lstinline!runTry!\inputencoding{utf8}
-uses the \inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8}
+Now we can generalize the code of \inputencoding{latin9}\lstinline!runTry!\inputencoding{utf8}
+to an arbitrary monad $M$ instead of \inputencoding{latin9}\lstinline!Try!\inputencoding{utf8}.
+We note that \inputencoding{latin9}\lstinline!runTry!\inputencoding{utf8}
+uses only two values specific to \inputencoding{latin9}\lstinline!Try!\inputencoding{utf8}:
+the \inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8}
 method of the \inputencoding{latin9}\lstinline!Try!\inputencoding{utf8}
-monad. The \inputencoding{latin9}\lstinline!Try!\inputencoding{utf8}
+monad and the \inputencoding{latin9}\lstinline!Success!\inputencoding{utf8}
+case class, which corresponds to the \inputencoding{latin9}\lstinline!Try!\inputencoding{utf8}
 monad\textsf{'}s \inputencoding{latin9}\lstinline!pure!\inputencoding{utf8}
-method is implemented by the \inputencoding{latin9}\lstinline!Success!\inputencoding{utf8}
-case class. So, we can generalize to another monad $M$ instead of
-\inputencoding{latin9}\lstinline!Try!\inputencoding{utf8} if we use
-$M$\textsf{'}s \inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8}
-and replace \inputencoding{latin9}\lstinline!Success!\inputencoding{utf8}
+method. To generalize the code to another monad $M$ instead of \inputencoding{latin9}\lstinline!Try!\inputencoding{utf8},
+we need to use $M$\textsf{'}s \inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8}
+and to replace \inputencoding{latin9}\lstinline!Success!\inputencoding{utf8}
 by $M$\textsf{'}s \inputencoding{latin9}\lstinline!pure!\inputencoding{utf8}:\inputencoding{latin9}
 \begin{lstlisting}
 trait RunnerM[F[_], M[_]] { def run[X]: F[X] => M[X] }
@@ -950,183 +1032,191 @@ def runM[F[_], M[_]: Monad, A](runnerM: RunnerM[F, M]): MonadDSL[F, A] => M[A] =
 } *** check that this code works
 \end{lstlisting}
 \inputencoding{utf8}
-The resulting construction:
+The use of general monadic runners gives the programmer more power
+for separating the business logic of an application from its execution
+enviroment. Since the monad $M$ is arbitrary, it may itself be a
+monadic DSL with a different set of operations and its own effect
+runner. By transforming one monadic DSL into another, we may be able
+to optimize, test, or verify a DSL program \emph{without} running
+it.
 
-Start with an \textsf{``}effects constructor\textsf{''} $F^{A}$ (often an unfunctor)
-
-Use $\text{DSL}^{F,A}$ and interpreter $\text{run}^{M,A}:\left(\forall X.F^{X}\rightarrow M^{X}\right)\rightarrow\text{DSL}^{F,A}\rightarrow M^{A}$
-
-Note: the function of type $\forall X.\,F^{X}\rightarrow M^{X}$ does
-not need to handle all possible types $X$ but only those for which
-values of type $F^{X}$ can exist; so, unfunctors are not a problem
-
-Create a DSL program $\text{prg}:\text{DSL}^{F,A}$ and an extractor
-$\text{ex}^{X}:F^{X}\rightarrow M^{X}$
-
-Run the program with the extractor: \texttt{\textcolor{blue}{\footnotesize{}run(ex)(prg)}};
-get a value $M^{A}$
-
-\subsection{The free monad in the raw tree encoding}
+\section{Different encodings of the free monad}
 
 The type \inputencoding{latin9}\lstinline!MonadDSL[F, A]!\inputencoding{utf8}
 is called a \textbf{free monad} on\index{free monad} the type constructor
 \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}. The word
 \textsf{``}free\textsf{''} indicates that \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}
-is free of any domain-specific code and works equally well with every
-DSL. We may view \inputencoding{latin9}\lstinline!MonadDSL[F, A]!\inputencoding{utf8}
+is free of any domain-specific code. We may view \inputencoding{latin9}\lstinline!MonadDSL[F, A]!\inputencoding{utf8}
 as a wrapper that adds the monad\textsf{'}s functionality to any type constructor
-\inputencoding{latin9}\lstinline!F!\inputencoding{utf8}. The monad\textsf{'}s
-methods (\inputencoding{latin9}\lstinline!pure!\inputencoding{utf8}
-and \inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8})
-will create some data structures (nested case classes) in memory and
-will not perform any domain-specific effects or actions. The effects
-will be performed at a later time by an effect runner (\inputencoding{latin9}\lstinline!runF!\inputencoding{utf8})
-when we apply \inputencoding{latin9}\lstinline!MonadDSL.run!\inputencoding{utf8}
-to a DSL program.
+\inputencoding{latin9}\lstinline!F!\inputencoding{utf8}, which will
+then become the effect constructor of a new monadic DSL. This construction
+uses \inputencoding{latin9}\lstinline!F!\inputencoding{utf8} as a
+type parameter, and so it works equally well with every \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}. 
 
 A monad must support the methods \inputencoding{latin9}\lstinline!pure!\inputencoding{utf8},
 \inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8}, and
 \inputencoding{latin9}\lstinline!map!\inputencoding{utf8}. The effect
 constructor \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}
-often does not support these methods. To see how \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}
-is able to convert \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}
-into a monad, let us look at the types used by \inputencoding{latin9}\lstinline!MonadDSL[F, A]!\inputencoding{utf8}.
+often does not have these methods: the domain-specific operations
+are not often monadic. The \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}
+constructor is able to convert \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}
+into a monad because the methods \inputencoding{latin9}\lstinline!pure!\inputencoding{utf8},
+\inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8}, and
+\inputencoding{latin9}\lstinline!map!\inputencoding{utf8} create
+some data structures (nested case classes) in memory but do not perform
+any domain-specific effects or actions. The effects will be performed
+at a later time by an effect runner (\inputencoding{latin9}\lstinline!runF!\inputencoding{utf8})
+when we apply \inputencoding{latin9}\lstinline!MonadDSL.run!\inputencoding{utf8}
+to a DSL program.
+
+The implementations of the monadic methods in \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}
+satisfy our goal of producing a flexible and type-safe DSL out of
+a given set of domain-specific operations. But it turns out that \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}
+is not the only way of turning a given type constructor \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}
+into a monad. Various presentations and blog posts on the subject
+of the free monad have given different codes that are not obviously
+equivalent to each other. Let us look at three examples that we will
+call \inputencoding{latin9}\lstinline!Free1!\inputencoding{utf8},
+\inputencoding{latin9}\lstinline!Free2!\inputencoding{utf8}, and
+\inputencoding{latin9}\lstinline!Free3!\inputencoding{utf8}. 
+
+The first example comes from a 2012 blog post\footnote{See \texttt{\href{http://www.haskellforall.com/2012/06/you-could-have-invented-free-monads.html}{http://www.haskellforall.com/2012/06/you-could-have-invented-free-monads.html}}}
+where \index{Gabriella Gonzalez (prior to 2021, Gabriel Gonzalez)}G.~Gonzalez
+showed a free monad (in Haskell) corresponing to this Scala code:\inputencoding{latin9}
+\begin{lstlisting}
+absract class Free1[F[_]: Functor, T] {
+  def flatMap[A](f: T => Free1[F, A]): Free1[F, A] = this match {
+    case Pure(t)      => f(a)
+    case Flatten(p)   => Flatten(p.map(g => g.flatMap(f))) // Use F\textsf{'}s Functor instance.
+  }
+}
+final case class Pure[F[_], T](t: T)                 extends Free1[F, T]
+final case class Flatten[F[_], T](p: F[Free1[F, T]]) extends Free1[F, T] 
+\end{lstlisting}
+\inputencoding{utf8}In a talk given in 2014,\footnote{See \texttt{\href{http://functionaltalks.org/2014/11/23/runar-oli-bjarnason-free-monad/}{http://functionaltalks.org/2014/11/23/runar-oli-bjarnason-free-monad/}}}
+R.~Bjarnason\index{Runar@R\'unar Bjarnason} presented the following
+implementation of a free monad:\inputencoding{latin9}
+\begin{lstlisting}
+sealed trait Free2[F[_], T] {
+  def flatMap[A](f: T => Free2[F, A]): Free2[F, A] = this match {
+    case Return(t     => f(t)
+    case Bind(p, g)   => Bind(p, (b => g(b) flatMap f))
+  }
+}
+final case class Return[F[_], T](t: T)                          extends Free2[F, T]
+final case class Bind[F[_], T, A](p: F[A], g: A => Free2[F, T]) extends Free2[F, T]
+\end{lstlisting}
+\inputencoding{utf8}In 2016, K.~Robinson\index{Kelley Robinson} gave a talk\footnote{See \texttt{\href{https://www.slideshare.net/KelleyRobinson1/why-the-free-monad-isnt-free-61836547}{https://www.slideshare.net/KelleyRobinson1/why-the-free-monad-isnt-free-61836547}}}
+where the code for the free monad looked like this:\inputencoding{latin9}
+\begin{lstlisting}
+sealed trait Free3[F[_], T] {
+  def flatMap[A](f: T => Free3[F, A]): Free3[F, A] = FlatMap[F, A, T](this, f) 
+}
+final case class Pure[F[_], T](t: T)                                      extends Free3[F, T]
+final case class Suspend[F[_], T](f: F[T])                                extends Free3[F, T]
+final case class FlatMap[F[_], T, A](p: Free3[F, A], g: A => Free3[F, T]) extends Free3[F, T]
+\end{lstlisting}
+\inputencoding{utf8}
+Since the differences between \inputencoding{latin9}\lstinline!Free1!\inputencoding{utf8},
+\inputencoding{latin9}\lstinline!Free2!\inputencoding{utf8}, and
+\inputencoding{latin9}\lstinline!Free3!\inputencoding{utf8} are in
+the definitions of the case classes and the \inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8}
+functions, we omitted all other code from these examples. The type
+of \inputencoding{latin9}\lstinline!Free3!\inputencoding{utf8} is
+the same as \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}
+except for renaming \inputencoding{latin9}\lstinline!Pure!\inputencoding{utf8}
+to \inputencoding{latin9}\lstinline!Val!\inputencoding{utf8}, \inputencoding{latin9}\lstinline!Suspend!\inputencoding{utf8}
+to \inputencoding{latin9}\lstinline!Op!\inputencoding{utf8}, and
+\inputencoding{latin9}\lstinline!FlatMap(f, g)!\inputencoding{utf8}
+to \inputencoding{latin9}\lstinline!Bind(f)(g)!\inputencoding{utf8}
+with curried arguments. However, \inputencoding{latin9}\lstinline!Free1!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!Free2!\inputencoding{utf8} have
+different data in their case classes and are not obviously equivalent
+to each other (or to \inputencoding{latin9}\lstinline!Free3!\inputencoding{utf8}).
+We call these implementations \textsf{``}encodings\textsf{''} of the free monad. The
+different codes implement the same idea (turning a type constructor
+\inputencoding{latin9}\lstinline!F!\inputencoding{utf8} into a monad)
+in different ways.
+
+\subsection{The raw tree encoding}
+
+To understand the relationships between the encodings, we first ask:
+Does the type \inputencoding{latin9}\lstinline!MonadDSL[F, A]!\inputencoding{utf8}
+satisfy the laws of a monad? 
+
+{*}{*}{*}We implemented \inputencoding{latin9}\lstinline!map!\inputencoding{utf8}
+through \inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8}
+only for simplicity and not because we wanted especially to satisfy
+the right identity law. As a result, our code for the \inputencoding{latin9}\lstinline!map!\inputencoding{utf8}
+method is different from the code of the two other monadic methods
+(\inputencoding{latin9}\lstinline!pure!\inputencoding{utf8} and \inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8})
+that simply create new values of the case classes \inputencoding{latin9}\lstinline!Val!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!Bind!\inputencoding{utf8} without
+performing any computations.
+
+We could implement \inputencoding{latin9}\lstinline!map!\inputencoding{utf8}
+in a similar way if we add a new case class, say \inputencoding{latin9}\lstinline!FMap!\inputencoding{utf8},
+to \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}.
+The result is a new encoding of the free monad that we may call \inputencoding{latin9}\lstinline!Free4!\inputencoding{utf8}:\inputencoding{latin9}
+\begin{lstlisting}
+sealed trait Free4[F[_], A] {
+  def flatMap[B](f: A => Free4[F, B]): Free4[F, B] = Bind(this)(f)
+  def map[B](f: A => B): Free4[F, B] = FMap(this)(f)
+}
+object Free4 {
+  def pure[F[_], A](a: A): Free4[F, A] = Val(a)
+}
+final case class Val[F[_], A](a: A)                                            extends Free4[F, A]
+final case class Bind[F[_], A, B](pa: Free4[F, B])(val f: B => Free4[F, A])    extends Free4[F, A]
+final case class FMap[F[_], A, B](pa: Free4[F, B])(val f: B => A)              extends Free4[F, A]
+final case class Op[F[_], A](op: F[A]) extends Free4[F, A] // Wrap all domain-specific operations.
+\end{lstlisting}
+\inputencoding{utf8}The code of the runner needs to be revised accordingly:\inputencoding{latin9}
+\begin{lstlisting}
+def run[F[_], A](runner: Runner[F]): Free4[F, A] => A = {
+  case Val(a)          => a
+  case bind@Bind(pa)   => run(runner)(bind.f(run(runner)(pa)))
+  case fmap@FMap(pa)   => fmap.f(run(runner)(pa))
+  case Op(op)          => runner.run(op)
+} *** check that this code works
+\end{lstlisting}
+\inputencoding{utf8}
+The code of \inputencoding{latin9}\lstinline!Free4!\inputencoding{utf8}
+implements all methods in a similar way: each method wraps its arguments
+into a case class of its own without performing any computations with
+those arguments. We call this implementation of the free monad the
+\textbf{raw tree encoding}\index{free monad!raw tree encoding}. The
+name means that a DSL program is a fully unevaluated (or \textsf{``}raw\textsf{''})
+expression tree representing all steps of the required computations.
+
+\subsection{Reduced encodings of the free monad}
+
+In the raw tree encoding (\inputencoding{latin9}\lstinline!Free4!\inputencoding{utf8}),
+\emph{none} of the monad laws hold. This is not a problem in practice,
+as the laws will hold after running a DSL program. However, we notice
+that the \inputencoding{latin9}\lstinline!Free3!\inputencoding{utf8}
+encoding (which is the same as \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8})
+fails fewer laws because it satisfies the monad\textsf{'}s identity laws by
+design. The byproduct of that design is that \inputencoding{latin9}\lstinline!Free3!\inputencoding{utf8}
+has fewer case classes than \inputencoding{latin9}\lstinline!Free4!\inputencoding{utf8}.
+This suggests the possibility of obtaining a simpler encoding if we
+look for a type constructor that satisfies more monad laws by design.
+{*}{*}{*}
+
+\section{Free constructions for other typeclasses}
+
+let us look at the types used by \inputencoding{latin9}\lstinline!MonadDSL[F, A]!\inputencoding{utf8}.
 For brevity, we will use the type notation:
 \[
 \text{MonadDSL}^{F,A}\triangleq A+F^{A}+\exists B.\,F^{B}\times(B\rightarrow F^{A})\quad.***
 \]
  So, the {*}{*}{*}
 
-Further directions (out of scope for this chapter):
-
-May choose another monad \texttt{\textcolor{blue}{\footnotesize{}N{[}A{]}}}
-and use interpreter \texttt{\textcolor{blue}{\footnotesize{}M{[}A{]}
-$\rightarrow$ N{[}A{]}}} 
-
-E.g.~transform into another monadic DSL to optimize, test, etc.
-
-Since \texttt{\textcolor{blue}{\footnotesize{}DSL{[}F,A{]}}} has a
-monad API, we can use monad transformers on it
-
 Can combine two or more DSLs in a disjunction: $\text{DSL}^{F+G+H,A}$
 
+\section{Laws of free typeclass constructions}
+
 \section{Slides}
-
-\paragraph{Monad laws for DSL programs}
-
-Monad laws hold for DSL programs only after evaluating them; when
-DSL is defined as an unevaluated tree, monad laws do not hold for
-that tree
-
-Consider the law $\text{flm}\left(\text{pure}\right)=\text{id}$;
-both functions $\text{DSL}^{F,A}\rightarrow\text{DSL}^{F,A}$
-
-Apply both sides to some $\text{prg}:\text{DSL}^{F,A}$ and get the
-new value
-
-\texttt{\textcolor{blue}{\footnotesize{}prg.flatMap(pure) == Bind(prg,
-a $\rightarrow$ Val(a))}}{\footnotesize\par}
-
-This new value is \emph{not equal} to \texttt{\textcolor{blue}{\footnotesize{}prg}},
-so this monad law fails!
-
-Other laws fail as well because operations never reduce anything
-
-After interpreting this program into a target monad $M^{A}$, the
-law holds:
-
-\texttt{\textcolor{blue}{\footnotesize{}run(ex)(prg).flatMap((a $\rightarrow$
-Val(a)) andThen run(ex)) }}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}  == run(ex)(prg).flatMap(a
-$\rightarrow$ run(ex)(Val(a)) }}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}  == run(ex)(prg).flatMap(a
-$\rightarrow$ pure(a))}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}  == run(ex)(prg)}}{\footnotesize\par}
-
-Here we have assumed that the laws hold for $M^{A}$
-
-All other laws also hold after interpreting into a lawful monad $M^{A}$
-
-The monad law violations are \textsf{``}not observable\textsf{''}
-
-{*}{*}{*}\footnote{\textsf{``}A function \inputencoding{latin9}\lstinline!launch()!\inputencoding{utf8}
-that launches real-world missiles can run out of missiles.\textsf{''} (A quote
-attributed to \index{Simon Peyton Jones}Simon Peyton Jones.)}
-
-\paragraph{Free constructions in mathematics: Example I}
-
-Consider the Cyrillic letter \foreignlanguage{russian}{ц} (ts\`{e})
-and the Chinese word \shui~(shu\textipa{\v i})
-
-We want to \emph{multiply} \foreignlanguage{russian}{ц} by \shui.
-Multiply how?
-
-Say, we want an associative (but noncommutative) product of them
-
-So we want to define a \emph{semigroup} that \emph{contains} \foreignlanguage{russian}{ц}
-and \shui~as elements
-
-while we still know nothing about \foreignlanguage{russian}{ц} and
-\shui
-
-Consider the set of all \emph{unevaluated expressions} such as \foreignlanguage{russian}{ц}$\cdot$\shui$\cdot$\shui$\cdot$\foreignlanguage{russian}{ц}$\cdot$\shui
-
-Here \foreignlanguage{russian}{ц}$\cdot$\shui~is different from
-\shui$\cdot$\foreignlanguage{russian}{ц} but $\left(a\cdot b\right)\cdot c=a\cdot\left(b\cdot c\right)$
-
-All these expressions form a \textbf{free semigroup} generated by
-\foreignlanguage{russian}{ц} and \shui
-
-This is the most unrestricted semigroup that contains \foreignlanguage{russian}{ц}
-and \shui
-
-Example calculation: (\shui$\cdot$\shui)$\cdot$(\foreignlanguage{russian}{ц}$\cdot$\shui)$\cdot$\foreignlanguage{russian}{ц}
-$=$ \shui$\cdot$\shui$\cdot$\foreignlanguage{russian}{ц}$\cdot$\shui$\cdot$\foreignlanguage{russian}{ц}
-
-How to represent this as a data type:
-
-\textbf{Tree encoding}: the full expression tree: (((\shui,\shui),(\foreignlanguage{russian}{ц},\shui)),\foreignlanguage{russian}{ц})
-
-Implement the operation $a\cdot b$ as pair constructor (easy)
-
-\textbf{Reduced encoding}, as a \textsf{``}smart\textsf{''} structure: List(\shui,\shui,\foreignlanguage{russian}{ц},\shui,\foreignlanguage{russian}{ц})
-
-Implement $a\cdot b$ by concatenating the lists (more expensive)
-
-
-\paragraph{Free constructions in mathematics: Example II}
-
-Want to define a product operation for $n$-dimensional vectors: $\mathbf{v}_{1}\otimes\mathbf{v}_{2}$
-
-The $\otimes$ must be linear and distributive (but not commutative):
-\begin{align*}
-\mathbf{u}_{1}\otimes\mathbf{v}_{1}+\left(\mathbf{u}_{2}\otimes\mathbf{v}_{2}+\mathbf{u}_{3}\otimes\mathbf{v}_{3}\right) & =\left(\mathbf{u}_{1}\otimes\mathbf{v}_{1}+\mathbf{u}_{2}\otimes\mathbf{v}_{2}\right)+\mathbf{u}_{3}\otimes\mathbf{v}_{3}\\
-\mathbf{u}\otimes\left(a_{1}\mathbf{v}_{1}+a_{2}\mathbf{v}_{2}\right) & =a_{1}\left(\mathbf{u}\otimes\mathbf{v}_{1}\right)+a_{2}\left(\mathbf{u}\otimes\mathbf{v}_{2}\right)\\
-\left(a_{1}\mathbf{v}_{1}+a_{2}\mathbf{v}_{2}\right) & \otimes\mathbf{u}=a_{1}\left(\mathbf{v}_{1}\otimes\mathbf{u}\right)+a_{2}\left(\mathbf{v}_{2}\otimes\mathbf{u}\right)
-\end{align*}
-
-We have such a product for 3-dimensional vectors; but it cannot be
-made to work for 2 or 4-dimensional vectors
-
-Consider \emph{unevaluated} \emph{expressions} of the form $\mathbf{u}_{1}\otimes\mathbf{v}_{1}+\mathbf{u}_{2}\otimes\mathbf{v}_{2}+...$
-
-A free vector space generated by pairs of vectors
-
-Impose the equivalence relationships shown above
-
-The result is known as the \textbf{tensor product}
-
-Tree encoding: full unevaluated expression tree
-
-A list of any number of vector pairs $\sum_{i}\mathbf{u}_{i}\otimes\mathbf{v}_{i}$
-
-Reduced encoding: an $n\times n$ matrix
-
-Reduced encoding requires proofs and more complex operations
-
 
 \paragraph{Worked example I: Free semigroup}
 
@@ -1689,8 +1779,8 @@ Generalize to arbitrary type classes:
 Type class $C$ is defined by its operations{\footnotesize{} $C^{X}\rightarrow X$}
 (with a suitable $C^{\bullet}$)
 
-call $C^{\bullet}$ the \textbf{method functor} of the inductive typeclass
-$C$
+call $C^{\bullet}$ the \textbf{structure functor} of the inductive
+typeclass $C$
 
 Tree encoding of \textsf{``}free $C$ over $Z$\textsf{''} is recursive, $\text{FreeC}^{Z}\triangleq Z+C^{\text{FreeC}^{Z}}$
 
@@ -1703,7 +1793,6 @@ Laws of the typeclass are satisfied automatically after \textsf{``}running\texts
 Works similarly for type constructors: operations $C^{P^{\bullet},A}\rightarrow P^{A}$
 
 Free typeclass $C$ over $F^{\bullet}$ is $\text{FreeC}^{F^{\bullet},A}\triangleq\forall P^{\bullet:C}.\left(F^{\bullet}\leadsto P^{\bullet}\right)\rightarrow P^{A}$
-
 
 \paragraph{Properties of free type constructions}
 
@@ -3157,6 +3246,77 @@ def toAny[T](t: T): Any = t
 function establishes the subtyping relation \inputencoding{latin9}\lstinline!T <: Any!\inputencoding{utf8}.
 
 \section{Discussion}
+
+\paragraph{Free constructions in mathematics: Example I}
+
+Consider the Cyrillic letter \foreignlanguage{russian}{ц} (ts\`{e})
+and the Chinese word \shui~(shu\textipa{\v i})
+
+We want to \emph{multiply} \foreignlanguage{russian}{ц} by \shui.
+Multiply how?
+
+Say, we want an associative (but noncommutative) product of them
+
+So we want to define a \emph{semigroup} that \emph{contains} \foreignlanguage{russian}{ц}
+and \shui~as elements
+
+while we still know nothing about \foreignlanguage{russian}{ц} and
+\shui
+
+Consider the set of all \emph{unevaluated expressions} such as \foreignlanguage{russian}{ц}$\cdot$\shui$\cdot$\shui$\cdot$\foreignlanguage{russian}{ц}$\cdot$\shui
+
+Here \foreignlanguage{russian}{ц}$\cdot$\shui~is different from
+\shui$\cdot$\foreignlanguage{russian}{ц} but $\left(a\cdot b\right)\cdot c=a\cdot\left(b\cdot c\right)$
+
+All these expressions form a \textbf{free semigroup} generated by
+\foreignlanguage{russian}{ц} and \shui
+
+This is the most unrestricted semigroup that contains \foreignlanguage{russian}{ц}
+and \shui
+
+Example calculation: (\shui$\cdot$\shui)$\cdot$(\foreignlanguage{russian}{ц}$\cdot$\shui)$\cdot$\foreignlanguage{russian}{ц}
+$=$ \shui$\cdot$\shui$\cdot$\foreignlanguage{russian}{ц}$\cdot$\shui$\cdot$\foreignlanguage{russian}{ц}
+
+How to represent this as a data type:
+
+\textbf{Tree encoding}: the full expression tree: (((\shui,\shui),(\foreignlanguage{russian}{ц},\shui)),\foreignlanguage{russian}{ц})
+
+Implement the operation $a\cdot b$ as pair constructor (easy)
+
+\textbf{Reduced encoding}, as a \textsf{``}smart\textsf{''} structure: List(\shui,\shui,\foreignlanguage{russian}{ц},\shui,\foreignlanguage{russian}{ц})
+
+Implement $a\cdot b$ by concatenating the lists (more expensive)
+
+
+\paragraph{Free constructions in mathematics: Example II}
+
+Want to define a product operation for $n$-dimensional vectors: $\mathbf{v}_{1}\otimes\mathbf{v}_{2}$
+
+The $\otimes$ must be linear and distributive (but not commutative):
+\begin{align*}
+\mathbf{u}_{1}\otimes\mathbf{v}_{1}+\left(\mathbf{u}_{2}\otimes\mathbf{v}_{2}+\mathbf{u}_{3}\otimes\mathbf{v}_{3}\right) & =\left(\mathbf{u}_{1}\otimes\mathbf{v}_{1}+\mathbf{u}_{2}\otimes\mathbf{v}_{2}\right)+\mathbf{u}_{3}\otimes\mathbf{v}_{3}\\
+\mathbf{u}\otimes\left(a_{1}\mathbf{v}_{1}+a_{2}\mathbf{v}_{2}\right) & =a_{1}\left(\mathbf{u}\otimes\mathbf{v}_{1}\right)+a_{2}\left(\mathbf{u}\otimes\mathbf{v}_{2}\right)\\
+\left(a_{1}\mathbf{v}_{1}+a_{2}\mathbf{v}_{2}\right) & \otimes\mathbf{u}=a_{1}\left(\mathbf{v}_{1}\otimes\mathbf{u}\right)+a_{2}\left(\mathbf{v}_{2}\otimes\mathbf{u}\right)
+\end{align*}
+
+We have such a product for 3-dimensional vectors; but it cannot be
+made to work for 2 or 4-dimensional vectors
+
+Consider \emph{unevaluated} \emph{expressions} of the form $\mathbf{u}_{1}\otimes\mathbf{v}_{1}+\mathbf{u}_{2}\otimes\mathbf{v}_{2}+...$
+
+A free vector space generated by pairs of vectors
+
+Impose the equivalence relationships shown above
+
+The result is known as the \textbf{tensor product}
+
+Tree encoding: full unevaluated expression tree
+
+A list of any number of vector pairs $\sum_{i}\mathbf{u}_{i}\otimes\mathbf{v}_{i}$
+
+Reduced encoding: an $n\times n$ matrix
+
+Reduced encoding requires proofs and more complex operations
 
 \subsection{Beyond Yoneda: using parametricity to simplify quantified types}
 
