@@ -65,7 +65,7 @@ function create_draft {
 	egrep "($draft_title_1|$draft_title_2|$draft_title_3|$draft_title_4)" | egrep -o '[0-9]+$' | \
 		(read b1; read e1; read b2; read e2; pageranges="1-$((b1-1)) $e1-$((b2-1)) $e2-end"; \
                  pdftk sofp.pdf cat $pageranges output $output_pdf; \
-                 echo Draft page ranges $pageranges )
+                 echo Command to create draft is: pdftk sofp.pdf cat $pageranges output $output_pdf)
 
 	# Check that the page number did not grow by mistake after wrong formatting.
 	local got_draft_pages=`pdfPages $output_pdf`
