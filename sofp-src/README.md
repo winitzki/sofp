@@ -1,11 +1,13 @@
-# Applied functional type theory: The science of functional programming
+# The Science of Functional Programming
 
-This is a series of in-depth tutorials on functional programming.
+This is the author's `git` repository containing the full source files of the book *The Science of Functional Programming*.
 
-The tutorials cover both the theory and the practice of functional programming,
+The book grew from a series of in-depth video tutorials on functional programming, by the same author.
+
+The video tutorials covered both the theory and the practice of functional programming,
 with the goal of building theoretical foundations that are valuable to practitioners.
 
-## Scope of this tutorial series
+## Scope of the tutorial series
 
 **Applied functional type theory** (AFTT) is what I call the area of computer science that should serve the needs of functional programmers who are working as software engineers.
 
@@ -132,15 +134,21 @@ All lecture content is authored by [Sergei Winitzki, Ph.D](https://sites.google.
 
 The lecture materials (slides and video recordings only) are released into the public domain under a [CC-0 license, which is an "uncopyright"](https://github.com/winitzki/talks/blob/master/LICENSE).
 
-The materials are being written up as a new book, "The Science of Functional Programming", which is released under GNU Free Documentation License.
+The materials are being written up as a new book, "The Science of Functional Programming", which is released under the [GNU Free Documentation 
+License](https://www.gnu.org/licenses/fdl-1.3.en.html).
+That license is a form of copyright that protects the book from becoming closed-source.
+The book will forever remain free to copy, to modify, and to distribute, in the form of LyX / LaTeX source and PDF, and no further restrictions may be imposed.
+
+The main directory for the book sources is [sofp-src](sofp-src/).
 
 ## Intended audience
 
 The material is presented here at medium to advanced level.
-It is not suitable for people unfamiliar with school-level algebra, or for people who are generally allergic to mathematics, or for people unwilling to learn new and difficult concepts through prolonged mental concentration.
 
-The first two chapters are introductory and may be suitable for beginners in programming.
+The first three chapters are introductory and may be suitable for beginners in programming.
 Starting from the middle of chapter 3, the material becomes unsuitable for beginners.
+
+Starting from chapter 5, the material starts to demand more mathematical experience from the reader.
 
 ## Main features and goals of this tutorial series
 
@@ -158,9 +166,9 @@ Starting from the middle of chapter 3, the material becomes unsuitable for begin
 - each new concept or technique is fully explained via "worked examples" and drilled via provided exercises
     - answers to exercises are not provided, but it is verified that the exercises are doable and free of errors
 
-## Current status
+## Current status of the video tutorials
 
-The tutorials are currently in development and are being uploaded to [this YouTube playlist](https://www.youtube.com/playlist?list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV) as they become ready.
+The tutorials are being uploaded to [this YouTube playlist](https://www.youtube.com/playlist?list=PLcoadSpY7rHXJWbUkjQ3P9MXBbXxLP8kV).
 
 See also this [Russian mirror](https://ruvideos.org/c/UCWpjX-z6_oNZhcHPzAAQy6g) and [Bitchute mirror](https://www.bitchute.com/channel/fttfp/).
 
