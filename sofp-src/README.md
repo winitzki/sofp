@@ -7,6 +7,11 @@ The book grew from a series of in-depth video tutorials on functional programmin
 The video tutorials covered both the theory and the practice of functional programming,
 with the goal of building theoretical foundations that are valuable to practitioners.
 
+At this time, the video tutorials are obsolete since the book has covered all their material and much more.
+Some notations in the video tutorials have been changed in the book.
+
+The material below is kept for reference only. Refer to the book for current status.
+
 ## Scope of the tutorial series
 
 **Applied functional type theory** (AFTT) is what I call the area of computer science that should serve the needs of functional programmers who are working as software engineers.
