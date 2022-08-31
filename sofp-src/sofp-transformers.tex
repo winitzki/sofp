@@ -1529,9 +1529,9 @@ that describes all the possible liftings within a given monad stack.
 Two monads $P$ and $Q$ are \textbf{in a lift relation} if there
 exists a monad morphism $P\leadsto Q$. If $Q$ is itself a monad
 stack containing the monad $P$, we can implement the lift relation
-$P\leadsto Q$ by using the monad transformers from that stack. For
-instance, the monads $L$ and $K\varangle L\varangle M$ are in a
-lift relation because we can construct a monad morphism $L\leadsto K\varangle L\varangle M$
+$P\leadsto Q$ by using the stack $Q$\textsf{'}s monad transformers. For instance,
+the monads $L$ and $K\varangle L\varangle M$ are in a lift relation
+because we can construct a monad morphism $L\leadsto K\varangle L\varangle M$
 as:
 \[
 \big(\text{blift}_{L}^{M}\bef\text{flift}_{K}^{L\varangle M}\big):L\leadsto K\varangle L\varangle M\quad.
@@ -1572,14 +1572,17 @@ base monads of monad transformers:
 final case class BaseMonad[L[_], KT[_[_], _]](iso: MM[L, KT[Id, *]])
 \end{lstlisting}
 It is assumed that the function \lstinline!iso! should be a monad
-isomorphism. Declaring a relation instance of \lstinline!BaseMonad!
-looks like this example:
+isomorphism. We need a relation instance of \lstinline!BaseMonad!
+for each supported transformer. As an example, the code for \lstinline!ReaderT!
+looks like this:
 \begin{lstlisting}
 implicit val readerBase: BaseMonad[Reader, ReaderT] = BaseMonad(new MM[Reader, ReaderT[Id, *]] {
     def apply[A]: Reader[A] => ReaderT[Id, A] = ReaderT[Id, A](_)
 })
 \end{lstlisting}
-Now we can implement a relation instance for the base lift:
+
+Now we can implement a relation instance for the base lift of an arbitrary
+monad stack:
 \begin{lstlisting}
 implicit def baseMonadToTransformer[KT[_[_], _], M[_] : Monad, L[_] : Monad]
   (implicit kt: MTrans[KT], isBase: BaseMonad[L, KT]): MM[L, KT[M, *]] = new MM[L, KT[M, *]] {
@@ -1619,15 +1622,15 @@ val resultStack3: Stack3[Int] = for { // Lift each value to Stack3 with a single
 } yield t
 \end{lstlisting}
 
-To implement the automatic lifts in this way, the programmer needs
-to create three implicit values for each monad: a \lstinline!Monad!
+To implement the automatic lifts via lift relations, the programmer
+needs to create three implicit values for each monad: a \lstinline!Monad!
 typeclass instance, a monad transformer (\lstinline!MTrans!) typeclass
 instance, and an instance of the \lstinline!BaseMonad! type relation.
-(So, the length of code is linear in the number of supported monad
-types.) Those instances can be defined as implicit values in a monad
-transformer library. Then the user may declare an arbitrary monad
-stack \lstinline!MyStack! and use the \lstinline!up[MyStack]! method
-as an automatic lift from any level in the stack to the top.
+Those instances can be defined as implicit values in a monad transformer
+library. So, the length of code is linear in the number of supported
+monad types. Then the user may declare an arbitrary monad stack \lstinline!MyStack!
+and use the \lstinline!up[MyStack]! method as an automatic lift from
+any level within the stack to the top of the stack.
 
 \subsection{Constructing lifts via typeclasses for monad operations (\textquotedblleft MTL-style\textquotedblright )\label{subsec:Combining-monads-via-mtl-style}}
 
@@ -1636,10 +1639,9 @@ monadic\index{monadic program!MTL-style} programming is another way
 of achieving automatic lifting of monadic values in arbitrary monad
 stacks. The MTL approach has two main ingredients:
 \begin{itemize}
-\item For a chosen set of \textsf{``}standard\textsf{''} monads (such as the \lstinline!Reader!
-monad of type $\text{Reader}^{R,A}\triangleq R\rightarrow A$, the
-\lstinline!State! monad of type $\text{State}^{S,A}\triangleq S\rightarrow A\times S$,
-etc.), define some typeclasses (\lstinline!ReaderMonadOps!, \lstinline!StateMonadOps!,
+\item For a chosen set of widely used monads (the \lstinline!Reader! monad,
+the \lstinline!Either! monad, the \lstinline!State! monad, etc.),
+define some typeclasses (\lstinline!ReaderMonadOps!, \lstinline!StateMonadOps!,
 etc.) encapsulating all the \textsf{``}effectful operations\textsf{''} specific to
 each monad. Refactor all monadic code to use only the operations from
 the provided typeclasses. 
@@ -1652,10 +1654,11 @@ the \lstinline!State! monad.
 \end{itemize}
 First, we need to define the \textsf{``}effectful operations\textsf{''} corresponding
 to each monad. As an example, consider the \lstinline!State! monad
-($\text{State}^{S,A}$). Its effect is to manipulate an internal state
-value (of type $S$): the state can be read, updated, and automatically
+($\text{State}^{S,A}\triangleq S\rightarrow A\times S$). Its effect
+is to manipulate an internal state value (of type $S$). The state
+can be read or rewritten; the updated state value is automatically
 passed on to the next computation. We may define the functions \lstinline!get!
-and \lstinline!set! that work with the internal state:
+and \lstinline!set! that work with the state value:
 \[
 \text{get}:\text{State}^{S,S}\quad,\quad\quad\text{get}\triangleq s^{:S}\rightarrow s\times s\quad,\quad\quad\text{set}:S\rightarrow\text{State}^{S,\bbnum 1}\quad,\quad\quad\text{set}\triangleq s^{:S}\rightarrow\_^{:S}\rightarrow1\times s\quad.
 \]
@@ -1665,10 +1668,10 @@ and \lstinline!set! that work with the internal state:
 
 \begin{lstlisting}
 val program: State[S, A] = for {
-  s1 <- get    // Get the initial state.
-  s2  = f(s1)  // Do some computations.
-  _ <- set(s2) // Assign the new state.
-} yield g(s2)  // Compute a result value.
+  s1 <- get     // Get the initial state.
+  s2  = f(s1)   // Do some computations.
+  _  <- set(s2) // Assign the new state.
+} yield g(s2)   // Compute a result value.
 \end{lstlisting}
 \vspace{-0.8\baselineskip}
 \end{wrapfigure}%
@@ -1691,29 +1694,30 @@ Now we can express $q$ equivalently as a monadic program involving
 only \lstinline!map!, \lstinline!flatMap!, and the operations \lstinline!get!
 and \lstinline!set!:
 
-\begin{wrapfigure}{l}{0.35\columnwidth}%
-\vspace{-0.6\baselineskip}
+\begin{wrapfigure}{l}{0.2\columnwidth}%
+\vspace{-0.5\baselineskip}
 
 \begin{lstlisting}
 q == for {
   s1 <- get
-  s2 = f2(s1)
-  _ <- set(s2)
+  s2  = f2(s1)
+  _  <- set(s2)
 } yield f1(s1)
 \end{lstlisting}
-\vspace{0.4\baselineskip}
+\vspace{1.2\baselineskip}
 \end{wrapfigure}%
 
-~\vspace{-0.9\baselineskip}
+~\vspace{-0.8\baselineskip}
 \[
 q=\text{get}\triangleright\text{flm}_{\text{State}}\big(s_{1}\rightarrow f_{2}(s_{1})\triangleright\text{set}\triangleright(\_\rightarrow f_{1}(s_{1}))^{\uparrow\text{State}}\big)\quad.
 \]
-
-We may refactor any \lstinline!State!-monadic code so that it does
-not directly refer to the type $S\rightarrow A\times S$ of the \lstinline!State!
-monad but instead only uses the operations \lstinline!get! and \lstinline!set!.
-For instance, the refactored code will not apply a monadic value to
-an argument of type $S$.
+We may refactor \emph{any} \lstinline!State!-monadic code so that
+it only uses the operations \lstinline!get! and \lstinline!set!
+but does not directly refer to the type $S\rightarrow A\times S$
+of the \lstinline!State! monad. For instance, the refactored code
+will not \textsf{``}run\textsf{''} a monadic value by applying it to an argument of
+type $S$ because that would require the knowledge of the type $S\rightarrow A\times S$.
+Usually, a monadic program is run only at the end of the computations.
 
 Another example is the \lstinline!Either! monad, for which we define
 an operation called \lstinline!raise!:
@@ -1723,9 +1727,9 @@ an operation called \lstinline!raise!:
 Any \lstinline!Either!-monadic program is a value of type $E+A$
 and can always be expressed through \lstinline!raise! and \lstinline!pure!.
 We may then refactor any monadic code so that it uses only the \lstinline!raise!
-operation but does not refer to the type $E+A$ of the \lstinline!Either!
-monad. For instance, the refactored code will not apply pattern matching
-directly to monad values.
+operation and does not refer to the type $E+A$ of the \lstinline!Either!
+monad. For instance, the refactored code may not apply pattern matching
+directly to a monad value of type $E+A$.
 
 The second ingredient of the MTL-style programming involves \textsf{``}lifting\textsf{''}
 the monad operations to arbitrary monad stacks. For example, consider
@@ -1757,7 +1761,7 @@ each stack, and we would like to avoid implementing $p$ by hand each
 time. In MTL-style programming, this is achieved by refactoring the
 code to use special typeclasses that encapsulate the effectful operations
 of all the required monads. For the \lstinline!State! monad, the
-typeclass \lstinline!StateMonadOps! is defined as
+typeclass \lstinline!StateMonadOps! is defined as:
 \begin{lstlisting}
 trait StateMonadOps[F[_], S] { // `F` is any monad that has `State`-like operations.
   def get: F[S]
@@ -1863,10 +1867,10 @@ implicit def otherTMonadOps[OtherT[_[_], _], Q[_], S](implicit val qMonadOps: St
 To use the MTL-style monad stacks in practice, one needs a library
 (such as \texttt{cats-mtl}\footnote{See \texttt{\href{https://typelevel.org/blog/2018/10/06/intro-to-mtl.html}{https://typelevel.org/blog/2018/10/06/intro-to-mtl.html}}})
 that defines typeclasses with sufficiently many operations for each
-standard monad, so that any desired monadic program may be expressed
-through those operations, without using explicit monad types. The
-library should also implement instances of those typeclasses for all
-supported monad stacks. 
+supported monad, so that any desired monadic program may be expressed
+through those operations without using explicit monad types. The library
+should also implement instances of those typeclasses for all supported
+monad stacks. 
 
 While the MTL style does provide automatic liftings, some problems
 remain. 
@@ -1915,24 +1919,23 @@ those two operations. As an example, look at \emph{updating}
 
 \noindent the state using a given function of type $S\rightarrow S$.
 In many cases, updating is the same as \lstinline!get!ting the current
-state value and immediately \lstinline!set!ting a new value. But
-suppose that certain state updates must be handled in a special way:
-e.g., atomic updates in a concurrent program; updates wrapped in a
-database transaction; or updates that must be run on a designated
-processing thread (such as the thread that drives the GUI events).
-Special handling of updates cannot be implemented through \lstinline!get!
-and \lstinline!set!; a new effectful operation (\lstinline!update!)
+state value and immediately \lstinline!set!ting a new value. However,
+certain kinds of updates need special handling. Examples are: atomic
+updates in a concurrent program; updates wrapped in a database transaction;
+and updates that must be run on a designated CPU thread (e.g., the
+thread that drives the GUI events). Such special handling of updates
+cannot be implemented via monadic programs with just \lstinline!get!
+and \lstinline!set!. A new effectful operation (\lstinline!update!)
 must be provided to the programmer.
 
 Table~\ref{tab:effectful-operations-for-some-monads} shows a number
 of operations for some monads.\footnote{Operations were gathered from the \texttt{cats-mtl} documentation
 and the papers \textsf{``}\emph{Monad transformers and modular interpreters}\textsf{''}
 (see \texttt{\href{http://web.cecs.pdx.edu/~mpj/pubs/modinterp.html}{http://web.cecs.pdx.edu/$\sim$mpj/pubs/modinterp.html}})
-and \textsf{``}\emph{Modular monad transformers}\textsf{''} (see \texttt{\href{https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.219.5365}{https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.219.5365}}).} The choice of operations seems to be heuristic and not following
-any principle or system. It is not easy to decide what operations
-will be useful or necessary in practical tasks involving a given monad.
-(Do we need a \lstinline!filter! operation for the \lstinline!Either!
-monad?) 
+and \textsf{``}\emph{Modular monad transformers}\textsf{''} (see \texttt{\href{https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.219.5365}{https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.219.5365}}).} The choice of operations is heuristic and does not follow any principle
+or system. It is not easy to decide what operations will be necessary
+in practical tasks involving a given monad. (Do we need a \lstinline!filter!
+operation for the \lstinline!Either! monad? How can we decide?) 
 
 Different libraries choose different sets of supported operations.
 However, adding a new operation to a monad in an MTL-style library
@@ -1940,9 +1943,8 @@ means updating all typeclasses related to that monad. Users who cannot
 modify the library code will be unable to add new operations.
 
 The second problem is the lack of a general method for lifting effectful
-operations to arbitrary monad transformers.\footnote{M.~\index{Mauro Jaskelioff}Jaskelioff developed a technique that
-can lift effectful operations systematically to almost all monad stacks;
-see Section~\ref{subsec:Monatron}.} So far, the examples in this subsection were limited to operations
+operations to arbitrary monad transformers.\footnote{Section~\ref{subsec:Monatron} shows a technique that can lift effectful
+operations systematically to almost all monad stacks.} So far, the examples in this subsection were limited to operations
 with type signatures of the form $L^{A}$ or $A\rightarrow L^{B}$.
 All operations of this form are lifted from the monad $L$ to a monad
 stack $P$ by composing with a lift function $p:L^{A}\rightarrow P^{A}$.
@@ -1960,10 +1962,11 @@ Knowing only a lift function $p:\text{Writer}^{W,A}\rightarrow P^{A}$
 is not sufficient for transforming \lstinline!clear! into a function
 of type $P^{A}\rightarrow P^{A}$.
 
-Lifting \lstinline!clear! to a given monad stack $P$ (say, $P=\,$\lstinline!State!$\varangle$\lstinline!Writer!
-or $P=\,$\lstinline!Writer!$\varangle$\lstinline!Cont!) requires
-custom code. Let us see how to write that code. For the stack $P=\,$\lstinline!State!$\varangle$\lstinline!Writer!,
-we need to implement a function $\text{clear}_{P}$ of type $P^{A}\rightarrow P^{A}$
+Lifting \lstinline!clear! to a given monad stack $P$ (say, $P\triangleq\,$\lstinline!State!$\varangle$\lstinline!Writer!
+or $P\triangleq\,$\lstinline!Writer!$\varangle$\lstinline!Cont!)
+requires custom code. Let us see how to write that code. For the stack
+$P=\,$\lstinline!State!$\varangle$\lstinline!Writer!, we need
+to implement a function $\text{clear}_{P}$ of type $P^{A}\rightarrow P^{A}$
 given a function \lstinline!clear! with type signature:
 \[
 \text{clear}:\text{Writer}^{W,A}\rightarrow\text{Writer}^{W,A}=W\times A\rightarrow W\times A\quad.
@@ -10438,13 +10441,12 @@ holds.
 
 Section~\ref{subsec:Combining-monads-via-mtl-style} showed that
 MTL-style programming requires custom code for lifting monad operations
-to all supported monad stacks.\index{Mauro Jaskelioff} M.~Jaskelioff\textsf{'}s
-\textsf{``}\texttt{Monatron}\textsf{''} library\footnote{See \texttt{\href{https://www.fceia.unr.edu.ar/~mauro/pubs/monatron.pdf}{https://www.fceia.unr.edu.ar/$\sim$mauro/pubs/monatron.pdf}}}\index{Monatron library (MTL-style)@\texttt{Monatron} library (MTL-style)}\index{MTL-style monadic programs!Monatron library@\texttt{Monatron} library}\index{monadic program!Monatron library (MTL-style)@\texttt{Monatron} library (MTL-style)}
+to all supported monad stacks. The \textsf{``}\texttt{Monatron}\textsf{''} library\footnote{See \texttt{\href{https://www.fceia.unr.edu.ar/~mauro/pubs/monatron.pdf}{https://www.fceia.unr.edu.ar/$\sim$mauro/pubs/monatron.pdf}}}\index{Monatron library (MTL-style)@\texttt{Monatron} library (MTL-style)}\index{MTL-style monadic programs!Monatron library@\texttt{Monatron} library}\index{monadic program!Monatron library (MTL-style)@\texttt{Monatron} library (MTL-style)}
 is based on a systematic approach that lifts many known monad operations
 to most monad stacks, including stacks that contain a single monad
 with an incomplete or missing transformer (such as \lstinline!Cont!
 or \lstinline!IO!) located at the deep end of the stack. This section,
-based on the methods and results explained in a paper by M.~Jaskelioff,\footnote{\textsf{``}Modular monad transformers\textsf{''}, see \texttt{\href{https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.219.5365}{https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.219.5365}}}
+based on the methods and results explained in a paper by \index{Mauro Jaskelioff}M.~Jaskelioff,\footnote{\textsf{``}Modular monad transformers\textsf{''}, see \texttt{\href{https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.219.5365}{https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.219.5365}}}
 will show how \texttt{Monatron}\textsf{'}s liftings work. 
 
 \paragraph{Common type signatures for operations}
@@ -10574,9 +10576,9 @@ law.
 
 The \lstinline!List! monad\textsf{'}s \lstinline!append! operation has the
 type signature of the \textsf{``}standard\textsf{''} form $F^{\text{List}^{A}}\rightarrow\text{List}^{A}$
-with $F^{A}\triangleq A\times A$. As shown in Exercise~\ref{subsec:Exercise-flatten-concat-distributive-law},
+with $F^{A}\triangleq A\times A$. By Exercise~\ref{subsec:Exercise-flatten-concat-distributive-law},
 \lstinline!append! satisfies the compatibility law~(\ref{eq:monatron-standard-operation-compatibility-law}).
-So, Statement~\ref{subsec:Statement-simple-standard-operations-monatron}
+Then Statement~\ref{subsec:Statement-simple-standard-operations-monatron}
 shows that \lstinline!append! is equivalent to a \textsf{``}simple\textsf{''} operation
 \lstinline!sappend!:
 \begin{align*}
@@ -10635,8 +10637,8 @@ any other way.
 
 Putting the \textsf{``}non-standard\textsf{''} operations \lstinline!callcc!, \lstinline!collect!,
 \lstinline!process!, and \lstinline!filter! temporarily aside, we
-now focus on the methods for lifting \textsf{``}simple\textsf{''} and \textsf{``}standard\textsf{''}
-operations to monad stacks.
+now focus on how to lift \textsf{``}simple\textsf{''} and \textsf{``}standard\textsf{''} operations
+to monad stacks.
 
 The goal is to lift a \textsf{``}standard\textsf{''} operation $\text{op}_{M}:F^{M}\leadsto M$
 from a monad $M$ to any monad stack $P$ containing $M$. We assume
@@ -10660,7 +10662,7 @@ should commute with the mapping by $p$. This requirement is written
 as a \index{monadic naturality law!of lifted operations}monadic naturality
 law:
 
-\begin{wrapfigure}{r}{0.2\columnwidth}%
+\begin{wrapfigure}{l}{0.19\columnwidth}%
 \begin{centering}
 \vspace{-2\baselineskip}
 \[
@@ -10674,7 +10676,7 @@ F^{P^{A}}\ar[r]\sp(0.5){\text{op}_{P}} & P^{A}
 
 ~\vspace{-0.45\baselineskip}
 \begin{equation}
-\text{op}_{M}\bef p=p^{\uparrow F}\bef\text{op}_{P}\quad.\label{eq:monatron-monadic-naturality-for-operations}
+\text{for any monad morphism }p:M\leadsto P:\quad\text{op}_{M}\bef p=p^{\uparrow F}\bef\text{op}_{P}\quad.\label{eq:monatron-monadic-naturality-for-operations}
 \end{equation}
 
 \noindent The goal of this section is to derive monadically natural
@@ -11140,11 +11142,11 @@ is not an identity function. $\square$
 As the case of the \lstinline!Writer! monad shows, it does not seem
 possible to implement a monadically natural lifting to the base monad
 for all monads $M$ at once. The method of Statements~\ref{subsec:Statement-monatron-equivalence-op-cop}\textendash \ref{subsec:Statement-monatron-standard-lifting-op}
-cannot be used because the codensity monad whose transformer does
-not support base lifts. So, lifting those operations requires custom
-code adapted to the particular structure of the functor $F$ and the
-base monad $M$. For example, we may lift the \lstinline!Writer!
-monad\textsf{'}s \lstinline!clear! operation to any stack $Q\triangleq M\varangle N=N\circ M$
+cannot be used because the codensity monad\textsf{'}s transformer does not
+support base lifts. So, lifting those operations requires custom code
+adapted to the particular structure of the functor $F$ and the base
+monad $M$. For example, we may lift the \lstinline!Writer! monad\textsf{'}s
+\lstinline!clear! operation to any stack $Q\triangleq M\varangle N=N\circ M$
 like this:
 
 \subsubsection{Example \label{subsec:Statement-monatron-lifting-writer-clear-to-base}\ref{subsec:Statement-monatron-lifting-writer-clear-to-base}\index{solved examples}}
@@ -11222,7 +11224,7 @@ We could also combine all \textsf{``}standard\textsf{''} operations ($\text{op}_
 $\text{op}_{2}:F_{2}^{M^{A}}\rightarrow M^{A}$, etc.) into a single
 operation by using the type equivalence:
 \[
-(F_{1}^{M^{A}}\rightarrow M^{A})\times(F_{2}^{M^{A}}\rightarrow M^{A})\cong(F_{1}+F_{2})^{M^{A}}\rightarrow M^{A}\quad.
+(F_{1}^{M^{A}}\rightarrow M^{A})\times(F_{2}^{M^{A}}\rightarrow M^{A})\cong\big(F_{1}^{M^{A}}+F_{2}^{M^{A}}\big)\rightarrow M^{A}\cong(F_{1}+F_{2})^{M^{A}}\rightarrow M^{A}\quad.
 \]
 The resulting \textsf{``}standard\textsf{''} operation corresponds to the product
 of all \textsf{``}standard\textsf{''} operations of the monad $M$. It is easier to
@@ -11249,9 +11251,9 @@ be also transformed to a \textsf{``}flipped-standard\textsf{''} form:
 \subsubsection{Example \label{subsec:Statement-monatron-collect-operation}\ref{subsec:Statement-monatron-collect-operation}}
 
 Show that the type of \lstinline!Writer! monad\textsf{'}s \lstinline!collect!
-operation,
+operation:
 \[
-\text{collect}:\forall A.\,A\times W\rightarrow(A\times W)\times W\quad,
+\text{collect}:\forall A.\,A\times W\rightarrow(A\times W)\times W
 \]
 is equivalent to the type $\forall A.\,(W\rightarrow A)\times W\rightarrow A\times W$. 
 
@@ -11435,7 +11437,7 @@ To express \lstinline!callcc! via \lstinline!jump! and \lstinline!scc!,
 we first convert \lstinline!scc! to an equivalent \textsf{``}standard\textsf{''}
 operation (\lstinline!cc!):
 \[
-\text{cc}:\text{Sel}^{R,\text{Cont}^{R,A}}\rightarrow\text{Cont}^{R,A}\quad,\quad\quad\text{cc}\triangleq\text{scc}\bef\text{ftn}_{\text{Cont}}\quad.
+\text{cc}:\text{Sel}^{R,\,\text{Cont}^{R,A}}\rightarrow\text{Cont}^{R,A}\quad,\quad\quad\text{cc}\triangleq\text{scc}\bef\text{ftn}_{\text{Cont}}\quad.
 \]
 To arrive at a systematic way of transforming functions of \lstinline!cc!\textsf{'}s
 type signature into functions of \lstinline!callcc!\textsf{'}s type signature,
