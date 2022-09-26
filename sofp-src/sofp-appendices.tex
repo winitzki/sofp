@@ -3132,8 +3132,8 @@ of the function $t$, which is built from smaller sub-expressions
 using the nine code constructions of Table~\ref{tab:nine-pure-code-constructions}.
 The inductive assumption is that all sub-expressions already satisfy
 the relational naturality law. An immediate difficulty with this approach
-is that the sub-expressions of $t$ may not have the type signature
-of a function and may also contain free variables. To illustrate,
+is that some sub-expressions of $t$ may contain free variables or
+may not have the type signature of a function. To illustrate this,
 write the code of $t$ as $t=z^{:P^{A}}\rightarrow\text{expr}(z)$,
 or in Scala:
 \begin{lstlisting}
@@ -3495,12 +3495,336 @@ that $g$ is some expression for which the relational naturality law
 already holds. It then holds for $t$ since $t=g$.
 
 This completes the proof of the relational parametricity theorem.
-$\square$ 
+
+\subsection{Non-disjunctive type constructors}
+
+As an example of using the relational parametricity theorem, we will
+now show that certain type constructors $P$ permit us to simplify
+the type $\forall A.\,P^{A}\rightarrow Q^{A}+R^{A}$ into the disjunctive
+type $(\forall A.\,P^{A}\rightarrow Q^{A})+(\forall A.\,P^{A}\rightarrow R^{A})$.
+
+Generally, the type expression $P\rightarrow Q+R$ cannot be simplified.
+In particular, it is not equivalent to $(P\rightarrow Q)+(P\rightarrow R)$.
+However, the situation becomes different once we assume full parametricity
+and a universally quantified type. As a first example, consider a
+fully parametric function $k$ of type:
+\[
+k:\forall A.\,A\rightarrow\bbnum 1+A\quad.
+\]
+The function $k$ must construct a value of type $\bbnum 1+A$ given
+a value of type $A$. So, the code of $k$ must decide to return either
+the first or the second part of the disjunctive type $\bbnum 1+A$.
+That decision \emph{cannot} depend on the value of the input argument
+(of type $A$) because nothing is known about the type $A$. In particular,
+the code of $k$ cannot perform any pattern-matching on the input
+argument. It follows that the decision about the disjunctive return
+value must be hard-coded: for some $k$ the value $k(x)$ must be
+$1+\bbnum 0$ for all $x$, and for other functions $k$ the result
+must be $\bbnum 0+x$ for all $x$. So, the fully parametric type
+$\forall A.\,A\rightarrow\bbnum 1+A$ splits into a disjunction of
+$\forall A.\,A\rightarrow\bbnum 1$ and $\forall A.\,A\rightarrow A$.
+Each of those types has only one possible implementation:
+\begin{lstlisting}
+def k1[A]: A => Option[A] = None
+def k2[A]: A => Option[A] = Some(_)
+\end{lstlisting}
+Indeed, we may use Yoneda identities to show that the types $\forall A.\,A\rightarrow\bbnum 1$
+and $\forall A.\,A\rightarrow A$ are both equivalent to $\bbnum 1$:
+\begin{align*}
+ & \forall A.\,A\rightarrow\bbnum 1\cong\forall A.\,(\bbnum 1\rightarrow A)\rightarrow\bbnum 1\cong\bbnum 1\quad,\\
+ & \forall A.\,A\rightarrow A\cong\forall A.\,(\bbnum 1\rightarrow A)\rightarrow A\cong\bbnum 1\quad.
+\end{align*}
+In this way, we have been able to simplify the initial type:
+\[
+\forall A.\,A\rightarrow\bbnum 1+A\cong(\forall A.\,A\rightarrow\bbnum 1)+(\forall A.\,A\rightarrow A)\cong\bbnum 1+\bbnum 1\cong\bbnum 2\quad.
+\]
+
+So far, our arguments are not fully rigorous: we relied upon the intuition
+that the input type ($A$) carries no \textsf{``}disjunctive information\textsf{''}
+and cannot be used to make decisions about which disjunctive value
+to return. To make this argument rigorous, we will prove that certain
+type constructors $P$ have the property of being \textsf{``}non-disjunctive\textsf{''}.
+When $P$ is non-disjunctive, input values of type $P^{A}$ cannot
+be used in pattern-matching. Fully parametric functions of type $\forall A.\,P^{A}\rightarrow Q^{A}+R^{A}$
+must hard-code the decision about the returned disjunctive value.
+
+\subsubsection{Definition \label{subsec:Definition-non-disjunctive-type-constructors}\ref{subsec:Definition-non-disjunctive-type-constructors}}
+
+A type constructor $P$ is called \index{non-disjunctive type constructor}\textbf{non-disjunctive}\index{type constructor!non-disjunctive}
+if for any type constructors $Q$ and $R$ the following type equivalence
+holds (assuming that all functions are fully parametric):
+\begin{equation}
+\forall A.\,P^{A}\rightarrow Q^{A}+R^{A}\cong(\forall A.\,P^{A}\rightarrow Q^{A})+(\forall A.\,P^{A}\rightarrow R^{A})\quad.\label{eq:non-disjunctive-type-equivalence}
+\end{equation}
+
+The main technique for proving the properties of non-disjunctive type
+constructors is to use the relational parametricity theorem with relations
+that always hold and relations that never hold. For convenience, we
+give the following definitions:
+
+\subsubsection{Definition \label{subsec:Definition-always-true-relation}\ref{subsec:Definition-always-true-relation}}
+
+For any two types $A$ and $B$, we denote by $\Omega^{:A\leftrightarrow B}$
+the \textbf{always-true} relation\index{always-true relation}:
+\[
+(x^{:A},y^{:B})\in\Omega^{:A\leftrightarrow B}\quad\text{for any }x^{:A}\text{ and }y^{:B}\quad.
+\]
+The \textbf{always-false} relation,\index{always-false relation}
+denoted by $\emptyset^{:A\leftrightarrow B}$, never holds for any
+values $(x^{:A},y^{:B})$.
+
+\subsubsection{Definition \label{subsec:Definition-lifting-to-true-and-to-false-property}\ref{subsec:Definition-lifting-to-true-and-to-false-property}}
+
+A type constructor $P$ is \index{type constructor!lifting-to-true property}\textsf{``}\textbf{lifting-to-true}\textsf{''}
+if for any two types $A$ and $B$ such that $P^{A}\neq\bbnum 0$
+and $P^{B}\neq0$ there exists a relation $r^{:A\leftrightarrow B}$
+such that $r^{\updownarrow P}=\Omega^{:P^{A}\leftrightarrow P^{B}}$.
+
+A type constructor $P$ is \index{type constructor!lifting-to-false property}\textsf{``}\textbf{lifting-to-false}\textsf{''}
+if for any two types $A$ and $B$ there exists a relation $r^{:A\leftrightarrow B}$
+such that $r^{\updownarrow P}=\emptyset^{:P^{A}\leftrightarrow P^{B}}$.
+$\square$
+
+The key observation is that lifting a relation to a disjunctive type
+constructor does \emph{not} give an always-true relation. Instead,
+it gives a relation that holds only for values belonging to the same
+part of the disjunctive type. So, if a lifted relation is always-true,
+the type constructor contains no disjunctions. The following statement
+makes this argument precise.
+
+\subsubsection{Statement \label{subsec:Statement-undisjunctive-type-constructors-relational}\ref{subsec:Statement-undisjunctive-type-constructors-relational}}
+
+If a type constructor $P$ is lifting-to-true then $P$ is non-disjunctive.
+
+\subparagraph{Proof}
+
+By assumption, there exists a relation $r^{:A\leftrightarrow B}$
+such that $r^{\updownarrow P}=\Omega^{:P^{A}\leftrightarrow P^{B}}$.
+Then the relational parametricity law for the type $\forall A.\,P^{A}\rightarrow Q^{A}+R^{A}$
+says that any fully parametric functions $p:P^{A}\rightarrow Q^{A}+R^{A}$
+and $q:P^{B}\rightarrow Q^{B}+R^{B}$ satisfy:
+\[
+\forall x^{:P^{A}},y^{:P^{B}}:\quad\text{if}\quad(x,y)\in r^{\updownarrow P}=\Omega\quad\text{then}\quad(p(x),q(y))\in r^{\updownarrow Q^{\bullet}+R^{\bullet}}=r^{\updownarrow Q}\boxplus r^{\updownarrow R}\quad.
+\]
+Since $(x,y)\in\Omega$ is always true, we find:
+\begin{equation}
+\forall x^{:P^{A}},y^{:P^{B}}:\quad(p(x),q(y))\in r^{\updownarrow Q}\boxplus r^{\updownarrow R}\quad.\label{eq:relational-law-example-all-x-y}
+\end{equation}
+By definition of the relational co-product $r^{\updownarrow Q}\boxplus r^{\updownarrow R}$,
+the values $\left(p(x),q(y)\right)$ must be in the same part of the
+disjunctive type $Q^{\bullet}+R^{\bullet}$. By assumption, $P^{A}\neq\bbnum 0$
+and and $P^{B}\neq0$, and there exists a pair $(x_{0}^{:P^{A}},y_{0}^{:P^{B}})$
+such that $\left(p(x_{0}),q(y_{0})\right)\in r^{\updownarrow Q}\boxplus r^{\updownarrow R}$.
+It follows that the values $p(x_{0})$ and $q(y_{0})$ must belong
+to the same part of the type $Q^{\bullet}+R^{\bullet}$. Suppose they
+belong to the part $Q^{\bullet}+\bbnum 0$, so that $p(x_{0})=s_{0}^{:Q^{A}}+\bbnum 0^{:R^{A}}$
+and $q(y_{0})=t_{0}^{:Q^{B}}+\bbnum 0^{:R^{B}}$ with some values
+$s_{0}$ and $t_{0}$. The relational law~(\ref{eq:relational-law-example-all-x-y})
+holds for all $x$ and $y$, so: 
+\begin{align*}
+ & \forall x^{:P^{A}}:\quad(p(x),q(y_{0}))=(p(x),t_{0}+\bbnum 0)\in r^{\updownarrow Q}\boxplus r^{\updownarrow R}\quad,\\
+ & \forall y^{:P^{B}}:\quad(p(x_{0}),q(y))=(s_{0}+\bbnum 0,q(y))\in r^{\updownarrow Q}\boxplus r^{\updownarrow R}\quad.
+\end{align*}
+Then the values $p(x)$ and $q(y)$ must be in the first part of the
+disjunctive type for \emph{all}  $x$ and $y$. So, the functions
+$p$ and $q$ are equivalent to some functions of types $P^{A}\rightarrow Q^{A}+\bbnum 0^{:R^{A}}$
+and $P^{B}\rightarrow Q^{B}+\bbnum 0^{:R^{A}}$.
+
+The other possibility is that both values $p(x_{0})$ and $q(y_{0})$
+belong to the second part ($\bbnum 0+R^{\bullet}$) of the type $Q^{\bullet}+R^{\bullet}$.
+A similar argument shows that $p(x)$ and $q(y)$ are of type $\bbnum 0+R^{\bullet}$
+for all $x$ and $y$. So, the functions $p$ and $q$ are equivalent
+to functions of types $P^{A}\rightarrow\bbnum 0^{:Q^{A}}+R^{A}$ and
+$P^{B}\rightarrow\bbnum 0^{:Q^{B}}+R^{B}$.
+
+We have found that the relational parametricity law forces each fully
+parametric function $p:P^{A}\rightarrow Q^{A}+R^{A}$ to belong either
+to the subtype $P^{A}\rightarrow Q^{A}+\bbnum 0^{:R^{A}}$ or to the
+subtype $P^{A}\rightarrow\bbnum 0^{:Q^{A}}+R^{A}$. In this way, we
+have proved the type equivalence~(\ref{eq:non-disjunctive-type-equivalence}).
+$\square$
+
+We will now use structural analysis to discover which type constructors
+are non-disjunctive.
+
+\subsubsection{Statement \label{subsec:Statement-undisjunctive-type-constructors-structural}\ref{subsec:Statement-undisjunctive-type-constructors-structural}}
+
+A type constructor $P$ is non-disjunctive when:
+
+\textbf{(a)} $P^{A}\triangleq K^{A}\times L^{A}$ where both $K$
+and $L$ are non-disjunctive.
+
+A type constructor $P$ is lifting-to-true when:
+
+\textbf{(b)} $P^{A}\triangleq\bbnum 1$.
+
+\textbf{(c)} $P^{A}\triangleq A$.
+
+\textbf{(d)} $P^{A}\triangleq K^{A}\rightarrow L^{A}$ where $K$
+is arbitrary and $L$ is lifting-to-true.
+
+\textbf{(e)} $P^{A}\triangleq K^{A}\rightarrow L^{A}$ where $K$
+is lifting-to-false and $L$ is arbitrary.
+
+A type constructor $P$ is lifting-to-false when:
+
+\textbf{(f)} $P^{A}\triangleq A$. (Compare with item \textbf{(b)}
+to see that a type constructor can be lifting-to-true and lifting-to-false
+at the same time.)
+
+\textbf{(g)} $P^{A}\triangleq K^{A}\times L^{A}$ where $K$ is lifting-to-false
+and $L$ is arbitrary.
+
+\textbf{(h)} $P^{A}\triangleq K^{A}\rightarrow L^{A}$ where $K$
+is \emph{not} lifting-to-false and $L$ is lifting-to-false.
+
+\subparagraph{Proof}
+
+\textbf{(a)} Use currying on the type $P^{A}$ and the assumption
+that both $K$ and $L$ are non-disjunctive:
+\begin{align*}
+ & P^{A}\rightarrow Q^{A}+R^{A}=\gunderline{K^{A}\times L^{A}}\rightarrow Q^{A}+R^{A}\cong K^{A}\rightarrow(\gunderline{L^{A}\rightarrow Q^{A}+R^{A}})\\
+ & \cong\gunderline{K^{A}\rightarrow\,}(L^{A}\rightarrow Q^{A})+(L^{A}\rightarrow R^{A})\\
+ & \cong(\gunderline{K^{A}\rightarrow L^{A}}\rightarrow Q^{A})+(\gunderline{K^{A}\rightarrow L^{A}}\rightarrow R^{A})\\
+ & \cong(\gunderline{K^{A}\times L^{A}}\rightarrow Q^{A})+(\gunderline{K^{A}\times L^{A}}\rightarrow R^{A})=(P^{A}\rightarrow Q^{A})+(P^{A}\rightarrow R^{A})\quad.
+\end{align*}
+
+\textbf{(b)} The unit type ($\bbnum 1$) has only one distinct value.
+So, any relation $r^{:A\leftrightarrow B}$ lifted to $P^{A}\triangleq\bbnum 1$
+will give an identity relation of type $\bbnum 1\leftrightarrow\bbnum 1$.
+That relation is the same as the always-true relation $\Omega^{:\bbnum 1\leftrightarrow\bbnum 1}$.
+
+\textbf{(c)} Lift an always-true relation $\Omega^{:A\leftrightarrow B}$
+to $P^{A}\triangleq A$ and obtain again $\Omega^{:A\leftrightarrow B}$.
+
+\textbf{(d)} Choose $r^{:A\leftrightarrow B}$ such that $r^{\updownarrow L}=\Omega^{:L^{A}\leftrightarrow L^{B}}$
+and lift that $r$ to $P$. The result is:
+\[
+r^{\updownarrow P}=r^{\updownarrow K}\ogreaterthan r^{\updownarrow L}=r^{\updownarrow K}\ogreaterthan\Omega\quad.
+\]
+The condition $(x,y)\in r^{\updownarrow P}$ becomes:
+\[
+(x^{:P^{A}},y^{:P^{B}})\in r^{\updownarrow P}\quad\text{means}\quad\text{if}\quad(a,b)\in r^{\updownarrow K}\quad\text{then}\quad(x(a),y(b))\in\Omega\quad.
+\]
+The condition $(x(a),y(b))\in\Omega$ is always true by definition
+of $\Omega$. The logical formula \textsf{``}if ... then true\textsf{''} is always
+true. So, we have proved that $(x,y)\in r^{\updownarrow P}$ is always
+true.
+
+\textbf{(e)} Choose $r^{:A\leftrightarrow B}$ such that $r^{\updownarrow K}=\emptyset^{:K^{A}\leftrightarrow K^{B}}$
+and lift that $r$ to $P$. The result is:
+\[
+r^{\updownarrow P}=r^{\updownarrow K}\ogreaterthan r^{\updownarrow L}=\emptyset\ogreaterthan r^{\updownarrow L}\quad.
+\]
+The condition $(x,y)\in r^{\updownarrow P}$ becomes:
+\[
+(x^{:P^{A}},y^{:P^{B}})\in r^{\updownarrow P}\quad\text{means}\quad\text{if}\quad(a,b)\in\emptyset\quad\text{then}\quad(x(a),y(b))\in r^{\updownarrow L}\quad.
+\]
+The condition $(a,b)\in\emptyset$ is always false. The logical formula
+\textsf{``}if false then ...\textsf{''} is always true. So, we have proved that $(x,y)\in r^{\updownarrow P}$
+is always true.
+
+\textbf{(f)} Lift an always-false relation $\emptyset^{:A\leftrightarrow B}$
+to $P^{A}\triangleq A$ and obtain again $\emptyset^{:A\leftrightarrow B}$.
+
+\textbf{(g)} Choose $r^{:A\leftrightarrow B}$ such that $r^{\updownarrow K}=\emptyset^{:K^{A}\leftrightarrow K^{B}}$
+and lift that $r$ to $P$. The result is:
+\[
+r^{\updownarrow P}=r^{\updownarrow K}\boxtimes r^{\updownarrow L}=\emptyset\boxtimes r^{\updownarrow L}\quad.
+\]
+The condition $(x,y)\in r^{\updownarrow P}$ becomes:
+\[
+(x^{:P^{A}},y^{:P^{B}})=(k_{1}^{:K^{A}}\times l_{1}^{:L^{A}},k_{2}^{:K^{B}}\times l_{2}^{:L^{B}})\in r^{\updownarrow P}\quad\text{means}\quad(k_{1},k_{2})\in\emptyset\quad\text{and}\quad(l_{1},l_{2})\in r^{\updownarrow L}\quad.
+\]
+The condition $(k_{1},k_{2})\in\emptyset$ is always false, so $(x,y)\in r^{\updownarrow P}$
+is also always false. 
+
+\textbf{(h)} By assumption, $K$ is not lifting-to-false, which means
+that there exist types $A$, $B$ such that \emph{any} relation $r^{:A\leftrightarrow B}$
+is lifted to a relation $r^{\updownarrow P}$ that is \emph{not} always-false.
+Choose $r^{:A\leftrightarrow B}$ such that $r^{\updownarrow L}=\emptyset^{:L^{A}\leftrightarrow L^{B}}$
+and lift that $r$ to $P$. The result is:
+\[
+r^{\updownarrow P}=r^{\updownarrow K}\ogreaterthan r^{\updownarrow L}=r^{\updownarrow K}\ogreaterthan\emptyset\quad.
+\]
+We will now show that $r^{\updownarrow P}=\emptyset$ by finding a
+contradiction when we assume that $(x,y)\in r^{\updownarrow P}$ for
+some $x^{:P^{A}}$ and $y^{:P^{B}}$. If we assume that such $x$
+and $y$ exist then we write out the condition $(x,y)\in r^{\updownarrow P}$:
+\[
+(x,y)\in r^{\updownarrow P}\quad\text{means}\quad\text{if}\quad(a,b)\in r^{\updownarrow K}\quad\text{then}\quad(x(a),y(b))\in\emptyset\quad.
+\]
+Since $r^{\updownarrow K}$ is \emph{not} always-false, there exist
+some values $a^{:K^{A}}$ and $b^{:K^{B}}$ such that $(a,b)\in r^{\updownarrow K}$.
+Using these values, we obtain $(x(a),y(b))\in\emptyset$, which is
+impossible. This contradiction shows that there do not exist any $x$
+and $y$ such that $(x,y)\in r^{\updownarrow P}$. So, $r^{\updownarrow P}=\emptyset$
+as required. $\square$
+
+The following examples will help us build up intuition about non-disjunctive
+types.
+
+\subsubsection{Example \label{subsec:Example-undisjunctive-type-constructors}\ref{subsec:Example-undisjunctive-type-constructors}\index{solved examples}}
+
+\textbf{(a)} Show that $P^{A}\triangleq A\rightarrow A$ is lifting-to-true
+but \emph{not} lifting-to-false.
+
+\textbf{(b)} Show that $P^{A}\triangleq\bbnum 1+A\rightarrow A$ is
+both lifting-to-true and lifting-to-false.
+
+\textbf{(c)} Show that $P^{A}\triangleq\left(A\rightarrow A\right)\rightarrow A\rightarrow A$
+is lifting-to-true.
+
+\subparagraph{Solution}
+
+\textbf{(a)} We know from Statement~\ref{subsec:Statement-undisjunctive-type-constructors-structural}(c)
+that $L^{A}\triangleq A$ is lifting-to-true. It follows from Statement~\ref{subsec:Statement-undisjunctive-type-constructors-structural}(d)
+with $K^{A}\triangleq L^{A}\triangleq A$ that $P$ is also lifting-to-true.
+
+To show that $P$ is not lifting-to-false, it is sufficient to demonstrate
+that for any relation $r^{:A\leftrightarrow B}$ there exist $x^{:P^{A}}$
+and $y^{:P^{B}}$ such that $(x,y)\in r^{\updownarrow P}$. Write
+out the condition $(x,y)\in r^{\updownarrow P}$:
+\[
+(x,y)\in r^{\updownarrow P}\quad\text{means}\quad\text{if}\quad(a^{:A},b^{:B})\in r\quad\text{then}\quad(x(a),y(b))\in r\quad.
+\]
+If we choose $x\triangleq\text{id}^{:A\rightarrow A}$ and $y\triangleq\text{id}^{:B\rightarrow B}$,
+we will have $(x(a),y(b))=(a,b)$. Then the condition becomes: if
+$(a,b)\in r$ then $(a,b)\in r$. This is true for any $r$. So, $(x,y)\in r^{\updownarrow P}$
+holds.
+
+\textbf{(b)} We know from Statement~\ref{subsec:Statement-undisjunctive-type-constructors-structural}(c,f)
+that $L^{A}\triangleq A$ is both lifting-to-true and lifting-to-false.
+By Statement~\ref{subsec:Statement-undisjunctive-type-constructors-structural}(d)
+with $K^{A}\triangleq\bbnum 1+A$ and $L^{A}\triangleq A$, we find
+that $K^{A}\rightarrow L^{A}$ is lifting-to-true. To show that $K^{A}\rightarrow L^{A}$
+is lifting-to-false, we can use Statement~\ref{subsec:Statement-undisjunctive-type-constructors-structural}(h)
+if we prove that $K^{A}$ is \emph{not} lifting-to-false. Lifting
+any relation $r^{:A\leftrightarrow B}$ to $K$, we find:
+\[
+r^{\updownarrow K}=\text{id}^{:\bbnum 1\leftrightarrow\bbnum 1}\boxplus r\quad.
+\]
+The pair of values $x^{:K^{A}}\triangleq1+\bbnum 0^{:A}$ and $y^{:K^{B}}\triangleq1+\bbnum 0^{:B}$
+are always in the left part of the relation $\text{id}\boxplus r$.
+In this way, we have shown that $r^{\updownarrow K}$ is not always-false. 
+
+By Statement~\ref{subsec:Statement-undisjunctive-type-constructors-relational},
+the type constructor $P$ is non-disjunctive. Note that the type expression
+$\bbnum 1+A\rightarrow A$ contains a disjunctive type but can be
+rewritten equivalently as $P^{A}\cong(\bbnum 1\rightarrow A)\times(A\rightarrow A)$,
+which no longer contains a disjunctive type.
+
+\textbf{(c)} We have shown in item (a) that $L^{A}\triangleq A\rightarrow A$
+is lifting-to-true. It remains to use Statement~\ref{subsec:Statement-undisjunctive-type-constructors-structural}(d)
+with $K^{A}\triangleq A\rightarrow A$ to conclude that $P^{A}=K^{A}\rightarrow L^{A}$
+is lifting-to-true.
+
+\subsection{Deriving the wedge law from relational parametricity}
 
 The relational formulation of parametricity is powerful but hard to
-use for deriving laws as equations rather than as relations. To convert
-the relational parametricity law such as Eq.~(\ref{eq:relational-naturality-law-simplified})
-into an equation with functions, we first choose the relation $r$
+use for deriving laws as equations for functions. To convert the relational
+parametricity law such as Eq.~(\ref{eq:relational-naturality-law-simplified})
+into a law involving functions, we first choose the relation $r$
 as $r\triangleq\left<f\right>$ with a suitable function $f$. Then
 we need to express the lifted relation $r^{\updownarrow Q}$ via an
 equation and derive the corresponding equation for $t$. However,
@@ -3510,29 +3834,27 @@ $\left<f\right>^{\updownarrow Q}$ will \emph{not} be expressible
 as an equation. 
 
 Nevertheless, this problem does not arise for most type signatures
-found in practice, and the relational naturality law can be reduced
+found in practice where the relational naturality law can be reduced
 to the dinaturality law~(\ref{eq:dinaturality-law-for-profunctors})
 via the wedge law~(\ref{eq:wedge-law-for-profunctors}). In a few
 cases, a more powerful property called the \textsf{``}strong\textsf{''} dinaturality
 law is required. In this book, strong dinaturality is only used to
 prove Statements~\ref{subsec:relational-property-for-foldFn}, \ref{subsec:Statement-Church-encoding-recursive-type-covariant},
 and~\ref{subsec:Statement-strong-dinaturality-property-of-fix},
-while in all other places the wedge law is sufficient. The following
-sections will prove that the wedge law and the strong dinaturality
+while in all other places the wedge law is sufficient. This and the
+following sections will prove that the wedge law and the strong dinaturality
 law are consequences of the relational parametricity theorem.
 
-\subsection{Deriving the wedge law from relational parametricity}
-
-This section derives the wedge law from the relational naturality
-law of \lstinline!xmap!.\footnote{The proof is based on the blog post by B.~Milewski\index{Bartosz Milewski}
+We will now derive the wedge law from the relational naturality law
+of \lstinline!xmap!.\footnote{The proof is based on the blog post by B.~Milewski\index{Bartosz Milewski}
 (\texttt{\href{https://bartoszmilewski.com/2017/04/11/}{https://bartoszmilewski.com/2017/04/11/}}).
 Another derivation of the dinaturality law from the relational parametricity
 theorem was given by J.~Voigtl\"ander\index{Janis@Janis Voigtl\"ander}
 in the paper \texttt{\href{https://arxiv.org/pdf/1908.07776.pdf}{https://arxiv.org/pdf/1908.07776.pdf}}.
 A proof of the dinaturality law based on obtaining the syntactic normal
 form of dinatural transformations (and \emph{without} using relational
-parametricity) was shown by J.~de Lataillade\index{Joachim de Lataillade}
-in the paper \textsf{``}Dinatural terms in System $F$\textsf{''}: see \texttt{\href{https://www.irif.fr/~delatail/dinat.pdf}{https://www.irif.fr/$\sim$delatail/dinat.pdf}}}  
+parametricity) was given by J.~de Lataillade\index{Joachim de Lataillade}
+in the paper \textsf{``}Dinatural terms in System $F$\textsf{''}: see \texttt{\href{https://www.irif.fr/~delatail/dinat.pdf}{https://www.irif.fr/$\sim$delatail/dinat.pdf}}} 
 
 \subsubsection{Statement \label{subsec:Statement-wedge-law-from-parametricity}\ref{subsec:Statement-wedge-law-from-parametricity}}
 
@@ -3912,7 +4234,7 @@ can be always completed to a square that represents the profunctor
 commutativity law~(\ref{eq:profunctor-commutativity-law}). $\square$
 
 Below we will perform structural analysis for profunctors $P$ with
-a pushout property and give some examples. The significance of those
+the pushout property and give some examples. The significance of those
 $P$ is that we can obtain a property that is stronger than ordinary
 dinaturality:
 
@@ -4498,7 +4820,7 @@ as required. $\square$
 Strong dinaturality holds only for type signatures $\forall A.\,K^{A,A}\rightarrow L^{A,A}$
 where the profunctor $K$ has a certain structure. Nevertheless, a
 broad range of practically encountered functions have type signatures
-of this form. Here are some examples.
+of that form. Here are some examples.
 
 \subsubsection{Example \label{subsec:Example-strong-dinaturality-for-some-type-signatures}\ref{subsec:Example-strong-dinaturality-for-some-type-signatures}\index{solved examples}}
 
@@ -4543,6 +4865,94 @@ $\square$
 Example~\ref{subsec:Example-strong-dinaturality-for-some-type-signatures}(c)
 is used in Statement~\ref{subsec:Statement-Church-encoding-recursive-type-covariant}
 for the Church encoding of recursive types.
+
+The following example illustrates that strong dinaturality laws are
+sometimes more helpful for deriving specific properties than the general
+laws of relational parametricity.
+
+\subsubsection{Example \label{subsec:Example-strong-dinaturality-show-void}\ref{subsec:Example-strong-dinaturality-show-void}}
+
+\textbf{(a)} For any (covariant) functor $F$, show that the type
+of fully parametric functions with type signature $\forall A.\,\left(A\rightarrow A\right)\rightarrow F^{A}$
+is equivalent to the type $F^{\bbnum 0}$.
+
+\textbf{(b)} For any contrafunctor $H$, show that the type of fully
+parametric functions with type signature $\forall A.\,\left(A\rightarrow A\right)\rightarrow H^{A}$
+is equivalent to the type $H^{\bbnum 1}$.
+
+\subparagraph{Solution}
+
+\textbf{(a)} We need to define a one-to-one correspondence between
+all values of type $F^{\bbnum 0}$ and all fully parametric functions
+of type $\forall A.\,\left(A\rightarrow A\right)\rightarrow F^{A}$.
+
+Note that the Yoneda lemma does not apply to type signatures of that
+form. The Yoneda identity:
+\[
+\forall A.\,\left(T\rightarrow A\right)\rightarrow F^{A}\cong F^{T}
+\]
+may be used only if the type $T$ is independent of the bound type
+parameter $A$.
+
+However, we can use this Yoneda identity with $T\triangleq\bbnum 0$
+to obtain the type equivalence $\forall A.\,F^{A}\cong F^{\bbnum 0}$:
+\[
+\forall A.\,F^{A}\cong\forall A.\,\bbnum 1\rightarrow F^{A}\cong\forall A.\,(\bbnum 0\rightarrow A)\rightarrow F^{A}\cong F^{\bbnum 0}
+\]
+
+By Example~\ref{subsec:Example-strong-dinaturality-for-some-type-signatures}(c),
+any fully parametric function $k$ of type $\forall A.\,\left(A\rightarrow A\right)\rightarrow F^{A}$
+obeys the strong dinaturality law. That law gives for any types $A$,
+$B$ and for any $f^{:A\rightarrow B}$, $p^{:A\rightarrow A}$, and
+$q^{:B\rightarrow B}$:
+\begin{equation}
+\text{if}\quad p\bef f=f\bef q\quad\text{then}\quad k(p)\triangleright f^{\uparrow F}=k(q)\quad.\label{eq:strong-dinaturality-example-void-type}
+\end{equation}
+Choose $A\triangleq\bbnum 0$, $p\triangleq\text{id}^{:\bbnum 0\rightarrow\bbnum 0}$,
+and $f\triangleq\text{absurd}^{:\bbnum 0\rightarrow B}$ (the function
+\lstinline!absurd! is defined in Example~\ref{subsec:ch-Example-type-identity-0-to-A}).
+Then the precondition of the law~(\ref{eq:strong-dinaturality-example-void-type})
+is satisfied for arbitrary $q^{:B\rightarrow B}$. Indeed, both sides
+of the precondition ($p\bef f=f\bef q$) are functions of type $\bbnum 0\rightarrow B$,
+and there exists only one distinct function of that type (Example~\ref{subsec:ch-Example-type-identity-0-to-A}).
+So, the conclusion of the law~(\ref{eq:strong-dinaturality-example-void-type})
+holds for any $q$. It means that the value $k(q)$ must be independent
+of $q$. In other words, any fully parametric function $k$ of type
+$\forall A.\,\left(A\rightarrow A\right)\rightarrow F^{A}$ must ignore
+its argument of type $A\rightarrow A$. By Example~\ref{subsec:ch-Example-type-identity-6-1},
+functions of type $\left(A\rightarrow A\right)\rightarrow F^{A}$
+that ignore their argument are equivalent to values of type $F^{A}$.
+So, we obtain the type equivalence:
+\[
+\forall A.\,\left(A\rightarrow A\right)\rightarrow F^{A}\cong\forall A.\,(\_^{:A\rightarrow A}\rightarrow F^{A})\cong\forall A.\,F^{A}\cong F^{\bbnum 0}.
+\]
+
+\textbf{(b)} Any fully parametric function $k$ of type $\forall A.\,\left(A\rightarrow A\right)\rightarrow H^{A}$
+obeys the strong dinaturality law:
+\begin{equation}
+\forall f^{:A\rightarrow B},p^{:A\rightarrow A},q^{:B\rightarrow B}:\quad\text{if}\quad p\bef f=f\bef q\quad\text{then}\quad k(p)=k(q)\triangleright f^{\downarrow H}\quad.\label{eq:strong-dinaturality-example-contrafunctor}
+\end{equation}
+Choose $B\triangleq\bbnum 1$, $q\triangleq\text{id}^{:\bbnum 1\rightarrow\bbnum 1}$,
+and $f\triangleq\_^{:A}\rightarrow1$. Then the precondition of the
+law~(\ref{eq:strong-dinaturality-example-contrafunctor}) is satisfied
+for arbitrary $p^{:A\rightarrow A}$ (both sides of the precondition
+are functions of type $\_^{:A}\rightarrow\bbnum 1$, and there exists
+only one distinct function of that type). So, the conclusion of the
+law~(\ref{eq:strong-dinaturality-example-contrafunctor}) holds for
+any $p$. It means that $k(p)$ must be independent of $p$. In other
+words, any fully parametric function $k$ of type $\forall A.\,\left(A\rightarrow A\right)\rightarrow H^{A}$
+must ignore its argument of type $A\rightarrow A$. By Example~\ref{subsec:ch-Example-type-identity-6-1},
+functions of type $\left(A\rightarrow A\right)\rightarrow H^{A}$
+that ignore their argument are equivalent to values of type $H^{A}$.
+So, we obtain the type equivalence:
+\[
+\forall A.\,\left(A\rightarrow A\right)\rightarrow H^{A}\cong\forall A.\,(\_^{:A\rightarrow A}\rightarrow H^{A})\cong\forall A.\,H^{A}\cong H^{\bbnum 1}.
+\]
+The last step is obtained via the contravariant Yoneda identity (Statement~\ref{subsec:Statement-contravariant-yoneda-identity-for-types}):
+\[
+\forall A.\,H^{A}\cong\forall A.\,\bbnum 1\rightarrow H^{A}\cong\forall A.\,(A\rightarrow\bbnum 1)\rightarrow H^{A}\cong H^{\bbnum 1}\quad.
+\]
+
 
 \subsection{Strong dinaturality of \texttt{foldFn}}
 
