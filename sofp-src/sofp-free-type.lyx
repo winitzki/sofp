@@ -11895,7 +11895,7 @@ pure
 \end_layout
 
 \begin_layout Subsection
-Free pointed type
+Free pointed types
 \end_layout
 
 \begin_layout Standard
@@ -13686,7 +13686,7 @@ co-Yoneda identity
 
 \end_inset
 
-We will prove this identity in Statement
+We will prove this type equivalence in Statement
 \begin_inset space ~
 \end_inset
 
@@ -13778,23 +13778,261 @@ FMap(f andThen g, p)
  of functions without causing stack overflow.
  This problem can be resolved if we postpone the function composition and
  instead create a list of functions that need to be composed.
- This idea gives us another encoding of the free functor ***
+ The runner will evaluate the list of functions without running into a stack
+ overflow.
 \end_layout
 
 \begin_layout Standard
-The free functor construction 
+This gives us an idea for another encoding of the stack-safe free functor,
+ which we will call 
 \begin_inset listings
 inline true
 status open
 
 \begin_layout Plain Layout
 
-FF[F, A]
+FFS
 \end_layout
 
 \end_inset
 
- can be viewed as a building block for other free typeclasses.
+.
+ First, we implement a data structure called 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+FuncSeq
+\end_layout
+
+\end_inset
+
+ for storing a list of functions with matching types.
+ A value of type 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+FuncSeq[A, B]
+\end_layout
+
+\end_inset
+
+ holds a list of functions with types 
+\begin_inset Formula $A\rightarrow C_{1}$
+\end_inset
+
+, 
+\begin_inset Formula $C_{1}\rightarrow C_{2}$
+\end_inset
+
+, ..., 
+\begin_inset Formula $C_{n-1}\rightarrow C_{n}$
+\end_inset
+
+, 
+\begin_inset Formula $C_{n}\rightarrow B$
+\end_inset
+
+, where 
+\begin_inset Formula $C_{i}$
+\end_inset
+
+ are some chosen types.
+ A list of with those types can be composed to yield a function of type
+ 
+\begin_inset Formula $A\rightarrow B$
+\end_inset
+
+.
+ To simplify code, we will cast all intermediate types to 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Any
+\end_layout
+
+\end_inset
+
+ and back.
+ Our code will take care to construct 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+FuncSeq
+\end_layout
+
+\end_inset
+
+ values with correct types.
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+final case class FuncSeq[X, Y](first: X => Any, funcs: Vector[Any => Any])
+ {
+\end_layout
+
+\begin_layout Plain Layout
+
+  def append[Z](g: Y => Z): FuncSeq[X, Z] = FuncSeq(first, funcs :+ g.asInstanceO
+f[Any => Any])
+\end_layout
+
+\begin_layout Plain Layout
+
+}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+To ensure stack safety when working with 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+FuncSeq
+\end_layout
+
+\end_inset
+
+, we implement a tail-recursive function 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+runSeq
+\end_layout
+
+\end_inset
+
+ that composes all functions stored in the sequence and applies them to
+ a given value.
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+@tailrec def runSeq[X, Y](x: X, p: FuncSeq[X, Y]): Y = p.funcs.headOption
+ match {
+\end_layout
+
+\begin_layout Plain Layout
+
+  case None => p.first(x).asInstanceOf[Y]
+\end_layout
+
+\begin_layout Plain Layout
+
+  case Some(second) => runSeq(p.first(x), FuncSeq(second, p.funcs.tail))
+\end_layout
+
+\begin_layout Plain Layout
+
+}
+\end_layout
+
+\end_inset
+
+Now we can write the code of the free functor 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+FFS
+\end_layout
+
+\end_inset
+
+:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+sealed trait FFS[F[_], A] {
+\end_layout
+
+\begin_layout Plain Layout
+
+  def map[B](f: A => B): FFS[F, B]
+\end_layout
+
+\begin_layout Plain Layout
+
+}
+\end_layout
+
+\begin_layout Plain Layout
+
+final case class FMap[F[_], X, Y](f: FuncSeq[X, Y], p: F[X]) extends FFS[F,
+ Y] {
+\end_layout
+
+\begin_layout Plain Layout
+
+  def map[Z](g: Y => Z): FFS[F, Z] = FMap[F, X, Z](f append g, p)
+\end_layout
+
+\begin_layout Plain Layout
+
+}
+\end_layout
+
+\begin_layout Plain Layout
+
+def runFF[F[_], A](runner: Runner[F]): FFS[F, A] => A = {
+\end_layout
+
+\begin_layout Plain Layout
+
+ case FMap(f, p) => runSeq(runner.run(p), f)
+\end_layout
+
+\begin_layout Plain Layout
+
+}*** check if this works
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+The free functor constructions can be viewed as building blocks for other
+ free typeclasses.
+ It is often easier to construct free typeclasses assuming that the effect
+ constructor is already a functor.
+ If this is not the case, we can first apply the free functor construction
+ and then build the free typeclass based on a functor.
  For instance, the free monad encoding 
 \begin_inset listings
 inline true
@@ -13833,7 +14071,7 @@ Free1
 
 \end_inset
 
- applied to 
+ applied to the free functor 
 \begin_inset listings
 inline true
 status open
@@ -13883,6 +14121,7 @@ F
 \end_inset
 
  is a functor.
+ 
 \end_layout
 
 \begin_layout Subsection
