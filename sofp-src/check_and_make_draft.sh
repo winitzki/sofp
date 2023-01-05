@@ -12,7 +12,7 @@ draft_pages=796
 
 # The number of pages in each chapter:
 #           0  1  2  3  4  5  6  7  8  9 10 11 12 13 14  15 16 17
-pagecounts=(3 17 42 34 24 50 45 12 63 54 63 62 53 39 147  6  5  6 3 6 6 3 6 43 21 1 2 1 1 8)
+pagecounts=(3 17 42 34 24 50 45 12 63 54 63 62 53 49 147  7  5  6 3 6 6 3 6 42 22 1 2 1 1 8)
 
 # To create the draft version that contains only proofread chapters:
 # cut out from here, including:
