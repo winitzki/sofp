@@ -1529,9 +1529,9 @@ that describes all the possible liftings within a given monad stack.
 Two monads $P$ and $Q$ are \textbf{in a lift relation} if there
 exists a monad morphism $P\leadsto Q$. If $Q$ is itself a monad
 stack containing the monad $P$, we can implement the lift relation
-$P\leadsto Q$ by using the monad transformers from that stack. For
-instance, the monads $L$ and $K\varangle L\varangle M$ are in a
-lift relation because we can construct a monad morphism $L\leadsto K\varangle L\varangle M$
+$P\leadsto Q$ by using the stack $Q$\textsf{'}s monad transformers. For instance,
+the monads $L$ and $K\varangle L\varangle M$ are in a lift relation
+because we can construct a monad morphism $L\leadsto K\varangle L\varangle M$
 as:
 \[
 \big(\text{blift}_{L}^{M}\bef\text{flift}_{K}^{L\varangle M}\big):L\leadsto K\varangle L\varangle M\quad.
@@ -1572,14 +1572,17 @@ base monads of monad transformers:
 final case class BaseMonad[L[_], KT[_[_], _]](iso: MM[L, KT[Id, *]])
 \end{lstlisting}
 It is assumed that the function \lstinline!iso! should be a monad
-isomorphism. Declaring a relation instance of \lstinline!BaseMonad!
-looks like this example:
+isomorphism. We need a relation instance of \lstinline!BaseMonad!
+for each supported transformer. As an example, the code for \lstinline!ReaderT!
+looks like this:
 \begin{lstlisting}
 implicit val readerBase: BaseMonad[Reader, ReaderT] = BaseMonad(new MM[Reader, ReaderT[Id, *]] {
     def apply[A]: Reader[A] => ReaderT[Id, A] = ReaderT[Id, A](_)
 })
 \end{lstlisting}
-Now we can implement a relation instance for the base lift:
+
+Now we can implement a relation instance for the base lift of an arbitrary
+monad stack:
 \begin{lstlisting}
 implicit def baseMonadToTransformer[KT[_[_], _], M[_] : Monad, L[_] : Monad]
   (implicit kt: MTrans[KT], isBase: BaseMonad[L, KT]): MM[L, KT[M, *]] = new MM[L, KT[M, *]] {
@@ -1619,15 +1622,15 @@ val resultStack3: Stack3[Int] = for { // Lift each value to Stack3 with a single
 } yield t
 \end{lstlisting}
 
-To implement the automatic lifts in this way, the programmer needs
-to create three implicit values for each monad: a \lstinline!Monad!
+To implement the automatic lifts via lift relations, the programmer
+needs to create three implicit values for each monad: a \lstinline!Monad!
 typeclass instance, a monad transformer (\lstinline!MTrans!) typeclass
 instance, and an instance of the \lstinline!BaseMonad! type relation.
-(So, the length of code is linear in the number of supported monad
-types.) Those instances can be defined as implicit values in a monad
-transformer library. Then the user may declare an arbitrary monad
-stack \lstinline!MyStack! and use the \lstinline!up[MyStack]! method
-as an automatic lift from any level in the stack to the top.
+Those instances can be defined as implicit values in a monad transformer
+library. So, the length of code is linear in the number of supported
+monad types. Then the user may declare an arbitrary monad stack \lstinline!MyStack!
+and use the \lstinline!up[MyStack]! method as an automatic lift from
+any level within the stack to the top of the stack.
 
 \subsection{Constructing lifts via typeclasses for monad operations (\textquotedblleft MTL-style\textquotedblright )\label{subsec:Combining-monads-via-mtl-style}}
 
@@ -1636,10 +1639,9 @@ monadic\index{monadic program!MTL-style} programming is another way
 of achieving automatic lifting of monadic values in arbitrary monad
 stacks. The MTL approach has two main ingredients:
 \begin{itemize}
-\item For a chosen set of \textsf{``}standard\textsf{''} monads (such as the \lstinline!Reader!
-monad of type $\text{Reader}^{R,A}\triangleq R\rightarrow A$, the
-\lstinline!State! monad of type $\text{State}^{S,A}\triangleq S\rightarrow A\times S$,
-etc.), define some typeclasses (\lstinline!ReaderMonadOps!, \lstinline!StateMonadOps!,
+\item For a chosen set of widely used monads (the \lstinline!Reader! monad,
+the \lstinline!Either! monad, the \lstinline!State! monad, etc.),
+define some typeclasses (\lstinline!ReaderMonadOps!, \lstinline!StateMonadOps!,
 etc.) encapsulating all the \textsf{``}effectful operations\textsf{''} specific to
 each monad. Refactor all monadic code to use only the operations from
 the provided typeclasses. 
@@ -1652,10 +1654,11 @@ the \lstinline!State! monad.
 \end{itemize}
 First, we need to define the \textsf{``}effectful operations\textsf{''} corresponding
 to each monad. As an example, consider the \lstinline!State! monad
-($\text{State}^{S,A}$). Its effect is to manipulate an internal state
-value (of type $S$): the state can be read, updated, and automatically
-passed on to the next computation. We may define the functions \lstinline!get!
-and \lstinline!set! that work with the internal state:
+($\text{State}^{S,A}\triangleq S\rightarrow A\times S$). Its effect
+is to manipulate an internal state value (of type $S$). The state
+can be read or updated; the updated state value is automatically passed
+on to the next computation. We may define the functions \lstinline!get!
+and \lstinline!set! that work with the state value:
 \[
 \text{get}:\text{State}^{S,S}\quad,\quad\quad\text{get}\triangleq s^{:S}\rightarrow s\times s\quad,\quad\quad\text{set}:S\rightarrow\text{State}^{S,\bbnum 1}\quad,\quad\quad\text{set}\triangleq s^{:S}\rightarrow\_^{:S}\rightarrow1\times s\quad.
 \]
@@ -1664,11 +1667,11 @@ and \lstinline!set! that work with the internal state:
 \vspace{-1\baselineskip}
 
 \begin{lstlisting}
-val program: State[S, A] = for {
-  s1 <- get    // Get the initial state.
-  s2  = f(s1)  // Do some computations.
-  _ <- set(s2) // Assign the new state.
-} yield g(s2)  // Compute a result value.
+for {
+  s1 <- get     // Get the initial state.
+  s2  = f(s1)   // Do some computations.
+  _  <- set(s2) // Store the new state.
+} yield g(s2)   // Compute a result value.
 \end{lstlisting}
 \vspace{-0.8\baselineskip}
 \end{wrapfigure}%
@@ -1686,34 +1689,35 @@ and define functions $f_{1}$ and $f_{2}$ by:
 \[
 f_{1}:S\rightarrow A\triangleq q\bef\pi_{1}\quad,\quad\quad f_{2}:S\rightarrow S\triangleq q\bef\pi_{2}\quad.
 \]
-These two functions compute the result value and update the state.
-Now we can express $q$ equivalently as a monadic program involving
-only \lstinline!map!, \lstinline!flatMap!, and the operations \lstinline!get!
-and \lstinline!set!:
+These two functions compute the result value and the final updated
+state value. Now we can express $q$ equivalently as a monadic program
+involving only \lstinline!map!, \lstinline!flatMap!, and the operations
+\lstinline!get! and \lstinline!set!:
 
-\begin{wrapfigure}{l}{0.35\columnwidth}%
-\vspace{-0.6\baselineskip}
+\begin{wrapfigure}{l}{0.2\columnwidth}%
+\vspace{-0.5\baselineskip}
 
 \begin{lstlisting}
 q == for {
-  s1 <- get
-  s2 = f2(s1)
-  _ <- set(s2)
-} yield f1(s1)
+  s  <- get
+  res = f1(s)
+  _  <- set(f2(s))
+} yield res
 \end{lstlisting}
-\vspace{0.4\baselineskip}
+\vspace{1.2\baselineskip}
 \end{wrapfigure}%
 
-~\vspace{-0.9\baselineskip}
+~\vspace{-0.8\baselineskip}
 \[
 q=\text{get}\triangleright\text{flm}_{\text{State}}\big(s_{1}\rightarrow f_{2}(s_{1})\triangleright\text{set}\triangleright(\_\rightarrow f_{1}(s_{1}))^{\uparrow\text{State}}\big)\quad.
 \]
-
-We may refactor any \lstinline!State!-monadic code so that it does
-not directly refer to the type $S\rightarrow A\times S$ of the \lstinline!State!
-monad but instead only uses the operations \lstinline!get! and \lstinline!set!.
-For instance, the refactored code will not apply a monadic value to
-an argument of type $S$.
+We may refactor \emph{any} \lstinline!State!-monadic code so that
+it only uses the operations \lstinline!get! and \lstinline!set!
+but does not directly refer to the type $S\rightarrow A\times S$
+of the \lstinline!State! monad. For instance, the refactored code
+will not \textsf{``}run\textsf{''} a monadic value by applying it to an argument of
+type $S$ because that would require the knowledge of the type $S\rightarrow A\times S$.
+Usually, a monadic program is run only at the end of the computations.
 
 Another example is the \lstinline!Either! monad, for which we define
 an operation called \lstinline!raise!:
@@ -1723,9 +1727,9 @@ an operation called \lstinline!raise!:
 Any \lstinline!Either!-monadic program is a value of type $E+A$
 and can always be expressed through \lstinline!raise! and \lstinline!pure!.
 We may then refactor any monadic code so that it uses only the \lstinline!raise!
-operation but does not refer to the type $E+A$ of the \lstinline!Either!
-monad. For instance, the refactored code will not apply pattern matching
-directly to monad values.
+operation and does not refer to the type $E+A$ of the \lstinline!Either!
+monad. For instance, the refactored code may not apply pattern matching
+directly to a monad value of type $E+A$.
 
 The second ingredient of the MTL-style programming involves \textsf{``}lifting\textsf{''}
 the monad operations to arbitrary monad stacks. For example, consider
@@ -1757,7 +1761,7 @@ each stack, and we would like to avoid implementing $p$ by hand each
 time. In MTL-style programming, this is achieved by refactoring the
 code to use special typeclasses that encapsulate the effectful operations
 of all the required monads. For the \lstinline!State! monad, the
-typeclass \lstinline!StateMonadOps! is defined as
+typeclass \lstinline!StateMonadOps! is defined as:
 \begin{lstlisting}
 trait StateMonadOps[F[_], S] { // `F` is any monad that has `State`-like operations.
   def get: F[S]
@@ -1863,10 +1867,10 @@ implicit def otherTMonadOps[OtherT[_[_], _], Q[_], S](implicit val qMonadOps: St
 To use the MTL-style monad stacks in practice, one needs a library
 (such as \texttt{cats-mtl}\footnote{See \texttt{\href{https://typelevel.org/blog/2018/10/06/intro-to-mtl.html}{https://typelevel.org/blog/2018/10/06/intro-to-mtl.html}}})
 that defines typeclasses with sufficiently many operations for each
-standard monad, so that any desired monadic program may be expressed
-through those operations, without using explicit monad types. The
-library should also implement instances of those typeclasses for all
-supported monad stacks. 
+supported monad, so that any desired monadic program may be expressed
+through those operations without using explicit monad types. The library
+should also implement instances of those typeclasses for all supported
+monad stacks. 
 
 While the MTL style does provide automatic liftings, some problems
 remain. 
@@ -1915,24 +1919,23 @@ those two operations. As an example, look at \emph{updating}
 
 \noindent the state using a given function of type $S\rightarrow S$.
 In many cases, updating is the same as \lstinline!get!ting the current
-state value and immediately \lstinline!set!ting a new value. But
-suppose that certain state updates must be handled in a special way:
-e.g., atomic updates in a concurrent program; updates wrapped in a
-database transaction; or updates that must be run on a designated
-processing thread (such as the thread that drives the GUI events).
-Special handling of updates cannot be implemented through \lstinline!get!
-and \lstinline!set!; a new effectful operation (\lstinline!update!)
+state value and immediately \lstinline!set!ting a new value. However,
+certain kinds of updates need special handling. Examples are: atomic
+updates in a concurrent program; updates wrapped in a database transaction;
+and updates that must be run on a designated CPU thread (e.g., the
+thread that drives the GUI events). Such special handling of updates
+cannot be implemented via monadic programs with just \lstinline!get!
+and \lstinline!set!. A new effectful operation (\lstinline!update!)
 must be provided to the programmer.
 
 Table~\ref{tab:effectful-operations-for-some-monads} shows a number
 of operations for some monads.\footnote{Operations were gathered from the \texttt{cats-mtl} documentation
 and the papers \textsf{``}\emph{Monad transformers and modular interpreters}\textsf{''}
 (see \texttt{\href{http://web.cecs.pdx.edu/~mpj/pubs/modinterp.html}{http://web.cecs.pdx.edu/$\sim$mpj/pubs/modinterp.html}})
-and \textsf{``}\emph{Modular monad transformers}\textsf{''} (see \texttt{\href{https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.219.5365}{https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.219.5365}}).} The choice of operations seems to be heuristic and not following
-any principle or system. It is not easy to decide what operations
-will be useful or necessary in practical tasks involving a given monad.
-(Do we need a \lstinline!filter! operation for the \lstinline!Either!
-monad?) 
+and \textsf{``}\emph{Modular monad transformers}\textsf{''} (see \texttt{\href{https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.219.5365}{https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.219.5365}}).} The choice of operations is heuristic and does not follow any principle
+or system. It is not easy to decide what operations will be necessary
+in practical tasks involving a given monad. (Do we need a \lstinline!filter!
+operation for the \lstinline!Either! monad? How can we decide?) 
 
 Different libraries choose different sets of supported operations.
 However, adding a new operation to a monad in an MTL-style library
@@ -1940,9 +1943,8 @@ means updating all typeclasses related to that monad. Users who cannot
 modify the library code will be unable to add new operations.
 
 The second problem is the lack of a general method for lifting effectful
-operations to arbitrary monad transformers.\footnote{M.~\index{Mauro Jaskelioff}Jaskelioff developed a technique that
-can lift effectful operations systematically to almost all monad stacks;
-see Section~\ref{subsec:Monatron}.} So far, the examples in this subsection were limited to operations
+operations to arbitrary monad transformers.\footnote{Section~\ref{subsec:Monatron} shows a technique that can lift effectful
+operations systematically to almost all monad stacks.} So far, the examples in this subsection were limited to operations
 with type signatures of the form $L^{A}$ or $A\rightarrow L^{B}$.
 All operations of this form are lifted from the monad $L$ to a monad
 stack $P$ by composing with a lift function $p:L^{A}\rightarrow P^{A}$.
@@ -1960,10 +1962,11 @@ Knowing only a lift function $p:\text{Writer}^{W,A}\rightarrow P^{A}$
 is not sufficient for transforming \lstinline!clear! into a function
 of type $P^{A}\rightarrow P^{A}$.
 
-Lifting \lstinline!clear! to a given monad stack $P$ (say, $P=\,$\lstinline!State!$\varangle$\lstinline!Writer!
-or $P=\,$\lstinline!Writer!$\varangle$\lstinline!Cont!) requires
-custom code. Let us see how to write that code. For the stack $P=\,$\lstinline!State!$\varangle$\lstinline!Writer!,
-we need to implement a function $\text{clear}_{P}$ of type $P^{A}\rightarrow P^{A}$
+Lifting \lstinline!clear! to a given monad stack $P$ (say, $P\triangleq\,$\lstinline!State!$\varangle$\lstinline!Writer!
+or $P\triangleq\,$\lstinline!Writer!$\varangle$\lstinline!Cont!)
+requires custom code. Let us see how to write that code. For the stack
+$P=\,$\lstinline!State!$\varangle$\lstinline!Writer!, we need
+to implement a function $\text{clear}_{P}$ of type $P^{A}\rightarrow P^{A}$
 given a function \lstinline!clear! with type signature:
 \[
 \text{clear}:\text{Writer}^{W,A}\rightarrow\text{Writer}^{W,A}=W\times A\rightarrow W\times A\quad.
@@ -2642,12 +2645,16 @@ then $T_{L}$ will be also co-pointed.
 
 It is remarkable that all the laws of monad transformers can be derived
 from a single (but more abstract) definition: a monad transformer
-$T$ is \emph{just a pointed and co-pointed endofunctor in the category
-of monads}.\footnote{\textsf{``}\emph{What\textsf{'}s the big deal?}\textsf{''} as the joke\index{jokes} would
-go.} Such a endofunctor $T$ maps monads $M$, $N$, etc., to monads $T^{M}$,
-$T^{N}$, etc. Suppose we were given such a $T$ but were not told
-that it is a monad transformer for some base monad. Still, we can
-recover its base monad $L$ as the image of the identity monad:
+$T$ is \emph{just a pointed and optionally co-pointed endofunctor
+in the category of monads}.\footnote{\textsf{``}\emph{What\textsf{'}s the big deal?}\textsf{''} as one\label{fn:Whats-the-big-deal-monad-transformers}
+would joke\index{jokes} similarly to the well-known monad joke in
+footnote~\ref{fn:A-monad-is-a-monoid-in-category-of-endofunctors-big-deal}
+on page~\pageref{fn:A-monad-is-a-monoid-in-category-of-endofunctors-big-deal}. } Such a endofunctor $T$ maps monads $M$, $N$, etc., to monads $T^{M}$,
+$T^{N}$, etc. 
+
+Suppose we are given such a $T$ not knowing that it is a monad transformer
+for some base monad. We can recover $T$\textsf{'}s base monad $L$ as the
+image of the identity monad:
 \[
 L\triangleq T^{\text{Id}}\quad.
 \]
@@ -2659,6 +2666,11 @@ The definition of $T$ already specifies functions \lstinline!flift!,
 The functor laws and the monadic naturality laws for those transformations
 will then enforce the 18 laws of monad transformers. In this way,
 a single definition expresses all monad transformer laws.
+
+This definition also explains why monad transformers compose while
+monads do not. Monad transformers compose because they are pointed
+functors (in the category of monads). The composition of two or more
+pointed functors is again a pointed functor.
 
 \paragraph{Open question\texttt{ }}
 
@@ -4407,7 +4419,7 @@ a suitable \lstinline!swap! function having the type signature:
 \text{sw}_{L,M}:M^{L^{A}}\rightarrow L^{M^{A}}\quad,
 \]
 for the base monad $M$ and an arbitrary foreign monad $L$. We will
-then prove that \lstinline!swap! satisfies all the laws stated in
+then prove that \lstinline!swap! satisfies all the laws given in
 Statement~\ref{subsec:Statement-inside-transformer-swap-laws}. This
 will guarantee that $T_{M}^{L,A}$ is a lawful monad transformer.
 
@@ -7419,7 +7431,7 @@ The two sides are now equal.
 
 This concludes the proofs of the laws for the free monad\textsf{'}s transformer.
 
-\subsection{Transformer for the \texttt{List} monad. Proofs}
+\subsection{Transformer for the \texttt{List} monad. Proofs\label{subsec:Transformer-for-the-List-monad}}
 
 The \lstinline!List! monad\textsf{'}s transformer, usually named \lstinline!ListT!,
 is defined as a recursive type:
@@ -9073,7 +9085,7 @@ and for more references.} \textbf{on} $F$ is defined by:
 \[
 \text{Cod}^{F,A}\triangleq\forall R.\,(A\rightarrow F^{R})\rightarrow F^{R}\quad.
 \]
-Before considering its transformer, we need to establish some properties
+Before considering its transformer, we will establish some properties
 of this monad.
 
 Note the similarity of $\text{Cod}^{F,A}$ with the continuation monad
@@ -9084,17 +9096,16 @@ $R$:
 \[
 \text{Cod}^{F,A}=\forall R.\,\text{Cont}^{F^{R},A}\quad.
 \]
- Many of the properties of the continuation monad continue to hold
-after adding $\forall R$. In general, adding a type quantifier preserves
-monad laws:
 
-\subsubsection{Statement \label{subsec:Statement-monad-with-quantifier}\ref{subsec:Statement-monad-with-quantifier} }
+In general, adding a type quantifier preserves monad laws:
+
+\subsubsection{Statement \label{subsec:Statement-monad-with-quantifier}\ref{subsec:Statement-monad-with-quantifier}}
 
 Assume a monad $K^{R,\bullet}$ with an extra type parameter $R$.
 In other words, $K^{R,A}$ is a lawful monad with respect to the type
-parameter $A$ and with a fixed $R$. Then \textbf{(a)} $L^{A}\triangleq\forall R.\,K^{R,A}$
-is also a lawful monad, and \textbf{(b)} for any fixed $R$, there
-is a monad morphism of type $L^{\bullet}\leadsto K^{R,\bullet}$.
+parameter $A$ and with a fixed $R$. Then: \textbf{(a)} $L^{A}\triangleq\forall R.\,K^{R,A}$
+is also a lawful monad. \textbf{(b)} For any fixed $R$, there is
+a monad morphism of type $L^{\bullet}\leadsto K^{R,\bullet}$.
 
 \subparagraph{Proof}
 
@@ -9166,8 +9177,8 @@ To verify the composition law, we show that its two sides are equal:
 
 \subsubsection{Statement \label{subsec:Statement-codensity-monad-lawful}\ref{subsec:Statement-codensity-monad-lawful}}
 
-$\text{Cod}^{F,\bullet}$ is a monad for any type constructor $F$
-(not necessarily a functor).
+$\text{Cod}^{F,\bullet}$ is a monad for any type constructor $F$,
+even if $F$ is not a functor.
 
 \subparagraph{Proof}
 
@@ -9175,32 +9186,38 @@ By Statement~\ref{subsec:Statement-monad-with-quantifier}, adding
 a quantifier ($\forall R$) to the continuation monad $\text{Cont}^{F^{R},A}$
 gives again a lawful monad. $\square$
 
-The next statement shows that $\text{Cod}^{F,\bullet}$ includes the
-effects of $F$ when $F$ is a monad.
+We will now show that when $F$ is a monad, $\text{Cod}^{F,\bullet}$
+includes all the effects of $F$. The proof also shows that the monad
+$\text{Cod}^{F,\bullet}$ may support some additional effects not
+described by the monad $F$.
 
 \subsubsection{Statement \label{subsec:Statement-codensity-monad-inC-outC}\ref{subsec:Statement-codensity-monad-inC-outC}}
 
-\textbf{(a)} If $F$ is itself a monad then there exist functions
-$\text{inC}:F^{\bullet}\leadsto\text{Cod}^{F,\bullet}$ and $\text{outC}:\text{Cod}^{F,\bullet}\leadsto F^{\bullet}$,
-such that $\text{inC}\,\bef\text{outC}=\text{id}$ (so, \lstinline!inC!
-is an injection and \lstinline!outC! a surjection). 
+If $F$ is itself a monad then:
+
+\textbf{(a)} There exist natural transformations $\text{inC}:F^{\bullet}\leadsto\text{Cod}^{F,\bullet}$
+and $\text{outC}:\text{Cod}^{F,\bullet}\leadsto F^{\bullet}$, such
+that $\text{inC}\,\bef\text{outC}=\text{id}$. So, the functions \lstinline!inC[A]!
+are injective while \lstinline!outC[A]! are surjective.
 
 \textbf{(b)} The function \lstinline!inC! is a monad morphism $F^{\bullet}\leadsto\text{Cod}^{F,\bullet}$
-(while \lstinline!outC! is not a monad morphism).
+but \lstinline!outC! is \emph{not} a monad morphism.
 
 \textbf{(c)} The functions \lstinline!inC! and \lstinline!outC!
 are \emph{not} isomorphisms between the types $F^{A}$ and $\text{Cod}^{F,A}$.
 
 \subparagraph{Proof}
 
-\textbf{(a)} Begin by implementing the functions \lstinline!inC!
-and \lstinline!outC!:
+\textbf{(a)} Begin by implementing \lstinline!inC! and \lstinline!outC!:
 \begin{align*}
  & \text{inC}:F^{A}\rightarrow\forall R.\,(A\rightarrow F^{R})\rightarrow F^{R}\quad,\quad\quad\text{inC}^{R,A}\triangleq f^{:F^{A}}\rightarrow k^{:A\rightarrow F^{R}}\rightarrow f\triangleright\text{flm}_{F}(k)\quad,\\
  & \text{outC}:\big(\forall R.\,(A\rightarrow F^{R})\rightarrow F^{R}\big)\rightarrow F^{A}\quad,\quad\quad\text{outC}^{A}\triangleq d^{:\forall R.\,(A\rightarrow F^{R})\rightarrow F^{R}}\rightarrow d^{A}(\text{pu}_{F}^{:A\rightarrow F^{A}})\quad.
 \end{align*}
-Note that \lstinline!inC! is the same as $F$\textsf{'}s \lstinline!flatMap!,
-or $\text{flm}_{F}$ with flipped arguments.
+Note that \lstinline!inC! is equivalent to $F$\textsf{'}s \lstinline!flatMap!,
+or equivalently $\text{flm}_{F}$ with flipped arguments.
+
+Both functions are natural transformations because their code is fully
+parametric.
 
 To verify the nondegeneracy law, compute:
 \begin{align*}
@@ -9274,15 +9291,16 @@ the composition law of \lstinline!outC!.
 \textbf{(c)} The functions \lstinline!inC! and \lstinline!outC!
 are not isomorphisms because $\text{outC}\bef\text{inC}\not=\text{id}$.
 To show this, choose $F^{A}\triangleq R\rightarrow A$ (the \lstinline!Reader!
-monad) and simplify the type $\text{Cod}^{F,A}$ using the Yoneda
-identity:
+monad) and simplify the type $\text{Cod}^{F,A}$ via the covariant
+Yoneda identity:
 \[
 \text{Cod}^{F,A}=\forall B.\,(\gunderline{A\rightarrow R}\rightarrow B)\rightarrow\gunderline{R\rightarrow}\,B=R\rightarrow\gunderline{\forall B.\,(A\times R\rightarrow B)\rightarrow B}=R\rightarrow A\times R\quad.
 \]
 The resulting type constructor is the \lstinline!State! monad ($\text{State}^{R,A}$),
 which includes the effect of \lstinline!Reader! and additionally
-the effect of changing a value of type $R$ and passing it to the
-next computation (which \lstinline!Reader! cannot do). 
+has the effect of changing a value of type $R$ and passing it to
+the next computation. That effect is not supported by the \lstinline!Reader!
+monad. 
 
 For this choice of $F$, the functions \lstinline!inC! and \lstinline!outC!
 are defined as:
@@ -9301,30 +9319,20 @@ To obtain a specific example showing that $\text{outC}\bef\text{inC}\neq\text{id
 choose the type $R\triangleq\bbnum 1+P$ with some fixed type $P$
 and define a monadic value $s:\text{State}^{R,R}$ by:
 \[
-s:\bbnum 1+P\rightarrow\left(\bbnum 1+P\right)\times\left(\bbnum 1+P\right)\quad,\quad\quad s\triangleq r^{:\bbnum 1+P}\rightarrow r\times\left(\bbnum 1+\bbnum 0\right)\quad.
+s:\bbnum 1+P\rightarrow(\bbnum 1+P)\times(\bbnum 1+P)\quad,\quad\quad s\triangleq r^{:\bbnum 1+P}\rightarrow r\times(\bbnum 1+\bbnum 0)\quad.
 \]
 Let us now compute $s\triangleright\text{outC}\bef\text{inC}$ and
 check that the result is not equal to $s$:
 \begin{align*}
  & s\triangleright\text{outC}=r^{:\bbnum 1+P}\rightarrow s(r)\triangleright\pi_{1}=r\rightarrow r=\text{id}\quad,\\
- & s\triangleright\text{outC}\triangleright\text{inC}=\text{id}\triangleright\text{inC}=r\rightarrow r\times r\neq s=r\rightarrow r\times\left(\bbnum 1+\bbnum 0\right)\quad.
+ & s\triangleright\text{outC}\triangleright\text{inC}=\text{id}\triangleright\text{inC}=r\rightarrow r\times r\neq s=r\rightarrow r\times(\bbnum 1+\bbnum 0)\quad.
 \end{align*}
 We conclude that $\text{outC}\bef\text{inC}\neq\text{id}$ for some
-monads $F$. $\square$
-
-This proof shows that $\text{Cod}^{F,\bullet}$ may support some additional
-effects not described by the monad $F$. So, $\text{Cod}^{F,\bullet}$
-and $F$ cannot be equivalent in general. An example when the equivalence
-$\text{Cod}^{F,A}\cong F^{A}$ nevertheless holds is found by setting
-$F=\text{Id}$:
-\[
-\text{Cod}^{\text{Id},\bullet}=\forall R.\,(A\rightarrow R)\rightarrow R\cong A=\text{Id}^{A}\quad.
-\]
-
+monads $F$.
 
 \subsubsection{Statement \label{subsec:Statement-codensity-monad-transformer}\ref{subsec:Statement-codensity-monad-transformer}}
 
-A monad transformer for $\text{Cod}^{F,\bullet}$ can be defined by:
+A monad transformer for $\text{Cod}^{F,\bullet}$ is defined by:
 \[
 T_{\text{Cod}}^{M,A}\triangleq\forall R.\,(A\rightarrow M^{F^{R}})\rightarrow M^{F^{R}}\quad.
 \]
@@ -9340,8 +9348,7 @@ groups of laws.
 \paragraph{The monad laws}
 
 hold for $T_{\text{Cod}}^{M,A}$ due to Statement~\ref{subsec:Statement-codensity-monad-lawful},
-where we need to replace the type constructor $F$ by the composition
-$M^{F^{\bullet}}$.
+where we replace $F^{\bullet}$ by $M^{F^{\bullet}}$.
 
 \paragraph{The identity laws}
 
@@ -9365,23 +9372,22 @@ where we renamed $F$ to $M$ and $R$ to $S$ to make the comparison
 easier. The difference between \lstinline!flift! and \lstinline!inC!
 is only in the universally quantified types. We obtain \lstinline!flift!
 from \lstinline!inC! by restricting the type $S$ to types of the
-form $F^{R}$ (where $R$ is arbitrary). By Statement~\ref{subsec:Statement-codensity-monad-inC-outC},
+form $F^{R}$ (where $R$ is arbitrary but fixed). By Statement~\ref{subsec:Statement-codensity-monad-inC-outC},
 the monad morphism laws hold for \lstinline!inC!, where the type
 $S$ is unrestricted. So, the same laws will hold for \lstinline!flift!
-where $S$ is limited to a subset of possible types. We do not need
-to repeat the proofs of those laws.
+where $S$ is restricted to types of the form $F^{R}$.
 
-\subsection{Examples of monads with two different transformers\label{subsec:Examples-of-monads-with-two-different-transformers}}
+\subsection{Examples of monads with several different transformers\label{subsec:Examples-of-monads-with-two-different-transformers}}
 
 As a rule, a monad has only one monad transformer. This section shows
-two exceptions to that rule: monads with two inequivalent transformers.
-As we will see, in both cases one transformer is complete (has all
-required methods) but the other is incomplete.
+some exceptions to that rule: monads that have several inequivalent
+transformers. Often, one transformer is complete (has all the required
+methods) but others are incomplete.
 
 The first example is the selector monad\index{monads!Sel (selector) monad@\texttt{Sel} (selector) monad},
 $\text{Sel}^{Q,A}=(A\rightarrow Q)\rightarrow A$. That monad, described
 in Section~\ref{subsec:Rigid-monad-construction-1-choice}, has a
-composed-outside transformer $T_{1}^{M,A}\triangleq(M^{A}\rightarrow Q)\rightarrow M^{A}$. 
+composed-outside transformer: $T_{1}^{M,A}\triangleq(M^{A}\rightarrow Q)\rightarrow M^{A}$. 
 
 At the same time, $\text{Sel}^{Q,A}$ is equivalent to the generalized
 \lstinline!Search! monad (Section~\ref{subsec:Transformer-for-the-generalized-search-monad})
@@ -9395,55 +9401,60 @@ with the type $T_{2}^{M,A}\triangleq(A\rightarrow M^{Q})\rightarrow M^{A}$.
 The transformers $T_{1}$ and $T_{2}$ cannot be equivalent because
 the transformer $T_{1}$ is covariant in the type parameter $M$ while
 $T_{2}$ is not. Since the transformer $T_{2}$ is incomplete (it
-lacks runners and a base lift), it is preferable to use the transformer
+lacks runners and a base lift), it may be preferable to use the transformer
 $T_{1}$.
 
-The second example is found when considering the codensity monad ($\text{Cod}^{F,\bullet}$).
-That monad is defined using an arbitrary type constructor $F$. When
-$F$ is itself a monad, we see that $\text{Cod}^{F,\bullet}$ is a
-new monad that includes the effects of $F$ (Statement~\ref{subsec:Statement-codensity-monad-inC-outC}).
-So, we could view $\text{Cod}^{F,\bullet}$ as a monad transformer
-applied to a foreign monad $F$. What is the base monad for that monad
-transformer? We expect the base monad to be obtained as $\text{Cod}^{F,\bullet}$
-with $F=\text{Id}$; this gives $\text{Cod}^{\text{Id},\bullet}=\text{Id}^{\bullet}$
-(see proof of Statement~\ref{subsec:Statement-codensity-monad-inC-outC}).
-So, the codensity type constructor is an alternative transformer \emph{for
-the identity monad}. The identity monad also has a standard transformer,
-$T_{\text{Id}}^{M,A}\triangleq M^{A}$. 
+Further examples of monads with several transformers are found via
+the codensity monad transformer ($T_{\text{Cod}^{F}}^{M,A}$). For
+some $F$, the type constructor $\text{Cod}^{F,\bullet}$ is equivalent
+to a simpler monad $G^{\bullet}$ that already has a \textsf{``}standard\textsf{''}
+transformer. For instance, $\text{Cod}^{F,\bullet}\cong G^{\bullet}$
+when $F^{A}=G^{A}=A$ (by the covariant Yoneda identity); when $F^{A}=R\rightarrow A$,
+$G^{A}=\text{State}^{R,A}$ (see the proof of Statement~\ref{subsec:Statement-codensity-monad-inC-outC}(c));
+and when $F^{A}\triangleq A\rightarrow A$, $G^{A}=\text{List}^{A}$
+(see Exercise~\ref{par:Exercise-additional-16-1}(a)). In this way,
+alternative monad transformers for the \lstinline!Id!, \lstinline!State!,
+and \lstinline!List! monads are obtained as $T_{\text{Cod}^{F}}^{M,A}$
+with the given choices of $F$. 
 
-\subsubsection{Statement \label{subsec:Statement-codensity-monad-3}\ref{subsec:Statement-codensity-monad-3} }
+Even though $\text{Cod}^{F}$ is equivalent to $G$, the codensity
+transformer ($T_{\text{Cod}^{F}}^{M,A}$) will be usually \emph{not}
+equivalent to $G$\textsf{'}s \textsf{``}standard\textsf{''} transformer ($T_{G}$) because
+$T_{\text{Cod}^{F}}^{M,A}$ is not covariant in the foreign monad
+$M$, while many \textsf{``}standard\textsf{''} transformers are. (For instance, the
+standard transformers for \lstinline!Id!, \lstinline!State!, and
+\lstinline!List! monads are covariant in the foreign monad.) Also,
+$T_{\text{Cod}^{F}}^{M,A}$ is an incomplete transformer: it lacks
+a foreign runner, and its base runner fails the composition law of
+monad morphisms.
 
-The type constructor $\text{Cod}^{M,\bullet}$ is a transformer for
-the identity monad ($\text{Id}$) applied to the foreign monad $M$.
-The transformer is incomplete as it lacks a foreign runner, and its
-base runner fails the composition law of monad morphisms.
-
-\subparagraph{Proof}
-
-The monad laws hold because $\text{Cod}^{M,\bullet}$ is a monad (Statement~\ref{subsec:Statement-codensity-monad-lawful}). 
-
-To verify the identity laws: when $M=\text{Id}$, we have (by the
-Yoneda identity):
+More examples of alternative transformers are found by considering
+Church-encoded free typeclasses. Given a typeclass \lstinline!TC!
+and a type $A$, we define the Church-encoded free typeclass \lstinline!TC!
+on $A$~as:
 \[
-\text{Cod}^{\text{Id},A}=\forall R.\,(A\rightarrow R)\rightarrow R\cong A=\text{Id}^{A}\quad.
+\text{FTC}^{A}\triangleq\forall X^{:\text{TC}}.\,(A\rightarrow X)\rightarrow X
 \]
-
-The foreign lift method is defined as the monad morphism \lstinline!inC!
-(Statement~\ref{subsec:Statement-codensity-monad-inC-outC}).
-
-A foreign runner is not possible since $\text{Cod}^{M,\bullet}$ is
-not covariant in $M$. 
-
-A base runner should have type signature $\text{Cod}^{M,A}\rightarrow M^{A}$.
-This is implemented by the function \lstinline!outC! from Statement~\ref{subsec:Statement-codensity-monad-inC-outC}.
-However, the proof of that statement shows that \lstinline!outC!
-does not satisfy the monad morphism composition law.
+(see Section~\ref{subsec:Free-constructions-for-arbitrary-typeclasses}).
+Inserting a foreign monad $M$ as in the codensity transformer, we
+define:
+\[
+T_{\text{FTC}}^{M,A}\triangleq\forall X^{:\text{TC}}.\,(A\rightarrow M^{X})\rightarrow M^{X}\quad.
+\]
+Note that $\text{FTC}^{A}$ is a monad (Statement~\ref{subsec:Statement-monad-with-quantifier}).
+For some typeclasses, $\text{FTC}^{A}$ is equivalent to a simpler
+monad $G^{A}$. Specific examples are found with \lstinline!TC!$\,=\,$\lstinline!Monoid!
+and $G$$\,=\,$\lstinline!List! (see Exercise~\ref{par:Exercise-additional-16-1}(e)),
+and with \lstinline!TC!$\,=\,$\lstinline!Semigroup! and $G$$\,=\,$\lstinline!NEL!.
+In these cases,  the type constructor $T_{\text{FTC}}^{M,A}$ gives
+a new transformer for the monad $G$ that is not equivalent to $G$\textsf{'}s
+\textsf{``}standard\textsf{''} transformer.
 
 \section{Further developments}
 
 \subsection{Some properties of monad morphisms}
 
-In this section we prove some properties of monad morphisms used elsewhere
+In this section we prove some properties of monad morphisms needed
 in this chapter.
 
 \subsubsection{Statement \label{subsec:Statement-M-to-M-times-M-is-monadic-morphism}\ref{subsec:Statement-M-to-M-times-M-is-monadic-morphism}}
@@ -10438,13 +10449,12 @@ holds.
 
 Section~\ref{subsec:Combining-monads-via-mtl-style} showed that
 MTL-style programming requires custom code for lifting monad operations
-to all supported monad stacks.\index{Mauro Jaskelioff} M.~Jaskelioff\textsf{'}s
-\textsf{``}\texttt{Monatron}\textsf{''} library\footnote{See \texttt{\href{https://www.fceia.unr.edu.ar/~mauro/pubs/monatron.pdf}{https://www.fceia.unr.edu.ar/$\sim$mauro/pubs/monatron.pdf}}}\index{Monatron library (MTL-style)@\texttt{Monatron} library (MTL-style)}\index{MTL-style monadic programs!Monatron library@\texttt{Monatron} library}\index{monadic program!Monatron library (MTL-style)@\texttt{Monatron} library (MTL-style)}
+to all supported monad stacks. The \textsf{``}\texttt{Monatron}\textsf{''} library\footnote{See \texttt{\href{https://www.fceia.unr.edu.ar/~mauro/pubs/monatron.pdf}{https://www.fceia.unr.edu.ar/$\sim$mauro/pubs/monatron.pdf}}}\index{Monatron library (MTL-style)@\texttt{Monatron} library (MTL-style)}\index{MTL-style monadic programs!Monatron library@\texttt{Monatron} library}\index{monadic program!Monatron library (MTL-style)@\texttt{Monatron} library (MTL-style)}
 is based on a systematic approach that lifts many known monad operations
 to most monad stacks, including stacks that contain a single monad
 with an incomplete or missing transformer (such as \lstinline!Cont!
 or \lstinline!IO!) located at the deep end of the stack. This section,
-based on the methods and results explained in a paper by M.~Jaskelioff,\footnote{\textsf{``}Modular monad transformers\textsf{''}, see \texttt{\href{https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.219.5365}{https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.219.5365}}}
+based on the methods and results explained in a paper by \index{Mauro Jaskelioff}M.~Jaskelioff,\footnote{\textsf{``}Modular monad transformers\textsf{''}, see \texttt{\href{https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.219.5365}{https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.219.5365}}}
 will show how \texttt{Monatron}\textsf{'}s liftings work. 
 
 \paragraph{Common type signatures for operations}
@@ -10574,9 +10584,9 @@ law.
 
 The \lstinline!List! monad\textsf{'}s \lstinline!append! operation has the
 type signature of the \textsf{``}standard\textsf{''} form $F^{\text{List}^{A}}\rightarrow\text{List}^{A}$
-with $F^{A}\triangleq A\times A$. As shown in Exercise~\ref{subsec:Exercise-flatten-concat-distributive-law},
+with $F^{A}\triangleq A\times A$. By Exercise~\ref{subsec:Exercise-flatten-concat-distributive-law},
 \lstinline!append! satisfies the compatibility law~(\ref{eq:monatron-standard-operation-compatibility-law}).
-So, Statement~\ref{subsec:Statement-simple-standard-operations-monatron}
+Then Statement~\ref{subsec:Statement-simple-standard-operations-monatron}
 shows that \lstinline!append! is equivalent to a \textsf{``}simple\textsf{''} operation
 \lstinline!sappend!:
 \begin{align*}
@@ -10635,8 +10645,8 @@ any other way.
 
 Putting the \textsf{``}non-standard\textsf{''} operations \lstinline!callcc!, \lstinline!collect!,
 \lstinline!process!, and \lstinline!filter! temporarily aside, we
-now focus on the methods for lifting \textsf{``}simple\textsf{''} and \textsf{``}standard\textsf{''}
-operations to monad stacks.
+now focus on how to lift \textsf{``}simple\textsf{''} and \textsf{``}standard\textsf{''} operations
+to monad stacks.
 
 The goal is to lift a \textsf{``}standard\textsf{''} operation $\text{op}_{M}:F^{M}\leadsto M$
 from a monad $M$ to any monad stack $P$ containing $M$. We assume
@@ -10660,7 +10670,7 @@ should commute with the mapping by $p$. This requirement is written
 as a \index{monadic naturality law!of lifted operations}monadic naturality
 law:
 
-\begin{wrapfigure}{r}{0.2\columnwidth}%
+\begin{wrapfigure}{l}{0.19\columnwidth}%
 \begin{centering}
 \vspace{-2\baselineskip}
 \[
@@ -10674,7 +10684,7 @@ F^{P^{A}}\ar[r]\sp(0.5){\text{op}_{P}} & P^{A}
 
 ~\vspace{-0.45\baselineskip}
 \begin{equation}
-\text{op}_{M}\bef p=p^{\uparrow F}\bef\text{op}_{P}\quad.\label{eq:monatron-monadic-naturality-for-operations}
+\text{for any monad morphism }p:M\leadsto P:\quad\text{op}_{M}\bef p=p^{\uparrow F}\bef\text{op}_{P}\quad.\label{eq:monatron-monadic-naturality-for-operations}
 \end{equation}
 
 \noindent The goal of this section is to derive monadically natural
@@ -11140,11 +11150,11 @@ is not an identity function. $\square$
 As the case of the \lstinline!Writer! monad shows, it does not seem
 possible to implement a monadically natural lifting to the base monad
 for all monads $M$ at once. The method of Statements~\ref{subsec:Statement-monatron-equivalence-op-cop}\textendash \ref{subsec:Statement-monatron-standard-lifting-op}
-cannot be used because the codensity monad whose transformer does
-not support base lifts. So, lifting those operations requires custom
-code adapted to the particular structure of the functor $F$ and the
-base monad $M$. For example, we may lift the \lstinline!Writer!
-monad\textsf{'}s \lstinline!clear! operation to any stack $Q\triangleq M\varangle N=N\circ M$
+cannot be used because the codensity monad\textsf{'}s transformer does not
+support base lifts. So, lifting those operations requires custom code
+adapted to the particular structure of the functor $F$ and the base
+monad $M$. For example, we may lift the \lstinline!Writer! monad\textsf{'}s
+\lstinline!clear! operation to any stack $Q\triangleq M\varangle N=N\circ M$
 like this:
 
 \subsubsection{Example \label{subsec:Statement-monatron-lifting-writer-clear-to-base}\ref{subsec:Statement-monatron-lifting-writer-clear-to-base}\index{solved examples}}
@@ -11222,7 +11232,7 @@ We could also combine all \textsf{``}standard\textsf{''} operations ($\text{op}_
 $\text{op}_{2}:F_{2}^{M^{A}}\rightarrow M^{A}$, etc.) into a single
 operation by using the type equivalence:
 \[
-(F_{1}^{M^{A}}\rightarrow M^{A})\times(F_{2}^{M^{A}}\rightarrow M^{A})\cong(F_{1}+F_{2})^{M^{A}}\rightarrow M^{A}\quad.
+(F_{1}^{M^{A}}\rightarrow M^{A})\times(F_{2}^{M^{A}}\rightarrow M^{A})\cong\big(F_{1}^{M^{A}}+F_{2}^{M^{A}}\big)\rightarrow M^{A}\cong(F_{1}+F_{2})^{M^{A}}\rightarrow M^{A}\quad.
 \]
 The resulting \textsf{``}standard\textsf{''} operation corresponds to the product
 of all \textsf{``}standard\textsf{''} operations of the monad $M$. It is easier to
@@ -11249,9 +11259,9 @@ be also transformed to a \textsf{``}flipped-standard\textsf{''} form:
 \subsubsection{Example \label{subsec:Statement-monatron-collect-operation}\ref{subsec:Statement-monatron-collect-operation}}
 
 Show that the type of \lstinline!Writer! monad\textsf{'}s \lstinline!collect!
-operation,
+operation:
 \[
-\text{collect}:\forall A.\,A\times W\rightarrow(A\times W)\times W\quad,
+\text{collect}:\forall A.\,A\times W\rightarrow(A\times W)\times W
 \]
 is equivalent to the type $\forall A.\,(W\rightarrow A)\times W\rightarrow A\times W$. 
 
@@ -11435,7 +11445,7 @@ To express \lstinline!callcc! via \lstinline!jump! and \lstinline!scc!,
 we first convert \lstinline!scc! to an equivalent \textsf{``}standard\textsf{''}
 operation (\lstinline!cc!):
 \[
-\text{cc}:\text{Sel}^{R,\text{Cont}^{R,A}}\rightarrow\text{Cont}^{R,A}\quad,\quad\quad\text{cc}\triangleq\text{scc}\bef\text{ftn}_{\text{Cont}}\quad.
+\text{cc}:\text{Sel}^{R,\,\text{Cont}^{R,A}}\rightarrow\text{Cont}^{R,A}\quad,\quad\quad\text{cc}\triangleq\text{scc}\bef\text{ftn}_{\text{Cont}}\quad.
 \]
 To arrive at a systematic way of transforming functions of \lstinline!cc!\textsf{'}s
 type signature into functions of \lstinline!callcc!\textsf{'}s type signature,
@@ -11638,11 +11648,35 @@ the free monad:
 \]
 $\square$
 
-So, if we have some \textsf{``}simple\textsf{''} effectful operations with functors
-$F_{1}$, $F_{2}$, etc., we may combine them into a single effect
-constructor $F=F_{1}+F_{2}+...$ and use a free monad on $F$ to obtain
-a monad that supports all the given operations. But a free monad cannot
-describe any operations that are not equivalent to \textsf{``}simple\textsf{''} ones.
+We may combine any number of \textsf{``}simple\textsf{''} effectful operations with
+functors $F_{1}$, $F_{2}$, ..., $F_{k}$ into a single effect constructor
+$F=F_{1}+F_{2}+...+F_{k}$. The free monad on $F$ will support all
+the given operations. But a free monad cannot describe an operation
+that is not equivalent to a \textsf{``}simple\textsf{''} one.
+
+\subsection{Summary of monad transformer constructions}
+
+Monad transformers seen in this chapter fall into one of the 6 cases:
+
+1. Compositional transformers that work by functor composition in
+one or another order. This applies to \lstinline!Either!, \lstinline!Writer!,
+\lstinline!Reader! and the \textsf{``}rigid\textsf{''} monads.
+
+2. The special monads \lstinline!State!, \lstinline!Cont!, \lstinline!Cod!,
+\lstinline!Search!, whose transformers are not fully-featured.
+
+3. The recursive monads: \lstinline!List! and the free monads.
+
+4. The transformer for a Cartesian product of monads is the Cartesian
+product of transformers.
+
+5. The free pointed monad and its special transformer.
+
+6. Monad stacks (monads of the form $K\varangle L\varangle...\varangle P$
+where $K$, $L$, ..., $P$ are given monads).
+
+No one knows any examples of monads that do not fit into one of these
+cases.
 
 \subsection{Exercises\index{exercises}}
 
@@ -11650,14 +11684,11 @@ describe any operations that are not equivalent to \textsf{``}simple\textsf{''} 
 
 Define type constructors for these monad stacks and for their transformers:
 
-\textbf{(a)} \lstinline!Eval! $\varangle$ \lstinline!Try!
-
-\textbf{(b)} \lstinline!List! $\varangle$ \lstinline!Eval!
-
-\textbf{(c)} \lstinline!Try! $\varangle$ \lstinline!Writer[W, *]!
-
-\textbf{(d)} \lstinline!Cont[R, *]! $\varangle$ \lstinline!Try!
-$\varangle$ \lstinline!State[S, *]!
+\textbf{(a)} \lstinline!Eval! $\varangle$ \lstinline!Try!.\textbf{
+(b)} \lstinline!List! $\varangle$ \lstinline!Eval!.\textbf{ (c)}
+\lstinline!Try! $\varangle$ \lstinline!Writer[W, *]!.\textbf{ (d)}
+\lstinline!Cont[R, *]! $\varangle$ \lstinline!Try! $\varangle$
+\lstinline!State[S, *]!.
 
 \subsubsection{Exercise \label{subsec:Exercise-monad-stack-1-1}\ref{subsec:Exercise-monad-stack-1-1}}
 
@@ -11727,7 +11758,7 @@ def dbl[M[_]: Monad, A](m: M[A]): M[A] = for {
 \vspace{-1.2\baselineskip}
 \end{wrapfigure}%
 
-~\vspace{-0.45\baselineskip}
+~\vspace{-1.05\baselineskip}
 \begin{align*}
 m^{:M^{A}}\triangleright\text{dbl} & \triangleq m\triangleright\text{flm}_{M}(\_^{:A}\rightarrow m)\\
  & =m\triangleright(\_\rightarrow m)^{\uparrow M}\bef\text{ftn}_{M}\quad.
@@ -12711,14 +12742,5 @@ that these transformers are incorrect they are not fully featured
 they do not satisfy the required laws I couldn't get that and I will
 talk about this later so now I begin with the composed inside transformers
 which is the first class of transformers in my 
-\end{comment}
-
-\begin{comment}
-\end{comment}
-
-\begin{comment}
-\end{comment}
-
-\begin{comment}
 \end{comment}
 
