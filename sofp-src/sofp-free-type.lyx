@@ -6555,7 +6555,7 @@ another monad
 \begin_inset Formula $M$
 \end_inset
 
- is some monad, we hope to obtain a general runner with type signature 
+ is some monad, we hope to obtain a runner with type signature 
 \begin_inset Formula $\forall A.\,\text{MonadDSL}^{F,A}\rightarrow M^{A}$
 \end_inset
 
@@ -6563,8 +6563,8 @@ another monad
 \end_layout
 
 \begin_layout Standard
-To see an example of using such general runners in practice, note that the
- execution of 
+To see an example of using such general runners in practice, assume that
+ the execution of 
 \begin_inset Formula $F$
 \end_inset
 
@@ -6586,7 +6586,11 @@ jokes
 \begin_inset Quotes eld
 \end_inset
 
+
+\emph on
 A function that launches real-world missiles can run out of missiles.
+\emph default
+
 \begin_inset Quotes erd
 \end_inset
 
@@ -6600,7 +6604,19 @@ Simon Peyton Jones
 
 \end_inset
 
-Simon Peyton Jones.)
+Simon Peyton Jones, see 
+\family typewriter
+
+\begin_inset CommandInset href
+LatexCommand href
+target "https://stackoverflow.com/questions/2773004"
+literal "false"
+
+\end_inset
+
+
+\family default
+ for discussion.)
 \end_layout
 
 \end_inset
@@ -6698,7 +6714,122 @@ MonadDSL
 
 \end_inset
 
-'s runner needs to be modified to accommodate the new type:
+'s runner needs to be modified to accommodate the new type.
+ Since a 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Val(a)
+\end_layout
+
+\end_inset
+
+ cannot generate errors (only 
+\begin_inset Formula $F$
+\end_inset
+
+-effects can), we transform a 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Val(a)
+\end_layout
+
+\end_inset
+
+ into 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Success(a)
+\end_layout
+
+\end_inset
+
+.
+ A 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Bind
+\end_layout
+
+\end_inset
+
+ value can only result from using 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+MonadDSL
+\end_layout
+
+\end_inset
+
+'s 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+flatMap
+\end_layout
+
+\end_inset
+
+, and so it is reasonable to transform 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Bind
+\end_layout
+
+\end_inset
+
+ into a call to 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Try
+\end_layout
+
+\end_inset
+
+'s 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+flatMap
+\end_layout
+
+\end_inset
+
+ method.
+ The new runner's code becomes:
 \begin_inset listings
 inline false
 status open
@@ -6952,13 +7083,13 @@ def runM[F[_], M[_]: Monad, A](runnerM: RunnerM[F, M]): MonadDSL[F, A] =>
 
 \begin_layout Plain Layout
 
-  case bind@Bind(pa)   => runM(runner)(pa).flatMap(bind.f andThen runM(runner))
+  case bind@Bind(pa)   => runM(runnerM)(pa).flatMap(bind.f andThen runM(runnerM))
  // Use flatMap from M.
 \end_layout
 
 \begin_layout Plain Layout
 
-  case Op(op)          => runner.run(op)
+  case Op(op)          => runnerM.run(op)
 \end_layout
 
 \begin_layout Plain Layout
@@ -6969,6 +7100,218 @@ def runM[F[_], M[_]: Monad, A](runnerM: RunnerM[F, M]): MonadDSL[F, A] =>
 \end_inset
 
 
+\end_layout
+
+\begin_layout Standard
+We have implemented the universal runner by mapping 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+MonadDSL
+\end_layout
+
+\end_inset
+
+'s monadic methods (
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+pure
+\end_layout
+
+\end_inset
+
+ and 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+flatMap
+\end_layout
+
+\end_inset
+
+) into the corresponding 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+pure
+\end_layout
+
+\end_inset
+
+ and 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+flatMap
+\end_layout
+
+\end_inset
+
+ methods of the monad 
+\begin_inset Formula $M$
+\end_inset
+
+.
+ More precisely, if we fix an effect runner 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+runnerM
+\end_layout
+
+\end_inset
+
+ then the corresponding runner 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+run = runM(runnerM)
+\end_layout
+
+\end_inset
+
+ satisfies:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+run(MonadDSL.pure(a)) == run(Val(a))  == Monad[M].pure(a)
+\end_layout
+
+\begin_layout Plain Layout
+
+run(p.flatMap(f)) == run(Bind(p)(f)) == run(p.flatMap(f andThen run))
+\end_layout
+
+\end_inset
+
+These equations also show that there is 
+\emph on
+only one
+\emph default
+ implementation of a runner function of type 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+run[A]: MonadDSL[A] => M[A]
+\end_layout
+
+\end_inset
+
+ that preserves the 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+pure
+\end_layout
+
+\end_inset
+
+ and 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+flatMap
+\end_layout
+
+\end_inset
+
+ operations.
+ The 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Op(op)
+\end_layout
+
+\end_inset
+
+ values must be transformed into 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+runnerM.run(op)
+\end_layout
+
+\end_inset
+
+ as there is no other way of converting a value of type 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+F[A]
+\end_layout
+
+\end_inset
+
+ into a value of type 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+M[A]
+\end_layout
+
+\end_inset
+
+ with an arbitrary monad 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+M
+\end_layout
+
+\end_inset
+
+.
+ 
 \end_layout
 
 \begin_layout Standard

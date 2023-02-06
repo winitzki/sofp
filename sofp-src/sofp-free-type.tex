@@ -986,13 +986,14 @@ obtain a monad runner of type \inputencoding{latin9}\lstinline!MonadDSL[F, A] =>
 
 More generally, we may need to run the $F$-effects into \emph{another
 monad}. Given an effect runner of type $\forall X.\,F^{X}\rightarrow M^{X}$,
-where $M$ is some monad, we hope to obtain a general runner with
-type signature $\forall A.\,\text{MonadDSL}^{F,A}\rightarrow M^{A}$.
+where $M$ is some monad, we hope to obtain a runner with type signature
+$\forall A.\,\text{MonadDSL}^{F,A}\rightarrow M^{A}$.
 
 To see an example of using such general runners in practice, note
 that the execution of $F$-effects may produce errors.\footnote{\index{jokes}\textsf{``}A function that launches real-world missiles can
 run out of missiles.\textsf{''} (A quote attributed to \index{Simon Peyton Jones}Simon
-Peyton Jones.)} For instance, the code of \inputencoding{latin9}\lstinline!runFileC!\inputencoding{utf8}
+Peyton Jones, see \texttt{\href{https://stackoverflow.com/questions/2773004}{https://stackoverflow.com/questions/2773004}}
+for discussion.)} For instance, the code of \inputencoding{latin9}\lstinline!runFileC!\inputencoding{utf8}
 (the runner for the \inputencoding{latin9}\lstinline!PrgFile!\inputencoding{utf8}
 DSL) will throw exceptions when files are not found or not readable.
 We may catch those exceptions with Scala\textsf{'}s standard \inputencoding{latin9}\lstinline!Try!\inputencoding{utf8}
@@ -1037,6 +1038,28 @@ def runM[F[_], M[_]: Monad, A](runnerM: RunnerM[F, M]): MonadDSL[F, A] => M[A] =
 } *** check that this code works
 \end{lstlisting}
 \inputencoding{utf8}
+An important property of the universal runner is that it maps \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}\textsf{'}s
+monadic methods (\inputencoding{latin9}\lstinline!pure!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8})
+into the corresponding \inputencoding{latin9}\lstinline!pure!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8}
+methods of the monad $M$. More precisely, if we fix an effect runner
+\inputencoding{latin9}\lstinline!runnerM!\inputencoding{utf8} then
+the corresponding runner \inputencoding{latin9}\lstinline!run = runM(runnerM)!\inputencoding{utf8}
+satisfies:\inputencoding{latin9}
+\begin{lstlisting}
+run(MonadDSL.pure(a)) == run(Val(a))  == Monad[M].pure(a)
+run(p.flatMap(f)) == run(Bind(p)(f)) == run(p.flatMap(f andThen run))
+\end{lstlisting}
+\inputencoding{utf8}Conversely, if we require that a runner \inputencoding{latin9}\lstinline!run[A]: MonadDSL[A] => M[A]!\inputencoding{utf8}
+should preserve \inputencoding{latin9}\lstinline!pure!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8},
+we have no choice but transform \inputencoding{latin9}\lstinline!Val!\inputencoding{utf8}
+into \inputencoding{latin9}\lstinline!M!\inputencoding{utf8}\textsf{'}s pure
+and \inputencoding{latin9}\lstinline!Bind!\inputencoding{utf8} into
+\inputencoding{latin9}\lstinline!M!\inputencoding{utf8}\textsf{'}s \inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8}.
+Under the requirement of he code of the universal runner is unique.
+
 The use of universal runners (with an arbitrary monad $M$) allows
 the programmer to better separate the business logic of an application
 from its execution environment. For instance, $M$ may itself be a
@@ -1753,13 +1776,12 @@ has the type signature of the form \inputencoding{latin9}\lstinline!... => M[A]!
 where the last return type uses the same monad \inputencoding{latin9}\lstinline!M!\inputencoding{utf8}.
 
 The second step is to implement the \textsf{``}universal runner\textsf{''} that transforms
-the free typeclass value into a value of another type belonging to
-the same typeclass. The universal runner for the free monad on \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}
-takes a polymorphic function of type $\forall A.\,F^{A}\rightarrow M^{A}$,
+a free typeclass value into a value of another type belonging to the
+same typeclass. For instance, the universal runner for the free monad
+on \inputencoding{latin9}\lstinline!F!\inputencoding{utf8} takes
+a polymorphic function of type $\forall A.\,F^{A}\rightarrow M^{A}$,
 where $M$ is any other monad, and runs the free monad\textsf{'}s effects into
-$M$\textsf{'}s effects. Similarly, the universal runner can map a value of
-a free typeclass into any other type already belonging to the same
-typeclass.
+$M$\textsf{'}s effects.
 
 Typically, the raw tree encoding will not satisfy the laws of the
 typeclass. (However, the laws will hold after applying the runner.)
@@ -1998,7 +2020,7 @@ as it only wraps the data in a new case class. However, \inputencoding{latin9}\l
 run operation may be implemented with tail recursion while \inputencoding{latin9}\lstinline!FSR[T]!\inputencoding{utf8}
 is a binary tree whose traversal cannot be tail-recursive.
 
-\subsection{Free monoids}
+\subsection{Free monoids\label{subsec:Free-monoids}}
 
 A monoid (see Example~\ref{subsec:tc-Example-Monoids}) is a typeclass
 with a two methods: \inputencoding{latin9}\lstinline!combine!\inputencoding{utf8}
@@ -2469,18 +2491,27 @@ The free typeclass recipe applied to a monad\textsf{'}s definition via \inputenc
 and \inputencoding{latin9}\lstinline!flatten!\inputencoding{utf8}
 will give:\inputencoding{latin9}
 \begin{lstlisting}
-sealed trait Free5[A]
-final case class Pure[A](a: A) extends Free5[A]
-final case class Flatten[A](ff: Free5[Free5[A]]) extends Free5[A]
+sealed trait Free5[F[_], A]
+final case class Pure[F[_], A](a: A) extends Free5[F, A]
+final case class Wrap[F[_], A](fa: F[A]) extends Free5[F, A]
+final case class Flatten[F[_], A](ff: Free5[F, Free5[F, A]]) extends Free5[F, A]
 \end{lstlisting}
 \inputencoding{utf8}This code differs from \inputencoding{latin9}\lstinline!Free1!\inputencoding{utf8}
-only{*}{*}{*}
+in two ways: the presence of \inputencoding{latin9}\lstinline!Wrap!\inputencoding{utf8}
+and the definition of the form \inputencoding{latin9}\lstinline!Free5[F, Free5[F, A]]!\inputencoding{utf8}
+instead of \inputencoding{latin9}\lstinline!F[Free1[F, A]]!\inputencoding{utf8}
+within \inputencoding{latin9}\lstinline!Flatten!\inputencoding{utf8}.{*}{*}{*}
+We avoid the simplification Free5{[}F, F{[}A{]}{]} because this creates
+a recursive definition of Free5{[}F, A{]} whose recursive use modifies
+the type parameter A of Free5
 
 \subsection{Free pointed functors}
 
 \subsection{Free filterable functors}
 
 \subsection{Free applicative functors}
+
+\section{Advanced applications}
 
 \subsection{The Church encodings of free typeclasses}
 
@@ -2498,7 +2529,7 @@ start from half-reduced encoding $F^{A}+\exists Z.F^{Z}\times\big(Z\rightarrow\t
 
 replace the existential type by an equivalent type $F^{\text{FreeM}^{F^{\bullet},A}}$
 
-\subsection{Free constructions for arbitrary inductive typeclasses\label{subsec:Free-constructions-for-arbitrary-typeclasses}}
+\paragraph{Another encoding: (to be studied in more detail):}
 
 We have:
 \[
@@ -2506,9 +2537,112 @@ We have:
 \]
 is the free \inputencoding{latin9}\lstinline!MyTypeclass!\inputencoding{utf8}
 in the lawful Church encoding. The laws hold! This is more economical
-than the raw tree encoding, see the Semigroup example.
+than the raw tree encoding, see the \inputencoding{latin9}\lstinline!Semigroup!\inputencoding{utf8}
+example.
 
 \section{Laws of free constructions}
+
+This chapter developed the free monad via the implementation of a
+simple type-safe DSL. One then discovers different encodings of the
+free monad (the raw tree encoding and the various reduced encodings)
+that have different performance trade-offs. Free constructions of
+other typeclasses are motivated by analogy with the free monad and
+its various encodings. Can we formulate any properties or laws that
+validate the correctness of those constructions? Are all the different
+encodings equally safe to use?
+
+\subsection{Free constructions for inductive typeclasses\label{subsec:Free-constructions-for-inductive-typeclasses}}
+
+Let us look at the features common to all the free typeclass constructions
+we have seen. For simplicity, we first consider the free monoid construction
+and generalize its features to other inductive typeclasses. We will
+then extend the results to typeclasses for type constructors (such
+as \inputencoding{latin9}\lstinline!Functor!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!Monad!\inputencoding{utf8}).
+
+The construction of a free monoid transforms an arbitrary type $T$
+into a new type ($\text{FM}^{T}$) that has a \inputencoding{latin9}\lstinline!Monoid!\inputencoding{utf8}
+typeclass instance. Values of type $T$ may be transformed into values
+of type $\text{FM}^{T}$. For any given monoid $M$ and a given function
+of type $T\rightarrow M$, a \textsf{``}free monoid program\textsf{''} (i.e., a value
+of type $\text{FM}^{T}$) can be \textsf{``}run into $M$\textsf{''}. The resulting
+runner (of type $\text{FM}^{T}\rightarrow M$) will preserve the monoid
+operations between $\text{FM}^{T}$ and $M$. So, the monoid laws
+will hold for the values of type $M$ obtained by running a \textsf{``}free
+monoid program\textsf{''}, even when the chosen encoding $\text{FM}^{T}$
+violates some of the monoid laws.
+
+To generalize from free monoids to other typeclasses, it helps to
+use the notion of an \textsf{``}inductive typeclass\textsf{''}\index{inductive typeclass}\index{typeclass!inductive}
+introduced in Section~\ref{subsec:Inductive-typeclasses}. For a
+given (covariant) functor $P$, we define a $P$\textbf{-typeclass}
+as\index{$P$-typeclass} an inductive typeclass with structure functor
+$P$. So, all the data in a $P$-typeclass instance for a type $A$
+is equivalent to a value of type $P^{A}\rightarrow A$. The typeclass
+instance data for \inputencoding{latin9}\lstinline!Monoid!\inputencoding{utf8}
+has type $A\times\left(A\times A\rightarrow A\right)$, which is equivalent
+to to $P^{A}\rightarrow A$ if we define the structure functor as
+$P^{A}\triangleq\bbnum 1+A\times A$. The two parts of the disjunctive
+type $\bbnum 1+A\times A$ correspond to the \emph{arguments} of the
+monoid\textsf{'}s two operations: the empty value and the binary operation.
+
+What does it mean for a function to \textsf{``}preserve the monoid\textsf{'}s operations\textsf{''}?
+{*}{*}{*}
+
+We will now generalize the free monoid construction to the \textsf{``}free
+$P$-typeclass\textsf{''} construction, with an arbitrary structure functor
+$P$. By analogy with the free monoid, we formulate the required properties
+of a free $P$-typeclass:
+\begin{itemize}
+\item The free $P$-typeclass is a covariant type constructor denoted by
+$\text{FPTC}^{\bullet}$.
+\item For any type $T$, the type $\text{FPTC}^{T}$ has a $P$-typeclass
+instance (i.e., there exists a value of type $P^{\text{FPTC}^{T}}\rightarrow\text{FPTC}^{T}$).
+\item There exists a function \inputencoding{latin9}\lstinline!in!\inputencoding{utf8}
+$:T\rightarrow\text{FPTC}^{T}$.
+\item For any $P$-typeclass instance $C$ and any function $T\rightarrow C$,
+there exists a unique runner $\text{FPTC}^{T}\rightarrow C$ that
+preserves the operations of the $P$-typeclass:
+\[
+\text{run}:(T\rightarrow C)\rightarrow\text{FPTC}^{T}\rightarrow C\quad.
+\]
+Here, the requirement of a \emph{unique} runner reflects our expectation
+that there is only one \textsf{``}correct\textsf{''} way of running a free $P$-typeclass
+program while preserving the typeclass\textsf{'}s operations. This was the
+case in several examples seen so far.
+\item If $T$ already has a $P$-typeclass instance then the corresponding
+unique runner $\text{run}\,(\text{id}^{:T\rightarrow T})$ of type
+$\text{FPTC}^{T}\rightarrow T$ satisfies the identity law involving
+the injection function (\inputencoding{latin9}\lstinline!in!\inputencoding{utf8}):
+\[
+\text{in}^{:T\rightarrow\text{FPTC}^{T}}\bef\text{run}\,(\text{id}^{:T\rightarrow T})=\text{id}^{T\rightarrow T}\quad.
+\]
+\end{itemize}
+The raw tree encoding of the free monoid (see Section~\ref{subsec:Free-monoids})
+has the type: 
+\[
+\text{FMR}^{T}\triangleq\bbnum 1+T+\text{FMR}^{T}\times\text{FMR}^{T}\quad.
+\]
+The parts of the disjunctive type $\bbnum 1+T+\text{FMR}^{T}\times\text{FMR}^{T}$
+correspond to three ways in which a free monoid value may be created:
+from the empty value, from a value of type $T$, and from two existing
+values of the free monoid type. The structure functor $P$ describes
+two of these three ways. So, we are motivated to rewrite the definition
+of $\text{FMR}^{T}$ as $\text{FMR}^{T}\triangleq T+P^{\text{FMR}^{T}}$.
+This can be directly generalized to an arbitrary $P$-typeclass. So,
+we define the raw tree encoding of a free $P$-typeclass (denoted
+by $\text{FPR}^{T}$) as:
+\[
+\text{FPR}^{T}\triangleq T+P^{\text{FPR}^{T}}\quad.
+\]
+Let us verify that $\text{FPR}^{T}$ has the required properties of
+a free $P$-typeclass.
+
+{*}{*}{*}
+
+The It turns out that the property of runner
+
+{*}{*}{*}
 
 \subsection{Free constructions on more than one generator}
 
