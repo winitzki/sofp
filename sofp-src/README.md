@@ -7,8 +7,8 @@ The book grew from a series of in-depth video tutorials on functional programmin
 The video tutorials covered both the theory and the practice of functional programming,
 with the goal of building theoretical foundations that are valuable to practitioners.
 
-At this time, the video tutorials are obsolete since the book has covered all their material and much more.
-Some notations in the video tutorials have been changed in the book.
+At this time, the video tutorials are obsolete because the book already covers all their material and much more.
+Some notations in the video tutorials have been changed in the book, and some mistakes have been corrected.
 
 The material below is kept for reference only. Refer to the book for current status.
 
