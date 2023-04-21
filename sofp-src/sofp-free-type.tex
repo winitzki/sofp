@@ -60,7 +60,7 @@ val prgFile: PrgFile = Read(Path(Read(Path(Val("config_location.txt")))))
 \inputencoding{utf8}Such values represent an \emph{unevaluated} expression tree corresponding
 to the operations that need to be performed. To actually perform those
 operations and extract the final \inputencoding{latin9}\lstinline!String!\inputencoding{utf8}
-value, we use a \textsf{``}runner\textsf{''} function:\inputencoding{latin9}
+value, we use a \textsf{``}runner\textsf{''} function:\index{runner!for free monads}\inputencoding{latin9}
 \begin{lstlisting}
 def runFile: PrgFile => String = {
   case Val(s)          => s
@@ -986,13 +986,14 @@ obtain a monad runner of type \inputencoding{latin9}\lstinline!MonadDSL[F, A] =>
 
 More generally, we may need to run the $F$-effects into \emph{another
 monad}. Given an effect runner of type $\forall X.\,F^{X}\rightarrow M^{X}$,
-where $M$ is some monad, we hope to obtain a general runner with
-type signature $\forall A.\,\text{MonadDSL}^{F,A}\rightarrow M^{A}$.
+where $M$ is some monad, we hope to obtain a runner with type signature
+$\forall A.\,\text{MonadDSL}^{F,A}\rightarrow M^{A}$.
 
-To see an example of using such general runners in practice, note
-that the execution of $F$-effects may produce errors.\footnote{\index{jokes}\textsf{``}A function that launches real-world missiles can
-run out of missiles.\textsf{''} (A quote attributed to \index{Simon Peyton Jones}Simon
-Peyton Jones.)} For instance, the code of \inputencoding{latin9}\lstinline!runFileC!\inputencoding{utf8}
+To see an example of using such general runners in practice, assume
+that the execution of $F$-effects may produce errors.\footnote{\index{jokes}\textsf{``}\emph{A function that launches real-world missiles
+can run out of missiles.}\textsf{''} (A quote attributed to \index{Simon Peyton Jones}Simon
+Peyton Jones, see \texttt{\href{https://stackoverflow.com/questions/2773004}{https://stackoverflow.com/questions/2773004}}
+for discussion.)} For instance, the code of \inputencoding{latin9}\lstinline!runFileC!\inputencoding{utf8}
 (the runner for the \inputencoding{latin9}\lstinline!PrgFile!\inputencoding{utf8}
 DSL) will throw exceptions when files are not found or not readable.
 We may catch those exceptions with Scala\textsf{'}s standard \inputencoding{latin9}\lstinline!Try!\inputencoding{utf8}
@@ -1004,7 +1005,16 @@ trait RunnerTry[F[_]] { def run[X]: F[X] => Try[X] }
 val runnerFileTry = new RunnerTry[PrgFileC] { def run[X]: PrgFileC[X] => Try[X] = p => Try(runFileC(p)) }
 \end{lstlisting}
 \inputencoding{utf8} The code of the \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}\textsf{'}s
-runner needs to be modified to accommodate the new type:\inputencoding{latin9}
+runner needs to be modified to accommodate the new type. Since a \inputencoding{latin9}\lstinline!Val(a)!\inputencoding{utf8}
+cannot generate errors (only $F$-effects can), we transform a \inputencoding{latin9}\lstinline!Val(a)!\inputencoding{utf8}
+into \inputencoding{latin9}\lstinline!Success(a)!\inputencoding{utf8}.
+A \inputencoding{latin9}\lstinline!Bind!\inputencoding{utf8} value
+can only result from using \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}\textsf{'}s
+\inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8}, and
+so it is reasonable to transform \inputencoding{latin9}\lstinline!Bind!\inputencoding{utf8}
+into a call to \inputencoding{latin9}\lstinline!Try!\inputencoding{utf8}\textsf{'}s
+\inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8} method.
+The new runner\textsf{'}s code becomes:\inputencoding{latin9}
 \begin{lstlisting}
 def runTry[F[_], A](runnerTry: RunnerTry[F]): MonadDSL[F, A] => Try[A] = {
   case Val(a)          => Success(a)
@@ -1032,11 +1042,34 @@ for the free monad:\inputencoding{latin9}
 trait RunnerM[F[_], M[_]] { def run[X]: F[X] => M[X] }
 def runM[F[_], M[_]: Monad, A](runnerM: RunnerM[F, M]): MonadDSL[F, A] => M[A] = {
   case Val(a)          => Monad[M].pure(a)
-  case bind@Bind(pa)   => runM(runner)(pa).flatMap(bind.f andThen runM(runner)) // Use flatMap from M.
-  case Op(op)          => runner.run(op)
+  case bind@Bind(pa)   => runM(runnerM)(pa).flatMap(bind.f andThen runM(runnerM)) // Use flatMap from M.
+  case Op(op)          => runnerM.run(op)
 } *** check that this code works
 \end{lstlisting}
 \inputencoding{utf8}
+We have implemented the universal runner by mapping \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}\textsf{'}s
+monadic methods (\inputencoding{latin9}\lstinline!pure!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8})
+into the corresponding \inputencoding{latin9}\lstinline!pure!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8}
+methods of the monad $M$. More precisely, if we fix an effect runner
+\inputencoding{latin9}\lstinline!runnerM!\inputencoding{utf8} then
+the corresponding runner \inputencoding{latin9}\lstinline!run = runM(runnerM)!\inputencoding{utf8}
+satisfies:\inputencoding{latin9}
+\begin{lstlisting}
+run(MonadDSL.pure(a)) == run(Val(a))  == Monad[M].pure(a)
+run(p.flatMap(f)) == run(Bind(p)(f)) == run(p.flatMap(f andThen run))
+\end{lstlisting}
+\inputencoding{utf8}These equations also show that there is \emph{only one} implementation
+of a runner function of type \inputencoding{latin9}\lstinline!run[A]: MonadDSL[A] => M[A]!\inputencoding{utf8}
+that preserves the \inputencoding{latin9}\lstinline!pure!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8}
+operations. The \inputencoding{latin9}\lstinline!Op(op)!\inputencoding{utf8}
+values must be transformed into \inputencoding{latin9}\lstinline!runnerM.run(op)!\inputencoding{utf8}
+as there is no other way of converting a value of type \inputencoding{latin9}\lstinline!F[A]!\inputencoding{utf8}
+into a value of type \inputencoding{latin9}\lstinline!M[A]!\inputencoding{utf8}
+with an arbitrary monad \inputencoding{latin9}\lstinline!M!\inputencoding{utf8}. 
+
 The use of universal runners (with an arbitrary monad $M$) allows
 the programmer to better separate the business logic of an application
 from its execution environment. For instance, $M$ may itself be a
@@ -1079,9 +1112,9 @@ to a DSL program. Effect runners are not part of the code of \inputencoding{lati
 and will need to be supplied separately. So, we may run the same \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}
 program using different runners.
 
-The implementations of the monadic methods in \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}
-satisfy our goal of producing a type-safe DSL out of a given set of
-domain-specific operations. But it turns out that \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}
+The code of \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}
+satisfies our goal of producing a type-safe DSL out of a given set
+of domain-specific operations. But it turns out that \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}
 is not the only way of turning a given type constructor \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}
 into a monad. Various presentations and blog posts about the free
 monad have used different implementations that are not obviously equivalent
@@ -1178,7 +1211,7 @@ performing any computations.
 We could implement \inputencoding{latin9}\lstinline!map!\inputencoding{utf8}
 in a similar way if we added a new case class, say \inputencoding{latin9}\lstinline!FMap!\inputencoding{utf8},
 to \inputencoding{latin9}\lstinline!MonadDSL!\inputencoding{utf8}.
-The result is a new encoding of the free monad that we may call \inputencoding{latin9}\lstinline!Free4!\inputencoding{utf8}
+The result is a new encoding of the free monad that we will call \inputencoding{latin9}\lstinline!Free4!\inputencoding{utf8}
 (since it uses $4$ case classes):\inputencoding{latin9}
 \begin{lstlisting}
 sealed trait Free4[F[_], A] {
@@ -1297,8 +1330,8 @@ with some \inputencoding{latin9}\lstinline!f: A => B!\inputencoding{utf8}.
 
 It follows that \inputencoding{latin9}\lstinline!free3toFree4!\inputencoding{utf8}
 is injective while \inputencoding{latin9}\lstinline!free4toFree3!\inputencoding{utf8}
-is surjective. In this sense, the set of values of type \inputencoding{latin9}\lstinline!Free3!\inputencoding{utf8}
-is a smaller subset of the set of values of type \inputencoding{latin9}\lstinline!Free4!\inputencoding{utf8}.
+is surjective. In this sense, the encoding \inputencoding{latin9}\lstinline!Free4!\inputencoding{utf8}
+is \textsf{``}larger\textsf{''} than \inputencoding{latin9}\lstinline!Free3!\inputencoding{utf8}.
 However, \inputencoding{latin9}\lstinline!Free4!\inputencoding{utf8}
 does not express any more functionality than \inputencoding{latin9}\lstinline!Free3!\inputencoding{utf8}.
 After running the corresponding \inputencoding{latin9}\lstinline!Free3!\inputencoding{utf8}
@@ -1404,7 +1437,7 @@ def free3toFree2[F[_], A]: Free3[F, A] => Free2[F, A] = {
   case FlatMap(p, g)   => ???
 }
 \end{lstlisting}
-\inputencoding{utf8}{*}{*}{*}
+\inputencoding{utf8}{*}{*}{*}Some of these conversions are injective.
 
 \subsection{Types with existential quantifiers}
 
@@ -1720,8 +1753,8 @@ and are therefore universally quantified.
 
 Motivated by these considerations, we may \emph{define} the meaning
 of the symbol $\exists$ through Eq.~(\ref{eq:existential-via-universal}).
-Later we will derive a more direct type formula that expresses $\exists C$
-via $\forall C$: 
+Later we will derive another formula that expresses $\exists C$ via
+$\forall C$: 
 \[
 \text{for any type constructor }F^{\bullet}:\quad\exists C.\,F^{C}\cong\forall D.\,(\forall C.\,(F^{C}\rightarrow D))\rightarrow D\quad.
 \]
@@ -1753,13 +1786,12 @@ has the type signature of the form \inputencoding{latin9}\lstinline!... => M[A]!
 where the last return type uses the same monad \inputencoding{latin9}\lstinline!M!\inputencoding{utf8}.
 
 The second step is to implement the \textsf{``}universal runner\textsf{''} that transforms
-the free typeclass value into a value of another type belonging to
-the same typeclass. The universal runner for the free monad on \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}
-takes a polymorphic function of type $\forall A.\,F^{A}\rightarrow M^{A}$,
+a free typeclass value into a value of another type belonging to the
+same typeclass. For instance, the universal runner for the free monad
+on \inputencoding{latin9}\lstinline!F!\inputencoding{utf8} takes
+a polymorphic function of type $\forall A.\,F^{A}\rightarrow M^{A}$,
 where $M$ is any other monad, and runs the free monad\textsf{'}s effects into
-$M$\textsf{'}s effects. Similarly, the universal runner can map a value of
-a free typeclass into any other type already belonging to the same
-typeclass.
+$M$\textsf{'}s effects.
 
 Typically, the raw tree encoding will not satisfy the laws of the
 typeclass. (However, the laws will hold after applying the runner.)
@@ -1998,7 +2030,7 @@ as it only wraps the data in a new case class. However, \inputencoding{latin9}\l
 run operation may be implemented with tail recursion while \inputencoding{latin9}\lstinline!FSR[T]!\inputencoding{utf8}
 is a binary tree whose traversal cannot be tail-recursive.
 
-\subsection{Free monoids}
+\subsection{Free monoid and its partially lawful encodings\label{subsec:Free-monoids}}
 
 A monoid (see Example~\ref{subsec:tc-Example-Monoids}) is a typeclass
 with a two methods: \inputencoding{latin9}\lstinline!combine!\inputencoding{utf8}
@@ -2019,51 +2051,69 @@ final case class Wrap[T](value: T) extends FMR[T]
 \[
 \text{FMR}^{T}\triangleq\bbnum 1+T+\text{FMR}^{T}\times\text{FMR}^{T}\quad.
 \]
-We can now see that \inputencoding{latin9}\lstinline!FSR[T]!\inputencoding{utf8}
-is a binary tree with leaf values of type $\bbnum 1+T$.
+We can see that \inputencoding{latin9}\lstinline!FMR[T]!\inputencoding{utf8}
+is just a binary tree with leaf values of type $\bbnum 1+T$:
+\[
+\text{FMR}^{T}=\text{Tree2}^{\bbnum 1+T}\quad.
+\]
+The binary tree type \inputencoding{latin9}\lstinline!Tree2!\inputencoding{utf8}
+was defined in Section~\ref{subsec:Binary-trees}. The data type
+$\text{FMR}^{T}$ represents an \emph{unevaluated} expression tree
+built from the monoid operations and from values of type $T$, for
+example:
+
+\begin{wrapfigure}{l}{0.6\columnwidth}%
+\vspace{-0.4\baselineskip}
+\inputencoding{latin9}\begin{lstlisting}
+val exampleFMR: FMR[Int] = Combine(Empty(), Combine( Combine(Wrap(456), Empty()), Wrap(123)))
+\end{lstlisting}
+\inputencoding{utf8}\vspace{0.2\baselineskip}
+\end{wrapfigure}%
+
+\noindent {\tiny{}\hspace{0.1\columnwidth}}{\tiny{} \Tree[ [ $e$ ] [ [ [ $456$ ] [ $e$ ] ] [ $123$ ] ] ] }{\tiny\par}
 
 We can implement a \inputencoding{latin9}\lstinline!Monoid!\inputencoding{utf8}
-typeclass instance for \inputencoding{latin9}\lstinline!FSR[T]!\inputencoding{utf8}
+typeclass instance for \inputencoding{latin9}\lstinline!FMR[T]!\inputencoding{utf8}
 like this:\inputencoding{latin9}
 \begin{lstlisting}
-implicit def monoidFMR[T]: Monoid[FMR[T]] = Monoid((l, r) => Combine(l, r), Empty()) *** verify code
+implicit def monoidFMR[T]: Monoid[FMR[T]] = Monoid((l, r) => Combine(l, r), Empty())
 \end{lstlisting}
 \inputencoding{utf8}We define a syntax extension for the infix binary operation \inputencoding{latin9}\lstinline!|+|!\inputencoding{utf8}
 as in the previous section.
 
-As usual with raw tree encodings, the free monoid\textsf{'}s operations not
-perform any computations but only create more nested case classes.
-Those nested case classes represent an unevaluated expression tree
-of an \textsf{``}\inputencoding{latin9}\lstinline!FMR!\inputencoding{utf8}-program\textsf{''}.
+As usual with raw tree encodings, this free monoid\textsf{'}s operations not
+perform any computations but only create nested case classes. Those
+nested case classes represent an unevaluated expression tree of an
+\textsf{``}\inputencoding{latin9}\lstinline!FMR!\inputencoding{utf8}-program\textsf{''}.
 The next step is to implement a universal runner that will evaluate
-that expression tree, mapping all values into a given monoid \inputencoding{latin9}\lstinline!M!\inputencoding{utf8}.
+that expression tree using the operations of any chosen monoid \inputencoding{latin9}\lstinline!M!\inputencoding{utf8}.
 Given a function \inputencoding{latin9}\lstinline!T => M!\inputencoding{utf8},
-we can run any \inputencoding{latin9}\lstinline!FMR!\inputencoding{utf8}-program
+we can convert any \inputencoding{latin9}\lstinline!FMR!\inputencoding{utf8}-program
 (a value of type \inputencoding{latin9}\lstinline!FMR[T]!\inputencoding{utf8})
-into \inputencoding{latin9}\lstinline!M!\inputencoding{utf8} like
-this:\inputencoding{latin9}
+into a value of type \inputencoding{latin9}\lstinline!M!\inputencoding{utf8}
+like this:\inputencoding{latin9}
 \begin{lstlisting}
-def runner[M: Monoid, T](runT: T => M): FMR[T] => M = {
-  case Combine(left, right)   => runner(runT)(left) |+| runner(runT)(right)
+def runnerFMR[M: Monoid, T](runT: T => M)(fmr: FMR[T]): M = fmr match {
+  case Combine(left, right)   => runnerFMR(runT)(left) |+| runnerFMR(runT)(right)
   case Empty()                => Monoid[M].empty
   case Wrap(value)            => runT(value)
 }
 \end{lstlisting}
 \inputencoding{utf8}
 The raw tree encoding \inputencoding{latin9}\lstinline!FMR[T]!\inputencoding{utf8}
-does not satisfy the monoid laws (the associativity law and the two
-identity laws). This is not a problem in practice, since the laws
-will hold after running an \inputencoding{latin9}\lstinline!FMR!\inputencoding{utf8}-program
-into a lawful monoid \inputencoding{latin9}\lstinline!M!\inputencoding{utf8}.
-Imposing the monoid laws merely helps us find a reduced encoding of
-the free monoid.
+does not satisfy any of the monoid laws (the associativity law and
+the two identity laws). This is not a problem in practice, since the
+laws will hold after running an \inputencoding{latin9}\lstinline!FMR!\inputencoding{utf8}-program
+into any lawful monoid \inputencoding{latin9}\lstinline!M!\inputencoding{utf8}.
+Imposing the monoid laws will help us find reduced encodings of the
+free monoid.
 
-As in the case of the free semigroup, the associativity law will hold
-if we replace a binary tree by a non-empty list. The result is a non-empty
+As with the free semigroup, the associativity law will hold if we
+replace a binary tree by a non-empty list. The result is a non-empty
 list of values of type $\bbnum 1+T$. The type \inputencoding{latin9}\lstinline!NEL[Option[T]]!\inputencoding{utf8}
-is a possible encoding of the free monoid, but it does not satisfy
-the identity laws. The empty value of the free monoid is represented
-by a single-element list containing \inputencoding{latin9}\lstinline!None!\inputencoding{utf8}
+is a possible encoding of the free monoid; it satisfies the associativity
+law but fails the identity laws. The empty value of the free monoid
+is represented by a single-element list containing \inputencoding{latin9}\lstinline!None!\inputencoding{utf8}
 (in the code notation, $[1+\bbnum 0^{:T}]$). The identity laws of
 the monoid would hold if lists of the form: 
 \[
@@ -2081,14 +2131,141 @@ The binary operation for \inputencoding{latin9}\lstinline!List[T]!\inputencoding
 is just the \inputencoding{latin9}\lstinline!concat!\inputencoding{utf8}
 function for lists; the empty list is the empty monoid value.
 
-The conclusion is that \inputencoding{latin9}\lstinline!List[T]!\inputencoding{utf8}
-is the reduced encoding for the free monoid on $T$. The runner is
-the same as the \inputencoding{latin9}\lstinline!foldMap!\inputencoding{utf8}
+The type \inputencoding{latin9}\lstinline!List[T]!\inputencoding{utf8}
+is the shortest reduced encoding for the free monoid on $T$, and
+it satisfies all monoid laws. The runner is the same as the \inputencoding{latin9}\lstinline!foldMap!\inputencoding{utf8}
 function for lists (see Section~\ref{subsec:From-reduce-and-foldleft-to-foldmap}):\index{foldMap function@\texttt{foldMap} function}\inputencoding{latin9}
 \begin{lstlisting}
-def runner[M: Monoid, T](runT: T => M): List[T] => M = foldMap[M, T](runT)
+def runnerList[M: Monoid, T](runT: T => M): List[T] => M = foldMap[M, T](runT)
 \end{lstlisting}
 \inputencoding{utf8}
+There exist other reduced encodings that satisfy only a subset of
+the monoid laws. As an example, let us define a reduced encoding of
+the free monoid that satisfies the identity laws but not the associativity
+law. To impose the identity laws on $\text{Tree2}^{\bbnum 1+T}$,
+we note that the identity laws reduce expression trees creating \textsf{``}empty\textsf{''}
+leaf values ($1+\bbnum 0^{:T}$) to expression trees that do not contain
+any \textsf{``}empty\textsf{''} values in the leaves. For instance, the value \inputencoding{latin9}\lstinline!exampleFMR!\inputencoding{utf8}
+defined above will be reduced to just \inputencoding{latin9}\lstinline!Combine(Wrap(456), Wrap(123))!\inputencoding{utf8}.
+If all leaves of the expression tree are \inputencoding{latin9}\lstinline!Empty!\inputencoding{utf8},
+the tree must be reduced to just a single empty value. This means
+we can simplify the encoding from $\text{Tree2}^{\bbnum 1+T}$ to
+$\bbnum 1+\text{Tree2}^{T}$.
+
+To summarize, we have obtained four different \textsf{``}partially lawful\textsf{''}
+free monoid encodings:\\
+\textbf{1)} The encoding $F_{1}^{T}\triangleq\text{Tree2}^{\bbnum 1+T}$
+(called \inputencoding{latin9}\lstinline!FMR[T]!\inputencoding{utf8}
+above) satisfies none of the monoid laws. The code is:\inputencoding{latin9}
+\begin{lstlisting}
+type F1[T] = Tree2[Option[T]]
+def wrapF1[T](t: T): F1[T] = Leaf(Some(t))
+implicit def monoidF1[T]: Monoid[F1[T]] = Monoid((l, r) => Branch(l, r), Leaf(None))
+def runnerF1[M: Monoid, T](runT: T => M)(fmr: F1[T]): M = fmr match {
+  case Branch(left, right)   => runnerF1(runT)(left) |+| runnerF1(runT)(right)
+  case Leaf(None)            => Monoid[M].empty
+  case Leaf(Some(value))     => runT(value)
+}
+\end{lstlisting}
+\inputencoding{utf8}
+\textbf{2)} The encoding $F_{2}^{T}\triangleq\text{NEL}^{\bbnum 1+T}$
+satisfies only the associativity law. The code is:\inputencoding{latin9}
+\begin{lstlisting}
+type F2[T] = NEL[Option[T]]
+def wrapF2[T](t: T): F2[T] = (Some(t), Nil)
+implicit def monoidF2[T]: Monoid[F2[T]] = Monoid(NEL.concat, (None, Nil))
+def runnerF2[M: Monoid, T](runT: T => M)(fmr: F2[T]): M = foldMap(runT).apply(fmr.toList.flatten) 
+\end{lstlisting}
+\inputencoding{utf8}For completeness, here is a simple implementation of non-empty lists
+and some methods on them:\inputencoding{latin9}
+\begin{lstlisting}
+type NEL[T] = (T, List[T])
+object NEL {
+  def concat[T]: (NEL[T], NEL[T]) => NEL[T] = {
+    case ((head1, tail1), (head2, tail2)) => (head1, tail1 ++ List(head2) ++ tail2)
+  }
+  implicit class ToList[T](nel: NEL[T]) {
+    def toList: List[T] = nel._1 +: nel._2
+  }
+}
+\end{lstlisting}
+\inputencoding{utf8}
+\textbf{3)} The encoding $F_{3}^{T}\triangleq\bbnum 1+\text{Tree2}^{T}$
+satisfies only the identity laws. The code is:\inputencoding{latin9}
+\begin{lstlisting}
+type F3[T] = Option[Tree2[T]]
+def wrapF3[T](t: T): F3[T] = Some(Leaf(t))
+def concatF3[T]: (F3[T], F3[T]) => F3[T] = {
+  case (None, x)            => x
+  case (x, None)            => x
+  case (Some(a), Some(b))   => Some(Branch(a, b))
+}
+def wrapF3[T](t: T): F3[T] = Some(Leaf(t))
+implicit def monoidF3[T]: Monoid[F3[T]] = Monoid(concatF3, None)
+def runnerTree2[M: Monoid, T](runT: T => M)(tree2: Tree2[T]): M = tree2 match {
+  case Leaf(a)               => runT(a)
+  case Branch(left, right)   => runnerTree2(runT)(left) |+| runnerTree2(runT)(right)
+}
+def runnerF3[M: Monoid, T](runT: T => M)(fmr: F3[T]): M = fmr match {
+  case Some(t)   => runnerTree2(runT)(t)
+  case None      => Monoid[M].empty
+}
+\end{lstlisting}
+\inputencoding{utf8}
+\textbf{4)} The encoding $F_{4}^{T}\triangleq\text{List}^{T}$ satisfies
+all the monoid laws. The code is:\inputencoding{latin9}
+\begin{lstlisting}
+type F4[T] = List[T]
+def wrapF4[T](t: T): F4[T] = List(t)
+implicit def monoidF4[T]: Monoid[F4[T]] = Monoid(_ ++ _, Nil)
+def runnerF4[M: Monoid, T](runT: T => M)(fmr: F4[T]): M = foldMap(runT).apply(fmr)
+\end{lstlisting}
+\inputencoding{utf8}
+To get more intuition about using these encodings, let us explore
+whether the types \inputencoding{latin9}\lstinline!F1!\inputencoding{utf8},
+\inputencoding{latin9}\lstinline!F2!\inputencoding{utf8}, \inputencoding{latin9}\lstinline!F3!\inputencoding{utf8},
+\inputencoding{latin9}\lstinline!F4!\inputencoding{utf8} can be mapped
+into each other. All of those encodings have a \inputencoding{latin9}\lstinline!Monoid!\inputencoding{utf8}
+instance, so we can use their runner functions to map one encoding
+into any other:\inputencoding{latin9}
+\begin{lstlisting}
+def f1_to_f2[T]: F1[T] => F2[T] = runnerF1(wrapF2[T](_))
+def f3_to_f2[T]: F3[T] => F2[T] = runnerF3(wrapF2[T](_))
+def f4_to_f3[T]: F4[T] => F3[T] = runnerF4(wrapF3[T](_)) // And so on.
+\end{lstlisting}
+\inputencoding{utf8}But it turns out that some of those mappings fail to preserve the
+monoid operations. For instance, converting a list $\left[1,2,3\right]$
+of type \inputencoding{latin9}\lstinline!F4[Int]!\inputencoding{utf8}
+to the type \inputencoding{latin9}\lstinline!F3[Int]!\inputencoding{utf8}
+will create the following tree:\inputencoding{latin9}
+\begin{lstlisting}
+scala> f4_to_f3(List(1, 2, 3))
+res0: F3[Int] = Some(Branch(Branch(Leaf(1), Leaf(2)), Leaf(3)))
+\end{lstlisting}
+\inputencoding{utf8}The same value \inputencoding{latin9}\lstinline!List(1, 2, 3)!\inputencoding{utf8}
+can be computed via \inputencoding{latin9}\lstinline!F4!\inputencoding{utf8}\textsf{'}s
+monoid operation as \inputencoding{latin9}\lstinline!List(1) |+| List(2, 3)!\inputencoding{utf8}.
+However, converting the two shorter lists to \inputencoding{latin9}\lstinline!F3[Int]!\inputencoding{utf8}
+and combining them via \inputencoding{latin9}\lstinline!F3!\inputencoding{utf8}\textsf{'}s
+monoid operation will give a different tree:\inputencoding{latin9}
+\begin{lstlisting}
+scala> f4_to_f3(List(1)) |+| f4_to_f3(List(2, 3))
+res1: F3[Int] = Some(Branch(Leaf(1), Branch(Leaf(2), Leaf(3))))
+\end{lstlisting}
+\inputencoding{utf8}The trees are not the same because \inputencoding{latin9}\lstinline!F3!\inputencoding{utf8}
+does not obey the monoid associativity law while \inputencoding{latin9}\lstinline!F4!\inputencoding{utf8}
+does. 
+
+Looking at more examples, we will find that whenever a free monoid
+encoding \inputencoding{latin9}\lstinline!P!\inputencoding{utf8}
+obeys \emph{more laws} than another encoding \inputencoding{latin9}\lstinline!Q!\inputencoding{utf8},
+the transformation of type \inputencoding{latin9}\lstinline!P => Q!\inputencoding{utf8}
+does not preserve the monoid operations (while the opposite one, \inputencoding{latin9}\lstinline!Q => P!\inputencoding{utf8},
+does). At the same time, the transformation of type \inputencoding{latin9}\lstinline!P => Q!\inputencoding{utf8}
+is injective, suggesting that the encoding is \textsf{``}smaller\textsf{''} when it
+satisfies more laws. These patterns will be generalized in Section~\ref{subsec:Free--typeclasses-that-satisfy-laws}
+as a rigorous theory of free typeclass encodings that satisfy only
+a subset of the laws of a given typeclass.
 
 \subsection{Free functors}
 
@@ -2380,6 +2557,36 @@ def runFF[F[_], A](runner: Runner[F]): FFS[F, A] => A = {
 \end{lstlisting}
 \inputencoding{utf8}
 
+\subsection{Free contrafunctors}
+
+Method $\text{contramap}:C^{A}\times\left(B\rightarrow A\right)\rightarrow C^{B}$ 
+
+Tree encoding: $\text{FreeCF}^{F^{\bullet},B}\triangleq F^{B}+\exists A.\text{FreeCF}^{F^{\bullet},A}\times\left(B\rightarrow A\right)$
+
+Reduced encoding: $\text{FreeCF}^{F^{\bullet},B}\triangleq\exists A.F^{A}\times\left(B\rightarrow A\right)$ 
+
+A value of type $\text{FreeCF}^{F^{\bullet},B}$ must be of the form
+{\footnotesize{}
+\[
+\exists Z_{1}.\exists Z_{2}...\exists Z_{n}.F^{Z_{1}}\times\left(B\rightarrow Z_{n}\right)\times\left(Z_{n}\rightarrow Z_{n-1}\right)\times...\times\left(Z_{2}\rightarrow Z_{1}\right)
+\]
+}{\footnotesize\par}
+
+The functions $B\rightarrow Z_{n}$, $Z_{n}\rightarrow Z_{n-1}$,
+etc., are composed associatively
+
+The equivalent type is $\exists Z_{1}.F^{Z_{1}}\times\left(B\rightarrow Z_{1}\right)$
+
+The reduced encoding is non-recursive
+
+Example: $F^{A}\triangleq A$, \textsf{``}interpret\textsf{''} into the contrafunctor
+$C^{A}\triangleq A\rightarrow\text{String}$
+
+\texttt{\textcolor{blue}{\footnotesize{}def prefixLog{[}A{]}(p: A): A
+$\rightarrow$ String = a $\rightarrow$ p.toString + a.toString}}{\footnotesize\par}
+
+If $F^{\bullet}$ is already a contrafunctor then $\text{FreeCF}^{F^{\bullet},A}\cong F^{A}$
+
 \subsection{Free constructions that assume other typeclasses}
 
 It is sometimes possible to find a simpler encoding of a free typeclass
@@ -2412,98 +2619,997 @@ is already functor, the free functor \inputencoding{latin9}\lstinline!FF[F, A]!\
 is equivalent to just \inputencoding{latin9}\lstinline!F[A]!\inputencoding{utf8}.
 So, the free monad on a functor \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}
 is the encoding \inputencoding{latin9}\lstinline!Free1!\inputencoding{utf8}.
-It is a significantly simpler data structure than \inputencoding{latin9}\lstinline!Free2!\inputencoding{utf8},
+It is a simpler data structure than \inputencoding{latin9}\lstinline!Free2!\inputencoding{utf8},
 the free monad on an arbitrary type constructor \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}.
 
 It also follows that the free monad encodings \inputencoding{latin9}\lstinline!Free1!\inputencoding{utf8}
 and \inputencoding{latin9}\lstinline!Free2!\inputencoding{utf8} are
 equivalent when the effect constructor \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}
-is a functor. 
+is a functor.
 
 The free functor construction can be viewed as a building block for
 other free typeclasses. It is often simpler to construct a free typeclass
 assuming that the effect constructor is already a functor. For type
 constructors that are not functors, we can first apply the free functor
 construction and then build the free typeclass based on a functor.
+So, in the following sections we will restrict our attention to free
+typeclasses on functors.
+
+To gain some intuition about how to build typeclasses based on functors,
+let us examine the definition of the free monad encoding \inputencoding{latin9}\lstinline!Free1[F, A]!\inputencoding{utf8}.
+(That definition assumes that \inputencoding{latin9}\lstinline!F!\inputencoding{utf8}
+is a functor.) A monad may be defined as a functor that additionally
+has the \inputencoding{latin9}\lstinline!pure!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!flatten!\inputencoding{utf8}
+methods satisfying suitable laws (the equivalence of \inputencoding{latin9}\lstinline!flatten!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!flatMap!\inputencoding{utf8}
+was proved in Statement~\ref{subsec:Statement-flatten-equivalent-to-flatMap}).
+The raw tree encoding for a monad\textsf{'}s definition via \inputencoding{latin9}\lstinline!pure!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!flatten!\inputencoding{utf8}
+gives:\inputencoding{latin9}
+\begin{lstlisting}
+sealed trait Free5[F[_], A]
+final case class Pure[F[_], A](a: A) extends Free5[F, A]
+final case class Wrap[F[_], A](fa: F[A]) extends Free5[F, A]
+final case class Flatten[F[_], A](ff: Free5[F, Free5[F, A]]) extends Free5[F, A]
+\end{lstlisting}
+\inputencoding{utf8}This code differs from \inputencoding{latin9}\lstinline!Free1!\inputencoding{utf8}
+in two ways. First, \inputencoding{latin9}\lstinline!Free1!\inputencoding{utf8}
+does not use a \inputencoding{latin9}\lstinline!Wrap!\inputencoding{utf8}
+case class. Second, \inputencoding{latin9}\lstinline!Free5!\inputencoding{utf8}
+has a recursive type definition of the form \inputencoding{latin9}\lstinline!Free5[F, Free5[F, A]]!\inputencoding{utf8}
+that uses \inputencoding{latin9}\lstinline!Free5!\inputencoding{utf8}
+twice, while \inputencoding{latin9}\lstinline!Free1!\inputencoding{utf8}
+instead uses a simpler type: \inputencoding{latin9}\lstinline!F[Free1[F, A]]!\inputencoding{utf8}.
+{*}{*}{*} We avoid the simplification Free5{[}F, F{[}A{]}{]} because
+this creates a recursive definition of Free5{[}F, A{]} whose recursive
+use modifies the type parameter A of Free5
+
+\subsection{Free pointed functors}
 
 \subsection{Free filterable functors}
 
 \subsection{Free applicative functors}
 
-\subsection{The Church encoding of free typeclasses}
+\section{Advanced applications}
 
-\subsection{Free constructions for arbitrary inductive typeclasses\label{subsec:Free-constructions-for-arbitrary-typeclasses}}
+\subsection{Church encodings of free typeclasses}
+
+\textsf{``}\textbf{Final} \textbf{Tagless} style\textsf{''} means \textsf{``}Church encoding
+of free monad over $F^{\bullet}$\textsf{''}
+
+Free monad over a functor $F^{\bullet}$ is $\text{FreeM}^{F^{\bullet},A}\triangleq A+F^{\text{FreeM}^{F^{\bullet},A}}$
+
+Free monad $\text{FreeM}^{M^{\bullet},\bullet}$ over a monad $M^{\bullet}$
+is not equivalent to $M^{\bullet}$
+
+Free monad over a pointed functor $F^{\bullet}$ is {\footnotesize{}$\text{FreeM}^{F^{\bullet},A}\triangleq F^{A}+F^{\text{FreeM}^{F^{\bullet},A}}$}{\footnotesize\par}
+
+start from half-reduced encoding $F^{A}+\exists Z.F^{Z}\times\big(Z\rightarrow\text{FreeM}^{F^{\bullet},A}\big)$ 
+
+replace the existential type by an equivalent type $F^{\text{FreeM}^{F^{\bullet},A}}$
+
+\paragraph{Another encoding: (to be studied in more detail):}
 
 We have:
 \[
 \forall X^{:\text{MyTypeclass}}.\,(A\rightarrow X)\rightarrow X
 \]
 is the free \inputencoding{latin9}\lstinline!MyTypeclass!\inputencoding{utf8}
-in the reduced Church encoding. The laws hold! This is more economical
-than the raw tree encoding, see the Semigroup example.
+in the lawful Church encoding. The laws hold! This is more economical
+than the raw tree encoding, see the \inputencoding{latin9}\lstinline!Semigroup!\inputencoding{utf8}
+example.
 
 \section{Laws of free constructions}
 
+This chapter developed the free monad via the implementation of a
+simple type-safe DSL. We found different encodings of the free monad
+(the raw tree encoding and the various reduced encodings) that have
+different performance trade-offs and satisfy different subsets of
+the monad laws. Free constructions of other typeclasses are motivated
+by analogy with the free monad and its various encodings. Can we formulate
+any properties or laws that validate the correctness of those constructions?
+Are all the different encodings equally safe to use? We will now develop
+the necessary theory for answering these questions.
+
+\subsection{Free constructions for $P$-typeclasses\label{subsec:Free-constructions-for-inductive-typeclasses}}
+
+Some features are common to all the free typeclass constructions we
+have seen. We begin by generalizing the features of the free monoid
+construction to other similar typeclasses. We will then extend the
+results to typeclasses for type constructors (such as \inputencoding{latin9}\lstinline!Functor!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!Monad!\inputencoding{utf8}).
+
+The construction of a free monoid transforms an arbitrary type $T$
+into a new type ($\text{FM}^{T}$) that has a \inputencoding{latin9}\lstinline!Monoid!\inputencoding{utf8}
+typeclass instance. Values of type $T$ may be transformed into values
+of type $\text{FM}^{T}$. For any given monoid $M$ and a given function
+of type $T\rightarrow M$, a \textsf{``}free monoid program\textsf{''} (i.e., a value
+of type $\text{FM}^{T}$) can be \textsf{``}run into $M$\textsf{''}. The resulting
+runner (of type $\text{FM}^{T}\rightarrow M$) will preserve the monoid
+operations between $\text{FM}^{T}$ and $M$. So, the monoid laws
+will hold after running a \textsf{``}free monoid program\textsf{''}, even when the
+chosen encoding $\text{FM}^{T}$ violates some of the monoid laws.
+
+To generalize from monoids to other typeclasses, it helps to use the
+notion of a \textsf{``}$P$-typeclass\textsf{''} introduced in Section~\ref{subsec:P-algebraic-typeclasses}.
+For a given (covariant) functor $P$, a $P$\textbf{-typeclass} \index{$P$-typeclass}
+has the evidence data equivalent to a value of type $P^{A}\rightarrow A$.
+For the \inputencoding{latin9}\lstinline!Monoid!\inputencoding{utf8}
+typeclass, the structure functor is $P^{A}\triangleq\bbnum 1+A\times A$,
+and the evidence data has type $A\times\left(A\times A\rightarrow A\right)$,
+which is equivalent to $P^{A}\rightarrow A$. The two parts of the
+disjunctive type $\bbnum 1+A\times A$ correspond to the \emph{arguments}
+of the monoid\textsf{'}s two operations: the empty value ($e_{A}$) and the
+binary operation ($\oplus_{A}$). 
+
+The next step is to generalize the property of \textsf{``}preserving the monoid\textsf{'}s
+operations\textsf{''} to an arbitrary $P$-typeclass. Given two monoids $M$
+and $N$, a function $f:M\rightarrow N$ that preserves the monoid\textsf{'}s
+operations is a monoid morphism\index{monoid morphism} according
+to Definition~\ref{subsec:Definition-monoid-morphism}. Can we describe
+the laws in Definition~\ref{subsec:Definition-monoid-morphism} purely
+in terms of the monoid\textsf{'}s structure functor $P^{A}=\bbnum 1+A\times A$?
+As $M$ and $N$ are monoids, their typeclass instances must be available
+as values $p_{M}$ and $p_{N}$: 
+\begin{align*}
+ & p_{M}:P^{M}\rightarrow M=\bbnum 1+M\times M\rightarrow M\quad,\quad\quad p_{M}\triangleq\,\begin{array}{|c||c|}
+ & M\\
+\hline \bbnum 1 & 1\rightarrow e_{M}\\
+M\times M & a\times b\rightarrow a\oplus_{M}b
+\end{array}\quad;\\
+ & p_{N}:P^{N}\rightarrow N=\bbnum 1+N\times N\rightarrow N\quad,\quad\quad p_{N}\triangleq\,\begin{array}{|c||c|}
+ & N\\
+\hline \bbnum 1 & 1\rightarrow e_{N}\\
+N\times N & c\times d\rightarrow c\oplus_{N}d
+\end{array}\quad.
+\end{align*}
+So far, we have functions of types $P^{M}\rightarrow M$, $M\rightarrow N$,
+and $P^{N}\rightarrow N$. It appears promising to arrange these functions
+in a type diagram. The missing edge of the diagram is a function of
+type $P^{M}\rightarrow P^{N}$.
+
+\begin{wrapfigure}{l}{0.2\columnwidth}%
+\vspace{-1.15\baselineskip}
+\[
+\xymatrix{\xyScaleY{1.4pc}\xyScaleX{3.0pc}P^{M}\ar[r]\sp(0.5){\ p_{M}}\ar[d]\sp(0.45){\,f^{\uparrow P}} & M\ar[d]\sp(0.45){\,f}\\
+P^{N}\ar[r]\sp(0.5){~p_{N}} & N
+}
+\]
+\vspace{-0.6\baselineskip}
+\end{wrapfigure}%
+
+\noindent Let us see what happens if we use $f^{\uparrow P}$ as that
+function and require that the resulting diagram should commute:\vspace{-0.4\baselineskip}
+\begin{equation}
+p_{M}\bef f\overset{!}{=}f^{\uparrow P}\bef p_{N}\quad.\label{eq:p-algebra-morphism-law}
+\end{equation}
+We simplify both sides of Eq.~(\ref{eq:p-algebra-morphism-law})
+by using the definition of $f^{\uparrow P}$:
+\begin{align*}
+ & f^{\uparrow P}=\,\begin{array}{|c||cc|}
+ & \bbnum 1 & N\times N\\
+\hline \bbnum 1 & \text{id} & \bbnum 0\\
+M\times M & \bbnum 0 & a\times b\rightarrow f(a)\times f(b)
+\end{array}\quad,\\
+ & p_{M}\bef f=\,\begin{array}{||c|}
+1\rightarrow e_{M}\\
+a\times b\rightarrow a\oplus_{M}b
+\end{array}\,\bef f=\,\begin{array}{||c|}
+1\rightarrow f(e_{M})\\
+a\times b\rightarrow f(a\oplus_{M}b)
+\end{array}\quad,\\
+ & f^{\uparrow P}\bef p_{N}=\,\begin{array}{||cc|}
+\text{id} & \bbnum 0\\
+\bbnum 0 & a\times b\rightarrow f(a)\times f(b)
+\end{array}\,\bef\,\begin{array}{||c|}
+1\rightarrow e_{N}\\
+c\times d\rightarrow c\oplus_{N}d
+\end{array}\,=\,\begin{array}{||c|}
+1\rightarrow e_{N}\\
+a\times b\rightarrow f(a)\oplus_{N}f(b)
+\end{array}\quad.
+\end{align*}
+Then Eq.~(\ref{eq:p-algebra-morphism-law}) is rewritten as:
+\[
+\begin{array}{||c|}
+1\rightarrow f(e_{M})\\
+a\times b\rightarrow f(a\oplus_{M}b)
+\end{array}\,\overset{!}{=}\,\begin{array}{||c|}
+1\rightarrow e_{N}\\
+a\times b\rightarrow f(a)\oplus_{N}f(b)
+\end{array}\quad.
+\]
+This equation is the same as the identity and composition laws in
+Definition~\ref{subsec:Definition-monoid-morphism}. It is now clear
+how to define the property of \textsf{``}preserving the typeclass operations\textsf{''}
+for an arbitrary $P$-typeclass: we just need to impose Eq.~(\ref{eq:p-algebra-morphism-law}).
+In this way, we have formulated the typeclass-preserving property
+purely in terms of the functor $P$.
+
+At this point it is helpful to borrow some standard definitions from
+\index{category theory}category theory. Given an endofunctor $F$,
+an object $M$ together with a chosen morphism $p_{M}:F^{M}\rightarrow M$
+is called an $F$\textbf{-algebra}. The morphism $p_{M}$ is called
+the \index{structure map of $F$-algebra}\textbf{structure map} corresponding
+to $M$. \index{$F$-algebra} All $F$-algebras form a category whose
+objects are pairs $\left(M,p_{M}\right)$ and morphisms are defined
+as functions $f^{:M\rightarrow N}$ satisfying Eq.~(\ref{eq:p-algebra-morphism-law}).
+Such functions $f$ are called $F$-\textbf{algebra morphisms}.\index{$F$-algebra morphism}
+An identity function is always an $F$-algebra morphism; a composition
+of two $F$-algebra morphism is again an $F$-algebra morphism.
+
+We can now formulate our findings about $P$-typeclasses in the language
+of $F$-algebras. We use the functor $P$ instead of $F$ when and
+say that a $P$-typeclass is a $P$-algebra whose structure map may
+need to satisfy additional laws. The structure map ($p_{M}:P^{M}\rightarrow M$)
+plays the role of an \emph{evidence value} showing that a type $M$
+belongs to the $P$-typeclass. If $M$ and $N$ are two $P$-algebras
+and a function $f^{:M\rightarrow N}$ is a $P$-algebra morphism then
+$f$ preserves the $P$-typeclass operations. 
+
+Below it will turn out that the construction of \textsf{``}free $P$-typeclass\textsf{''}
+plays a central role in the rigorous formulation of $P$-typeclass
+laws. As preparation for that, let us generalize the free monoid construction
+to the \textsf{``}free $P$-typeclass\textsf{''} construction. By analogy with the
+free monoid, we formulate the required properties of an \textsf{``}encoding\textsf{''}
+of a free $P$-typeclass:
+
+\subsubsection{Definition \label{subsec:Definition-free-P-typeclass-encoding}\ref{subsec:Definition-free-P-typeclass-encoding}}
+
+Given a functor $P^{\bullet}$, a \textbf{free} $P$\textbf{-typeclass}
+\textbf{encoding} is a functor $E^{\bullet}$ such that:
+
+\textbf{(a)} For any type $T$, the type $E^{T}$ has a $P$-typeclass
+instance $p_{E}^{T}:P^{E^{T}}\rightarrow E^{T}$ that is fully parametric
+in $T$. (As a consequence, for any $f^{:T\rightarrow U}$ the function
+$f^{\uparrow E}:E^{T}\rightarrow E^{U}$ is a $P$-algebra morphism.)
+
+\textbf{(b)} The functor $E$ is pointed: there exists a fully parametric
+function $\text{pu}_{E}:\forall T.\,T\rightarrow E^{T}$.
+
+\textbf{(c)} For any type $C$ that belongs to the $P$-typeclass
+and obeys all the  typeclass laws, and for any type $T$ (not necessarily
+of the $P$-typeclass), there exists a \textsf{``}universal runner\textsf{''} function
+($\text{run}_{E}^{T,C}$) that satisfies:
+\begin{align*}
+ & \text{run}_{E}^{T,C}:(T\rightarrow C)\rightarrow E^{T}\rightarrow C\quad,\\
+{\color{greenunder}\text{naturality law in }T:}\quad & \text{for any }f^{:S\rightarrow T}:\quad\text{run}_{E}^{S,C}(f\bef r)=f^{\uparrow E}\bef\text{run}_{E}^{T,C}(r)\quad,\\
+{\color{greenunder}\text{identity law}:}\quad & \text{pu}_{E}\bef\text{run}_{E}^{T,C}(r)=r\quad,\\
+{\color{greenunder}P\text{-algebra morphism law}:}\quad & p_{E}^{T}\bef\text{run}_{E}^{T,C}(r)=\big(\text{run}_{E}^{T,C}(r)\big)^{\uparrow P}\bef p_{C}^{T}\quad,\\
+{\color{greenunder}P\text{-algebra naturality law in }C:}\quad & \text{for any }P\text{-algebra morphism }g^{:C\rightarrow D}:\\
+ & \quad\quad\text{run}_{E}^{T,D}(r\bef g)=\text{run}_{E}^{T,C}(r)\bef g\quad.
+\end{align*}
+
+\textbf{(d)} The following \textsf{``}uniqueness property\textsf{''} must hold: \emph{any}
+$P$-algebra morphism $f:E^{T}\rightarrow C$ satisfying the identity
+law ($\text{pu}_{E}\bef f=r$) can be expressed via the universal
+runner as $f=\text{run}_{E}^{T,C}(r)$. $\square$
+
+The uniqueness property reflects a programmer\textsf{'}s expectation that there
+is only one correct way of running (i.e., evaluating) a free $P$-typeclass
+program while preserving the typeclass\textsf{'}s operations.
+
+If $T$ itself has a $P$-typeclass instance then the function $\text{run}_{E}^{T,T}(\text{id}^{:T\rightarrow T})$
+of type $E^{T}\rightarrow T$ satisfies the identity law:
+\[
+\text{pu}_{E}\bef\text{run}_{E}^{T,T}(\text{id}^{:T\rightarrow T})=\text{id}^{:T\rightarrow T}\quad.
+\]
+So, $\text{pu}_{E}:T\rightarrow E^{T}$ is an injective function when
+$T$ already has a $P$-typeclass instance.
+
+Setting $C=E^{T}$ and $r=\text{pu}_{E}$ in property \textbf{(c)}
+of Definition~\ref{subsec:Definition-free-P-typeclass-encoding},
+we find that there is a unique $P$-algebra morphism $\text{run}_{E}^{T,E^{T}}(\text{pu}_{E})$
+of type $E^{T}\rightarrow E^{T}$. That -algebra morphism must be
+equal to the identity function, $\text{id}:E^{T}\rightarrow E^{T}$,
+because the identity function is also a $P$-algebra morphism satisfying
+the identity law ($\text{pu}_{E}\bef\text{id}=\text{pu}_{E}$). So,
+it follows from Definition~\ref{subsec:Definition-free-P-typeclass-encoding}
+that: 
+\[
+\text{run}_{E}^{T,E^{T}}(\text{pu}_{E})=\text{id}^{:E^{T}\rightarrow E^{T}}\quad.
+\]
+
+It is important that the definition of a free $P$-typeclass encoding
+$E$ does \emph{not} require that $E$\textsf{'}s structure map ($p_{E}^{T}$)
+should satisfy any of the typeclass\textsf{'}s laws. For instance, we have
+seen that the raw tree encoding of free monads, free monoids, and
+other typeclasses does not satisfy any of the relevant laws. Because
+this does not lead to problems in practical programming, a good definition
+of free $P$-typeclasses needs to admit encodings that satisfy only
+a subset of typeclass laws (or no laws at all). We begin by generalizing
+the raw tree encoding from \inputencoding{latin9}\lstinline!Monoid!\inputencoding{utf8}
+to an arbitrary $P$-typeclass. 
+
+The raw tree encoding of a free monoid (see Section~\ref{subsec:Free-monoids})
+has the type: 
+\[
+\text{FMR}^{T}\triangleq\bbnum 1+T+\text{FMR}^{T}\times\text{FMR}^{T}\quad.
+\]
+The parts of the disjunctive type $\bbnum 1+T+\text{FMR}^{T}\times\text{FMR}^{T}$
+correspond to three ways in which a free monoid value may be created:
+from the empty value, from a value of type $T$, and from two existing
+values of the free monoid type. The structure functor $P$ describes
+two of these three ways. This suggests to rewrite the definition of
+$\text{FMR}^{T}$ as $\text{FMR}^{T}\triangleq T+P^{\text{FMR}^{T}}$.
+We can now generalize to arbitrary $P$-typeclasses and define the
+raw tree encoding of a free $P$-typeclass (denoted by $\text{FPR}^{T}$)
+by:
+\[
+\text{FPR}^{T}\triangleq T+P^{\text{FPR}^{T}}\quad.
+\]
+
+
+\subsubsection{Statement \label{subsec:Statement-free-P-typeclass-raw-tree-encoding}\ref{subsec:Statement-free-P-typeclass-raw-tree-encoding}}
+
+The recursive type constructor $\text{FPR}^{T}\triangleq T+P^{\text{FPR}^{T}}$
+is a free $P$-typeclass encoding.
+
+\subparagraph{Proof}
+
+We need to verify the three properties in Definition~\ref{subsec:Definition-free-P-typeclass-encoding}.
+
+\textbf{(a)} By the type equivalence $T+P^{\text{FPR}^{T}}\cong\text{FPR}^{T}$,
+we may rewrite the type of the typeclass instance $p_{\text{FPR}}:P^{\text{FPR}^{T}}\rightarrow\text{FPR}^{T}$
+equivalently as $p_{\text{FPR}}:P^{\text{FPR}^{T}}\rightarrow T+P^{\text{FPR}^{T}}$.
+Then we define $p_{\text{FPR}}$ by:
+\[
+p_{\text{FPR}}^{T}:P^{\text{FPR}^{T}}\rightarrow T+P^{\text{FPR}^{T}}\quad,\quad\quad p_{\text{FPR}}(x)\triangleq\bbnum 0^{:T}+x^{:P^{\text{FPR}^{T}}}\quad.
+\]
+This code is fully parametric in $T$, so the naturality law holds:
+for any $f:T\rightarrow U$, we have:
+\[
+p_{\text{FPR}}^{T}\bef f^{\uparrow\text{FPR}}=f^{\uparrow\text{FPR}\uparrow P}\bef p_{\text{FPR}}^{U}\quad.
+\]
+This equation is the same as the $P$-algebra morphism law for the
+function $f^{\uparrow\text{FPR}}$.
+
+\textbf{(b)} The function $\text{pu}_{\text{FPR}}:T\rightarrow\text{FPR}^{T}$
+is defined as $\text{pu}_{\text{FPR}}(t)\triangleq t+\bbnum 0$.
+
+\textbf{(c)} Given $p_{C}:P^{C}\rightarrow C$, the runner function
+$\text{run}_{\text{FPR}}^{T,C}$ is defined recursively by:
+\[
+\text{run}_{\text{FPR}}^{T,C}:(T\rightarrow C)\rightarrow\text{FPR}^{T}\rightarrow C\quad,\quad\quad\text{run}_{\text{FPR}}^{T,C}(r^{:T\rightarrow C})\triangleq\,\begin{array}{|c||c|}
+ & C\\
+\hline T & r\\
+P^{\text{FPR}^{T}} & \overline{\text{run}_{\text{FPR}}^{T,C}(r)}^{\uparrow P}\bef p_{C}
+\end{array}\quad.
+\]
+
+To verify the identity law:
+\[
+\text{pu}_{\text{FPR}}\bef\text{run}_{\text{FPR}}^{T,C}(r)=\,\begin{array}{|c||cc|}
+ & T & P^{\text{FPR}^{T}}\\
+\hline T & \text{id} & \bbnum 0
+\end{array}\,\bef\,\begin{array}{|c||c|}
+ & C\\
+\hline T & r\\
+P^{\text{FPR}^{T}} & \overline{\text{run}_{\text{FPR}}^{T,C}(r)}^{\uparrow P}\bef p_{C}
+\end{array}\,=r\quad.
+\]
+
+To verify the $P$-algebra morphism law for the function $\text{run}_{\text{FPR}}^{T,C}(r)$:
+\[
+p_{\text{FPR}}\bef\text{run}_{\text{FPR}}^{T,C}(r)=\,\begin{array}{|c||cc|}
+ & T & P^{\text{FPR}^{T}}\\
+\hline P^{\text{FPR}^{T}} & \bbnum 0 & \text{id}
+\end{array}\,\bef\,\begin{array}{|c||c|}
+ & C\\
+\hline T & r\\
+P^{\text{FPR}^{T}} & \overline{\text{run}_{\text{FPR}}^{T,C}(r)}^{\uparrow P}\bef p_{C}
+\end{array}\,=\overline{\text{run}_{\text{FPR}}^{T,C}(r)}^{\uparrow P}\bef p_{C}\quad.
+\]
+
+To verify the $P$-algebra naturality law, assume $g^{:C\rightarrow D}$
+is a $P$-algebra morphism ($p_{C}\bef g=g^{\uparrow P}\bef p_{D}$)
+and use the inductive assumption that $\overline{\text{run}_{\text{FPR}}^{T,D}(r\bef g)}=\overline{\text{run}_{\text{FPR}}^{T,C}(r)\bef g}$
+for recursive calls to $\text{run}_{\text{FPR}}$:
+\begin{align*}
+{\color{greenunder}\text{left-hand side}:}\quad & \text{run}_{\text{FPR}}^{T,D}(r\bef g)=\,\begin{array}{|c||c|}
+ & D\\
+\hline T & r\bef g\\
+P^{\text{FPR}^{T}} & \overline{\text{run}_{\text{FPR}}^{T,D}(r\bef g)}^{\uparrow P}\bef p_{D}
+\end{array}\\
+{\color{greenunder}\text{inductive assumption}:}\quad & \quad\quad=\,\begin{array}{||c|}
+r\bef g\\
+\big(\overline{\text{run}_{\text{FPR}}^{T,C}(r)}\bef g\big)^{\uparrow P}\bef p_{D}
+\end{array}\,=\,\begin{array}{||c|}
+r\bef g\\
+\overline{\text{run}_{\text{FPR}}^{T,C}(r)}^{\uparrow P}\bef g^{\uparrow P}\bef p_{D}
+\end{array}\quad;\\
+{\color{greenunder}\text{right-hand side}:}\quad & \text{run}_{\text{FPR}}^{T,C}(r)\bef f=\,\begin{array}{|c||c|}
+ & C\\
+\hline T & r\\
+P^{\text{FPR}^{T}} & \overline{\text{run}_{\text{FPR}}^{T,C}(r)}^{\uparrow P}\bef p_{C}
+\end{array}\,\bef g=\,\begin{array}{||c|}
+r\bef g\\
+\overline{\text{run}_{\text{FPR}}^{T,C}(r)}^{\uparrow P}\bef p_{C}\bef g
+\end{array}\quad.
+\end{align*}
+The two code matrices are now equal due to the assumed law $p_{C}\bef g=g^{\uparrow P}\bef p_{D}$.
+
+It remains to prove the uniqueness property of the runner. For a fixed
+type $C$ with $P$-typeclass instance data $p_{C}:P^{C}\rightarrow C$
+and a fixed $r:T\rightarrow C$, suppose an arbitrary function $f:\text{FPR}^{T}\rightarrow C$
+satisfies the identity law and is a $P$-algebra morphism:
+\[
+\text{pu}_{\text{FPR}}\bef f=r\quad,\quad\quad p_{\text{FPR}}\bef f=f^{\uparrow P}\bef p_{C}\quad.
+\]
+We need to show that $f=\text{run}_{\text{FPR}}^{T,C}(r)$. Since
+we have the function $\text{run}_{\text{FPR}}^{T,C}$ in matrix form,
+it is convenient to rewrite $f$ also in that form:
+\[
+f:T+P^{\text{FPR}^{T}}\rightarrow C\quad,\quad\quad f\triangleq\,\begin{array}{|c||c|}
+ & C\\
+\hline T & g\\
+P^{\text{FPR}^{T}} & h
+\end{array}\quad,
+\]
+where $g$ and $h$ are new arbitrary functions. The identity law
+($\text{pu}_{\text{FPR}}\bef f=r$) then gives simply $g=r$, while
+the $P$-algebra morphism law gives:
+\[
+p_{\text{FPR}}\bef f=h\overset{!}{=}f^{\uparrow P}\bef p_{C}\quad.
+\]
+It remains to show that the following code matrices are equal:
+\[
+\text{run}_{\text{FPR}}^{T,C}(r)=\,\begin{array}{||c|}
+r\\
+\overline{\text{run}_{\text{FPR}}^{T,C}(r)}^{\uparrow P}\bef p_{C}
+\end{array}\,\overset{?}{=}f=\,\begin{array}{|c||c|}
+ & C\\
+\hline T & r\\
+P^{\text{FPR}^{T}} & f^{\uparrow P}\bef p_{C}
+\end{array}\quad.
+\]
+By the inductive assumption, the recursive call $\overline{\text{run}_{\text{FPR}}^{T,C}(r)}$
+already satisfies the equation we need to prove: $f=\overline{\text{run}_{\text{FPR}}^{T,C}(r)}$.
+So, the code matrices for $f$ and for $\text{run}_{\text{FPR}}^{C}$
+are equal. $\square$
+
+We notice that $\text{FPR}^{T}$ is the same as the free monad\index{free monad}
+on $P$ (first defined in Statement~\ref{subsec:Statement-monad-construction-4-free-monad}).
+The free monad on $P$ is a tree-like data structure whose branch
+shape is described by the functor $P$. Because of that, the free
+monad on $P$ represents an unevaluated expression tree built up from
+operations of type $P^{A}\rightarrow A$. The monadic operation \inputencoding{latin9}\lstinline!flatten!\inputencoding{utf8}
+will transform \inputencoding{latin9}\lstinline!FPR[FPR[T]]!\inputencoding{utf8}
+into \inputencoding{latin9}\lstinline!FPR[T]!\inputencoding{utf8}.
+As we will now show, that transformation is a $P$-algebra morphism;
+in other words, it preserves the $P$-typeclass operations. So, it
+is not useful to apply the free $P$-typeclass construction twice,
+as the result will be reducible to a single layer of \inputencoding{latin9}\lstinline!FPR[T]!\inputencoding{utf8}.
+
+\subsubsection{Statement \label{subsec:Statement-free-P-typeclass-monad}\ref{subsec:Statement-free-P-typeclass-monad}}
+
+The free monad\textsf{'}s \inputencoding{latin9}\lstinline!flatten!\inputencoding{utf8}
+operation of the raw free $P$-typeclass encoding, $\text{ftn}_{\text{FPR}}:\text{FPR}^{\text{FPR}^{T}}\rightarrow\text{FPR}^{T}$,
+is a $P$-algebra morphism.
+
+\subparagraph{Proof}
+
+Write the $P$-algebra morphism law of $\text{ftn}_{\text{FPR}}$:
+
+\begin{wrapfigure}{l}{0.2\columnwidth}%
+\vspace{-2.15\baselineskip}
+\[
+\xymatrix{\xyScaleY{1.4pc}\xyScaleX{3.5pc}P^{\text{FPR}^{\text{FPR}^{T}}}\ar[r]\sp(0.5){\ p_{\text{FPR}}^{\text{FPR}^{T}}}\ar[d]\sp(0.45){\,\text{ftn}_{\text{FPR}}^{\uparrow P}} & \text{FPR}^{\text{FPR}^{T}}\ar[d]\sp(0.45){\,\text{ftn}_{\text{FPR}}}\\
+P^{\text{FPR}^{T}}\ar[r]\sp(0.5){~p_{\text{FPR}}^{T}} & \text{FPR}^{T}
+}
+\]
+\vspace{-0.6\baselineskip}
+\end{wrapfigure}%
+
+\noindent ~\vspace{-0.55\baselineskip}
+\[
+p_{\text{FPR}}^{\text{FPR}^{T}}\bef\text{ftn}_{\text{FPR}}\overset{?}{=}\big(\text{ftn}_{\text{FPR}}\big)^{\uparrow P}\bef p_{\text{FPR}}^{T}\quad.
+\]
+The function $\text{ftn}_{\text{FPR}}$ is given by the following
+code matrix (see Statement~\ref{subsec:Statement-monad-construction-4-free-monad}):
+\[
+\text{ftn}_{\text{FPR}}=\,\begin{array}{|c||cc|}
+ & T & P^{\text{FPR}^{T}}\\
+\hline T & \text{id} & \bbnum 0\\
+P^{\text{FPR}^{T}} & \bbnum 0 & \text{id}\\
+P^{\text{FPR}^{\text{FPR}^{T}}} & \bbnum 0 & \overline{\text{ftn}}_{\text{FPR}}^{\uparrow P}
+\end{array}\quad.
+\]
+For values $x$ of type $P^{\text{FPR}^{\text{FPR}^{T}}}$ we have:
+\[
+p_{\text{FPR}}^{\text{FPR}^{T}}=x^{:P^{\text{FPR}^{\text{FPR}^{T}}}}\rightarrow\big(\bbnum 0^{:A}+\bbnum 0^{:P^{\text{FPR}^{T}}}+x\big)^{:\text{FPR}^{\text{FPR}^{T}}}\quad.
+\]
+Then we compute:
+\begin{align*}
+ & p\bef\text{ftn}_{\text{FPR}}=x^{:P^{\text{FPR}^{\text{FPR}^{T}}}}\rightarrow\big(\bbnum 0^{:T}+\bbnum 0^{:P^{\text{FPR}^{T}}}+x\big)\triangleright\text{ftn}_{\text{FPR}}=x\rightarrow\bbnum 0^{:T}+x\triangleright\overline{\text{ftn}}_{\text{FPR}}^{\uparrow P}\quad,\\
+ & \text{ftn}_{\text{FPR}}^{\uparrow P}\bef p=x^{:P^{\text{FPR}^{\text{FPR}^{T}}}}\rightarrow\bbnum 0^{:T}+\big(x\triangleright\text{ftn}_{\text{FPR}}^{\uparrow P}\big)^{:P^{\text{FPR}^{T}}}\quad.
+\end{align*}
+The two sides of the equation are now the same. $\square$
+
+\subsection{Describing laws of $P$-typeclasses as values}
+
+Usually, typeclasses impose some laws on their methods. We will now
+develop a rigorous description of $P$-typeclass laws where a law
+is represented by a value of a certain type.
+
+For motivation, write the laws of the \inputencoding{latin9}\lstinline!Monoid!\inputencoding{utf8}
+typeclass for a monoid type $A$:
+\begin{align*}
+{\color{greenunder}\text{left identity law}:}\quad & \text{for all }x^{:A}\quad:\quad e_{_{A}}\oplus_{_{A}}x=x\quad,\\
+{\color{greenunder}\text{right identity law}:}\quad & \text{for all }x^{:A}\quad:\quad x\oplus_{_{A}}e_{_{A}}=x\quad.\\
+{\color{greenunder}\text{associativity law}:}\quad & \text{for all }x^{:A},y^{:A},z^{:A}\quad:\quad(x\oplus_{_{A}}y)\oplus_{_{A}}z=x\oplus_{_{A}}(y\oplus_{_{A}}z)\quad.
+\end{align*}
+Each law is an equation between some expressions of the same type
+$A$. These expressions are computed via the monoid\textsf{'}s operations using
+arbitrary values ($x$, $y$, $z$), which are also of type $A$.
+To generalize, we may express all the monoid laws as equations of
+the form $f_{1}(...)=f_{2}(...)$:
+\[
+\text{for all }x^{:A},y^{:A},z^{:A}\quad:\quad f_{1}(\oplus_{_{A}},e_{_{A}},x,y,z)=f_{2}(\oplus_{_{A}},e_{_{A}},x,y,z)\quad.
+\]
+For the associativity law, we need to choose the functions $f_{1}$
+and $f_{2}$ as:
+\begin{align*}
+{\color{greenunder}\text{for the associativity law}:}\quad & f_{1}(\oplus,e,x,y,z)\triangleq(x\oplus y)\oplus z\quad,\quad\quad f_{2}(\oplus,e,x,y,z)\triangleq x\oplus(y\oplus z)\quad.
+\end{align*}
+The functions $f_{1}$ and $f_{2}$ for the left identity law will
+not depend on $y$ and $z$:
+\begin{align*}
+{\color{greenunder}\text{for the left identity law}:}\quad & f_{1}(\oplus,e,x,y,z)\triangleq e\oplus x\quad,\quad\quad f_{2}(\oplus,e,x,y,z)\triangleq x\quad,
+\end{align*}
+and similarly for the right identity law.
+
+The data in the pair $(\oplus_{_{A}},e_{_{A}})$ is a value of type
+$P^{A}\rightarrow A$, where $P^{A}\triangleq\bbnum 1+A\times A$
+for the \inputencoding{latin9}\lstinline!Monoid!\inputencoding{utf8}
+typeclass. So, the functions $f_{1}$ and $f_{2}$ have type $(P^{A}\rightarrow A)\times A\times A\times A\rightarrow A$.
+The pair $(f_{1},f_{2})$ is equivalent to a single value of type
+$(P^{A}\rightarrow A)\times A\times A\times A\rightarrow A\times A$.
+Each monoid law corresponds to a specific value of that type, which
+we will call a \index{law function}\textbf{law function}. A law function
+computes the two sides of the law at once as a single value of type
+$A\times A$. The law then requires that the two values in that pair
+should be equal. If $p:A\times A$ is a pair of values of type $A$
+then we will write the condition: 
+\[
+p\triangleright\pi_{1}=p\triangleright\pi_{2}
+\]
+to indicate that the two values in the pair are equal.
+
+The monoid laws use up to three arbitrary values of type $A$, but
+laws for other typeclasses might require more than three arbitrary
+values. To make the definition of a law function more general, we
+replace an arbitrary value of type $A\times A\times A$ by an arbitrary
+function $f$ of type $\text{Int}\rightarrow A$. Instead of values
+$x$, $y$, $z$ we will then use the values $f(1)$, $f(2)$, $f(3)$,
+etc., which are still arbitrary values of type $A$ since $f$ is
+an arbitrary function. This allows us to generalize the definition
+of the \inputencoding{latin9}\lstinline!Monoid!\inputencoding{utf8}
+laws to other typeclasses of similar form:
+
+\subsubsection{Definition \label{subsec:Definition-law-function-P-typeclass}\ref{subsec:Definition-law-function-P-typeclass}}
+
+A \textbf{law function} for a $P$-typeclass \index{$P$-typeclass!law function}
+with a \index{law function of a $P$-typeclass}structure functor $P$
+is a value $l$ of type: 
+\begin{equation}
+\text{LawF}_{P}\triangleq\forall A.\,(P^{A}\rightarrow A)\times(\text{Int}\rightarrow A)\rightarrow A\times A\quad.\label{eq:P-typeclass-law-type}
+\end{equation}
+Given a law function $l$ of type \inputencoding{latin9}\lstinline!LawF!\inputencoding{utf8},
+we say that an evidence value $p_{T}:P^{T}\rightarrow T$ \textbf{satisfies
+the $l$-law} if:
+\begin{align}
+{\color{greenunder}p_{T}\text{ satisfies the }l\text{-law}:}\quad & \text{for all }f^{:\text{Int}\rightarrow T}\quad:\quad\big(l^{T}(p_{T},f)\big)\triangleright\pi_{1}=\big(l^{T}(p_{T},f)\big)\triangleright\pi_{2}\quad.\label{eq:P-typeclass-law}
+\end{align}
+Here $l^{T}$ is the law function $l$ used with the type parameter
+$T$.
+
+A \textbf{lawful} $P$\textbf{-typeclass} with law functions $l_{1}$,
+$l_{2}$, ..., $l_{k}$ imposes each of the $l_{i}$-laws (for $i=1$,
+$2$, ..., $k$) on the evidence values. A type $T$ belongs to that
+$P$-typeclass if there exists an evidence value $p_{T}:P^{T}\rightarrow T$
+that satisfies the $l_{i}$-law~(\ref{eq:P-typeclass-law}) for each
+of the specified law functions $l_{i}$. For brevity, we also say
+that the $l_{i}$-laws \textsf{``}\textbf{hold for} $T$\textsf{''} as long as it
+is clear how what evidence value $p_{T}$ is implied. $\square$
+
+Another approach to typeclass laws is by describing the two sides
+of a law via expression trees. The raw tree encoding of a free $P$-typeclass
+($\text{FPR}^{T}$) is a type that represents arbitrary expression
+trees with leaf values of type $T$. We can use a pair of values of
+type $\text{FPR}^{T}$ as two sides of the law. The two sides can
+be evaluated as expression trees using the $P$-operations of a specific
+type $T$. The result will be two values of type $T$; the law holds
+if these two values are equal.
+
+To see in detail how this approach works, consider again the \inputencoding{latin9}\lstinline!Monoid!\inputencoding{utf8}
+typeclass with its three laws. Suppose the type $T$ already has the
+monoid methods ($\oplus_{_{T}}$ and $e_{_{T}}$), and we would like
+to check whether the monoid laws hold for $T$. We take the raw tree
+encoding of a free monoid on $T$, which is the type \inputencoding{latin9}\lstinline!FMR[T]!\inputencoding{utf8}
+defined in Section~\ref{subsec:Free-monoids}. Begin with the left
+identity law of monoids: it says that for any value $t^{:T}$ we must
+have $e_{_{T}}\oplus_{_{T}}t=t$. The two sides of that law are two
+expressions involving the monoid $T$\textsf{'}s operations as well as an arbitrary
+value $t$ of type $T$. We first consider those two expressions as
+unevaluated expression trees. Those \textsf{``}law expression trees\textsf{''} are
+two values of the type \inputencoding{latin9}\lstinline!FMR[T]!\inputencoding{utf8}
+that we may implement in Scala code like this:\inputencoding{latin9}
+\begin{lstlisting}
+def lhs1[T](t: T): FMR[T] = Combine(Empty(), Wrap(t))
+def rhs1[T](t: T): FMR[T] = Wrap(t)
+\end{lstlisting}
+\inputencoding{utf8}The two sides of the law must be defined as \emph{functions} of type
+$T\rightarrow\text{FMR}^{T}$ because the law should hold for arbitrary
+values $t^{:T}$. In order to verify that the law holds, we now need
+to apply the \inputencoding{latin9}\lstinline!runner!\inputencoding{utf8}
+function to the values \inputencoding{latin9}\lstinline!lhs1!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!rhs1!\inputencoding{utf8}. To
+evaluate the expression trees of type $\text{FMR}^{T}$ into values
+of type $T$, we specify an identity function (of type $T\rightarrow T$)
+as the first argument of the \inputencoding{latin9}\lstinline!runner!\inputencoding{utf8}
+function:\inputencoding{latin9}
+\begin{lstlisting}
+def lhs1Evaluated[T: Monoid](t: T): T = runner[T, T](identity)(lhs1(t))
+def rhs1Evaluated[T: Monoid](t: T): T = runner[T, T](identity)(rhs1(t))
+\end{lstlisting}
+\inputencoding{utf8}The law says that both sides should be equal as values of type $T$.
+We could test that:\inputencoding{latin9}
+\begin{lstlisting}
+forAll { t: T =>               // Using the scalacheck library.
+  lhs1Evaluated(t) shouldEqual rhs1Evaluated(t)
+}
+\end{lstlisting}
+\inputencoding{utf8}
+The right identity law is treated similarly. Turning now to the associativity
+law, we find that we need \emph{three} arbitrary values of type $T$,
+so the \textsf{``}law expression trees\textsf{''} are:\inputencoding{latin9}
+\begin{lstlisting}
+def lhs3[T](t1: T, t2: T, t3: T): FMR[T] = Combine(Combine(Wrap(t1), Wrap(t2)), Wrap(t3))
+def rhs3[T](t1: T, t2: T, t3: T): FMR[T] = Combine(Wrap(t1), Combine(Wrap(t2), Wrap(t3)))
+\end{lstlisting}
+\inputencoding{utf8}To verify that the law holds for $T$, we again evaluate both expression
+trees into values of type $T$ using the \inputencoding{latin9}\lstinline!runner!\inputencoding{utf8}
+function:\inputencoding{latin9}
+\begin{lstlisting}
+def lhs3Evaluated[T: Monoid](t1: T, t2: T, t3: T): T = runner[T, T](identity)(lhs3(t1, t2, t3))
+def rhs3Evaluated[T: Monoid](t1: T, t2: T, t3: T): T = runner[T, T](identity)(rhs3(t1, t2, t3))
+\end{lstlisting}
+\inputencoding{utf8}To test that the law holds:\inputencoding{latin9}
+\begin{lstlisting}
+forAll { (t1: T, t2: T, t3: T) =>               // Using the scalacheck library.
+  lhs3Evaluated(t1, t2, t3) shouldEqual rhs3Evaluated(t1, t2, t3)
+}
+\end{lstlisting}
+\inputencoding{utf8}
+We can now generalize the notion of \textsf{``}law expression trees\textsf{''} from
+\inputencoding{latin9}\lstinline!Monoid!\inputencoding{utf8} to an
+arbitrary $P$-typeclass. The two sides of the law are functions that
+take as arguments one or more arbitrary values of type $T$ and will
+return a value of type $\text{FPR}^{T}$. In order to be able to describe
+any number of arbitrary values of type $T$, we instead use an arbitrary
+function of type $\text{Int}\rightarrow T$. So, the law is expressed
+by a function of type $(\text{Int}\rightarrow T)\rightarrow\text{FPR}^{T}\times\text{FPR}^{T}$.
+Since the law is supposed to work in the same way for all types $T$,
+we add a universal quantifier ($\forall T$). The type of \textsf{``}pairs
+of law expression trees\textsf{''} (\inputencoding{latin9}\lstinline!LawET!\inputencoding{utf8})
+becomes:
+\begin{equation}
+\text{LawET}_{P}\triangleq\forall T.\,(\text{Int}\rightarrow T)\rightarrow\text{FPR}^{T}\times\text{FPR}^{T}\quad.\label{eq:law-expression-tree-type}
+\end{equation}
+
+How does a given value \inputencoding{latin9}\lstinline!et: LawET!\inputencoding{utf8}
+specify a law of a $P$-typeclass (the \textsf{``}\inputencoding{latin9}\lstinline!et!\inputencoding{utf8}-law\textsf{''})?
+Suppose we need to verify whether a type $T$ with a $P$-algebra
+structure map $p_{T}$ obeys the \inputencoding{latin9}\lstinline!et!\inputencoding{utf8}-law.
+First, we apply \inputencoding{latin9}\lstinline!et!\inputencoding{utf8}
+to an arbitrary function \inputencoding{latin9}\lstinline!f: Int => T!\inputencoding{utf8}
+and obtain a pair \inputencoding{latin9}\lstinline!(lhs, rhs)!\inputencoding{utf8}
+of values of type \inputencoding{latin9}\lstinline!FPR[T]!\inputencoding{utf8}:\inputencoding{latin9}
+\begin{lstlisting}
+val f: Int => T = ...
+val (lhs: FPR[T], rhs: FPR[T]) = et(f)
+\end{lstlisting}
+\inputencoding{utf8}Then we evaluate both expression trees using $T$\textsf{'}s operations (that
+is, data from $p_{T}$):\inputencoding{latin9}
+\begin{lstlisting}
+val (lhsT: T, rhsT: T) = (runner(id)(lhs), runner(id)(rhs))
+\end{lstlisting}
+\inputencoding{utf8}The \inputencoding{latin9}\lstinline!et!\inputencoding{utf8}-law
+is then just the condition \inputencoding{latin9}\lstinline!lhsT == rhsT!\inputencoding{utf8}.
+
+The types \inputencoding{latin9}\lstinline!LawF!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!LawET!\inputencoding{utf8} appear
+to be different but turn out to be equivalent:
+
+\subsubsection{Statement \label{subsec:Statement-equivalence-law-function-law-expression-tree-P-typeclass}\ref{subsec:Statement-equivalence-law-function-law-expression-tree-P-typeclass}}
+
+The types of fully parametric functions \inputencoding{latin9}\lstinline!LawF!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!LawET!\inputencoding{utf8} (defined
+by Eq.~(\ref{eq:P-typeclass-law-type}) and Eq.~(\ref{eq:law-expression-tree-type})
+respectively) are equivalent to each other and to the type $\text{FPR}^{\text{Int}}\times\text{FPR}^{\text{Int}}$.
+
+\subparagraph{Proof}
+
+To verify the first type equivalence ($\text{LawF}\cong\text{FPR}^{\text{Int}}\times\text{FPR}^{\text{Int}}$):
+\begin{align*}
+ & \forall A.\,(P^{A}\rightarrow A)\gunderline{\times}\,(\text{Int}\rightarrow A)\rightarrow A\times A\\
+ & \cong\forall A.\,(P^{A}+\text{Int}\rightarrow A)\rightarrow\gunderline{A\times A}\\
+ & \cong\forall A.\,(P^{A}+\text{Int}\rightarrow A)\rightarrow\bbnum 2\rightarrow A\\
+ & \cong\bbnum 2\rightarrow\forall A.\,(P^{A}+\text{Int}\rightarrow A)\rightarrow A\quad.
+\end{align*}
+The type $\forall A.\,(P^{A}+\text{Int}\rightarrow A)\rightarrow A$
+is a Church encoding (see Section~\ref{subsec:The-Church-encoding-of-recursive-types})
+of the recursive type $U$ defined as the least fixpoint of the type
+equation $U\cong P^{U}+\text{Int}$. The least fixpoint $U$ is the
+same as the type we denote by $\text{FPR}^{\text{Int}}$ according
+to the definition of $\text{FPR}^{T}$.
+
+To verify the second type equivalence ($\text{LawET}\cong\text{FPR}^{\text{Int}}\times\text{FPR}^{\text{Int}}$),
+use the Yoneda lemma:
+\[
+\forall T.\,(\gunderline{\text{Int}}\rightarrow T)\rightarrow\gunderline{\text{FPR}^{T}\times\text{FPR}^{T}}\cong\text{FPR}^{\text{Int}}\times\text{FPR}^{\text{Int}}\quad.
+\]
+\vspace{-1\baselineskip}
+
+The types \inputencoding{latin9}\lstinline!LawF!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!LawET!\inputencoding{utf8} are
+equivalent because they are both equivalent to the same type. $\square$
+
+Because the types \inputencoding{latin9}\lstinline!LawF!\inputencoding{utf8}
+and \inputencoding{latin9}\lstinline!LawET!\inputencoding{utf8} are
+equivalent, we may use either of them according to convenience within
+a particular derivation or proof.
+
+It turns out that laws of a $P$-typeclass are closely connected with
+$P$-algebra morphisms. In particular, $P$-algebra morphisms preserve
+the typeclass laws and hide the law violations.
+
+\subsubsection{Statement \label{subsec:Statement-P-algebra-morphisms-and-laws}\ref{subsec:Statement-P-algebra-morphisms-and-laws} }
+
+For any $P$-algebras $M$ and $N$ with structure maps $p_{M}$ and
+$p_{N}$; for any $P$-algebra morphism $\phi:M\rightarrow N$; and
+for any fully parametric law function $l:\text{LawF}_{P}$ that defines
+an $l$-law:
+
+\textbf{(a)} Suppose that the $l$-law holds for $M$ and $\phi$
+is surjective. Then the $l$-law also holds for $N$. (In this sense,
+a $P$-algebra morphism \textsf{``}preserves\textsf{''} the $P$-typeclass laws.)
+
+\textbf{(b)} Suppose the $l$-law holds for $N$ but \emph{not} for
+$M$. The $l$-law for $M$ has the form of Eq.~(\ref{eq:P-typeclass-law})
+with $T=M$. Suppose a violation of the $l$-law for $M$ is found
+using a specific $f:\text{Int}\rightarrow M$ as:
+\begin{equation}
+\big(l^{M}(p_{M},f)\big)\triangleright\pi_{1}\neq\big(l^{M}(p_{M},f)\big)\triangleright\pi_{2}\quad.\label{eq:p-typeclass-law-violation}
+\end{equation}
+Then this law violation will disappear after applying $\phi$:
+\begin{equation}
+\big(l^{M}(p_{M},f)\big)\triangleright\pi_{1}\bef\phi=\big(l^{M}(p_{M},f)\big)\triangleright\pi_{2}\bef\phi\quad.\label{eq:p-typeclass-law-violation-hidden}
+\end{equation}
+(In this sense, a $P$-algebra morphism \textsf{``}hides\textsf{''} any violations
+of the $P$-typeclass laws.)
+
+\subparagraph{Proof}
+
+First, we prove that any fully parametric law function $l$ obeys
+the strong dinaturality law (Section~\ref{subsec:Strong-dinaturality.-General-properties}).
+By Statement~\ref{subsec:Statement-post-wedge-entails-strong-dinaturality},
+the function $l$ is strongly dinatural if the argument type of $l$
+can be expressed through a profunctor with the post-wedge property.
+The type \inputencoding{latin9}\lstinline!LawF!\inputencoding{utf8}
+is:
+\[
+\text{LawF}_{P}=\forall A.\,(P^{A}\rightarrow A)\times(\text{Int}\rightarrow A)\rightarrow A\times A=\forall A.\,R^{A,A}\rightarrow S^{A}\quad,
+\]
+where we defined the profunctor $R^{X,Y}\triangleq(P^{X}\rightarrow Y)\times(\text{Int}\rightarrow Y)$
+and the functor $S^{A}\triangleq A\times A$. The argument type of
+$l$ is $R^{A,A}$, and indeed we find, via Statement~~\ref{subsec:Statement-post-wedge}
+and Example~\ref{subsec:Example-strong-dinaturality-for-some-type-signatures}(b),
+that $R$ has the post-wedge property. To write the strong dinaturality
+law of $l$, we use Eq.~(\ref{eq:strong-dinaturality-law}) with
+types $A=M$, $B=N$, and $t=l$, $f=\phi$. For all $x^{:P^{M}\rightarrow M}$,
+$u^{:\text{Int}\rightarrow M}$, $y^{:P^{N}\rightarrow N}$, $v^{:\text{Int}\rightarrow N}$
+we have:
+\begin{equation}
+\text{when}\quad x\bef\phi=\phi^{\uparrow P}\bef y\quad\text{and}\quad u\bef\phi=v\quad\text{then}\quad l^{M}(x,u)\triangleright\phi^{\uparrow S}=l^{N}(y,v)\quad.\label{eq:strong-dinaturality-of-l-general}
+\end{equation}
+When we write the equation for the $l$-law, we will apply the function
+$l$ as, say, $l^{M}(p_{M},u)$. Indeed, we may use $x=p_{M}$ and
+$y=p_{N}$ in Eq.~(\ref{eq:strong-dinaturality-of-l-general}) because
+the condition $x\bef\phi=\phi^{\uparrow P}\bef y$ is the same as
+the $P$-algebra morphism law~(\ref{eq:p-algebra-morphism-law})
+of $\phi$, which is assumed to hold. Then Eq.~(\ref{eq:strong-dinaturality-of-l-general})
+is simplified to:
+\begin{equation}
+\text{for all }u^{:\text{Int}\rightarrow M}:\quad l^{M}(p_{M},u)\triangleright\phi^{\uparrow S}=l^{N}(p_{N},u\bef\phi)\quad.\label{eq:strong-dinaturality-of-typeclass-law-function-l}
+\end{equation}
+
+\textbf{(a)} The two sides of the $l$-law for any $u^{:\text{Int}\rightarrow M}$
+are contained in the value $l^{M}(p_{M},u)$ of type $M\times M$.
+That value is a pair of \emph{equal} values of type $M$ because it
+is given that the $l$-law holds for $M$:
+\[
+l^{M}(p_{M},u)\triangleright\pi_{1}=l^{M}(p_{M},u)\triangleright\pi_{2}.
+\]
+Applying $\phi^{\uparrow S}$ to $l^{M}(p_{M},u)$, we obtain again
+a pair of equal numbers. To see this more formally, we use the naturality
+laws of $\pi_{1}$ and $\pi_{2}$:
+\[
+\phi^{\uparrow S}\bef\pi_{1}=\pi_{1}\bef\phi\quad,\quad\quad\phi^{\uparrow S}\bef\pi_{2}=\pi_{2}\bef\phi\quad,
+\]
+to find:
+\[
+l^{M}(p_{M},u)\triangleright\phi^{\uparrow S}\triangleright\pi_{1}=l^{M}(p_{M},u)\triangleright\pi_{1}\triangleright\phi=l^{M}(p_{M},u)\triangleright\pi_{2}\triangleright\phi=l^{M}(p_{M},u)\triangleright\phi^{\uparrow S}\triangleright\pi_{2}\quad.
+\]
+Using Eq.~(\ref{eq:strong-dinaturality-of-typeclass-law-function-l}),
+we obtain:
+\[
+l^{N}(p_{N},u\bef\phi)\triangleright\pi_{1}=l^{N}(p_{N},u\bef\phi)\triangleright\pi_{2}\quad.
+\]
+This is not yet enough to prove that the $l$-law holds for $N$.
+We need to prove that $l^{N}(p_{N},v)$ is a pair of equal values
+for \emph{arbitrary} $v^{:\text{Int}\rightarrow N}$, but so far we
+have only proved it for $v$ of the form $u\bef\phi$. So, it remains
+to show that for an arbitrary $v^{:\text{Int}\rightarrow N}$ there
+exists some $u_{v}^{:\text{Int}\rightarrow M}$ such that $v=u_{v}\bef\phi$.
+By assumption, $\phi$ is surjective, which means that there exists
+a function $\chi:N\rightarrow M$ such that $\chi\bef\phi=\text{id}$.
+Then we define $u_{v}\triangleq\chi(v)$ and obtain $u_{v}\bef\phi=v\triangleright\chi\bef\phi=v$
+as required. This definition of $u_{v}$ gives: 
+\[
+l^{N}(p_{N},v)=l^{N}(p_{N},u_{v}\bef\phi)\quad,\quad\text{and so}:\quad l^{N}(p_{N},v)\triangleright\pi_{1}=l^{N}(p_{N},v)\triangleright\pi_{2}\quad.
+\]
+ This holds for all $v^{:\text{Int}\rightarrow N}$, which shows that
+the $l$-law holds for the type $N$.
+
+\textbf{(b)} The $l$-law violation is witnessed by the inequality~(\ref{eq:p-typeclass-law-violation}).
+To show that Eq.~(\ref{eq:p-typeclass-law-violation-hidden}) holds,
+we write:
+\begin{align*}
+{\color{greenunder}\text{expect to equal }\big(l^{M}(p_{M},f)\big)\triangleright\pi_{2}\bef\phi:}\quad & \big(l^{M}(p_{M},f)\big)\triangleright\gunderline{\pi_{1}\bef\phi}\\
+{\color{greenunder}\text{naturality law of }\pi_{1}:}\quad & =\gunderline{\big(l^{M}(p_{M},f)\big)\triangleright\phi^{\uparrow S}}\bef\pi_{1}\\
+{\color{greenunder}\text{use Eq.~(\ref{eq:strong-dinaturality-of-typeclass-law-function-l})}:}\quad & =l^{N}(p_{N},f\bef\phi)\bef\gunderline{\pi_{1}}\\
+{\color{greenunder}\text{the }l\text{-law holds for }N:}\quad & =l^{N}(p_{N},f\bef\phi)\bef\pi_{2}\\
+{\color{greenunder}\text{use Eq.~(\ref{eq:strong-dinaturality-of-typeclass-law-function-l})}:}\quad & =\big(l^{M}(p_{M},f)\big)\triangleright\gunderline{\phi^{\uparrow S}\bef\pi_{2}}\\
+{\color{greenunder}\text{naturality law of }\pi_{2}:}\quad & =\big(l^{M}(p_{M},f)\big)\triangleright\pi_{2}\bef\phi\quad.
+\end{align*}
+$\square$
+
+The property of \textsf{``}hiding\textsf{''} the law violations justifies the practical
+use of free typeclass constructions (e.g., free monads) that do not
+satisfy some of the laws. In practice, a free monad program will be
+interpreted (or \textsf{``}run\textsf{''}) into a lawful monad such as \inputencoding{latin9}\lstinline!Try!\inputencoding{utf8},
+and the runner will preserve the typeclass operations (that is, the
+runner is a $P$-algebra morphism). Statement~\ref{subsec:Statement-P-algebra-morphisms-and-laws}(b)
+then shows that no law violations will be observable after the runner
+is applied. We have proved this for our free monad DSL in Section~\ref{subsec:A-first-recipe-monadic-dsl}.
+Now we find that this is a general property that applies to all $P$-typeclasses.
+
+We find that it is safe to use a free typeclass encoding (even if
+it violates some laws) as long as its runner preserves the typeclass
+operations and the target typeclass is lawful. In the next section
+we will study such \textsf{``}partially lawful\textsf{''} free typeclass encodings.
+
+\subsection{Free $P$-typeclasses that satisfy a subset of the laws\label{subsec:Free--typeclasses-that-satisfy-laws}}
+
+In Section~\ref{subsec:Free-monoids}, we have seen four different
+encodings of the free monoid (denoted by \inputencoding{latin9}\lstinline!F1!\inputencoding{utf8},
+\inputencoding{latin9}\lstinline!F2!\inputencoding{utf8}, \inputencoding{latin9}\lstinline!F3!\inputencoding{utf8},
+and \inputencoding{latin9}\lstinline!F4!\inputencoding{utf8}). We
+will find that all those encodings satisfy the requirements of Definition~\ref{subsec:Definition-free-P-typeclass-encoding}
+even though they obey different subsets of the monoid laws. We will
+now generalize that situation to $P$-typeclasses and study the properties
+of free $P$-typeclass constructions that satisfy only a subset of
+the typeclass\textsf{'}s laws. The resulting theory will make it simpler to
+prove that a given type is indeed a correct free $P$-typeclass encoding
+according to Definition~\ref{subsec:Definition-free-P-typeclass-encoding}.
+
+The first step is to simplify the properties of the \textsf{``}universal runner\textsf{''}
+shown in Definition~\ref{subsec:Definition-free-P-typeclass-encoding}(c).
+Given a type $C$ which is a $P$-algebra satisfying \emph{all} of
+the typeclass laws, and given an additional map $T\rightarrow C$,
+the encoding $E^{T}$ can be mapped to $C$. By Definition~\ref{subsec:Definition-free-P-typeclass-encoding}(b),
+there exists also a map $T\rightarrow E^{T}$. We notice that we are
+working with $P$-algebras that have an additional map from $T$ to
+the $P$-algebra\textsf{'}s type. For example, $E^{T}$ is a $P$-algebra with
+a structure map $p_{E}^{T}:P^{E^{T}}\rightarrow E^{T}$ and additionally
+a map $\text{pu}_{E}:T\rightarrow E^{T}$. The pair type $(P^{C}\rightarrow A)\times(T\rightarrow A)$
+is equivalent to $T+P^{A}\rightarrow A$. So, we will describe our
+situation more concisely if we define a functor $Q_{T}^{A}\triangleq T+P^{A}$
+and just say that $E^{T}$ is a $Q_{T}$-algebra.
+
+In general, a type $M$ is a $Q_{T}$-algebra if it has a pair of
+functions $p_{M}:P^{M}\rightarrow M$ and $i_{M}:T\rightarrow M$.
+The structure map $q_{M}:Q_{T}^{M}\rightarrow M$ is then written
+as:
+\[
+q_{M}:T+P^{M}\rightarrow M\quad,\quad\quad q_{M}\triangleq\,\begin{array}{|c||c|}
+ & M\\
+\hline T & i_{M}\\
+P^{M} & p_{M}
+\end{array}\quad.
+\]
+
+We can now make some of our definitions shorter if we consider $Q_{T}$-algebra
+\emph{morphisms}. A function $\phi:M\rightarrow N$ is a $Q_{T}$-algebra
+morphism if it is a $P$-algebra morphism and additionally $i_{M}\bef\phi=i_{N}$.
+Applied to $M=E^{T}$ and $N=C$, we find that the equation $i_{M}\bef\phi=i_{N}$
+is the same as the identity law of the universal runner ($\text{pu}_{M}\bef\text{run}_{E}^{C,T}(r)=r$).
+This allows us to simplify the definition of a free $P$-typeclass
+encoding:
+
+\subsubsection{Statement \label{subsec:Definition-free-P-typeclass-encoding-simplified}\ref{subsec:Definition-free-P-typeclass-encoding-simplified}}
+
+Given a $P$-typeclass, a functor $E$ is a free $P$-typeclass encoding
+if:
+
+\textbf{(1)} The type $E^{T}$ is a $Q_{T}$-algebra whose structure
+map $q_{E}^{T}:Q_{T}^{E^{T}}\rightarrow E^{T}$ is natural with respect
+to $T$.
+
+\textbf{(2)} If $C$ is any $Q_{T}$-algebra that obeys all the $P$-typeclass
+laws then there exists only one $Q_{T}$-algebra morphism, denoted
+by $r_{E}^{T,C}:E^{T}\rightarrow C$, and it is natural in $T$. 
+
+\subparagraph{Proof}
+
+We will show that conditions (a)–(d) of Definition~\ref{subsec:Definition-free-P-typeclass-encoding}
+hold for $E$.
+
+Conditions (a) and (b) hold by assumption (1) and by the definition
+of a $Q_{T}$-algebra. If the structure map $q_{E}^{T}$ is natural
+in $T$ then so are the functions $p_{E}^{T}$ and $i_{E}\triangleq\text{pu}_{E}$.
+
+To show that condition (c) holds, suppose $C$ is a $P$-algebra with
+a structure map $p_{C}:P^{C}\rightarrow C$ that obeys all typeclass
+laws. Given any function $i_{C}:T\rightarrow C$, we can make $C$
+into a $Q_{T}$-algebra. By assumption (2), we have a $Q_{T}$-algebra
+morphism $r_{E}^{T,C}:E^{T}\rightarrow C$. Then we define $\text{run}_{E}^{T,C}$
+via $r_{E}^{T,C}$:
+\[
+\text{run}_{E}^{T,C}(i_{C})\triangleq r_{E}^{T,C}\quad.
+\]
+The $P$-algebra morphism law and the identity law hold for $\text{run}_{E}^{T,C}(i_{C})$
+as consequences of the $Q_{T}$-algebra morphism law of $r_{E}^{T,C}$.
+The naturality law in $T$ follows from the assumption that $r_{E}^{T,C}$
+is natural in $T$. 
+
+The $P$-algebra naturality law in $C$ follows from the assumption
+of uniqueness. Suppose $C$ and $D$ are $P$-algebras that satisfy
+all the typeclass laws. Given any $P$-algebra morphism $g^{:C\rightarrow D}$
+and any function $i_{C}:T\rightarrow C$, we define $i_{D}\triangleq i_{C}\bef g$
+and find that both $C$ and $D$ are $Q_{T}$-algebras and that $g$
+is a $Q_{T}$-algebra morphism. The function $r_{E}^{T,C}\bef g$
+has type $E^{T}\rightarrow D$ and is a composition of two $Q_{T}$-algebra
+morphisms; so, $r_{E}^{T,C}\bef g$ is also a $Q_{T}$-algebra morphism.
+By assumption (2), there is only one $Q_{T}$-algebra morphism of
+type $E^{T}\rightarrow D$, namely $r_{E}^{T,D}$. It follows that
+$r_{E}^{T,C}\bef g=r_{E}^{T,D}$, or equivalently:
+\[
+\text{run}_{E}^{T,C}(i_{C})\bef g=\text{run}_{E}^{T,D}(i_{C}\bef g)\quad.
+\]
+ This is exactly the $P$-algebra naturality law of $\text{run}_{E}^{T,C}$.
+
+Finally, condition (d) holds because for any $i_{C}:T\rightarrow C$
+and any $P$-algebra morphism $f^{:E^{T}\rightarrow C}$ satisfying
+$\text{pu}_{E}\bef f=i_{C}$ we find that $f$ is also a $Q_{T}$-algebra
+morphism. By assumption (2), there is only one $Q_{T}$-algebra morphism
+of type $E^{T}\rightarrow C$, namely $r_{E}^{T,C}$. So, we must
+have $f=r_{E}^{T,C}=\text{run}_{E}^{T,C}(i_{C})$. $\square$
+
+{*}{*}{*}
+
+\subsection{Church encodings for free $P$-typeclasses\label{subsec:Church-encodings-for-free-P-typeclasses}}
+
 \subsection{Free constructions on more than one generator}
 
-Can combine two or more DSLs in a disjunction: $\text{DSL}^{F+G+H,A}$
+Can combine two or more DSLs in a disjunction: $\text{DSL}^{F+G+H,A}$ 
+
 - combine semigroup and pointed to get a monoid
 
 \section{Slides }
-
-\paragraph{Worked example II: Free monoid}
-
-Implement a free monoid \texttt{\textcolor{blue}{\footnotesize{}FM{[}Z{]}}}
-generated by type \texttt{\textcolor{blue}{\footnotesize{}Z}} 
-
-A value of \texttt{\textcolor{blue}{\footnotesize{}FM{[}Z{]}}} can
-be the empty value; it can also be a \texttt{\textcolor{blue}{\footnotesize{}Z}} 
-
-If \texttt{\textcolor{blue}{\footnotesize{}x}}, \texttt{\textcolor{blue}{\footnotesize{}y}}
-are of type \texttt{\textcolor{blue}{\footnotesize{}FM{[}Z{]}}} then
-so is \texttt{\textcolor{blue}{\footnotesize{}x |+| y}} 
-
-\texttt{\textcolor{blue}{\footnotesize{}sealed trait FM{[}Z{]} }}\textcolor{darkgray}{\footnotesize{}//
-tree encoding}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}case class Empty{[}Z{]}()
-extends FM{[}Z{]}}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}case class Wrap{[}Z{]}(z: Z)
-extends FM{[}Z{]}}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}case class Comb{[}Z{]}(x: FM{[}Z{]},
-y: FM{[}Z{]}) extends FM{[}Z{]}}}{\footnotesize\par}
-
-Short type notation: $\text{FM}^{Z}\triangleq1+Z+\text{FM}^{Z}\times\text{FM}^{Z}$ 
-
-For a monoid $M$ and given $Z\rightarrow M$, map $\text{FM}^{Z}\rightarrow M$
-
-\texttt{\textcolor{blue}{\footnotesize{}def |+|(x: FM{[}Z{]}, y: FM{[}Z{]}): FM{[}Z{]}
-= Comb(x, y)}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}def run{[}M: Monoid, Z{]}(extract: Z
-$\rightarrow$ M): FM{[}Z{]} $\rightarrow$ M = \{}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}  case Empty() $\rightarrow$
-Monoid{[}M{]}.empty}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}  case Wrap(z) $\rightarrow$
-extract(z)}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}  case Comb(x, y) $\rightarrow$
-run(extract)(x) |+| run(extract)(y)}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}\} }}\textcolor{darkgray}{\footnotesize{}//
-Monoid laws will hold after applying run().}{\footnotesize\par}
-
-The reduced encoding is $\text{FMR}^{Z}\triangleq\text{List}^{Z}$
-(list of $Z$\textsf{'}s)
-
-Implementing \texttt{\textcolor{blue}{\footnotesize{}|+|}} requires
-concatenating the lists 
-
-Reduced encoding and tree encoding give identical results after \texttt{\textcolor{blue}{\footnotesize{}run()}} 
 
 
 \paragraph{Mapping a free semigroup to different targets}
@@ -2535,7 +3641,7 @@ Functor laws hold for $\text{FS}^{X}$, so \texttt{\textcolor{blue}{\footnotesize
 is composable as usual
 
 The \textsf{``}interpreter\textsf{''} commutes with \texttt{\textcolor{blue}{\footnotesize{}fmap}}
-as well (naturality law):{\footnotesize{}
+as well (naturality law):{\footnotesize{}}{\footnotesize{}
 \[
 \xymatrix{\xyScaleY{0.2pc}\xyScaleX{3pc} & \text{FS}^{Y}\ar[rd]\sp(0.6){\ \text{run}^{S}g^{:Y\rightarrow S}}\\
 \text{FS}^{X}\ar[ru]\sp(0.45){\text{fmap}\,f^{:X\rightarrow Y}}\ar[rr]\sb(0.5){\text{run}^{S}(f\bef g)^{:X\rightarrow S}} &  & S
@@ -3094,40 +4200,9 @@ of $P^{A}$
 Example: a typeclass with methods $\text{pt}:A\rightarrow P^{A}$
 and $\text{ex}:P^{A}\rightarrow A$
 
-Such typeclasses are not inductive
+Such typeclasses are not inductive nor co-inductive
 
 Typeclasses with methods of the form $P^{A}\rightarrow...$ are \textbf{co-inductive}
-
-
-\paragraph{Worked example IV: Free contrafunctor}
-
-Method $\text{contramap}:C^{A}\times\left(B\rightarrow A\right)\rightarrow C^{B}$ 
-
-Tree encoding: $\text{FreeCF}^{F^{\bullet},B}\triangleq F^{B}+\exists A.\text{FreeCF}^{F^{\bullet},A}\times\left(B\rightarrow A\right)$
-
-Reduced encoding: $\text{FreeCF}^{F^{\bullet},B}\triangleq\exists A.F^{A}\times\left(B\rightarrow A\right)$ 
-
-A value of type $\text{FreeCF}^{F^{\bullet},B}$ must be of the form
-{\footnotesize{}
-\[
-\exists Z_{1}.\exists Z_{2}...\exists Z_{n}.F^{Z_{1}}\times\left(B\rightarrow Z_{n}\right)\times\left(Z_{n}\rightarrow Z_{n-1}\right)\times...\times\left(Z_{2}\rightarrow Z_{1}\right)
-\]
-}{\footnotesize\par}
-
-The functions $B\rightarrow Z_{n}$, $Z_{n}\rightarrow Z_{n-1}$,
-etc., are composed associatively
-
-The equivalent type is $\exists Z_{1}.F^{Z_{1}}\times\left(B\rightarrow Z_{1}\right)$
-
-The reduced encoding is non-recursive
-
-Example: $F^{A}\triangleq A$, \textsf{``}interpret\textsf{''} into the contrafunctor
-$C^{A}\triangleq A\rightarrow\text{String}$
-
-\texttt{\textcolor{blue}{\footnotesize{}def prefixLog{[}A{]}(p: A): A
-$\rightarrow$ String = a $\rightarrow$ p.toString + a.toString}}{\footnotesize\par}
-
-If $F^{\bullet}$ is already a contrafunctor then $\text{FreeCF}^{F^{\bullet},A}\cong F^{A}$
 
 
 \paragraph{Worked example V: Free pointed functor}
@@ -3213,44 +4288,6 @@ Free filterable contrafunctor is constructed in a similar way
 
 \paragraph{Worked example VII: Free monad}
 
-Methods:
-\begin{align*}
-\text{pure} & :A\rightarrow F^{A}\\
-\text{flatMap} & :F^{A}\rightarrow(A\rightarrow F^{B})\rightarrow F^{B}
-\end{align*}
-
-Can recover \texttt{\textcolor{blue}{\footnotesize{}map}} from \texttt{\textcolor{blue}{\footnotesize{}flatMap}}
-and \texttt{\textcolor{blue}{\footnotesize{}pure}}, so we keep only
-\texttt{\textcolor{blue}{\footnotesize{}flatMap}} 
-
-Tree encoding: {\footnotesize{}$\text{FreeM}^{F^{\bullet},A}\triangleq F^{A}+A+\exists Z.\text{FreeM}^{F^{\bullet},Z}\times\big(Z\rightarrow\text{FreeM}^{F^{\bullet},A}\big)$}{\footnotesize\par}
-
-Derivation of reduced encoding: 
-
-can simplify $A\times\big(A\rightarrow\text{FreeM}^{F^{\bullet},B}\big)\cong\text{FreeM}^{F^{\bullet},B}$
-
-use associativity to replace $\text{FreeM}^{A}\times(A\rightarrow\text{FreeM}^{B})\times(B\rightarrow\text{FreeM}^{C})$
-by $\text{FreeM}^{A}\times\big(A\rightarrow\text{FreeM}^{B}\times(B\rightarrow\text{FreeM}^{C})\big)$
-
-therefore we can replace $\exists Z.\text{FreeM}^{F^{\bullet},Z}\times...$
-by $\exists Z.F^{Z}\times...$
-
-Reduced encoding: $\text{FreeM}^{F^{\bullet},A}\triangleq A+\exists Z.F^{Z}\times\big(Z\rightarrow\text{FreeM}^{F^{\bullet},A}\big)$
-
-\textsf{``}\textbf{Final} \textbf{Tagless} style\textsf{''} means \textsf{``}Church encoding
-of free monad over $F^{\bullet}$\textsf{''}
-
-Free monad over a functor $F^{\bullet}$ is $\text{FreeM}^{F^{\bullet},A}\triangleq A+F^{\text{FreeM}^{F^{\bullet},A}}$
-
-Free monad $\text{FreeM}^{M^{\bullet},\bullet}$ over a monad $M^{\bullet}$
-is not equivalent to $M^{\bullet}$
-
-Free monad over a pointed functor $F^{\bullet}$ is {\footnotesize{}$\text{FreeM}^{F^{\bullet},A}\triangleq F^{A}+F^{\text{FreeM}^{F^{\bullet},A}}$}{\footnotesize\par}
-
-start from half-reduced encoding $F^{A}+\exists Z.F^{Z}\times\big(Z\rightarrow\text{FreeM}^{F^{\bullet},A}\big)$ 
-
-replace the existential type by an equivalent type $F^{\text{FreeM}^{F^{\bullet},A}}$
-
 
 \paragraph{Worked example VIII: Free applicative functor}
 
@@ -3312,7 +4349,7 @@ $\text{FreeC}^{Z}$ is a functor in $Z$; {\footnotesize{}$\text{fmap}_{\text{Free
 %
 \end{minipage}{\footnotesize{}}%
 \begin{minipage}[t]{0.36\columnwidth}%
-{\footnotesize{}
+{\footnotesize{}}{\footnotesize{}
 \[
 \xymatrix{\xyScaleY{1.5pc}\xyScaleX{5pc}\text{FreeC}^{Y}\ar[d]\sb(0.45){\text{fmap}\,f^{:Y\rightarrow Z}}\ar[rd]\sp(0.65){\ \text{run}\left(f\bef g\right)}\\
 \text{FreeC}^{Z}\ar[r]\sp(0.5){\text{run}(g^{:Z\rightarrow P})} & P
@@ -3330,6 +4367,7 @@ $f^{:P\rightarrow Q}$, we have{\footnotesize{}
 \[
 \text{run}^{P}(g)\bef f=\text{run}^{Q}\left(g\bef f\right)\quad\quad\text{– \textsf{``}universal property\textsf{''} of }\text{run}
 \]
+}{\footnotesize{}
 \[
 \xymatrix{\xyScaleY{2.0pc}\xyScaleX{3pc}\text{FreeC}^{Z}\ar[d]\sb(0.4){\text{run}^{P}(g^{:Z\rightarrow P})}\ar[rd]\sp(0.55){\quad\text{run}^{Q}(g\bef f)} &  &  & C^{P}\ar[d]\sb(0.4){\text{fmap}_{S}f}\ar[r]\sp(0.5){\text{ops}_{P}} & P\ar[d]\sb(0.4){f}\\
 P\ar[r]\sp(0.5){f^{:P\rightarrow Q}} & Q &  & C^{Q}\ar[r]\sp(0.5){\text{ops}_{Q}} & Q
@@ -4138,7 +5176,7 @@ As an example of a function that is \emph{not} fixpoint-preserving,
 consider truncating an infinite list at a fixed length of, say, $100$
 elements. {*}{*}{*}
 
-\subsection{The Church encoding of recursive types}
+\subsection{The Church encoding of recursive types\label{subsec:The-Church-encoding-of-recursive-types}}
 
 Any given type can be represented in a \textbf{Church encoding}\index{Church encoding},
 which is a function type with a universally quantified type parameter.
@@ -4196,8 +5234,8 @@ $s^{:F^{B}\rightarrow B}$, and $f^{:A\rightarrow B}$:
 \end{equation}
 Defined in this way, the type $T$ is a solution of the fixpoint equation
 $T\cong F^{T}$. Strong dinaturality holds for all fully parametric
-functions of type $T$. This follows from Example~\ref{subsec:Example-strong-dinaturality-for-some-type-signatures}(c)
-with $G^{A}\triangleq A$ and $H^{A}\triangleq A$.
+functions of type $T$. This follows from Example~\ref{subsec:Example-strong-dinaturality-for-some-type-signatures}(b)
+with $G^{A}\triangleq A$ and $L^{X,Y}\triangleq Y$.
 
 \subparagraph{Proof}
 

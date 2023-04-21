@@ -83,8 +83,9 @@ or if they wish to make comments or suggestions regarding the contents of the bo
 - Milestone 1 (achieved as of August 2019): chapters 1-6 are completed and available for purchase at lulu.com as a cheap (black/white) paperback.
 - Milestone 2 (achieved as of December 2019): chapters 1-9 are completed.
 - Milestone 3 (achieved as of November 2020): chapters 10 and 14 are completed.
-- Milestone 4 (ETA: January 2021): chapters 1-12 and 14 are completed.
-- Milestone 5 (ETA: June 2022): the book is finished and available for on-demand printing at lulu.com or elsewhere.
+- Milestone 4 (achieved in 2021): chapters 1-12 and 14 are completed.
+- Milestone 5 (ETA: June 2023): the book is finished and available for 
+on-demand printing at lulu.com or elsewhere.
 
 # Building a PDF version of the book from LyX sources
 
@@ -112,4 +113,6 @@ and is automatically uploaded to Docker Hub at https://hub.docker.com/repository
 
 This Docker image is loaded by the file [build-pdf.yml](.github/workflows/build-pdf.yml#L31) in order to build the PDF version of the book.
 
-The latest build is uploaded to Github when a new git tag is pushed, which 
+The latest build is uploaded to Github when a new git tag is pushed.
+This happens with each new release.
+Also, a PDF build is performed on every commit to master.
