@@ -145,7 +145,7 @@ rm -rf mdoc; mkdir mdoc
 for f in $name-*tex; do g=`basename "$f" .tex`; cat $g.pre.md <(perl extract_scala_snippets.pl < $f) > mdoc/$g.md; done
 
 # Remove control annotations for Scala code snippets.
-LC_ALL=C sed -i.bak -e " s| +//IGNORETHIS.*||" $name*.tex
+LC_ALL=C sed -i.bak -e " s|  *//IGNORETHIS.*||" $name*.tex
 
 # Preparing source files for the book cover.
 

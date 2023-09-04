@@ -8,11 +8,11 @@ name="sofp"
 # When changing the title of any chapter, make sure it is correctly updated in `draft_title_*` and in the `chapters` array below.
 
 # Expected total number of pages in the book draft:
-draft_pages=798
+draft_pages=799
 
 # The number of pages in each chapter:
 #           0  1  2  3  4  5  6  7  8  9 10 11 12 13  14 15 16 17 18 19 A B  C  D E F
-pagecounts=(3 17 42 34 24 56 45 12 63 54 63 62 53 57 147  9  5  6  3  6 6 3 42 22 1 2 1 1 8)
+pagecounts=(3 17 42 34 24 56 45 12 63 54 64 62 53 65 147 10  5  6  3  6 6 3 42 22 1 2 1 1 8)
 
 # To create the draft version that contains only proofread chapters:
 # cut out from here, including:
