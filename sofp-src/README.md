@@ -10,7 +10,7 @@ with the goal of building theoretical foundations that are valuable to practitio
 At this time, the video tutorials are obsolete because the book already covers all their material and much more.
 Some notations in the video tutorials have been changed in the book, and some mistakes have been corrected.
 
-The material below is kept for reference only. Refer to the book for current status.
+The material below is obsolete and kept for reference only. Refer to the book for current status.
 
 ## Scope of the tutorial series
 
@@ -248,7 +248,7 @@ Contents in brief:
 - How to infer the most generic (parametric) types for higher-order functions
 - Worked examples and exercises
 
-**Note**: There was an error in the last exercise as shown in the video -- it had no solution.
+**Note**: There was an error in the last exercise as shown in the video -- it had no solutions.
 Please use the exercises from the current version of the PDF slides.
 
 ## Chapter 3, part 2: Disjunction types
