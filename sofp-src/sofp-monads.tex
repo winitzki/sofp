@@ -1838,13 +1838,13 @@ curry the argument $A$. The result is:
 \left(A\times S\rightarrow B\times S\right)\cong\left(A\rightarrow S\rightarrow B\times S\right)=A\rightarrow L^{B}\quad,\quad\text{where}\quad L^{B}\triangleq S\rightarrow B\times S\quad.
 \]
 So, the\index{monads!State monad@\texttt{State} monad} \lstinline!State!
-monad must be defined by the type constructor $\text{State}^{S,A}\triangleq S\rightarrow A\times S$.
+monad is defined by the type constructor $\text{State}^{S,A}\triangleq S\rightarrow A\times S$.
 This is a function that computes a value of type $A$ while using
-and possibly updating the \textsf{``}state value\textsf{''} of type $S$.
+and possibly updating the \textsf{``}internal state value\textsf{''} of type $S$.
 
-To code of the \lstinline!flatMap! method for this type constructor
-was derived in Example~\ref{subsec:ch-solvedExample-9}(c). It does
-indeed pass the updated state value to the next computation:
+The code of the \lstinline!flatMap! method for this type constructor
+was derived in Example~\ref{subsec:ch-solvedExample-9}(c). The code
+passes the updated state value to the next computation:
 \begin{lstlisting}
 type State[S, A] = S => (A, S)
 def flatMap[S, A, B](prev: State[S, A])(f: A => State[S, B]): State[S, B] = { s =>
@@ -1853,7 +1853,7 @@ def flatMap[S, A, B](prev: State[S, A])(f: A => State[S, B]): State[S, B] = { s 
 }
 \end{lstlisting}
 
-An example of using the \lstinline!State! monad is the task of implementing
+An example of using the \lstinline!State! monad is when implementing
 a random number generator. A simple generator is the \textbf{Lehmer\textsf{'}s
 algorithm}\index{Lehmer\textsf{'}s algorithm},\footnote{See \texttt{\href{https://en.wikipedia.org/wiki/Lehmer_random_number_generator}{https://en.wikipedia.org/wiki/Lehmer\_random\_number\_generator}}}
 which generates integer sequences $x_{n}$ defined by:
@@ -1863,13 +1863,13 @@ x_{n+1}\triangleq\left(48271*x_{n}\right)\%\,(2^{31}-1)\quad,\quad\quad1\leq x_{
 The \textsf{``}updating\textsf{''} function for this sequence, $x_{n+1}=\text{lehmer}\,(x_{n})$,
 can be implemented as:
 \begin{lstlisting}
-def lehmer(x: Long): Long = x * 48271L % ((1L << 31) - 1)
+def lehmer(x: Long): Long = (x * 48271L) % ((1L << 31) - 1L)
 \end{lstlisting}
 In many applications, one needs uniformly distributed floating-point
 numbers in the interval $\left[0,1\right]$. To produce such numbers,
 let us define a helper function:
 \begin{lstlisting}
-def uniform(x: Long): Double = (x - 1).toDouble / ((1L << 31) - 3)   // Enforce the interval [0, 1].
+def uniform(x: Long): Double = (x - 1L).toDouble / ((1L << 31) - 3L)  // Enforce the interval [0, 1].
 \end{lstlisting}
 
 To use the uniform generator, we need to provide an initial value
@@ -1906,7 +1906,7 @@ to maintain the generator state while computing the result. The floating-point
 generator is implemented as a monadic value of type \lstinline!State[Long, Double]!:
 \begin{lstlisting}
 val rngUniform: State[Long, Double] = { oldState =>
-  val result = uniform(oldState)   // Enforce the interval [0, 1].
+  val result = uniform(oldState)
   val newState = lehmer(oldState)
   (result, newState)
 }
@@ -2031,7 +2031,7 @@ def result(callback: Int => Unit): Unit = mult4(10)(r => add3(r)(callback))
 To make the pattern more clear, replace the constant \lstinline!10!
 by a function \lstinline!pure! with a callback argument:
 
-\begin{wrapfigure}{l}{0.5\columnwidth}%
+\begin{wrapfigure}{l}{0.48\columnwidth}%
 \vspace{-0.8\baselineskip}
 \begin{lstlisting}
 def pure(x: Int)(callback: Int => Unit): Unit =
@@ -2050,13 +2050,16 @@ def result(callback: Int => Unit): Unit =
 \vspace{-1\baselineskip}
 \end{wrapfigure}%
 
-\noindent This code is a typical pattern of continuation-passing style.
-The final result of the calculation is only available as the bound
-variable \lstinline!z! in a deeply nested function scope. This makes
-working with this code style more difficult: We can continue the program
-only by writing code either directly within that deeply nested scope
-or within the given \lstinline!callback!. This is the heuristic reason
-why callback programming is known as \textsf{``}continuation-passing\textsf{''} style.
+\noindent This code illustrates the continuation-passing style: each
+step of the calculation calls a function (a \textsf{``}continuation\textsf{''}) passed
+to it as the last curried argument. The final result of the calculation
+is not returned by the function \lstinline!result! but is available
+only as the bound variable \lstinline!z! in a deeply nested function
+scope where \lstinline!callback(z)! is run. If we need to extend
+this program with some more calculation steps, we would have to add
+extra code within the deepest-nested scope of \lstinline!result!,
+or we could pass a \lstinline!callback! argument that contains further
+steps.
 
 Another feature of the continuation-passing style is that callbacks
 could be called at a later time, concurrently with the main thread
@@ -2081,29 +2084,28 @@ the execution strategy, at the cost of making the code more complicated
 to write and to understand.
 
 One complication is that it is difficult to maintain code that contains
-deeply nested function scopes. The continuation monad solves this
+deeply nested function scopes. The continuation monad solves that
 problem by converting nested function scopes into more easily composable
 functor blocks. The code also becomes more readable.
 
 To derive the required type constructor, consider a computation of
-type $A\rightarrow B$ that needs to use the continuation-passing
+type $A\rightarrow B$ that needs to be converted to the continuation-passing
 style. Instead of returning a value of type $B$, it registers a callback
-function for possible later use and returns a \lstinline!Unit! value.
-If the callback has type $B\rightarrow\bbnum 1$, the total input
-of our computation is $A\times\left(B\rightarrow\bbnum 1\right)$
-while the output is simply $\bbnum 1$. So, the type of a continuation-passing
-computation is $A\times\left(B\rightarrow\bbnum 1\right)\rightarrow\bbnum 1$.
-Rewrite this type in the form $A\rightarrow L^{B}$ with a suitable
-functor $L$:
+function and returns a \lstinline!Unit! value. If the callback has
+type $B\rightarrow\bbnum 1$, the total input of our computation is
+$A\times\left(B\rightarrow\bbnum 1\right)$ while the output is simply
+$\bbnum 1$. So, the type of a continuation-passing computation is
+$A\times\left(B\rightarrow\bbnum 1\right)\rightarrow\bbnum 1$. Rewrite
+this type in the form $A\rightarrow L^{B}$ with a suitable functor
+$L$:
 \[
 \left(A\times\left(B\rightarrow\bbnum 1\right)\rightarrow\bbnum 1\right)\cong\left(A\rightarrow\left(B\rightarrow\bbnum 1\right)\rightarrow\bbnum 1\right)=A\rightarrow L^{B}\quad,\quad\text{where}\quad L^{A}\triangleq\left(A\rightarrow\bbnum 1\right)\rightarrow\bbnum 1\quad.
 \]
+
 It is sometimes helpful if the callback returns a more informative
 value than \lstinline!Unit!. For instance, that value could show
 error information or give access to processes that were scheduled
-concurrently.
-
-So, we generalize the type constructor $L$ to $\left(A\rightarrow R\right)\rightarrow R$,
+concurrently. So, we generalize the type constructor $L^{A}$ to $\left(A\rightarrow R\right)\rightarrow R$,
 where $R$ is a fixed \textsf{``}result\textsf{''} type. This type constructor is
 called the \textbf{continuation monad}\index{monads!continuation monad (Cont)@continuation monad (\texttt{Cont})}
 and is denoted by $\text{Cont}^{R,A}\triangleq\left(A\rightarrow R\right)\rightarrow R$.
@@ -2115,10 +2117,10 @@ implementation is (see Exercise~\ref{subsec:ch-Exercise-7}):
 type Cont[R, A] = (A => R) => R
 def flatMap[R, A, B](ca: Cont[R, A])(f: A => Cont[R, B]): Cont[R, B] = { br => ca(a => f(a)(br)) }
 \end{lstlisting}
-The code of \lstinline!flatMap! substitutes a new callback, \lstinline!br: B => R!,
+The code of \lstinline!flatMap! substitutes a new callback (\lstinline!br: B => R!)
 into the innermost scope of the computation \lstinline!f!. In this
-way, we obtain easy access to the innermost callback scope. This trick
-makes code with deeply nested callbacks composable.
+way, we obtain direct access to the innermost callback scope. This
+trick makes code with deeply nested callbacks composable.
 
 After defining \lstinline!map! and \lstinline!flatMap! as extension
 methods on \lstinline!Cont!, we can rewrite the code above as:
@@ -2171,10 +2173,10 @@ monad.
 
 \subsubsection{Example \label{subsec:Example-continuation-monad-computation-cost}\ref{subsec:Example-continuation-monad-computation-cost}\index{solved examples}}
 
-Each arithmetic computation, such as \lstinline!add3! or \lstinline!mult4!,
-now has a certain cost, which is a value of a monoid type $W$. Use
-the monad \lstinline!Cont[W, A]! to implement computations with a
-specified cost. The total cost must add up automatically when computations
+Suppose that each arithmetic computation, such as \lstinline!add3!
+or \lstinline!mult4!, has a certain cost, which is a value of a monoid
+type $W$. Use the monad \lstinline!Cont[W, A]! to implement computations
+with a cost. The total cost must add up automatically when computations
 are chained using \lstinline!flatMap!.
 
 \subparagraph{Solution}
@@ -2208,7 +2210,7 @@ val (totalCost, futureResult) = runCont(result, Monoid[W].empty)
 val resultInt = Await.result(futureResult, Duration.Inf)   // Wait for the Future value.
 \end{lstlisting}
 
-If the code contains many other monadic operations such as \lstinline!add3!
+If the code contains many monadic operations similar to \lstinline!add3!
 and \lstinline!mult4!, it is inconvenient to hard-code the cost each
 time. Instead, we can easily implement a function that adds a given
 cost to any given monadic operation:
@@ -5545,10 +5547,11 @@ for the state and continuation monads:
 \end{align*}
 These type signatures are complicated and confusing to read. Direct
 proofs of the monad laws for these functions are much longer than
-the proofs of Statements~\ref{subsec:Statement-state-monad-is-lawful}\textendash \ref{subsec:Statement-continuation-monad-is-lawful}.
+the proofs of Statements~\ref{subsec:Statement-state-monad-is-lawful}\textendash \ref{subsec:Statement-continuation-monad-is-lawful}. 
+
 When a monad $M$ has a function type, the Kleisli function $A\rightarrow M^{B}$
-has two curried arguments. Flipping or uncurrying these arguments
-often produces an equivalent function that is easier to work with. 
+has two curried arguments. Flipping or uncurrying those arguments
+often gives an equivalent type that is easier to work with. 
 
 \subsection{Constructions of semi-monads and monads\label{subsec:Structural-analysis-of-monads}}
 
@@ -7314,6 +7317,9 @@ We can package this code into a \lstinline!runner! function:
 \begin{lstlisting}
 def runner[S, A](init: S): State[S, A] => A = _.run(init)._1
 \end{lstlisting}
+\begin{equation}
+\text{run}_{\text{State}}:S\rightarrow\text{State}^{S,A}\rightarrow A\quad,\quad\quad\text{run}_{\text{State}}(s_{0})\triangleq k^{:S\rightarrow A\times S}\rightarrow s_{0}\triangleright k\triangleright\pi_{1}\quad.\label{eq:definition-of-runState}
+\end{equation}
 The runner for the \lstinline!State! monad computes a final result
 value of type $A$ by performing all the state updates and other computations
 encapsulated by a monadic program (\lstinline!s: State[S, A]!). We
@@ -7400,7 +7406,7 @@ composition law becomes:
 \begin{wrapfigure}{l}{0.2\columnwidth}%
 \vspace{-1.9\baselineskip}
 \[
-\xymatrix{\xyScaleY{2.0pc}\xyScaleX{2.3pc}M^{M^{A}}\ar[d]\sb(0.5){\text{ftn}_{M}}\ar[r]\sp(0.5){\theta^{\uparrow M}}\sb(0.5){\theta^{M^{A}}} & M^{A}\ar[d]\sb(0.45){\theta}\\
+\xymatrix{\xyScaleY{2.0pc}\xyScaleX{2.3pc}M^{M^{A}}\ar[d]\sb(0.5){\text{ftn}_{M}}\ar[r]\sp(0.5){\theta^{\uparrow M}} & M^{A}\ar[d]\sb(0.45){\theta}\\
 M^{A}\ar[r]\sp(0.5){\theta} & A
 }
 \]
