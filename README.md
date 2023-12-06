@@ -91,6 +91,8 @@ on-demand printing at lulu.com or elsewhere.
 
 If you want to build from source, currently you need `LyX` 2.3.x and `pdftk` installed. 
 
+Change to the directory `sofp-src`.
+
 The command `bash make_sofp_pdf.sh` builds PDF files `sofp.pdf` and `sofp-draft.pdf`.
 The first file is a full draft with some unfinished chapters,
 the second file contains only finished and proofread chapters.

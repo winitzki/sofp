@@ -3,6 +3,7 @@
 # Requires pdftk and lyx.
 # Get lyx from www.lyx.org
 # For Mac, get pdftk from https://www.pdflabs.com/tools/pdftk-the-pdf-toolkit/pdftk_server-2.02-mac_osx-10.11-setup.pkg
+# For Windows, get pdftk from https://www.pdflabs.com/tools/pdftk-the-pdf-toolkit/pdftk_free-2.02-win-setup.exe
 
 name="sofp"
 
