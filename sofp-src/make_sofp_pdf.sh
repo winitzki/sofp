@@ -64,7 +64,7 @@ function add_color {
 	local texsrc="$1"
 	# Insert color comments into displayed equation arrays. Also, in some places the green color was inserted; replace by `greenunder`.
 	# Example of inserted color: {\color{greenunder}\text{outer-interchange law for }M:}\quad &
-	LC_ALL=C sed -i.bak -e 's|\\color{green}|\\color{greenunder}|; s|^\(.*\\text{[^}]*}.*:\)\( *\\quad \& \)|{\\color{greenunder}\1}\2|' "$texsrc"
+	LC_ALL=C sed -i.bak -e 's|\\color{green}|\\color{greenunder}|; s|^\(.*\\text{[^}]*}.*:\)\( *\\quad \& \)|{\\color{greenunder}\1}\2|; s|\(\& *\\quad\)\(.*\\text{[^}]*}.*: *\)\(\\quad\\\\\)$|\1{\\color{greenunder}\2}\3|' "$texsrc"
 	# Insert color background into all displayed equations. This is disabled because it does not always produce visually good results.
 	if false; then
 	LC_ALL=C sed -i.bak -E -e ' s!\\begin\{(align.?|equation)\}!\\begin{empheq}[box=\\mymathbgbox]{\1}!; s!\\end\{(align.?|equation)\}!\\end{empheq}!; ' "$texsrc"
@@ -195,9 +195,9 @@ total_pages=`pdfPages "$name".pdf`
 
 echo Result is "$name.pdf", size `kbSize "$name.pdf"` bytes, with $total_pages pages.
 
-bash prepare_volume.sh 1 &
-bash prepare_volume.sh 2 &
-bash prepare_volume.sh 3 &
+bash prepare_volume.sh 1 "$pdftk" &
+bash prepare_volume.sh 2 "$pdftk" &
+bash prepare_volume.sh 3 "$pdftk" &
 
 bash spelling_check.sh &
 
@@ -224,9 +224,8 @@ if [ x"$1" == x-print ]; then
 fi
 
 
-# Prepare the full 3-page book covers. Use $total_pages and not $draft_pages since the printed file has all unedited content as well.
-sed -i.bak -e "s|TOTALPAGES|$total_pages|" book_cover/sofp-cover-parameters.tex
-(cd book_cover; bash sofp-make-cover.sh)
+# Prepare the full 3-page book covers. Use $total_pages of the whole pdf file and not $draft_pages since the printed file has all unedited content as well.
+bash prepare_cover.sh "$name.pdf" "$pdftk" &
 
 # Cleanup?
 #rm -f $name*{idx,ind,aux,dvi,ilg,out,toc,log,ps,lof,lot,data}
