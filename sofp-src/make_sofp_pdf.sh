@@ -2,7 +2,7 @@
 
 # Requires pdftk and lyx.
 # Get lyx from www.lyx.org
-# For Mac, get pdftk from https://www.pdflabs.com/tools/pdftk-the-pdf-toolkit/pdftk_server-2.02-mac_osx-10.11-setup.pkg
+# For Mac, get pdftk from https://www.pdflabs.com/tools/pdftk-the-pdf-toolkit/pdftk_server-2.02-mac_osx-10.11-setup.pkg or else it may not work
 # For Windows, get pdftk from https://www.pdflabs.com/tools/pdftk-the-pdf-toolkit/pdftk_free-2.02-win-setup.exe
 
 name="sofp"
@@ -157,12 +157,14 @@ for f in sofp-cover-page-no-bg.tex sofp-cover-page.tex sofp-back-cover.tex sofp-
 # Check whether the sources have changed. If so, create a new sources archive and a new PDF file.
 add_source_hashes $name.tex
 
+# Prepare "$name-src.tar.bz2" with all sources.
 assemble_sources &
 
 echo "Creating a full PDF file..."
 
 make_pdf_with_index "$name" # Output is $name.pdf, main file is $name.tex, and other .tex files are \include'd.
 
+# Wait until assemble_sources is finished.
 wait
 
 	if ! test -s "$name".pdf; then
@@ -193,6 +195,12 @@ total_pages=`pdfPages "$name".pdf`
 
 echo Result is "$name.pdf", size `kbSize "$name.pdf"` bytes, with $total_pages pages.
 
+bash prepare_volume.sh 1 &
+bash prepare_volume.sh 2 &
+bash prepare_volume.sh 3 &
+
+bash spelling_check.sh &
+
 # Create the "clean draft" pdf file by selecting the chapters that have been proofread.
 # Check page counts in the draft file and in individual chapters.
 bash check_and_make_draft.sh
@@ -200,11 +208,6 @@ draft_pages=`pdfPages "$draft".pdf`
 bash check-consistent-labels.sh
 bash check-lines_with_displaymath_in_new_paragraph.sh
 
-# Attach sources to the draft file.
-if test -s $name-src.tar.bz2 && test -s $draft.pdf; then  "$pdftk" $draft.pdf attach_files "$name-src.tar.bz2" output $draft-src.pdf
-else
-	echo Not attaching sources to draft since no source file $name-src.tar.bz2 is found or no $draft.pdf is found.
-fi
 if [ x"$1" == x-nolulu ]; then
 	# Create a pdf file without references to lulu.com and without lulu.com's ISBN.
 	mv "$name".pdf "$name"-lulu.pdf
@@ -217,15 +220,9 @@ if [ x"$1" == x-nolulu ]; then
 fi
 
 if [ x"$1" == x-print ]; then
-	# Create a full pdf without hyperlinks, for printing on paper. Remove the cover image from first page and the back cover image.
-	mv "$name.pdf" "$name-hyperlinks.pdf"
-	LC_ALL=C sed -i.bak -e 's|colorlinks=true|colorlinks=false|; s|\\input{sofp-cover-page}||; s|\\input{sofp-back-cover-page}||; ' $name.tex 
-	make_pdf_with_index $name fast
-	mv "$name.pdf" "$name-nohyperlinks.pdf"
-	mv "$name-hyperlinks.pdf" "$name.pdf"
+  bash remove_hyperlinks.sh $name
 fi
 
-bash spelling_check.sh
 
 # Prepare the full 3-page book covers. Use $total_pages and not $draft_pages since the printed file has all unedited content as well.
 sed -i.bak -e "s|TOTALPAGES|$total_pages|" book_cover/sofp-cover-parameters.tex
@@ -233,3 +230,6 @@ sed -i.bak -e "s|TOTALPAGES|$total_pages|" book_cover/sofp-cover-parameters.tex
 
 # Cleanup?
 #rm -f $name*{idx,ind,aux,dvi,ilg,out,toc,log,ps,lof,lot,data}
+
+# Wait for background jobs.
+wait
