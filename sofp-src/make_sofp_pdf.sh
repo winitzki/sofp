@@ -219,9 +219,10 @@ if [ x"$1" == x-nolulu ]; then
 	mv "$name"-lulu.pdf "$name".pdf
 fi
 
-if [ x"$1" == x-print ]; then
-  bash remove_hyperlinks.sh $name
-fi
+# Prepare an entire PDF file without hyperlinks.
+#if [ x"$1" == x-print ]; then
+#  bash remove_hyperlinks.sh $name
+#fi
 
 
 # Prepare the full 3-page book covers. Use $total_pages of the whole pdf file and not $draft_pages since the printed file has all unedited content as well.
