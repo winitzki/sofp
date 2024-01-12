@@ -203,8 +203,8 @@ bash spelling_check.sh &
 
 # Create the "clean draft" pdf file by selecting the chapters that have been proofread.
 # Check page counts in the draft file and in individual chapters.
-bash check_and_make_draft.sh
-draft_pages=`pdfPages "$draft".pdf`
+#bash check_and_make_draft.sh
+#draft_pages=`pdfPages "$draft".pdf`
 bash check-consistent-labels.sh
 bash check-lines_with_displaymath_in_new_paragraph.sh
 

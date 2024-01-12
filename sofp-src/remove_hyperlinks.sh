@@ -5,6 +5,5 @@ name="$1"
 	LC_ALL=C sed -i.bak -e 's|colorlinks=true|colorlinks=false|; s|\\input{sofp-cover-page}||; s|\\input{sofp-back-cover-page}||; ' $name.tex 
 	#make_pdf_with_index $name fast
 	pdflatex --interaction=batchmode "$name"
-	makeindex "$name.idx"
 	mv "$name.pdf" "$name-nohyperlinks.pdf"
 	mv "$name-hyperlinks.pdf" "$name.pdf"

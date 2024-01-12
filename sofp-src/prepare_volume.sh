@@ -1,5 +1,5 @@
 # Prepare the printable PDF file of volume v of the book. v = 1, 2, 3.
-
+# The files are designed for printing and will have no PDF hyperlinks.
 
 function pdfPages {
  local file="$1"
@@ -93,6 +93,10 @@ esac
 cp book_cover/* .
 
 mv $name.tex sofp.tex
+
+# Disable PDF hyperlinks and remove covers.
+LC_ALL=C sed -i.bak -e 's|colorlinks=true|colorlinks=false|; s|\\input{sofp-cover-page}||; s|\\input{sofp-back-cover-page}||; ' sofp.tex
+
 pdflatex --interaction=batchmode sofp
 makeindex sofp.idx
 cp ../*.aux . # Enable references to other chapters.
