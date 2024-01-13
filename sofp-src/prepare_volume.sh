@@ -6,13 +6,17 @@ function pdfPages {
  "$pdftk" "$file" dump_data | fgrep NumberOfPages | sed -e 's,^.* ,,'
 }
 
-vol1_ISBN="ISBN (vol.1): 978-1-4710-4004-7"
+vol1_ISBN="ISBN (vol.~1): 978-1-4710-4004-7"
 vol1_ISBN_barcode="vol1_isbn_barcode.pdf"
 vol1_url="https://www.lulu.com/shop/sergei-winitzki/the-science-of-functional-programming-part-i/paperback/product-dyyq2zm.html"
 
-vol2_ISBN="ISBN (vol.2): 978-1-4461-9146-0"
-vol2_ISBN_barcode="vol2_ISBN_barcode.pdf"
+vol2_ISBN="ISBN (vol.~2): 978-1-4461-9146-0"
+vol2_ISBN_barcode="vol2_isbn_barcode.pdf"
 vol2_url="https://www.lulu.com/shop/sergei-winitzki/the-science-of-functional-programming-part-ii/paperback/product-655e7wm.html"
+
+vol3_ISBN="ISBN (vol.~3): 978-1-4461-9136-1"
+vol3_ISBN_barcode="vol3_isbn_barcode.pdf"
+vol3_url="https://www.lulu.com/shop/sergei-winitzki/the-science-of-functional-programming-part-ii/paperback/product-p668z4q.html"
 
 v=$1
 pdftk=$2
@@ -73,7 +77,7 @@ case $v in
   echo "Detected previous chapter $firstchapter, first page $firstpage, previous part number $firstpart"
   cat sofp.tex | remove_part2 | remove_part3  > $name.tex
   sed -i.bak -e 's|\(of Functional Programming\)|\1, Part I|; s|\(\\part{.*}\)|\\setcounter{page}{'$firstpage'}\\setcounter{part}{'$firstpart'}\\setcounter{chapter}{'$firstchapter'}\1|;' $name.tex
-  sed -i.bak -e 's|% End of title.|\\vspace{0.2in}\\centerline{\\fontsize{20pt}{20pt}\\selectfont{Part I. Introductory level}}|' book_cover/sofp-cover-page-no-bg.tex
+  sed -i.bak -e 's|% End of title.|\\vspace{0.2in}\\centerline{\\fontsize{20pt}{20pt}\\selectfont{Part I: Introductory level}}|' book_cover/sofp-cover-page-no-bg.tex
   sed -i.bak -e 's|\(of Functional Programming\)|\1, Part I|;' book_cover/sofp-spine.tex
 
   # Replace ISBN information.
@@ -89,7 +93,7 @@ case $v in
   cat sofp.tex | remove_part1 | remove_part3  > $name.tex
 
   sed -i.bak -e 's|\(of Functional Programming\)|\1, Part II|; s|\(\\part{.*}\)|\\setcounter{page}{'$firstpage'}\\setcounter{part}{'$firstpart'}\\setcounter{chapter}{'$firstchapter'}\1|;' $name.tex
-  sed -i.bak -e 's|% End of title.|\\vspace{0.2in}\\centerline{\\fontsize{20pt}{20pt}\\selectfont{Part II. Intermediate level}}|' book_cover/sofp-cover-page-no-bg.tex
+  sed -i.bak -e 's|% End of title.|\\vspace{0.2in}\\centerline{\\fontsize{20pt}{20pt}\\selectfont{Part II: Intermediate level}}|' book_cover/sofp-cover-page-no-bg.tex
   sed -i.bak -e 's|\(of Functional Programming\)|\1, Part II|;' book_cover/sofp-spine.tex
 
   # Replace ISBN information.
@@ -105,8 +109,14 @@ case $v in
   cat sofp.tex | remove_part1 | remove_part2  > $name.tex
 
   sed -i.bak -e 's|\(of Functional Programming\)|\1, Part III|; s|\(\\part{.*}\)|\\setcounter{page}{'$firstpage'}\\setcounter{part}{'$firstpart'}\\setcounter{chapter}{'$firstchapter'}\1|;' $name.tex
-  sed -i.bak -e 's|% End of title.|\\vspace{0.2in}\\centerline{\\fontsize{20pt}{20pt}\\selectfont{Part III. Advanced level}}|' book_cover/sofp-cover-page-no-bg.tex
+  sed -i.bak -e 's|% End of title.|\\vspace{0.2in}\\centerline{\\fontsize{20pt}{20pt}\\selectfont{Part III: Advanced level}}|' book_cover/sofp-cover-page-no-bg.tex
   sed -i.bak -e 's|\(of Functional Programming\)|\1, Part III|;' book_cover/sofp-spine.tex
+
+  # Replace ISBN information.
+  echo "Using volume $v ISBN '$vol3_ISBN'"
+  sed -i.bak -e 's|\({\\footnotesize{}\)ISBN: [^}]*\(}\\\\\)|\1'"$vol3_ISBN"'\2|;' $name.tex
+  # Add barcode to back cover.
+  sed -i.bak -e 's|%\(.*\){barcode}.*|\1{'$vol3_ISBN_barcode'}|' book_cover/sofp-back-cover-no-bg.tex
        ;;
 
 esac
