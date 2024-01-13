@@ -52,7 +52,7 @@ firstpart1=$(fgrep '\contentsline {part}' ../sofp.aux | tail -n +$v | head -1 | 
 firstpage1=$(fgrep '\contentsline {part}' ../sofp.aux | tail -n +$v | head -1 | sed -e 's|.*{\([0-9]*\)}{part.[0-9]}.*|\1|')
 # Latex will increment those counters immediately. So, we decrement them here before setting.
 firstpart=$((firstpart1-1))
-firstpage=$((firstpage1-1))
+firstpage=$((firstpage1-0))
 
 function get_chapter {
   local c=$(fgrep '\contentsline {chapter}' "$1" | head -1 | sed -e 's|.*{chapter.\([0-9]*\)}.*|\1|')
