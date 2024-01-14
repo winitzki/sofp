@@ -23,14 +23,15 @@ of that theory to functional programming.
 
 \section{Values computed by fully parametric functions}
 
-\subsection{Motivation}
+\subsection{Motivation and outlook\label{subsec:Motivation-and-outlook}}
 
 Consider the following sketch of a fully parametric function\textsf{'}s Scala
 code:
 \begin{lstlisting}
 def f[A, B, ...]: ... = {
   val x: Either[A, B] = ... // Some expression here.
-  ... }
+  ... 
+}
 \end{lstlisting}
 If this program compiles without type errors, it means that the types
 match and, in particular, that the function \lstinline!f! is able
@@ -38,24 +39,23 @@ to compute a value \lstinline!x! of type \lstinline!Either[A, B]!.
 
 It is sometimes \emph{impossible} to compute a value of a certain
 type in fully parametric code. For example, the fully parametric function
-\lstinline!fmap! shown in Section~\ref{subsec:Disjunctive-Example-option-1}
+\lstinline!fmap! shown in Example~\ref{subsec:Disjunctive-Example-option-1}
 cannot compute a value of type \lstinline!A!:
 \begin{lstlisting}
 def fmap[A, B](f: A => B): Option[A] => Option[B] = {
   val x: A = ???            // Cannot compute x here!
   ... }
 \end{lstlisting}
-
 The reason is that no fully parametric code can compute values of
-type \lstinline!A! from scratch without using a previously given
-value of type \lstinline!A! and without applying a function that
-returns values of type \lstinline!A!. In \lstinline!fmap!, no values
-of type \lstinline!A! are given as arguments; the given function
-\lstinline!f: A => B! returns values of type \lstinline!B! and not
-\lstinline!A!. The code of \lstinline!fmap! must perform pattern
-matching on a value of type \lstinline!Option[A]!:
+type \lstinline!A! \textsf{``}from scratch\textsf{''}, that is, without using any
+previously given value of type \lstinline!A! and without applying
+a previously given function that returns a value of type \lstinline!A!.
+In \lstinline!fmap!, no values of type \lstinline!A! are given as
+arguments; the given function \lstinline!f: A => B! returns values
+of type \lstinline!B! and not \lstinline!A!. The code of \lstinline!fmap!
+must perform pattern matching on an argument of type \lstinline!Option[A]!:
 \begin{lstlisting}
-def fmap[A, B](f: A => B): Option[A] => Option[B] = {
+def fmap[A, B](f: A => B)(pa: Option[A]): Option[B] = pa match {
   case None       => 
     val x: A = ??? // Cannot compute x here!
     ...
@@ -67,46 +67,86 @@ Since the case \lstinline!None! has no values of type \lstinline!A!,
 we are unable to compute a value \lstinline!x! in that scope (as
 long as \lstinline!fmap! remains a fully parametric function). 
 
-\textsf{``}Being able\textsf{''} to compute \lstinline!x:A! means that, if needed,
+\textsf{``}Being able\textsf{''} to compute \lstinline!x: A! means that, if needed,
 the code should be able to \emph{return} \lstinline!x! as a result
 value. This requires computing \lstinline!x! in all cases, not just
-within one part (\lstinline!case ...!) of a pattern-matching expression. 
-
-The body of \lstinline!fmap! also cannot compute any values of type
-\lstinline!B!. Since no arguments of type \lstinline!B! are given,
-the only way of obtaining a value of type \lstinline!B! would be
-to apply the function \lstinline!f: A => B! to \emph{some} value
-of type \lstinline!A!. But we just saw that the body of \lstinline!fmap!
-cannot compute any values of type \lstinline!A!.
-
-Another example where one cannot compute a value of a certain type
-is the following code:
+within one part (\lstinline!case ...!) of a pattern-matching expression.
+In other words, we should be able to implement the following type
+signature:
 \begin{lstlisting}
-def before[A, B, C](f: A => B, g: B => C): A => C = {
-  //  val h: C => A = ???   // Cannot compute h here!
-  a => g(f(a)) // Can compute a value of type A => C.
+def bad[A, B](f: A => B)(pa: Option[A]): A = ???
+\end{lstlisting}
+
+So, the question \textsf{``}can we compute a value of type \lstinline!A!
+within a fully parametric function with arguments of type \lstinline!B!
+and \lstinline!C!\textsf{''} is equivalent to the question \textsf{``}can be implement
+a fully parametric function of type \lstinline!(B, C) => A!\textsf{''}. From
+now on, we will focus on the latter kind of questions.
+
+Here are some other examples where \emph{no} fully parametric code
+can implement a given type signature: 
+\begin{lstlisting}
+def bad2[A, B](f: A => B): A = ???
+
+def bad3[A, B, C](p: A => Either[B, C]): Either[A => B, A => C] = ???
+\end{lstlisting}
+
+The problem with \lstinline!bad2! is that no data of type \lstinline!A!
+is given, while the given function \lstinline!f! returns values of
+type \lstinline!B!, not \lstinline!A!. 
+
+The problem with \lstinline!bad3! is that it needs to hard-code the
+decision of whether to return the \lstinline!Left! or the \lstinline!Right!
+part of \lstinline!Either!. That decision cannot depend on the function
+\lstinline!p! because one cannot pattern-match on a function, and
+because \lstinline!bad3! does not receive any data of type \lstinline!A!
+and so cannot call \lstinline!p!. Suppose \lstinline!bad3! is hard-coded
+to always return a \lstinline!Left(f)! with some \lstinline!f: A => B!.
+It is then necessary to compute \lstinline!f! from \lstinline!p!,
+but that is impossible: the given function \lstinline!p! may return
+either \lstinline!Left(b)! or \lstinline!Right(c)! for different
+values of its argument (of type \lstinline!A!). This data is insufficient
+to create a function of type \lstinline!A => B!. Similarly, \lstinline!bad3!
+is not able to return \lstinline!Right(f)! with some \lstinline!f: A => C!.
+
+In all these examples, we see that the impossibility of implementing
+a type signature means that the information given in a function\textsf{'}s
+arguments is in some way insufficient for computing the result value.
+
+The type signature inverse to that of \lstinline!bad3! is:
+\begin{lstlisting}
+def good3[A, B, C](q: Either[A => B, A => C]): A => Either[B, C] = ???
+\end{lstlisting}
+This type signature \emph{can} be implemented, but only in one way:
+\begin{lstlisting}
+def good3[A, B, C](q: Either[A => B, A => C]): A => Either[B, C] = q match {
+  case Left(k)    => { a => Left(k(a))  }
+  case Right(k)   => { a => Right(k(a)) }
 }
 \end{lstlisting}
-The body of \lstinline!before! may only use the arguments \lstinline!f!
-and \lstinline!g!. We can compose \lstinline!f! and \lstinline!g!
-to get a value of type \lstinline!A => C!. But it is impossible to
-compute a value \lstinline!h! of type \lstinline!C => A!, no matter
-what code we try to write. The reason is that the body of \lstinline!before!
-has no given values of type \lstinline!A! and no functions that return
-values of type \lstinline!A!, so a nameless function such as \lstinline!{c:C => ???}!
-cannot compute a return value of type \lstinline!A!. Since a fully
-parametric function cannot create values of an arbitrary type \lstinline!A!
-from scratch, computing \lstinline!h! within the body of \lstinline!before!
-seems to be impossible.
 
-Can we prove rigorously that a value of type \lstinline!C => A! cannot
-be computed within the body of \lstinline!before!? Or, perhaps, a
-clever trick could produce a value of that type? So far, we only saw
-informal arguments about whether values of certain types can be computed.
-To make those arguments rigorous, we need to translate statements
-such as \textsf{``}a fully parametric function \lstinline!before! can compute
-a value of type \lstinline!C => A!\textsf{''} into mathematical formulas
-with rules for proving them true or false.
+So, when working with fully parametric code and looking at some type
+signature of a function, we may ask the question \textemdash{} is
+that type signature implementable, and if so, can we derive the code
+by just \textsf{``}following the types\textsf{''}? It is remarkable that this question
+can be asked at all. When working with non-functional programming
+languages, the notion of fully parametric functions is usually not
+relevant, and implementations cannot be derived from types. But in
+functional programming, fully parametric functions are used often.
+It is then important for the programmer to know whether a given fully
+parametric type signature can be implemented, and if so, to be able
+to derive the code.
+
+Can we prove rigorously that the functions \lstinline!bad!, \lstinline!bad2!,
+\lstinline!bad3! cannot be implemented by any fully parametric code?
+Or, perhaps, we were mistaken and a clever trick \emph{could} produce
+some code for those type signatures? 
+
+So far, we only saw informal arguments about whether values of certain
+types can be computed. To make those arguments rigorous, we need to
+translate statements such as \textsf{``}a fully parametric function \lstinline!before!
+can compute a value of type \lstinline!C => A!\textsf{''} into mathematical
+formulas with rules for proving them true or false.
 
 The first step towards a rigorous mathematical formulation is to choose
 a precise notation. In Section~\ref{subsec:Disjunctions-and-conjunctions},
@@ -121,7 +161,7 @@ we are interested in proving statements like this:
 \end{align}
 Here $X$, $Y$, ..., $Z$, $A$ may be either type parameters or
 more complicated type expressions, such as $B\rightarrow C$ or $(C\rightarrow D)\rightarrow E$,
-built from other type parameters.
+built from some type parameters.
 
 If values of types $X$, $Y$, ..., $Z$ are given, it means we \textsf{``}already
 have\textsf{''} values of those types, i.e., the propositions ${\cal CH}(X)$,
@@ -138,42 +178,53 @@ are called \textbf{premises}\index{sequent (in logic)!premises} and
 the proposition ${\cal CH}(A)$ is called the \textbf{goal}\index{sequent (in logic)!goal}
 of the sequent.
 
-Sequents provide a notation for the questions about what types of
-values may be computed by fully parametric functions. Since our goal
-is to answer such questions rigorously, we will need to be able to
-\emph{prove} sequents of the form~(\ref{eq:ch-example-sequent}).
-The following sequents correspond to some examples we just saw:
+Sequents provide a notation for the questions about types of fully
+parametric functions. Since our goal is to answer such questions rigorously,
+we will need to be able to \emph{prove} sequents of the form~(\ref{eq:ch-example-sequent}).
+The following sequents correspond to the type signatures we just saw:
 \begin{align*}
 {\color{greenunder}\text{\texttt{fmap} for \texttt{Option}}:}\quad & {\cal CH}(\text{\texttt{A => B}})\vdash{\cal CH}(\text{\texttt{Option[A] => Option[B]}})\\
 {\color{greenunder}\text{the function \texttt{before}}:}\quad & {\cal CH}(\text{\texttt{A => B}}),{\cal CH}(\text{\texttt{B => C}})\vdash{\cal CH}(\text{\texttt{A => C}})\\
-{\color{greenunder}\text{value of type }A\text{ in \texttt{fmap}}:}\quad & {\cal CH}(\text{\texttt{A => B}}),{\cal CH}(\text{\texttt{Option[A]}})\vdash{\cal CH}(\text{\texttt{A}})\\
-{\color{greenunder}\text{value of type }C\rightarrow A\text{ in \texttt{before}}:}\quad & {\cal CH}(\text{\texttt{A => B}}),{\cal CH}(\text{\texttt{B => C}})\vdash{\cal CH}(\text{\texttt{C => A}})
+{\color{greenunder}\text{the function }\text{\texttt{bad}}:}\quad & {\cal CH}(\text{\texttt{A => B}}),{\cal CH}(\text{\texttt{Option[A]}})\vdash{\cal CH}(\text{\texttt{A}})\\
+{\color{greenunder}\text{the function }\text{\texttt{bad2}}:}\quad & {\cal CH}(\text{\texttt{A => B}}),{\cal CH}(\text{\texttt{B => C}})\vdash{\cal CH}(\text{\texttt{A}})
 \end{align*}
-So far, we only gave informal arguments towards proving the first
-two sequents and \emph{disproving} the last two. We will now develop
-tools for proving sequents rigorously. We will then be able to prove
-that a given fully parametric function can compute values of a certain
-type (or that it cannot).
+So far, we only saw informal arguments towards proving the first two
+sequents and disproving the last two. We will now develop tools for
+proving sequents rigorously. 
 
 In formal logic, sequents are proved\index{proof (in logic)} by starting
 with certain axioms and following certain derivation rules. Different
 choices of axioms and derivation rules will give different \emph{logics}.
 We will need to discover the correct logic for reasoning about sequents
-with ${\cal CH}$-propositions. That logic\textsf{'}s axioms and derivation
-rules will give correct answers about implementable and non-implementable
-types.
+with ${\cal CH}$-propositions. To discover that logic\textsf{'}s complete
+set of axioms and derivation rules, we need to examine systematically
+what types and code constructions are possible in a fully parametric
+function. The resulting logic is known under the name \textsf{``}constructive
+logic\textsf{''}. That logic\textsf{'}s axioms and derivation rules directly correspond
+to programming language constructions allowed by fully parametric
+code. For that reason, constructive logic gives correct answers about
+implementable and non-implementable type signatures of fully parametric
+functions.
+
+We will then be able to borrow the results and methods already available
+in the mathematical literature on formal logic. The main result is
+an algorithm (called LJT) for finding a proof for a given sequent
+in the constructive logic. If a proof is found, the algorithm also
+provides the code of a function that has the type signature corresponding
+to the sequent. If a proof is not found, it means that the given type
+signature cannot be implemented by fully parametric code.
 
 \subsection{Type notation and ${\cal CH}$-propositions for standard type constructions\label{subsec:Type-notation-and-standard-type-constructions}}
 
 A proposition ${\cal CH}(A)$ may be true with one set of premises
 such as ${\cal CH}(X)$, ${\cal CH}(Y)$, ..., ${\cal CH}(Z)$ but
 false with another. Here and in the following sections, we will be
-reasoning about ${\cal CH}$-propositions within the body of a \emph{chosen}
-fully parametric function, i.e., with a fixed set of premises. We
-will then temporarily omit the premises and write just ${\cal CH}(A)$
-instead of ${\cal CH}(X),{\cal CH}(Y),...,{\cal CH}(Z)\vdash{\cal CH}(A)$.
-In later sections, we will need to write full sets of premises for
-sequents.
+reasoning about ${\cal CH}$-propositions within sequents of the form
+${\cal CH}(X),{\cal CH}(Y),...,{\cal CH}(Z)\vdash{\cal CH}(A)$ that
+represent the type signatures of fully parametric functions. It will
+be convenient to shorten the notation and to denote all premises by
+the symbol $\Gamma$. We will then write just $\Gamma\vdash{\cal CH}(A)$
+instead of ${\cal CH}(X),{\cal CH}(Y),...,{\cal CH}(Z)\vdash{\cal CH}(A)$. 
 
 In Section~\ref{subsec:Disjunctions-and-conjunctions} we saw examples
 of reasoning about ${\cal CH}$-propositions for case classes and
@@ -257,7 +308,7 @@ case class Person(firstName: String, lastName: String, age: Int)
 is written in the type notation as $\text{String}\times\text{String}\times\text{Int}$.
 So, the rule for tuple types is:
 \[
-{\cal CH}\left(A\times B\times...\times C\right)={\cal CH}(A)\wedge{\cal CH}(B)\wedge...\wedge{\cal CH}(C)\quad.
+\Gamma\vdash{\cal CH}\left(A\times B\times...\times C\right)=\Gamma\vdash{\cal CH}(A)\wedge{\cal CH}(B)\wedge...\wedge{\cal CH}(C)\quad.
 \]
 
 
@@ -281,11 +332,11 @@ is translated to the type notation as:
 \[
 \text{RootsOfQ}\triangleq\bbnum 1+\text{Double}+\text{Double}\times\text{Double}\quad.
 \]
-Here, the type notation is significantly shorter because it omits
-all case class names and part names from the type definitions. Using
-the type notation, the rule for disjunctive types is written as:
+Here the type notation is significantly shorter because it omits all
+case class names and part names from the type definitions. Using the
+type notation, the rule for disjunctive types is written as:
 \[
-{\cal CH}\left(A+B+...+C\right)={\cal CH}(A)\vee{\cal CH}(B)\vee...\vee{\cal CH}(C)\quad.
+\Gamma\vdash{\cal CH}\left(A+B+...+C\right)=\Gamma\vdash{\cal CH}(A)\vee{\cal CH}(B)\vee...\vee{\cal CH}(C)\quad.
 \]
 
 
@@ -309,7 +360,7 @@ ${\cal CH}(A)\Rightarrow{\cal CH}(B)$, which means that ${\cal CH}(B)$
 can be proved if we already have a proof of ${\cal CH}(A)$. So, the
 rule for function types is:
 \[
-{\cal CH}(A\rightarrow B)={\cal CH}(A)\Rightarrow{\cal CH}(B)\quad.
+\Gamma\vdash{\cal CH}(A\rightarrow B)=\Gamma\vdash{\cal CH}(A)\Rightarrow{\cal CH}(B)\quad.
 \]
 
 
@@ -331,7 +382,8 @@ and is equivalent to:
 \forall(A,B).\,{\cal CH}\left(A\rightarrow(A\rightarrow B)\rightarrow B\right)\quad.
 \]
 The symbol $\forall$ means \textsf{``}for all\textsf{''} and is called the \index{universal quantifier (forall)@universal quantifier ($\forall$)}\textbf{universal
-quantifier} in logic. 
+quantifier} in logic. We read $\forall A.\,{\cal CH}(B)$ as the proposition
+\textsf{``}for all types $A$, we can compute a value of type $B$\textsf{''}.
 
 The type notation for the type signature of \lstinline!f! is written
 in one of the following ways:
@@ -373,13 +425,23 @@ This syntax corresponds more closely to the code notation $\forall(A,B).\,x^{:A}
 So, the rule for parameterized types with the type notation $\forall A.\,F^{A}$
 is:
 \[
-{\cal CH}(\forall A.\,F^{A})=\forall A.\,{\cal CH}(F^{A})\quad.
+\Gamma\vdash{\cal CH}(\forall A.\,F^{A})=\Gamma\vdash\forall A.\,{\cal CH}(F^{A})\quad.
 \]
 
 Case classes and disjunctive types use \emph{names} for the types
 and their parts. However, those names only add convenience for programmers
 and do not affect the computational properties of types. The type
 notation is designed to support nameless type expressions.
+
+The rules just shown will allow us to express ${\cal CH}$-propositions
+for complicated types via ${\cal CH}$-propositions for type parameters.
+Then any type signature can be rewritten as a sequent that contains
+${\cal CH}$-propositions only for the individual type parameters. 
+
+In this way, we see a correspondence between fully parametric type
+signatures and logical sequents that express the proposition \textsf{``}the
+type signature can be implemented\textsf{''}. This is the first half of the
+Curry-Howard correspondence.
 
 Table~\ref{tab:ch-correspondence-type-notation-CH-propositions}
 summarizes the type notation and shows how to translate it into logic
@@ -445,15 +507,14 @@ case, parentheses are necessary, e.g., in the type expression $\left(\forall A.\
 
 From now on, we will prefer to write types in the type notation rather
 than in the Scala syntax. The type notation allows us to write nameless
-type expressions and makes the structure of complicated types more
-clear, compared with the Scala syntax. Names of types and parts of
-types are, of course, helpful for reminding programmers of the meaning
-of data in a program. However, writing names for every part of every
-type is not helpful for reasoning about the properties of types. Type
-notation makes reasoning about types easier, as we will see throughout
-this chapter. Once the programmer has finished deriving the necessary
-types and verifying their properties, the type notation can be straightforwardly
-translated into Scala code. Let us get some experience doing that.
+type expressions and makes the structure of complicated types clearer
+than in the Scala syntax. Names of types and parts of types are, of
+course, helpful for reminding programmers of the meaning of data in
+a program. However, writing names for every part of every type does
+not help reasoning about the properties of types.  Once the programmer
+has finished deriving the necessary types and verifying their properties,
+the type notation can be straightforwardly translated into Scala code.
+Let us get some experience doing that.
 
 \subsubsection{Example \label{subsec:Example-ch-dupl-function}\ref{subsec:Example-ch-dupl-function}}
 
@@ -748,11 +809,13 @@ book is available at \texttt{\href{https://homepages.phonecoop.coop/randj/richar
 \subsection{The rules of proof for ${\cal CH}$-propositions\label{subsec:The-rules-of-proof}}
 
 To derive the suitable logical axioms and proof rules systematically,
-let us examine what makes a ${\cal CH}$-proposition true. A sequent
-${\cal CH}(A)\vdash{\cal CH}(X)$ is true when a value of type $X$
-can be computed by fully parametric code that may only use a given
-value of type $A$. To describe all possible ways of computing a value
-of type $X$, we need to enumerate all possible ways of \emph{writing
+let us examine what could make a sequent with ${\cal CH}$-propositions
+true.
+
+A sequent ${\cal CH}(A)\vdash{\cal CH}(X)$ is true when a value of
+type $X$ can be computed by fully parametric code that may only use
+a given value of type $A$. To describe all possible ways of computing
+a value of type $X$, we need to enumerate all possible ways of \emph{writing
 code} for a fully parametric function body. The requirement of full
 parametricity means that we are not allowed to use any specific types
 such as \lstinline!Int! or \lstinline!String!, any concrete values
@@ -786,7 +849,7 @@ will give a proof rule in the logic.
 
 It is important that there are only a finite number of allowed code
 constructions. This defines rigorously the concept of \textsf{``}fully parametric
-code\textsf{''}\index{fully parametric!code} and allows us to \emph{prove}
+code\textsf{''}\index{fully parametric!code|textit} and allows us to \emph{prove}
 ${\cal CH}$-propositions.
 
 Reasoning about proof rules is easier with a compact notation. To
@@ -802,13 +865,20 @@ constructs\index{eight code constructions}. That code combination
 can be translated into a combination of logic rules, which will produce
 a proof of the proposition ${\cal CH}(X)$.
 
-In the following text, we will need to use the full formulation~(\ref{eq:ch-CH-proposition-def})
-of ${\cal CH}$-propositions and write them as sequents such as Eq.~(\ref{eq:ch-example-sequent}).
-For brevity, we define $\alpha\triangleq{\cal CH}(A)$, $\beta\triangleq{\cal CH}(B)$,
-etc. It is also customary to use the letter $\Gamma$ to denote a
-set of premises, such as ${\cal CH}(X)$, ${\cal CH}(Y)$, ..., ${\cal CH}(Z)$
-in Eq.~(\ref{eq:ch-example-sequent}). So, we can write a shorter
-formula $\Gamma\vdash\alpha$ instead of the sequent~(\ref{eq:ch-example-sequent}).
+In this way, we see a correspondence between fully parametric programs
+and proofs of the corresponding sequents. This is the second half
+of the Curry-Howard correspondence.
+
+In the following text, we will need to write ${\cal CH}$-propositions
+such as Eq.~(\ref{eq:ch-CH-proposition-def}) as sequents such as
+Eq.~(\ref{eq:ch-example-sequent}). As we have seen, ${\cal CH}$-propositions
+involving complicated type expressions can be always rewritten via
+${\cal CH}$-propositions for individual type parameters (${\cal CH}(A)$,
+${\cal CH}(B)$, etc.). So, we will only need sequents involving such
+${\cal CH}$-propositions. For brevity, we denote $\alpha\triangleq{\cal CH}(A)$,
+$\beta\triangleq{\cal CH}(B)$, etc. We will use the letter $\Gamma$
+to stand for a set of premises and write a shorter formula $\Gamma\vdash\alpha$
+instead of the sequent~(\ref{eq:ch-example-sequent}).
 
 With these notations, we list the rules for proving ${\cal CH}$-propositions
 and the corresponding code:
@@ -1195,9 +1265,7 @@ do not provide an algorithm for finding a proof tree automatically.
 It turns out that one can replace the rules in Table~\ref{tab:Proof-rules-of-constructive-and-boolean}
 by a different but equivalent set of derivation rules that \emph{do}
 give an algorithm (called the \textsf{``}\index{LJT algorithm}LJT algorithm\textsf{''},
-see Section~\ref{app:The-LJT-algorithm} below). That algorithm first
-translates a type signature containing tuples, disjunctive types,
-and function types into a logical formula. Then the algorithm either
+see Section~\ref{app:The-LJT-algorithm} below). That algorithm either
 finds that the given formula cannot be proved, or it finds a proof
 and infers code that has the given type signature.
 
@@ -1252,10 +1320,10 @@ can \emph{prove} that the given type signature cannot be implemented.
 The \lstinline!curryhoward! library will then print an error message,
 and compilation will fail.
 
-As another example, let us verify that the type signature from Section~\ref{subsec:Example:-Failure-of-Boolean-logic}
+As another example, let us verify that the type signature from Section~\ref{subsec:Motivation-and-outlook}
 is not implementable:
 \begin{lstlisting}
-@ def bad[A, B, C](g: A => Either[B, C]): Either[A => B, A => C]   =   implement
+@ def bad2[A, B, C](g: A => Either[B, C]): Either[A => B, A => C]   =   implement
 cmd4.sc:1: type (A => Either[B, C]) => Either[A => B, A => C] cannot be implemented
 \end{lstlisting}
 
@@ -1272,13 +1340,472 @@ order to use the LJT algorithm well, a programmer needs to learn how
 to infer code from types by hand. We will practice doing that throughout
 the book.
 
+\subsection{The LJT algorithm\label{app:The-LJT-algorithm}}
+
+In the previous section, we saw an example showing that the rules
+in Table~\ref{tab:Proof-rules-of-constructive-and-boolean} do not
+provide an algorithm for finding a proof for a given sequent.
+
+To illustrate this problem on another example, let us try proving
+the sequent:
+\[
+A,B\vee C\vdash(A\wedge B)\vee C\quad.
+\]
+We expect that this sequent is provable because we can write the corresponding
+Scala code:
+\begin{lstlisting}
+def f[A, B, C](a: A): Either[B, C] => Either[(A, B), C] = {
+  case Left(b)    => Left((a, b))
+  case Right(c)   => Right(c)
+}
+\end{lstlisting}
+How can we obtain a proof of this sequent according to the rules in
+Table~\ref{tab:Proof-rules-of-constructive-and-boolean}? We find
+that we could potentially apply the rules \textsf{``}create \lstinline!Left!\textsf{''},
+\textsf{``}create \lstinline!Right!\textsf{''}, \textsf{``}use \lstinline!Either!\textsf{''}, and
+\textsf{``}use function\textsf{''}. However, no matter what rule we choose, we will
+get stuck at the next step. Let us see why:
+
+To apply \textsf{``}create \lstinline!Left!\textsf{''}, we first need to prove the
+sequent $A,B\vee C\vdash A\wedge B$. But this sequent cannot be proved:
+we do not necessarily have values of both types $A$ and $B$ if we
+are only given values of type $A$ and of type \lstinline!Either[B, C]!.
+To apply \textsf{``}create \lstinline!Right!\textsf{''}, we need to prove the sequent
+$A,B\vee C\vdash C$. Again, we find that this sequent cannot be proved.
+The next choice is the rule \textsf{``}use \lstinline!Either!\textsf{''} that matches
+any goal of the sequent as the proposition $\gamma$. But we are then
+required to choose two new propositions ($\alpha$ and $\beta$) such
+that we can prove $A,B\vee C\vdash\alpha\vee\beta$ as well as $A,B\vee C,\alpha\vdash(A\wedge B)\vee C$
+and $A,B\vee C,\beta\vdash(A\wedge B)\vee C$. It is not clear how
+we should choose $\alpha$ and $\beta$ in order to make progress
+in the proof. The remaining rule, \textsf{``}use function\textsf{''}, similarly requires
+us to choose a new proposition $\alpha$ such that we can prove $A,B\vee C\vdash\alpha$
+and $A,B\vee C\vdash\alpha\Rightarrow((A\wedge B)\vee C)$. The rules
+give us no guidance for choosing $\alpha$ appropriately.
+
+To see that the rules in Table~\ref{tab:Proof-rules-for-constructive-logic}
+are not helpful for proof search, note that the rules \textsf{``}use function\textsf{''}
+and \textsf{``}use \lstinline!Either!\textsf{''} require us to choose new unknown
+propositions and to prove more complicated sequents than the ones
+we had before. For instance, the rule \textsf{``}use function\textsf{''} gives a proof
+of $\Gamma\vdash\beta$ only if we first choose some other proposition
+$\alpha$ and prove the sequents $\Gamma\vdash\alpha$ and $\Gamma\vdash\alpha\Rightarrow\beta$.
+The rule does not say how to choose the proposition $\alpha$ correctly.
+We need to guess the correct $\alpha$ by trial and error. Even after
+choosing $\alpha$ in some way, we will have to prove a more complicated
+sequent ($\Gamma\vdash\alpha\Rightarrow\beta$). It is not guaranteed
+that we are getting closer to finding the proof of the initial sequent
+($\Gamma\vdash\beta$). 
+
+It is far from obvious how to overcome that difficulty. Mathematicians
+have studied the constructive logic for more than 60 years, trying
+to replace the rules in Table~\ref{tab:Proof-rules-of-constructive-and-boolean}
+by a different but equivalent set of derivation rules that require
+no guessing when looking for a proof. The first partial success came
+in 1935 with an algorithm called \textsf{``}LJ\textsf{''}.\footnote{See \texttt{\href{https://en.wikipedia.org/wiki/Sequent_calculus\#Overview}{https://en.wikipedia.org/wiki/Sequent\_calculus\#Overview}}}
+The LJ algorithm still has a significant problem: one of its derivation
+rules may be applied infinitely many times. So, the LJ algorithm is
+not guaranteed to terminate without some heuristics for avoiding an
+infinite loop. A terminating version of the LJ algorithm, called \index{LJT algorithm}LJT,
+was formulated in 1992.\footnote{An often cited paper by R.~Dyckhoff\index{Roy Dyckhoff} is \texttt{\href{https://philpapers.org/rec/DYCCSC}{https://philpapers.org/rec/DYCCSC}}.
+For the history of that research, see \texttt{\href{https://research-repository.st-andrews.ac.uk/handle/10023/8824}{https://research-repository.st-andrews.ac.uk/handle/10023/8824}}} 
+
+We will first present the LJ algorithm. Although that algorithm does
+not guarantee termination, it is simpler to understand and to apply
+by hand. Then we will show how to modify the LJ algorithm in order
+to obtain the always-terminating LJT algorithm.
+
+\subsubsection*{The LJ algorithm}
+
+Figure~\ref{fig:Rules-of-the-LJ-algorithm} shows the LJ algorithm\textsf{'}s
+axioms and derivation rules. Each rule says that the bottom sequent
+will be proved if proofs are given for sequent(s) at the top. For
+each possible sub-expression (conjunction $X\wedge Y$, disjunction
+$X\vee Y$, and implication $X\Rightarrow Y$) there is one rule where
+that sub-expression is a premise (at \textsf{``}left\textsf{''}) and one rule where
+that sub-expression is the goal (at \textsf{``}right\textsf{''}). Those sub-expressions
+are shown in blue in Figure~\ref{fig:Rules-of-the-LJ-algorithm}
+to help us look for a proof. To find out which rules apply, we match
+some part of the sequent with a blue sub-expression.
+
+\begin{figure}
+\begin{centering}
+\fbox{\begin{minipage}[t]{0.7\linewidth}%
+\begin{align*}
+\frac{}{\Gamma,X\vdash{\color{blue}X}}~(\text{Id})\qquad & \qquad\frac{}{\Gamma\vdash{\color{blue}\top}}~(\text{True})\\
+\frac{\Gamma,A\Rightarrow B\vdash A\quad\Gamma,B\vdash C}{\Gamma,{\color{blue}A\Rightarrow B}\vdash C}~(\text{Left}\Rightarrow)\qquad & \qquad\frac{\Gamma,A\vdash B}{\Gamma\vdash{\color{blue}A\Rightarrow B}}~(\text{Right}\Rightarrow)\\
+\frac{\Gamma,A_{i}\vdash C}{\Gamma,{\color{blue}A_{1}\wedge A_{2}}\vdash C}~(\text{Left}\wedge_{i})\qquad & \qquad\frac{\Gamma\vdash A\quad\quad\Gamma\vdash B}{\Gamma\vdash{\color{blue}A\wedge B}}~(\text{Right}\wedge)\\
+\frac{\Gamma,A\vdash C\quad\Gamma,B\vdash C}{\Gamma,{\color{blue}A\vee B}\vdash C}~(\text{Left}\vee)\qquad & \qquad\frac{\Gamma\vdash A_{i}}{\Gamma\vdash{\color{blue}A_{1}\vee A_{2}}}~(\text{Right}\vee_{i})
+\end{align*}
+%
+\end{minipage}}
+\par\end{centering}
+\caption{Axioms and derivation rules of the LJ algorithm. Each of the rules
+\textquotedblleft ($\text{Left}\wedge_{i}$)\textquotedblright{} and
+\textquotedblleft ($\text{Right}\vee_{i}$)\textquotedblright{} have
+two versions, with $i=1$ or $i=2$. \label{fig:Rules-of-the-LJ-algorithm}}
+\end{figure}
+
+It turns out that the rules in Figure~\ref{fig:Rules-of-the-LJ-algorithm}
+are \emph{equivalent} to the rules in Table~\ref{tab:Proof-rules-for-constructive-logic}.
+The proof is beyond the scope of this book. We only remark that this
+equivalence is far from obvious. To prove it, one needs to demonstrate
+that any sequent derived through the first set of rules is also derivable
+through the second set, and vice versa.
+
+To illustrate the LJ algorithm, let us prove the sequent~(\ref{eq:ch-example-sequent-2}).
+Denote that sequent by $S_{0}$:
+\[
+S_{0}\triangleq\emptyset\vdash\left(\left(\alpha\Rightarrow\alpha\right)\Rightarrow\beta\right)\Rightarrow\beta\quad.
+\]
+ Since the goal of $S_{0}$ contains an implication, we use the rule
+\textsf{``}($\text{Right}\Rightarrow$)\textsf{''} and get a sequent $S_{1}$:
+\[
+S_{1}\triangleq\left(\alpha\Rightarrow\alpha\right)\Rightarrow\beta\vdash\beta\quad.
+\]
+Now the implication is in the premise, so we use the rule \textsf{``}($\text{Left}\Rightarrow$)\textsf{''}
+and get two new sequents:
+\[
+S_{2}\triangleq\left(\alpha\Rightarrow\alpha\right)\Rightarrow\beta\vdash\alpha\Rightarrow\alpha\quad,\quad\quad S_{3}\triangleq\beta\vdash\beta\quad.
+\]
+Sequent $S_{3}$ follows from the \textsf{``}(Id)\textsf{''} axiom, so it remains
+to prove $S_{2}$. Since $S_{2}$ contains an implication both as
+a premise and as the goal, we may apply either the rule \textsf{``}($\text{Left}\Rightarrow$)\textsf{''}
+or the rule \textsf{``}($\text{Right}\Rightarrow$)\textsf{''}. We choose to apply
+\textsf{``}($\text{Left}\Rightarrow$)\textsf{''} and get two new sequents:
+\[
+S_{4}\triangleq\left(\alpha\Rightarrow\alpha\right)\Rightarrow\beta\vdash\alpha\Rightarrow\alpha\quad,\quad\quad S_{5}:\beta\vdash\alpha\Rightarrow\alpha\quad.
+\]
+Notice that $S_{4}=S_{2}$. So, our proof search is getting into an
+infinite loop trying to prove the same sequent $S_{2}$ over and over
+again. We can prove $S_{5}$ but this will not help us break the loop.
+
+Once we recognize the problem, we backtrack to the point where we
+chose to apply \textsf{``}($\text{Left}\Rightarrow$)\textsf{''} to $S_{2}$. That
+was a bad choice, so let us instead apply \textsf{``}($\text{Right}\Rightarrow$)\textsf{''}
+to $S_{2}$. This yields a new sequent $S_{6}$:
+\[
+S_{6}\triangleq\left(\alpha\Rightarrow\alpha\right)\Rightarrow\beta,\alpha\vdash\alpha\quad.
+\]
+This sequent follows from the \textsf{``}(Id)\textsf{''}axiom. There are no more sequents
+to prove, so the proof of $S_{0}$ is finished. It can be drawn as
+a \index{proof tree}\textbf{proof tree} like this:
+\[
+\xymatrix{\xyScaleY{1.5pc}\xyScaleX{4pc} &  &  & (\text{Id})\\
+\ar[r]\sp(0.35){S_{0}} & (\text{Right}\Rightarrow)\ar[r]\sp(0.5){S_{1}} & (\text{Left}\Rightarrow)\ar[r]\sp(0.5){S_{2}}\ar[ru]\sp(0.6){S_{3}} & (\text{Right}\Rightarrow)\ar[r]\sp(0.65){S_{6}} & (\text{Id})
+}
+\]
+The nodes of the proof tree are axioms or derivation rules, and the
+edges are intermediate sequents required by the rules. Some rule nodes
+branch into several sequents because some rules require more than
+one new sequent to be proved. The leaves of the tree are axioms that
+do not require proving any further sequents. 
+
+\subsubsection*{Extracting code from proofs}
+
+According to the Curry-Howard correspondence, a sequent (such as $A,B,...,C\vdash X$)
+represents the task of writing a fully parametric code expression
+of type $X$ that uses some given values of types $A$, $B$, ...,
+$C$. The sequent is true (i.e., can be proved) if that code expression
+can be found. So, the code serves as an \textsf{``}evidence of proof\textsf{''} for
+the sequent.
+
+\begin{figure}
+\begin{centering}
+{\small{}}%
+\noindent\fbox{\begin{minipage}[t]{1\columnwidth - 2\fboxsep - 2\fboxrule}%
+{\small{}
+\begin{align*}
+\frac{}{\Gamma,A\vdash{\color{blue}A}}~(\text{Id})\quad & \quad\text{Proof}\,(\Gamma,A\vdash A)_{\text{given }p^{:\Gamma},x^{:A}}=x\\
+\frac{}{\Gamma\vdash{\color{blue}\top}}~(\text{True})\quad & \quad\text{Proof}\,(\Gamma\vdash\top)_{\text{given }p^{:\Gamma}}=1\\
+\frac{\Gamma,A\Rightarrow B\vdash A\quad\Gamma,B\vdash C}{\Gamma,{\color{blue}A\Rightarrow B}\vdash C}~(\text{Left}\Rightarrow)\quad & \quad\text{Proof}\,(\Gamma,A\Rightarrow B\vdash C)_{\text{given }p^{:\Gamma},q^{:A\rightarrow B}}\\
+ & \quad\quad=\text{Proof}\,(\Gamma,B\vdash C)_{\text{given }p,b^{:B}}\\
+\text{where} & \quad b^{:B}\triangleq q\big(\text{Proof}\,(\Gamma,A\Rightarrow B\vdash A)_{\text{given }p,q}\big)\\
+\frac{\Gamma,A\vdash B}{\Gamma\vdash{\color{blue}A\Rightarrow B}}~(\text{Right}\Rightarrow)\quad & \quad\text{Proof}\,(\Gamma\vdash A\Rightarrow B)_{\text{given }p^{:\Gamma}}\\
+ & \quad\quad=x^{:A}\rightarrow\text{Proof}\,(\Gamma,A\vdash B)_{\text{given }p^{:\Gamma},x^{:A}}\\
+\frac{\Gamma,A\vdash C}{\Gamma,{\color{blue}A\wedge B}\vdash C}~(\text{Left}\wedge_{1})\quad & \quad\text{Proof}\,(\Gamma,A\wedge B\vdash C)_{\text{given }p^{:\Gamma},(a^{:A}\times b^{:B})}\\
+ & \quad\quad=\text{Proof}\,(\Gamma,A\vdash C)_{\text{given }p^{:\Gamma},a^{:A}}\\
+\frac{\Gamma,B\vdash C}{\Gamma,{\color{blue}A\wedge B}\vdash C}~(\text{Left}\wedge_{2})\quad & \quad\text{Proof}\,(\Gamma,A\wedge B\vdash C)_{\text{given }p^{:\Gamma},(a^{:A}\times b^{:B})}\\
+ & \quad\quad=\text{Proof}\,(\Gamma,B\vdash C)_{\text{given }p^{:\Gamma},b^{:B}}\\
+\frac{\Gamma\vdash A\quad\quad\Gamma\vdash B}{\Gamma\vdash{\color{blue}A\wedge B}}~(\text{Right}\wedge)\quad & \quad\text{Proof}\,(\Gamma\vdash A\wedge B)_{\text{given }p^{:\Gamma}}\\
+ & \quad\quad=\text{Proof}\,(\Gamma\vdash A)_{\text{given }p^{:\Gamma}}\\
+ & \quad\quad\quad\times\text{Proof}\,(\Gamma\vdash B)_{\text{given }p^{:\Gamma}}\\
+\frac{\Gamma,A\vdash C\quad\quad\Gamma,B\vdash C}{\Gamma,{\color{blue}A\vee B}\vdash C}~(\text{Left}\vee)\quad & \quad\text{Proof}\,(\Gamma,A\vee B\vdash C)_{\text{given }p^{:\Gamma},q^{:A+B}}\\
+ & \quad\quad=q\triangleright\begin{array}{|c||c|}
+ & C\\
+\hline A & x^{:A}\rightarrow\text{Proof}\,(\Gamma,A\vdash C)_{\text{given }p,x}\\
+B & y^{:B}\rightarrow\text{Proof}\,(\Gamma,B\vdash C)_{\text{given }p,y}
+\end{array}\\
+\frac{\Gamma\vdash A}{\Gamma\vdash{\color{blue}A\vee B}}~(\text{Right}\vee_{1})\quad & \quad\text{Proof}\,(\Gamma\vdash A\vee B)_{\text{given }p^{:\Gamma}}=\text{Proof}\,(\Gamma\vdash A)+\bbnum 0^{:B}\\
+\frac{\Gamma\vdash B}{\Gamma\vdash{\color{blue}A\vee B}}~(\text{Right}\vee_{2})\quad & \quad\text{Proof}\,(\Gamma\vdash A\vee B)_{\text{given }p^{:\Gamma}}=\bbnum 0^{:A}+\text{Proof}\,(\Gamma\vdash B)
+\end{align*}
+}%
+\end{minipage}}{\small\par}
+\par\end{centering}
+\caption{\label{fig:proof-transformers-for-LJ-rules}Proof transformers for
+the rules of the LJ algorithm.}
+\end{figure}
+
+In the previous subsection, we have found a proof of the sequent $S_{0}$,
+which represents the task of writing a fully parametric function with
+type signature $(\left(A\rightarrow A\right)\rightarrow B)\rightarrow B$).
+Let us now see how we can extract the code of that function from the
+proof of the sequent $S_{0}$.
+
+We start from the leaves of the proof tree and move step by step towards
+the initial sequent. At each step, we shorten the proof tree by replacing
+some sequent by its corresponding evidence-of-proof code. Eventually
+we will replace the initial sequent by its corresponding code. Let
+us see how this procedure works for the proof tree of the sequent
+$S_{0}$ shown in the previous section.
+
+Since the leaves are axioms, let us write the code corresponding to
+each axiom of LJ:
+\begin{align*}
+ & \frac{}{\Gamma,X\vdash X}~(\text{Id})\quad:\quad\quad\text{Proof}\,(\Gamma,X\vdash X)_{\text{given }p^{:\Gamma},x^{:X}}=x\quad;\\
+ & \frac{}{\Gamma\vdash\top}~(\text{True})\quad:\quad\quad\text{Proof}\,(\Gamma\vdash\top)_{\text{given }p^{:\Gamma}}=1\quad.
+\end{align*}
+Here we denote explicitly the values (such as $p$ and $x$) given
+as premises to the sequent. The notation $p^{:\Gamma}$ means all
+values given in the set of premises $\Gamma$. Below we will assume
+that the propositions $\alpha$ and $\beta$ correspond to types $A$
+and $B$; that is, $\alpha\triangleq{\cal CH}(A)$ and $\beta\triangleq{\cal CH}(B)$.
+
+The leaves in the proof tree for $S_{0}$ are the \textsf{``}($\text{Id}$)\textsf{''}
+axioms used to prove the sequents $S_{3}$ and $S_{6}$. Let us write
+the code that serves as the \textsf{``}evidence of proof\textsf{''} for these sequents.
+For brevity, we denote $\gamma\triangleq\left(\alpha\Rightarrow\alpha\right)\Rightarrow\beta$
+and $C\triangleq\left(A\rightarrow A\right)\rightarrow B$, so that
+$\gamma={\cal CH}(C)$. Then we can write:
+\begin{align*}
+ & S_{3}\triangleq\beta\vdash\beta\quad,\quad\quad\text{Proof}\,(S_{3})_{\text{given }y^{:B}}=y\quad,\\
+ & S_{6}\triangleq\gamma,\alpha\vdash\alpha\quad,\quad\quad\text{Proof}\,(S_{6})_{\text{given }q^{:C},x^{:A}}=x\quad.
+\end{align*}
+Note that the proof of $S_{6}$ does not use the first given value
+$q^{:C}$ (corresponding to the premise $\gamma$).
+
+We now shorten the proof tree by replacing the sequents $S_{3}$ and
+$S_{6}$ by their \textsf{``}evidence of proof\textsf{''}:
+\[
+\xymatrix{\xyScaleY{1.5pc}\xyScaleX{4pc} &  &  & \square\\
+\ar[r]\sp(0.35){S_{0}} & (\text{Right}\Rightarrow)\ar[r]\sp(0.5){S_{1}} & (\text{Left}\Rightarrow)\ar[r]\sp(0.5){S_{2}}\ar[ru]\sp(0.6){(y)_{\text{given }y^{:B}}} & (\text{Right}\Rightarrow)\ar[r]\sp(0.65){(x)_{\text{given }q^{:C},x^{:A}}} & \square
+}
+\]
+
+The next step is to consider the proof of $S_{2}$, which is found
+by applying the rule \textsf{``}($\text{Right}\Rightarrow$)\textsf{''}. This rule
+promises to give a proof of $S_{2}$ if we have a proof of $S_{6}$.
+In order to extract code from that rule, we can write a function that
+transforms a proof of $S_{6}$ into a proof of $S_{2}$. We call this
+function the \textbf{proof transformer}\index{Curry-Howard correspondence!proof transformer}\index{proof transformer}
+corresponding to the rule \textsf{``}($\text{Right}\Rightarrow$)\textsf{''}. That
+rule and its transformer are defined as:
+\begin{align*}
+\frac{\Gamma,A\vdash B}{\Gamma\vdash A\Rightarrow B}~(\text{Right}\Rightarrow)\quad: & \quad\quad\text{Proof}\,(\Gamma\vdash A\Rightarrow B)_{\text{given }p^{:\Gamma}}\\
+ & \quad\quad=x^{:A}\rightarrow\text{Proof}\,(\Gamma,A\vdash B)_{\text{given }p^{:\Gamma},x^{:A}}\quad.
+\end{align*}
+Applying the proof transformer to the known proof of $S_{6}$, we
+obtain a proof of $S_{2}$:
+\[
+\text{Proof}\,(S_{2})_{\text{given }q^{:C}}=x^{:A}\rightarrow\text{Proof}\,(S_{6})_{\text{given }q^{:C},x^{:A}}=(x^{:A}\rightarrow x)_{\text{given }q^{:C}}\quad.
+\]
+The proof tree can be now shortened to:
+\[
+\xymatrix{\xyScaleY{1.5pc}\xyScaleX{3.5pc} &  &  & \square\\
+\ar[r]\sp(0.35){S_{0}} & (\text{Right}\Rightarrow)\ar[r]\sp(0.5){S_{1}} & (\text{Left}\Rightarrow)\ar[rr]\sp(0.62){(x^{:A}\rightarrow x)_{\text{given }q^{:C}}}\ar[ru]\sp(0.6){(y)_{\text{given }y^{:B}}} &  & \square
+}
+\]
+
+The next step is to get the proof of $S_{1}$ obtained by applying
+the rule \textsf{``}($\text{Left}\Rightarrow$)\textsf{''}. That rule requires two
+previous sequents, so its transformer is a function of two previously
+obtained proofs:
+\begin{align*}
+ & \frac{\Gamma,A\Rightarrow B\vdash A\quad\quad\Gamma,B\vdash C}{\Gamma,A\Rightarrow B\vdash C}~(\text{Left}\Rightarrow)\quad:\\
+ & \text{Proof}\,(\Gamma,A\Rightarrow B\vdash C)_{\text{given }p^{:\Gamma},q^{:A\rightarrow B}}=\text{Proof}\,(\Gamma,B\vdash C)_{\text{given }p^{:\Gamma},b^{:B}}\\
+ & \quad\quad\text{where}\quad b^{:B}\triangleq q\big(\text{Proof}\,(\Gamma,A\Rightarrow B\vdash A)_{\text{given }p^{:\Gamma},q^{:A\rightarrow B}}\big)\quad.
+\end{align*}
+In the proof tree shown above, we obtain a proof of $S_{1}$ by applying
+this proof transformer to the proofs of $S_{2}$ and $S_{3}$:
+\begin{align*}
+ & \text{Proof}\,(S_{1})_{\text{given }q^{:C}}=\text{Proof}\,(S_{3})_{\text{given }b^{:B}}\text{ where }b^{:B}\triangleq q(\text{Proof}\,(S_{2}))_{\text{given }q^{:C}}\\
+ & \quad=b\text{ where }b^{:B}\triangleq q(x^{:A}\rightarrow x)_{\text{given }q^{:C}}=q(x^{:A}\rightarrow x)_{\text{given }q^{:C}}\quad.
+\end{align*}
+Substituting this proof into the proof tree, we shorten the tree to:
+\[
+\xymatrix{\xyScaleY{1.5pc}\xyScaleX{3.5pc}\ar[r]\sp(0.35){S_{0}} & (\text{Right}\Rightarrow)\ar[r]\sp(0.65){q(x^{:A}\rightarrow x)_{\text{given }q^{:C}}} & \square}
+\]
+
+It remains to obtain the proof of $S_{0}$ by applying the proof transformer
+of the rule \textsf{``}($\text{Right}\Rightarrow$)\textsf{''}:
+\begin{align*}
+ & \text{Proof}\,(S_{0})=\text{Proof}\,(\emptyset\vdash(\alpha\Rightarrow\alpha)\Rightarrow\beta)\Rightarrow\beta)\\
+ & =q^{:(A\rightarrow A)\rightarrow B}\rightarrow\text{Proof}\,(S_{1})_{\text{given }q^{:C}}=q^{:(A\rightarrow A)\rightarrow B}\rightarrow q(x^{:A}\rightarrow x)\quad.
+\end{align*}
+The proof tree is now shortened to the code expression $q^{:(A\rightarrow A)\rightarrow B}\rightarrow q(x^{:A}\rightarrow x)$
+has type $\left(\left(A\rightarrow A\right)\rightarrow B\right)\rightarrow B$.
+So, that code is an evidence of proof for $S_{0}$. In this way, we
+have derived the code of a fully parametric function from its type
+signature.
+
+Figure~\ref{fig:proof-transformers-for-LJ-rules} shows the proof
+transformers for all the rules of the LJ algorithm. Apart from the
+special rule \textsf{``}($\text{Left}\Rightarrow$)\textsf{''}, all other rules have
+proof transformers using just one of the code constructions (\textsf{``}create
+function\textsf{''}, \textsf{``}create tuple\textsf{''}, \textsf{``}use tuple\textsf{''}, etc.) allowed within
+fully parametric code.
+
+\subsubsection*{The LJT algorithm}
+
+As we have seen, the LJ algorithm enters a loop if the rule \textsf{``}($\text{Left}\Rightarrow$)\textsf{''}
+gives a sequent we already had at a previous step. That rule requires
+us to prove two new sequents:
+\[
+\frac{\Gamma,A\Rightarrow B\vdash A\quad\quad\Gamma,B\vdash C}{\Gamma,A\Rightarrow B\vdash C}~(\text{Left}\Rightarrow)\quad.
+\]
+A sign of trouble is that the first of these sequents ($\Gamma,A\Rightarrow B\vdash A$)
+does not have a simpler form than the initial sequent ($\Gamma,A\Rightarrow B\vdash C$).
+So, it is not clear that we are getting closer to completing the proof.
+If $A=C$, the new sequent will simply repeat the initial sequent,
+immediately creating a loop.
+
+In some cases, a repeated sequent will occur after more than one step.
+It is not easy to formulate rigorous conditions for stopping the loop
+or for avoiding the rule \textsf{``}($\text{Left}\Rightarrow$)\textsf{''}.
+
+The LJT algorithm solves this problem by removing the rule \textsf{``}($\text{Left}\Rightarrow$)\textsf{''}
+from the LJ algorithm. Instead, \emph{four} new rules are introduced.
+Each of these rules contains a different pattern instead of $A$ in
+the premise $A\Rightarrow C$:
+\begin{align*}
+\text{(}A\text{ is atomic)\,}\frac{\Gamma,A,B\vdash D}{\Gamma,A,{\color{blue}A\Rightarrow B}\vdash D}~(\text{Left}\Rightarrow_{A})\qquad & \quad\frac{\Gamma,A\Rightarrow B\Rightarrow C\vdash D}{\Gamma,{\color{blue}(A\wedge B)\Rightarrow C}\vdash D}~(\text{Left}\Rightarrow_{\wedge})\\
+\frac{\Gamma,B\Rightarrow C\vdash A\Rightarrow B\quad\quad\Gamma,C\vdash D}{\Gamma,{\color{blue}(A\Rightarrow B)\Rightarrow C}\vdash D}~(\text{Left}\Rightarrow_{\Rightarrow})\qquad & \quad\frac{\Gamma,A\Rightarrow C,B\Rightarrow C\vdash D}{\Gamma,{\color{blue}(A\vee B)\Rightarrow C}\vdash D}~(\text{Left}\Rightarrow_{\vee})
+\end{align*}
+The rule \textsf{``}$\text{Left}\Rightarrow_{A}$\textsf{''} applies only if the implication
+starts with an \textsf{``}atomic\textsf{''} type expression, i.e., a single type parameter
+or a unit type. In all other cases, the implication must start with
+a conjunction, a disjunction, or an implication, which means that
+one of the three remaining rules will apply.
+
+The LJT algorithm retains all the rules in Figure~\ref{fig:proof-transformers-for-LJ-rules}
+except the rule \textsf{``}($\text{Left}\Rightarrow$)\textsf{''}, which is replaced
+by the four new rules. It is far from obvious that the new rules are
+equivalent to the old ones. It took mathematicians several decades
+to come up with the LJT rules and to prove their validity. This book
+will rely on that result and will not attempt to prove it.
+
+The proof transformers for the new rules are shown in Figure~\ref{fig:proof-transformers-for-LJT-rules}.
+Figures~\ref{fig:proof-transformers-for-LJ-rules}\textendash \ref{fig:proof-transformers-for-LJT-rules}
+define the set of proof transformers sufficient for using the LJT
+algorithm in practice. The \index{curryhoward library@\texttt{curryhoward} library}\lstinline!curryhoward!
+library\texttt{}\footnote{See \texttt{\href{https://github.com/Chymyst/curryhoward}{https://github.com/Chymyst/curryhoward}}}
+implements these proof transformers.
+
+The most complicated of the new rules is the rule \textsf{``}($\text{Left}\Rightarrow_{\Rightarrow}$)\textsf{''}.
+It is far from obvious why the rule $\text{Left}\Rightarrow_{\Rightarrow}$
+is useful or even correct. This rule is based on a non-trivial logic
+identity: 
+\[
+\left(\left(A\rightarrow B\right)\rightarrow C\right)\rightarrow\left(A\rightarrow B\right)\,\Longleftrightarrow\,\left(B\rightarrow C\right)\rightarrow\left(A\rightarrow B\right)\quad.
+\]
+Consider the type at the left-hand side of this identity:
+\[
+\left(\left(A\rightarrow B\right)\rightarrow C\right)\rightarrow B\rightarrow C\quad.
+\]
+A function with that type can be written as: 
+\[
+f=k^{:\left(A\rightarrow B\right)\rightarrow C}\rightarrow b^{:B}\rightarrow k\,(\_^{:A}\rightarrow b)\quad.
+\]
+The function $f$ occurs in the proof transformer for the rule $\text{Left}\Rightarrow_{\Rightarrow}$
+(shown below in Table~\ref{fig:proof-transformers-for-LJT-rules}).
+Note that this $f$ applies $k$ to a function $(\_\rightarrow b)$
+that ignores its argument. We expect to be able to simplify the resulting
+expression at the place when $(\_\rightarrow b)$ is applied to some
+argument expression, which we can then ignore. For this reason, applying
+the transformer for the rule $\text{Left}\Rightarrow_{\Rightarrow}$
+results in evidence-of-proof code that is longer than the code obtained
+via LJ\textsf{'}s rule transformers. The code obtained via the LJT algorithm
+needs to be simplified symbolically.
+
+As an example of using the LJT algorithm, we again prove the sequent
+from the previous section: $S_{0}=\emptyset\vdash((\alpha\Rightarrow\alpha)\Rightarrow\beta)\Rightarrow\beta$.
+At each step, only one LJT rule applies to each sequent. The initial
+part of the proof tree looks like this:\vspace{-1\baselineskip}
+\[
+\xymatrix{\xyScaleY{1.5pc}\xyScaleX{6pc} &  &  & ~\\
+\ar[r]\sp(0.4){\emptyset\vdash((\alpha\Rightarrow\alpha)\Rightarrow\beta)\Rightarrow\beta} & (\text{Right}\Rightarrow)\ar[r]\sp(0.5){(\alpha\Rightarrow\alpha)\Rightarrow\beta\vdash\beta} & (\text{Left}\Rightarrow_{\Rightarrow})\ar[ru]\sp(0.65){\beta\vdash\beta}\ar[r]\sp(0.65){\alpha\Rightarrow\beta\vdash\alpha\Rightarrow\alpha} & ~
+}
+\]
+The proofs for the sequents $\beta\vdash\beta$ and $\alpha\Rightarrow\beta\vdash\alpha\Rightarrow\alpha$
+are the same as before:
+\[
+\text{Proof}\,(\beta\vdash\beta)_{\text{given }y^{:B}}=y\quad,\quad\quad\text{Proof}\,(\alpha\Rightarrow\beta\vdash\alpha\Rightarrow\alpha)_{\text{given }r^{:A\rightarrow B}}=x^{:A}\rightarrow x\quad.
+\]
+Substituting these proofs into the proof transformer of the rule \textsf{``}($\text{Left}\Rightarrow_{\Rightarrow}$)\textsf{''}
+produces this code:
+\begin{align*}
+ & \text{Proof}\,((\alpha\Rightarrow\alpha)\Rightarrow\beta\vdash\beta)_{\text{given }q^{:(A\rightarrow A)\rightarrow B}}=q\big(\text{Proof}\,(\alpha\Rightarrow\beta\vdash\alpha\Rightarrow\alpha)_{\text{given }r^{:A\rightarrow B}}\big)\\
+ & \quad\quad\text{where }r^{:A\rightarrow B}=a^{:A}\rightarrow q(\_^{:A}\rightarrow a)\\
+ & =q(x^{:A}\rightarrow x)\quad.
+\end{align*}
+The proof of $\alpha\Rightarrow\beta\vdash\alpha\Rightarrow\alpha$
+does not actually use the intermediate value $r^{:A\rightarrow B}$
+provided by the proof transformer. As a symbolic simplification step,
+we may simply omit the code of $r$. The \lstinline!curryhoward!
+library always performs symbolic simplification after applying the
+LJT algorithm. 
+
+\begin{figure}
+\begin{centering}
+{\small{}}%
+\noindent\fbox{\begin{minipage}[t]{1\columnwidth - 2\fboxsep - 2\fboxrule}%
+{\small{}
+\begin{align*}
+\frac{\Gamma,A,B\vdash D}{\Gamma,A,{\color{blue}A\Rightarrow B}\vdash D}~(\text{Left}\Rightarrow_{A})\quad & \quad\text{Proof}\,(\Gamma,A,A\Rightarrow B\vdash D)_{\text{given }p^{:\Gamma},x^{:A},q^{:A\rightarrow B}}\\
+ & \quad\quad=\text{Proof}\,(\Gamma,A,B\vdash D)_{\text{given }p,x,q(x)}\\
+\frac{\Gamma,A\Rightarrow B\Rightarrow C\vdash D}{\Gamma,{\color{blue}(A\wedge B)\Rightarrow C}\vdash D}~(\text{Left}\Rightarrow_{\wedge})\quad & \quad\text{Proof}\,(\Gamma,(A\wedge B)\Rightarrow C\vdash D)_{\text{given }p^{:\Gamma},q^{:A\times B\rightarrow C}}\\
+ & \quad\quad=\text{Proof}\,(\Gamma,\\
+ & \quad\quad\quad A\Rightarrow B\Rightarrow C\vdash D)_{\text{given }p,(a^{:A}\rightarrow b^{:B}\rightarrow q(a\times b))}\\
+\frac{\Gamma,A\Rightarrow C,B\Rightarrow C\vdash D}{\Gamma,{\color{blue}(A\vee B)\Rightarrow C}\vdash D}~(\text{Left}\Rightarrow_{\vee})\quad & \quad\text{Proof}\,(\Gamma,(A\vee B)\Rightarrow C\vdash D)_{\text{given }p^{:\Gamma},q^{:A+B\rightarrow C}}\\
+ & \quad\quad=\text{Proof}\,(\Gamma,A\Rightarrow C,B\Rightarrow C\vdash D)_{\text{given }p,r,s}\\
+ & \quad\quad\text{where}~r\triangleq a^{:A}\rightarrow q(a+\bbnum 0)\\
+ & \quad\quad\text{ and }s\triangleq b^{:B}\rightarrow q(\bbnum 0+b)\\
+\frac{\Gamma,B\Rightarrow C\vdash A\Rightarrow B\quad\Gamma,C\vdash D}{\Gamma,{\color{blue}(A\Rightarrow B)\Rightarrow C}\vdash D}~(\text{Left}\Rightarrow_{\Rightarrow})\quad & \quad\text{Proof}\,(\Gamma,(A\Rightarrow B)\Rightarrow C\vdash D)_{\text{given }p^{:\Gamma},q^{:\left(A\rightarrow B\right)\rightarrow C}}\\
+ & \quad\quad=\text{Proof}\,(\Gamma,C\vdash D)_{\text{given }p,c}\\
+ & \quad\quad\text{ where}~c^{:C}\triangleq q\big(\text{Proof}\,(\Gamma,\\
+ & \quad\quad\quad\quad\quad\quad\quad\quad B\Rightarrow C\vdash A\Rightarrow B)_{\text{given }p,r}\big)\\
+ & \quad\quad\text{ and }r^{:B\rightarrow C}\triangleq b^{:B}\rightarrow q(\_^{:A}\rightarrow b)
+\end{align*}
+}%
+\end{minipage}}{\small\par}
+\par\end{centering}
+\caption{\label{fig:proof-transformers-for-LJT-rules}Proof transformers for
+the four new rules of the \index{LJT algorithm|textit}LJT algorithm.}
+\end{figure}
+
+The reason the LJT algorithm terminates is that each rule replaces
+a given sequent by one or more sequents with simpler premises or goals.\footnote{The paper \texttt{\href{http://citeseer.ist.psu.edu/viewdoc/summary?doi=10.1.1.35.2618}{http://citeseer.ist.psu.edu/viewdoc/summary?doi=10.1.1.35.2618}}
+shows that the LJT algorithm terminates by giving an explicit decreasing
+measure on proof trees.} This guarantees that the proof search will terminate either with
+a complete proof or with a sequent to which no more rules apply. An
+example of such a \textsf{``}dead-end\textsf{''} sequent is $\alpha\vdash\beta$ where
+$\alpha$ and $\beta$ are different, unrelated propositions. When
+no more rules apply, the LJT algorithm concludes that the initial
+sequent cannot be proved.
+
+To \emph{prove} that there is no proof, one needs to use methods
+that are beyond the scope of this book. An introduction to the required
+techniques is in the book \textsf{``}Proof and Disproof in Formal Logic\textsf{''}
+by R.~Bornat\index{Richard Bornat} (see footnote~\ref{fn:Bornat-proof-book}
+on page~\pageref{fn:Bornat-proof-book}).
+
 \subsection{Failure of Boolean logic in reasoning about $\mathcal{CH}$-propositions\label{subsec:Example:-Failure-of-Boolean-logic}}
 
-Programmers are most familiar with the \index{Boolean logic}Boolean
-logic whose operations are written in Scala as \lstinline!x && y!
-(conjunction), \lstinline!x || y! (disjunction), and \lstinline*!x*
-(negation). However, it turns out that the Boolean logic does \emph{not}
-always produce correct conclusions when reasoning about ${\cal CH}$-propositions.
+Programmers are familiar with the \index{Boolean logic}Boolean logic
+whose operations are written in Scala as \lstinline!x && y! (conjunction),
+\lstinline!x || y! (disjunction), and \lstinline*!x* (negation).
+However, it turns out that the Boolean logic does \emph{not} always
+produce correct conclusions when reasoning about ${\cal CH}$-propositions.
 One needs to use the constructive logic to reason correctly about
 implementable type signatures.
 
@@ -1412,28 +1939,28 @@ The first example is given by the following type:
 \begin{equation}
 \forall(A,B,C).\,\left(A\rightarrow B+C\right)\rightarrow\left(A\rightarrow B\right)+\left(A\rightarrow C\right)\quad,\label{eq:ch-example-boolean-bad-type}
 \end{equation}
-which corresponds to the Scala type signature:
+which corresponds to the Scala type signature (shown in Section~\ref{subsec:Motivation-and-outlook}):
 \begin{lstlisting}
-def bad[A, B, C](g: A => Either[B, C]): Either[A => B, A => C] = ???
+def bad2[A, B, C](g: A => Either[B, C]): Either[A => B, A => C] = ???
 \end{lstlisting}
-The function \lstinline!bad! \emph{cannot} be implemented via fully
+The function \lstinline!bad2! \emph{cannot} be implemented via fully
 parametric code. To see why, consider that the only available data
 is a function $g^{:A\rightarrow B+C}$, which returns values of type
 $B$ or $C$ depending (in some unknown way) on the input value of
-type $A$. The function \lstinline!bad! must return either a function
+type $A$. The function \lstinline!bad2! must return either a function
 of type $A\rightarrow B$ or a function of type $A\rightarrow C$.
-How can the code of \lstinline!bad! make that decision? The only
+How can the code of \lstinline!bad2! make that decision? The only
 input data is the function $g$ that takes an argument of type $A$.
 We could imagine applying $g$ to various arguments of type $A$ and
 to see whether $g$ returns a $B$ or a $C$. However, the type $A$
 is arbitrary, and a fully parametric function cannot produce a value
 of type $A$ in order to apply $g$ to it. So, the decision about
 whether to return $A\rightarrow B$ or $A\rightarrow C$ must be independent
-of $g$. That decision must be hard-coded in the function \lstinline!bad!.
+of $g$. That decision must be hard-coded in the function \lstinline!bad2!.
 
 Suppose we hard-coded the decision to return a function of type $A\rightarrow B$.
 How would we create a function of type $A\rightarrow B$ in the body
-of \lstinline!bad!? Given a value $x^{:A}$ of type $A$, we would
+of \lstinline!bad2!? Given a value $x^{:A}$ of type $A$, we would
 need to compute some value of type $B$. Since the type $B$ is arbitrary
 (it is a type parameter), we cannot produce a value of type $B$ from
 scratch. The only potential source of values of type $B$ is the given
@@ -5397,464 +5924,3 @@ the foundation of the type system will be safe so that is the final
 lesson from the great Howard correspondence this concludes the tutorial
 \end{comment}
 
-
-\subsection{The LJT algorithm\label{app:The-LJT-algorithm}}
-
-In this chapter, we have seen how to derive code from a type signature
-as long as one has a proof of the sequent corresponding to that type
-signature. But Section~\ref{subsec:Example:-Proving-a-ch-proposition}
-gave an example showing that the rules in Table~\ref{tab:Proof-rules-of-constructive-and-boolean}
-do not provide an algorithm for finding a proof for a given sequent.
-
-To illustrate this problem on another example, let us try proving
-the sequent:
-\[
-A,B\vee C\vdash(A\wedge B)\vee C\quad.
-\]
-We expect that this sequent is provable because we can write the corresponding
-Scala code:
-\begin{lstlisting}
-def f[A, B, C](a: A): Either[B, C] => Either[(A, B), C] = {
-  case Left(b)    => Left((a, b))
-  case Right(c)   => Right(c)
-}
-\end{lstlisting}
-How can we obtain a proof of this sequent according to the rules in
-Table~\ref{tab:Proof-rules-of-constructive-and-boolean}? We find
-that we could potentially apply the rules \textsf{``}create \lstinline!Left!\textsf{''},
-\textsf{``}create \lstinline!Right!\textsf{''}, \textsf{``}use \lstinline!Either!\textsf{''}, and
-\textsf{``}use function\textsf{''}. However, no matter what rule we choose, we will
-get stuck at the next step. Let us see why:
-
-To apply \textsf{``}create \lstinline!Left!\textsf{''}, we first need to prove the
-sequent $A,B\vee C\vdash A\wedge B$. But this sequent cannot be proved:
-we do not necessarily have values of both types $A$ and $B$ if we
-are only given values of type $A$ and of type \lstinline!Either[B, C]!.
-To apply \textsf{``}create \lstinline!Right!\textsf{''}, we need to prove the sequent
-$A,B\vee C\vdash C$. Again, we find that this sequent cannot be proved.
-The next choice is the rule \textsf{``}use \lstinline!Either!\textsf{''} that matches
-any goal of the sequent as the proposition $\gamma$. But we are then
-required to choose two new propositions ($\alpha$ and $\beta$) such
-that we can prove $A,B\vee C\vdash\alpha\vee\beta$ as well as $A,B\vee C,\alpha\vdash(A\wedge B)\vee C$
-and $A,B\vee C,\beta\vdash(A\wedge B)\vee C$. It is not clear how
-we should choose $\alpha$ and $\beta$ in order to make progress
-in the proof. The remaining rule, \textsf{``}use function\textsf{''}, similarly requires
-us to choose a new proposition $\alpha$ such that we can prove $A,B\vee C\vdash\alpha$
-and $A,B\vee C\vdash\alpha\Rightarrow((A\wedge B)\vee C)$. The rules
-give us no guidance for choosing $\alpha$ appropriately.
-
-To see that the rules in Table~\ref{tab:Proof-rules-for-constructive-logic}
-are not helpful for proof search, note that the rules \textsf{``}use function\textsf{''}
-and \textsf{``}use \lstinline!Either!\textsf{''} require us to choose new unknown
-propositions and to prove more complicated sequents than the ones
-we had before. For instance, the rule \textsf{``}use function\textsf{''} gives a proof
-of $\Gamma\vdash\beta$ only if we first choose some other proposition
-$\alpha$ and prove the sequents $\Gamma\vdash\alpha$ and $\Gamma\vdash\alpha\Rightarrow\beta$.
-The rule does not say how to choose the proposition $\alpha$ correctly.
-We need to guess the correct $\alpha$ by trial and error. Even after
-choosing $\alpha$ in some way, we will have to prove a more complicated
-sequent ($\Gamma\vdash\alpha\Rightarrow\beta$). It is not guaranteed
-that we are getting closer to finding the proof of the initial sequent
-($\Gamma\vdash\beta$). 
-
-It is far from obvious how to overcome that difficulty. Mathematicians
-have studied the constructive logic for more than 60 years, trying
-to replace the rules in Table~\ref{tab:Proof-rules-of-constructive-and-boolean}
-by a different but equivalent set of derivation rules that require
-no guessing when looking for a proof. The first partial success came
-in 1935 with an algorithm called \textsf{``}LJ\textsf{''}.\footnote{See \texttt{\href{https://en.wikipedia.org/wiki/Sequent_calculus\#Overview}{https://en.wikipedia.org/wiki/Sequent\_calculus\#Overview}}}
-The LJ algorithm still has a significant problem: one of its derivation
-rules may be applied infinitely many times. So, the LJ algorithm is
-not guaranteed to terminate without some heuristics for avoiding an
-infinite loop. A terminating version of the LJ algorithm, called \index{LJT algorithm}LJT,
-was formulated in 1992.\footnote{An often cited paper by R.~Dyckhoff\index{Roy Dyckhoff} is \texttt{\href{https://philpapers.org/rec/DYCCSC}{https://philpapers.org/rec/DYCCSC}}.
-For the history of that research, see \texttt{\href{https://research-repository.st-andrews.ac.uk/handle/10023/8824}{https://research-repository.st-andrews.ac.uk/handle/10023/8824}}} 
-
-We will first present the LJ algorithm. Although that algorithm does
-not guarantee termination, it is simpler to understand and to apply
-by hand. Then we will show how to modify the LJ algorithm in order
-to obtain the always-terminating LJT algorithm.
-
-\subsubsection*{The LJ algorithm}
-
-Figure~\ref{fig:Rules-of-the-LJ-algorithm} shows the LJ algorithm\textsf{'}s
-axioms and derivation rules. Each rule says that the bottom sequent
-will be proved if proofs are given for sequent(s) at the top. For
-each possible sub-expression (conjunction $X\wedge Y$, disjunction
-$X\vee Y$, and implication $X\Rightarrow Y$) there is one rule where
-that sub-expression is a premise (at \textsf{``}left\textsf{''}) and one rule where
-that sub-expression is the goal (at \textsf{``}right\textsf{''}). Those sub-expressions
-are shown in blue in Figure~\ref{fig:Rules-of-the-LJ-algorithm}
-to help us look for a proof. To find out which rules apply, we match
-some part of the sequent with a blue sub-expression.
-
-\begin{figure}
-\begin{centering}
-\fbox{\begin{minipage}[t]{0.7\linewidth}%
-\begin{align*}
-\frac{}{\Gamma,X\vdash{\color{blue}X}}~(\text{Id})\qquad & \qquad\frac{}{\Gamma\vdash{\color{blue}\top}}~(\text{True})\\
-\frac{\Gamma,A\Rightarrow B\vdash A\quad\Gamma,B\vdash C}{\Gamma,{\color{blue}A\Rightarrow B}\vdash C}~(\text{Left}\Rightarrow)\qquad & \qquad\frac{\Gamma,A\vdash B}{\Gamma\vdash{\color{blue}A\Rightarrow B}}~(\text{Right}\Rightarrow)\\
-\frac{\Gamma,A_{i}\vdash C}{\Gamma,{\color{blue}A_{1}\wedge A_{2}}\vdash C}~(\text{Left}\wedge_{i})\qquad & \qquad\frac{\Gamma\vdash A\quad\quad\Gamma\vdash B}{\Gamma\vdash{\color{blue}A\wedge B}}~(\text{Right}\wedge)\\
-\frac{\Gamma,A\vdash C\quad\Gamma,B\vdash C}{\Gamma,{\color{blue}A\vee B}\vdash C}~(\text{Left}\vee)\qquad & \qquad\frac{\Gamma\vdash A_{i}}{\Gamma\vdash{\color{blue}A_{1}\vee A_{2}}}~(\text{Right}\vee_{i})
-\end{align*}
-%
-\end{minipage}}
-\par\end{centering}
-\caption{Axioms and derivation rules of the LJ algorithm. Each of the rules
-\textquotedblleft ($\text{Left}\wedge_{i}$)\textquotedblright{} and
-\textquotedblleft ($\text{Right}\vee_{i}$)\textquotedblright{} have
-two versions, with $i=1$ or $i=2$. \label{fig:Rules-of-the-LJ-algorithm}}
-\end{figure}
-
-It turns out that the rules in Figure~\ref{fig:Rules-of-the-LJ-algorithm}
-are \emph{equivalent} to the rules in Table~\ref{tab:Proof-rules-for-constructive-logic}.
-The proof is beyond the scope of this book. We only remark that this
-equivalence is far from obvious. To prove it, one needs to demonstrate
-that any sequent derived through the first set of rules is also derivable
-through the second set, and vice versa.
-
-To illustrate the LJ algorithm, let us prove the sequent~(\ref{eq:ch-example-sequent-2}).
-Denote that sequent by $S_{0}$:
-\[
-S_{0}\triangleq\emptyset\vdash\left(\left(\alpha\Rightarrow\alpha\right)\Rightarrow\beta\right)\Rightarrow\beta\quad.
-\]
- Since the goal of $S_{0}$ contains an implication, we use the rule
-\textsf{``}($\text{Right}\Rightarrow$)\textsf{''} and get a sequent $S_{1}$:
-\[
-S_{1}\triangleq\left(\alpha\Rightarrow\alpha\right)\Rightarrow\beta\vdash\beta\quad.
-\]
-Now the implication is in the premise, so we use the rule \textsf{``}($\text{Left}\Rightarrow$)\textsf{''}
-and get two new sequents:
-\[
-S_{2}\triangleq\left(\alpha\Rightarrow\alpha\right)\Rightarrow\beta\vdash\alpha\Rightarrow\alpha\quad,\quad\quad S_{3}\triangleq\beta\vdash\beta\quad.
-\]
-Sequent $S_{3}$ follows from the \textsf{``}(Id)\textsf{''} axiom, so it remains
-to prove $S_{2}$. Since $S_{2}$ contains an implication both as
-a premise and as the goal, we may apply either the rule \textsf{``}($\text{Left}\Rightarrow$)\textsf{''}
-or the rule \textsf{``}($\text{Right}\Rightarrow$)\textsf{''}. We choose to apply
-\textsf{``}($\text{Left}\Rightarrow$)\textsf{''} and get two new sequents:
-\[
-S_{4}\triangleq\left(\alpha\Rightarrow\alpha\right)\Rightarrow\beta\vdash\alpha\Rightarrow\alpha\quad,\quad\quad S_{5}:\beta\vdash\alpha\Rightarrow\alpha\quad.
-\]
-Notice that $S_{4}=S_{2}$. So, our proof search is getting into an
-infinite loop trying to prove the same sequent $S_{2}$ over and over
-again. We can prove $S_{5}$ but this will not help us break the loop.
-
-Once we recognize the problem, we backtrack to the point where we
-chose to apply \textsf{``}($\text{Left}\Rightarrow$)\textsf{''} to $S_{2}$. That
-was a bad choice, so let us instead apply \textsf{``}($\text{Right}\Rightarrow$)\textsf{''}
-to $S_{2}$. This yields a new sequent $S_{6}$:
-\[
-S_{6}\triangleq\left(\alpha\Rightarrow\alpha\right)\Rightarrow\beta,\alpha\vdash\alpha\quad.
-\]
-This sequent follows from the \textsf{``}(Id)\textsf{''}axiom. There are no more sequents
-to prove, so the proof of $S_{0}$ is finished. It can be drawn as
-a \index{proof tree}\textbf{proof tree} like this:
-\[
-\xymatrix{\xyScaleY{1.5pc}\xyScaleX{4pc} &  &  & (\text{Id})\\
-\ar[r]\sp(0.35){S_{0}} & (\text{Right}\Rightarrow)\ar[r]\sp(0.5){S_{1}} & (\text{Left}\Rightarrow)\ar[r]\sp(0.5){S_{2}}\ar[ru]\sp(0.6){S_{3}} & (\text{Right}\Rightarrow)\ar[r]\sp(0.65){S_{6}} & (\text{Id})
-}
-\]
-The nodes of the proof tree are axioms or derivation rules, and the
-edges are intermediate sequents required by the rules. Some rule nodes
-branch into several sequents because some rules require more than
-one new sequent to be proved. The leaves of the tree are axioms that
-do not require proving any further sequents. 
-
-\subsubsection*{Extracting code from proofs}
-
-According to the Curry-Howard correspondence, a sequent (such as $A,B,...,C\vdash X$)
-represents the task of writing a fully parametric code expression
-of type $X$ that uses some given values of types $A$, $B$, ...,
-$C$. The sequent is true (i.e., can be proved) if that code expression
-can be found. So, the code serves as an \textsf{``}evidence of proof\textsf{''} for
-the sequent.
-
-\begin{figure}
-\begin{centering}
-{\small{}}%
-\noindent\fbox{\begin{minipage}[t]{1\columnwidth - 2\fboxsep - 2\fboxrule}%
-{\small{}
-\begin{align*}
-\frac{}{\Gamma,A\vdash{\color{blue}A}}~(\text{Id})\quad & \quad\text{Proof}\,(\Gamma,A\vdash A)_{\text{given }p^{:\Gamma},x^{:A}}=x\\
-\frac{}{\Gamma\vdash{\color{blue}\top}}~(\text{True})\quad & \quad\text{Proof}\,(\Gamma\vdash\top)_{\text{given }p^{:\Gamma}}=1\\
-\frac{\Gamma,A\Rightarrow B\vdash A\quad\Gamma,B\vdash C}{\Gamma,{\color{blue}A\Rightarrow B}\vdash C}~(\text{Left}\Rightarrow)\quad & \quad\text{Proof}\,(\Gamma,A\Rightarrow B\vdash C)_{\text{given }p^{:\Gamma},q^{:A\rightarrow B}}\\
- & \quad\quad=\text{Proof}\,(\Gamma,B\vdash C)_{\text{given }p,b^{:B}}\\
-\text{where} & \quad b^{:B}\triangleq q\big(\text{Proof}\,(\Gamma,A\Rightarrow B\vdash A)_{\text{given }p,q}\big)\\
-\frac{\Gamma,A\vdash B}{\Gamma\vdash{\color{blue}A\Rightarrow B}}~(\text{Right}\Rightarrow)\quad & \quad\text{Proof}\,(\Gamma\vdash A\Rightarrow B)_{\text{given }p^{:\Gamma}}\\
- & \quad\quad=x^{:A}\rightarrow\text{Proof}\,(\Gamma,A\vdash B)_{\text{given }p^{:\Gamma},x^{:A}}\\
-\frac{\Gamma,A\vdash C}{\Gamma,{\color{blue}A\wedge B}\vdash C}~(\text{Left}\wedge_{1})\quad & \quad\text{Proof}\,(\Gamma,A\wedge B\vdash C)_{\text{given }p^{:\Gamma},(a^{:A}\times b^{:B})}\\
- & \quad\quad=\text{Proof}\,(\Gamma,A\vdash C)_{\text{given }p^{:\Gamma},a^{:A}}\\
-\frac{\Gamma,B\vdash C}{\Gamma,{\color{blue}A\wedge B}\vdash C}~(\text{Left}\wedge_{2})\quad & \quad\text{Proof}\,(\Gamma,A\wedge B\vdash C)_{\text{given }p^{:\Gamma},(a^{:A}\times b^{:B})}\\
- & \quad\quad=\text{Proof}\,(\Gamma,B\vdash C)_{\text{given }p^{:\Gamma},b^{:B}}\\
-\frac{\Gamma\vdash A\quad\quad\Gamma\vdash B}{\Gamma\vdash{\color{blue}A\wedge B}}~(\text{Right}\wedge)\quad & \quad\text{Proof}\,(\Gamma\vdash A\wedge B)_{\text{given }p^{:\Gamma}}\\
- & \quad\quad=\text{Proof}\,(\Gamma\vdash A)_{\text{given }p^{:\Gamma}}\\
- & \quad\quad\quad\times\text{Proof}\,(\Gamma\vdash B)_{\text{given }p^{:\Gamma}}\\
-\frac{\Gamma,A\vdash C\quad\quad\Gamma,B\vdash C}{\Gamma,{\color{blue}A\vee B}\vdash C}~(\text{Left}\vee)\quad & \quad\text{Proof}\,(\Gamma,A\vee B\vdash C)_{\text{given }p^{:\Gamma},q^{:A+B}}\\
- & \quad\quad=q\triangleright\begin{array}{|c||c|}
- & C\\
-\hline A & x^{:A}\rightarrow\text{Proof}\,(\Gamma,A\vdash C)_{\text{given }p,x}\\
-B & y^{:B}\rightarrow\text{Proof}\,(\Gamma,B\vdash C)_{\text{given }p,y}
-\end{array}\\
-\frac{\Gamma\vdash A}{\Gamma\vdash{\color{blue}A\vee B}}~(\text{Right}\vee_{1})\quad & \quad\text{Proof}\,(\Gamma\vdash A\vee B)_{\text{given }p^{:\Gamma}}=\text{Proof}\,(\Gamma\vdash A)+\bbnum 0^{:B}\\
-\frac{\Gamma\vdash B}{\Gamma\vdash{\color{blue}A\vee B}}~(\text{Right}\vee_{2})\quad & \quad\text{Proof}\,(\Gamma\vdash A\vee B)_{\text{given }p^{:\Gamma}}=\bbnum 0^{:A}+\text{Proof}\,(\Gamma\vdash B)
-\end{align*}
-}%
-\end{minipage}}{\small\par}
-\par\end{centering}
-\caption{\label{fig:proof-transformers-for-LJ-rules}Proof transformers for
-the rules of the LJ algorithm.}
-\end{figure}
-
-In the previous subsection, we have found a proof of the sequent $S_{0}$,
-which represents the task of writing a fully parametric function with
-type signature $(\left(A\rightarrow A\right)\rightarrow B)\rightarrow B$).
-Let us now see how we can extract the code of that function from the
-proof of the sequent $S_{0}$.
-
-We start from the leaves of the proof tree and move step by step towards
-the initial sequent. At each step, we shorten the proof tree by replacing
-some sequent by its corresponding evidence-of-proof code. Eventually
-we will replace the initial sequent by its corresponding code. Let
-us see how this procedure works for the proof tree of the sequent
-$S_{0}$ shown in the previous section.
-
-Since the leaves are axioms, let us write the code corresponding to
-each axiom of LJ:
-\begin{align*}
- & \frac{}{\Gamma,X\vdash X}~(\text{Id})\quad:\quad\quad\text{Proof}\,(\Gamma,X\vdash X)_{\text{given }p^{:\Gamma},x^{:X}}=x\quad;\\
- & \frac{}{\Gamma\vdash\top}~(\text{True})\quad:\quad\quad\text{Proof}\,(\Gamma\vdash\top)_{\text{given }p^{:\Gamma}}=1\quad.
-\end{align*}
-Here we denote explicitly the values (such as $p$ and $x$) given
-as premises to the sequent. The notation $p^{:\Gamma}$ means all
-values given in the set of premises $\Gamma$. Below we will assume
-that the propositions $\alpha$ and $\beta$ correspond to types $A$
-and $B$; that is, $\alpha\triangleq{\cal CH}(A)$ and $\beta\triangleq{\cal CH}(B)$.
-
-The leaves in the proof tree for $S_{0}$ are the \textsf{``}($\text{Id}$)\textsf{''}
-axioms used to prove the sequents $S_{3}$ and $S_{6}$. Let us write
-the code that serves as the \textsf{``}evidence of proof\textsf{''} for these sequents.
-For brevity, we denote $\gamma\triangleq\left(\alpha\Rightarrow\alpha\right)\Rightarrow\beta$
-and $C\triangleq\left(A\rightarrow A\right)\rightarrow B$, so that
-$\gamma={\cal CH}(C)$. Then we can write:
-\begin{align*}
- & S_{3}\triangleq\beta\vdash\beta\quad,\quad\quad\text{Proof}\,(S_{3})_{\text{given }y^{:B}}=y\quad,\\
- & S_{6}\triangleq\gamma,\alpha\vdash\alpha\quad,\quad\quad\text{Proof}\,(S_{6})_{\text{given }q^{:C},x^{:A}}=x\quad.
-\end{align*}
-Note that the proof of $S_{6}$ does not use the first given value
-$q^{:C}$ (corresponding to the premise $\gamma$).
-
-We now shorten the proof tree by replacing the sequents $S_{3}$ and
-$S_{6}$ by their \textsf{``}evidence of proof\textsf{''}:
-\[
-\xymatrix{\xyScaleY{1.5pc}\xyScaleX{4pc} &  &  & \square\\
-\ar[r]\sp(0.35){S_{0}} & (\text{Right}\Rightarrow)\ar[r]\sp(0.5){S_{1}} & (\text{Left}\Rightarrow)\ar[r]\sp(0.5){S_{2}}\ar[ru]\sp(0.6){(y)_{\text{given }y^{:B}}} & (\text{Right}\Rightarrow)\ar[r]\sp(0.65){(x)_{\text{given }q^{:C},x^{:A}}} & \square
-}
-\]
-
-The next step is to consider the proof of $S_{2}$, which is found
-by applying the rule \textsf{``}($\text{Right}\Rightarrow$)\textsf{''}. This rule
-promises to give a proof of $S_{2}$ if we have a proof of $S_{6}$.
-In order to extract code from that rule, we can write a function that
-transforms a proof of $S_{6}$ into a proof of $S_{2}$. We call this
-function the \textbf{proof transformer}\index{Curry-Howard correspondence!proof transformer}\index{proof transformer}
-corresponding to the rule \textsf{``}($\text{Right}\Rightarrow$)\textsf{''}. That
-rule and its transformer are defined as:
-\begin{align*}
-\frac{\Gamma,A\vdash B}{\Gamma\vdash A\Rightarrow B}~(\text{Right}\Rightarrow)\quad: & \quad\quad\text{Proof}\,(\Gamma\vdash A\Rightarrow B)_{\text{given }p^{:\Gamma}}\\
- & \quad\quad=x^{:A}\rightarrow\text{Proof}\,(\Gamma,A\vdash B)_{\text{given }p^{:\Gamma},x^{:A}}\quad.
-\end{align*}
-Applying the proof transformer to the known proof of $S_{6}$, we
-obtain a proof of $S_{2}$:
-\[
-\text{Proof}\,(S_{2})_{\text{given }q^{:C}}=x^{:A}\rightarrow\text{Proof}\,(S_{6})_{\text{given }q^{:C},x^{:A}}=(x^{:A}\rightarrow x)_{\text{given }q^{:C}}\quad.
-\]
-The proof tree can be now shortened to:
-\[
-\xymatrix{\xyScaleY{1.5pc}\xyScaleX{3.5pc} &  &  & \square\\
-\ar[r]\sp(0.35){S_{0}} & (\text{Right}\Rightarrow)\ar[r]\sp(0.5){S_{1}} & (\text{Left}\Rightarrow)\ar[rr]\sp(0.62){(x^{:A}\rightarrow x)_{\text{given }q^{:C}}}\ar[ru]\sp(0.6){(y)_{\text{given }y^{:B}}} &  & \square
-}
-\]
-
-The next step is to get the proof of $S_{1}$ obtained by applying
-the rule \textsf{``}($\text{Left}\Rightarrow$)\textsf{''}. That rule requires two
-previous sequents, so its transformer is a function of two previously
-obtained proofs:
-\begin{align*}
- & \frac{\Gamma,A\Rightarrow B\vdash A\quad\quad\Gamma,B\vdash C}{\Gamma,A\Rightarrow B\vdash C}~(\text{Left}\Rightarrow)\quad:\\
- & \text{Proof}\,(\Gamma,A\Rightarrow B\vdash C)_{\text{given }p^{:\Gamma},q^{:A\rightarrow B}}=\text{Proof}\,(\Gamma,B\vdash C)_{\text{given }p^{:\Gamma},b^{:B}}\\
- & \quad\quad\text{where}\quad b^{:B}\triangleq q\big(\text{Proof}\,(\Gamma,A\Rightarrow B\vdash A)_{\text{given }p^{:\Gamma},q^{:A\rightarrow B}}\big)\quad.
-\end{align*}
-In the proof tree shown above, we obtain a proof of $S_{1}$ by applying
-this proof transformer to the proofs of $S_{2}$ and $S_{3}$:
-\begin{align*}
- & \text{Proof}\,(S_{1})_{\text{given }q^{:C}}=\text{Proof}\,(S_{3})_{\text{given }b^{:B}}\text{ where }b^{:B}\triangleq q(\text{Proof}\,(S_{2}))_{\text{given }q^{:C}}\\
- & \quad=b\text{ where }b^{:B}\triangleq q(x^{:A}\rightarrow x)_{\text{given }q^{:C}}=q(x^{:A}\rightarrow x)_{\text{given }q^{:C}}\quad.
-\end{align*}
-Substituting this proof into the proof tree, we shorten the tree to:
-\[
-\xymatrix{\xyScaleY{1.5pc}\xyScaleX{3.5pc}\ar[r]\sp(0.35){S_{0}} & (\text{Right}\Rightarrow)\ar[r]\sp(0.65){q(x^{:A}\rightarrow x)_{\text{given }q^{:C}}} & \square}
-\]
-
-It remains to obtain the proof of $S_{0}$ by applying the proof transformer
-of the rule \textsf{``}($\text{Right}\Rightarrow$)\textsf{''}:
-\begin{align*}
- & \text{Proof}\,(S_{0})=\text{Proof}\,(\emptyset\vdash(\alpha\Rightarrow\alpha)\Rightarrow\beta)\Rightarrow\beta)\\
- & =q^{:(A\rightarrow A)\rightarrow B}\rightarrow\text{Proof}\,(S_{1})_{\text{given }q^{:C}}=q^{:(A\rightarrow A)\rightarrow B}\rightarrow q(x^{:A}\rightarrow x)\quad.
-\end{align*}
-The proof tree is now shortened to the code expression $q^{:(A\rightarrow A)\rightarrow B}\rightarrow q(x^{:A}\rightarrow x)$
-has type $\left(\left(A\rightarrow A\right)\rightarrow B\right)\rightarrow B$.
-So, that code is an evidence of proof for $S_{0}$. In this way, we
-have derived the code of a fully parametric function from its type
-signature.
-
-Figure~\ref{fig:proof-transformers-for-LJ-rules} shows the proof
-transformers for all the rules of the LJ algorithm. Apart from the
-special rule \textsf{``}($\text{Left}\Rightarrow$)\textsf{''}, all other rules have
-proof transformers using just one of the code constructions (\textsf{``}create
-function\textsf{''}, \textsf{``}create tuple\textsf{''}, \textsf{``}use tuple\textsf{''}, etc.) allowed within
-fully parametric code.
-
-\subsubsection*{The LJT algorithm}
-
-As we have seen, the LJ algorithm enters a loop if the rule \textsf{``}($\text{Left}\Rightarrow$)\textsf{''}
-gives a sequent we already had at a previous step. That rule requires
-us to prove two new sequents:
-\[
-\frac{\Gamma,A\Rightarrow B\vdash A\quad\quad\Gamma,B\vdash C}{\Gamma,A\Rightarrow B\vdash C}~(\text{Left}\Rightarrow)\quad.
-\]
-A sign of trouble is that the first of these sequents ($\Gamma,A\Rightarrow B\vdash A$)
-does not have a simpler form than the initial sequent ($\Gamma,A\Rightarrow B\vdash C$).
-So, it is not clear that we are getting closer to completing the proof.
-If $A=C$, the new sequent will simply repeat the initial sequent,
-immediately creating a loop.
-
-In some cases, a repeated sequent will occur after more than one step.
-It is not easy to formulate rigorous conditions for stopping the loop
-or for avoiding the rule \textsf{``}($\text{Left}\Rightarrow$)\textsf{''}.
-
-The LJT algorithm solves this problem by removing the rule \textsf{``}($\text{Left}\Rightarrow$)\textsf{''}
-from the LJ algorithm. Instead, \emph{four} new rules are introduced.
-Each of these rules contains a different pattern instead of $A$ in
-the premise $A\Rightarrow C$:
-\begin{align*}
-\text{(}A\text{ is atomic)\,}\frac{\Gamma,A,B\vdash D}{\Gamma,A,{\color{blue}A\Rightarrow B}\vdash D}~(\text{Left}\Rightarrow_{A})\qquad & \quad\frac{\Gamma,A\Rightarrow B\Rightarrow C\vdash D}{\Gamma,{\color{blue}(A\wedge B)\Rightarrow C}\vdash D}~(\text{Left}\Rightarrow_{\wedge})\\
-\frac{\Gamma,B\Rightarrow C\vdash A\Rightarrow B\quad\quad\Gamma,C\vdash D}{\Gamma,{\color{blue}(A\Rightarrow B)\Rightarrow C}\vdash D}~(\text{Left}\Rightarrow_{\Rightarrow})\qquad & \quad\frac{\Gamma,A\Rightarrow C,B\Rightarrow C\vdash D}{\Gamma,{\color{blue}(A\vee B)\Rightarrow C}\vdash D}~(\text{Left}\Rightarrow_{\vee})
-\end{align*}
-The rule \textsf{``}$\text{Left}\Rightarrow_{A}$\textsf{''} applies only if the implication
-starts with an \textsf{``}atomic\textsf{''} type expression, i.e., a single type parameter
-or a unit type. In all other cases, the implication must start with
-a conjunction, a disjunction, or an implication, which means that
-one of the three remaining rules will apply.
-
-The LJT algorithm retains all the rules in Figure~\ref{fig:proof-transformers-for-LJ-rules}
-except the rule \textsf{``}($\text{Left}\Rightarrow$)\textsf{''}, which is replaced
-by the four new rules. It is far from obvious that the new rules are
-equivalent to the old ones. It took mathematicians several decades
-to come up with the LJT rules and to prove their validity. This book
-will rely on that result and will not attempt to prove it.
-
-The proof transformers for the new rules are shown in Figure~\ref{fig:proof-transformers-for-LJT-rules}.
-Figures~\ref{fig:proof-transformers-for-LJ-rules}\textendash \ref{fig:proof-transformers-for-LJT-rules}
-define the set of proof transformers sufficient for using the LJT
-algorithm in practice. The \index{curryhoward library@\texttt{curryhoward} library}\lstinline!curryhoward!
-library\texttt{}\footnote{See \texttt{\href{https://github.com/Chymyst/curryhoward}{https://github.com/Chymyst/curryhoward}}}
-implements these proof transformers.
-
-The most complicated of the new rules is the rule \textsf{``}($\text{Left}\Rightarrow_{\Rightarrow}$)\textsf{''}.
-It is far from obvious why the rule $\text{Left}\Rightarrow_{\Rightarrow}$
-is useful or even correct. The insight (which took mathematicians
-over 50 years to find) is based on a non-trivial logic identity: 
-\[
-\left(\left(A\rightarrow B\right)\rightarrow C\right)\rightarrow\left(A\rightarrow B\right)\,\Longleftrightarrow\,\left(B\rightarrow C\right)\rightarrow\left(A\rightarrow B\right)\quad.
-\]
-Consider the type at the left-hand side of this identity:
-\[
-\left(\left(A\rightarrow B\right)\rightarrow C\right)\rightarrow B\rightarrow C\quad.
-\]
-A function with that type can be written as: 
-\[
-f=k^{:\left(A\rightarrow B\right)\rightarrow C}\rightarrow b^{:B}\rightarrow k\,(\_^{:A}\rightarrow b)\quad.
-\]
-The function $f$ occurs in the proof transformer for the rule $\text{Left}\Rightarrow_{\Rightarrow}$
-(shown below in Table~\ref{fig:proof-transformers-for-LJT-rules}).
-Note that this $f$ applies $k$ to a function $(\_\rightarrow b)$
-that ignores its argument. We expect to be able to simplify the resulting
-expression at the place when $(\_\rightarrow b)$ is applied to some
-argument expression, which we can then ignore. For this reason, applying
-the transformer for the rule $\text{Left}\Rightarrow_{\Rightarrow}$
-results in evidence-of-proof code that is longer than the code obtained
-via LJ\textsf{'}s rule transformers. The code obtained via the LJT algorithm
-needs to be simplified symbolically.
-
-As an example of using the LJT algorithm, we again prove the sequent
-from the previous section: $S_{0}=\emptyset\vdash((\alpha\Rightarrow\alpha)\Rightarrow\beta)\Rightarrow\beta$.
-At each step, only one LJT rule applies to each sequent. The initial
-part of the proof tree looks like this:\vspace{-1\baselineskip}
-\[
-\xymatrix{\xyScaleY{1.5pc}\xyScaleX{6pc} &  &  & ~\\
-\ar[r]\sp(0.4){\emptyset\vdash((\alpha\Rightarrow\alpha)\Rightarrow\beta)\Rightarrow\beta} & (\text{Right}\Rightarrow)\ar[r]\sp(0.5){(\alpha\Rightarrow\alpha)\Rightarrow\beta\vdash\beta} & (\text{Left}\Rightarrow_{\Rightarrow})\ar[ru]\sp(0.65){\beta\vdash\beta}\ar[r]\sp(0.65){\alpha\Rightarrow\beta\vdash\alpha\Rightarrow\alpha} & ~
-}
-\]
-The proofs for the sequents $\beta\vdash\beta$ and $\alpha\Rightarrow\beta\vdash\alpha\Rightarrow\alpha$
-are the same as before:
-\[
-\text{Proof}\,(\beta\vdash\beta)_{\text{given }y^{:B}}=y\quad,\quad\quad\text{Proof}\,(\alpha\Rightarrow\beta\vdash\alpha\Rightarrow\alpha)_{\text{given }r^{:A\rightarrow B}}=x^{:A}\rightarrow x\quad.
-\]
-Substituting these proofs into the proof transformer of the rule \textsf{``}($\text{Left}\Rightarrow_{\Rightarrow}$)\textsf{''}
-produces this code:
-\begin{align*}
- & \text{Proof}\,((\alpha\Rightarrow\alpha)\Rightarrow\beta\vdash\beta)_{\text{given }q^{:(A\rightarrow A)\rightarrow B}}=q\big(\text{Proof}\,(\alpha\Rightarrow\beta\vdash\alpha\Rightarrow\alpha)_{\text{given }r^{:A\rightarrow B}}\big)\\
- & \quad\quad\text{where }r^{:A\rightarrow B}=a^{:A}\rightarrow q(\_^{:A}\rightarrow a)\\
- & =q(x^{:A}\rightarrow x)\quad.
-\end{align*}
-The proof of $\alpha\Rightarrow\beta\vdash\alpha\Rightarrow\alpha$
-does not actually use the intermediate value $r^{:A\rightarrow B}$
-provided by the proof transformer. As a symbolic simplification step,
-we may simply omit the code of $r$. The \lstinline!curryhoward!
-library always performs symbolic simplification after applying the
-LJT algorithm. 
-
-\begin{figure}
-\begin{centering}
-{\small{}}%
-\noindent\fbox{\begin{minipage}[t]{1\columnwidth - 2\fboxsep - 2\fboxrule}%
-{\small{}
-\begin{align*}
-\frac{\Gamma,A,B\vdash D}{\Gamma,A,{\color{blue}A\Rightarrow B}\vdash D}~(\text{Left}\Rightarrow_{A})\quad & \quad\text{Proof}\,(\Gamma,A,A\Rightarrow B\vdash D)_{\text{given }p^{:\Gamma},x^{:A},q^{:A\rightarrow B}}\\
- & \quad\quad=\text{Proof}\,(\Gamma,A,B\vdash D)_{\text{given }p,x,q(x)}\\
-\frac{\Gamma,A\Rightarrow B\Rightarrow C\vdash D}{\Gamma,{\color{blue}(A\wedge B)\Rightarrow C}\vdash D}~(\text{Left}\Rightarrow_{\wedge})\quad & \quad\text{Proof}\,(\Gamma,(A\wedge B)\Rightarrow C\vdash D)_{\text{given }p^{:\Gamma},q^{:A\times B\rightarrow C}}\\
- & \quad\quad=\text{Proof}\,(\Gamma,\\
- & \quad\quad\quad A\Rightarrow B\Rightarrow C\vdash D)_{\text{given }p,(a^{:A}\rightarrow b^{:B}\rightarrow q(a\times b))}\\
-\frac{\Gamma,A\Rightarrow C,B\Rightarrow C\vdash D}{\Gamma,{\color{blue}(A\vee B)\Rightarrow C}\vdash D}~(\text{Left}\Rightarrow_{\vee})\quad & \quad\text{Proof}\,(\Gamma,(A\vee B)\Rightarrow C\vdash D)_{\text{given }p^{:\Gamma},q^{:A+B\rightarrow C}}\\
- & \quad\quad=\text{Proof}\,(\Gamma,A\Rightarrow C,B\Rightarrow C\vdash D)_{\text{given }p,r,s}\\
- & \quad\quad\text{where}~r\triangleq a^{:A}\rightarrow q(a+\bbnum 0)\\
- & \quad\quad\text{ and }s\triangleq b^{:B}\rightarrow q(\bbnum 0+b)\\
-\frac{\Gamma,B\Rightarrow C\vdash A\Rightarrow B\quad\Gamma,C\vdash D}{\Gamma,{\color{blue}(A\Rightarrow B)\Rightarrow C}\vdash D}~(\text{Left}\Rightarrow_{\Rightarrow})\quad & \quad\text{Proof}\,(\Gamma,(A\Rightarrow B)\Rightarrow C\vdash D)_{\text{given }p^{:\Gamma},q^{:\left(A\rightarrow B\right)\rightarrow C}}\\
- & \quad\quad=\text{Proof}\,(\Gamma,C\vdash D)_{\text{given }p,c}\\
- & \quad\quad\text{ where}~c^{:C}\triangleq q\big(\text{Proof}\,(\Gamma,\\
- & \quad\quad\quad\quad\quad\quad\quad\quad B\Rightarrow C\vdash A\Rightarrow B)_{\text{given }p,r}\big)\\
- & \quad\quad\text{ and }r^{:B\rightarrow C}\triangleq b^{:B}\rightarrow q(\_^{:A}\rightarrow b)
-\end{align*}
-}%
-\end{minipage}}{\small\par}
-\par\end{centering}
-\caption{\label{fig:proof-transformers-for-LJT-rules}Proof transformers for
-the four new rules of the \index{LJT algorithm|textit}LJT algorithm.}
-\end{figure}
-
-The reason the LJT algorithm terminates is that each rule replaces
-a given sequent by one or more sequents with simpler premises or goals.\footnote{The paper \texttt{\href{http://citeseer.ist.psu.edu/viewdoc/summary?doi=10.1.1.35.2618}{http://citeseer.ist.psu.edu/viewdoc/summary?doi=10.1.1.35.2618}}
-shows that the LJT algorithm terminates by giving an explicit decreasing
-measure on proof trees.} This guarantees that the proof search will terminate either with
-a complete proof or with a sequent to which no more rules apply. An
-example of such a \textsf{``}dead-end\textsf{''} sequent is $\alpha\vdash\beta$ where
-$\alpha$ and $\beta$ are different, unrelated propositions. When
-no more rules apply, the LJT algorithm concludes that the initial
-sequent cannot be proved.
-
-To \emph{prove} that there is no proof, one needs to use methods
-that are beyond the scope of this book. An introduction to the required
-techniques is in the book \textsf{``}Proof and Disproof in Formal Logic\textsf{''}
-by R.~Bornat\index{Richard Bornat} (see footnote~\ref{fn:Bornat-proof-book}
-on page~\pageref{fn:Bornat-proof-book}).
