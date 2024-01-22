@@ -162,10 +162,10 @@ assemble_sources &
 
 echo "Creating a full PDF file..."
 
-make_pdf_with_index "$name" &  # Output is $name.pdf, main file is $name.tex, and other .tex files are \include'd.
+make_pdf_with_index "$name"  # Output is $name.pdf, main file is $name.tex, and other .tex files are \include'd.
 
 # Wait until assemble_sources is finished.
-#wait
+wait
 
 	if ! test -s "$name".pdf; then
 		echo Output file "$name".pdf not found, exiting.
