@@ -162,10 +162,10 @@ assemble_sources &
 
 echo "Creating a full PDF file..."
 
-make_pdf_with_index "$name" # Output is $name.pdf, main file is $name.tex, and other .tex files are \include'd.
+make_pdf_with_index "$name" &  # Output is $name.pdf, main file is $name.tex, and other .tex files are \include'd.
 
 # Wait until assemble_sources is finished.
-wait
+#wait
 
 	if ! test -s "$name".pdf; then
 		echo Output file "$name".pdf not found, exiting.
@@ -194,6 +194,8 @@ function pdfPages {
 total_pages=`pdfPages "$name".pdf`
 
 echo Result is "$name.pdf", size `kbSize "$name.pdf"` bytes, with $total_pages pages.
+
+bash prepare_10point.sh "$pdftk" &
 
 bash prepare_volume.sh 1 "$pdftk" &
 bash prepare_volume.sh 2 "$pdftk" &
