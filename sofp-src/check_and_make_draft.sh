@@ -99,3 +99,9 @@ function create_draft {
 
 # Create the lulu.com draft file by selecting the chapters that have been proofread.
 create_draft $name $draft.pdf
+
+# Attach sources to the draft file.
+if test -s $name-src.tar.bz2 && test -s $draft.pdf; then  "$pdftk" $draft.pdf attach_files "$name-src.tar.bz2" output $draft-src.pdf
+else
+	echo Not attaching sources to draft since no source file $name-src.tar.bz2 is found or no $draft.pdf is found.
+fi

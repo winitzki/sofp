@@ -23,118 +23,132 @@ of that theory to functional programming.
 
 \section{Values computed by fully parametric functions}
 
-\subsection{Motivation}
+\subsection{Motivation and outlook\label{subsec:Motivation-and-outlook}}
 
 Consider the following sketch of a fully parametric function\textsf{'}s Scala
 code:
-
-\begin{wrapfigure}{l}{0.54\columnwidth}%
-\vspace{-0.65\baselineskip}
 \begin{lstlisting}
 def f[A, B, ...]: ... = {
   val x: Either[A, B] = ... // Some expression here.
-  ... }
+  ... 
+}
 \end{lstlisting}
-
-\vspace{-0.9\baselineskip}
-\end{wrapfigure}%
-
-\noindent If this program compiles without type errors, it means that
-the types match and, in particular, that the function \lstinline!f!
-is able to compute a value \lstinline!x! of type \lstinline!Either[A, B]!.
+If this program compiles without type errors, it means that the types
+match and, in particular, that the function \lstinline!f! is able
+to compute a value \lstinline!x! of type \lstinline!Either[A, B]!.
 
 It is sometimes \emph{impossible} to compute a value of a certain
 type in fully parametric code. For example, the fully parametric function
-\lstinline!fmap! shown in Section~\ref{subsec:Disjunctive-Example-option-1}
+\lstinline!fmap! shown in Example~\ref{subsec:Disjunctive-Example-option-1}
 cannot compute a value of type \lstinline!A!:
-
-\begin{wrapfigure}{l}{0.54\columnwidth}%
-\vspace{-0.65\baselineskip}
 \begin{lstlisting}
 def fmap[A, B](f: A => B): Option[A] => Option[B] = {
   val x: A = ???            // Cannot compute x here!
-  ... }
+  ...
+}
 \end{lstlisting}
-
-\vspace{-0.9\baselineskip}
-\end{wrapfigure}%
-
-\noindent The reason is that no fully parametric code can compute
-values of type \lstinline!A! from scratch without using a previously
-given value of type \lstinline!A! and without applying a function
-that returns values of type \lstinline!A!. In \lstinline!fmap!,
-no values of type \lstinline!A! are given as arguments; the given
-function \lstinline!f: A => B! returns values of type \lstinline!B!
-and not \lstinline!A!. The code of \lstinline!fmap! must perform
-pattern matching on a value of type \lstinline!Option[A]!:
-
-\begin{wrapfigure}{l}{0.54\columnwidth}%
-\vspace{-0.65\baselineskip}
+The reason is that no fully parametric code can compute values of
+type \lstinline!A! \textsf{``}from scratch\textsf{''}, that is, without using any
+previously given value of type \lstinline!A! and without applying
+a previously given function that returns a value of type \lstinline!A!.
+In \lstinline!fmap!, no values of type \lstinline!A! are given as
+arguments; the given function \lstinline!f: A => B! returns values
+of type \lstinline!B! and not \lstinline!A!. The code of \lstinline!fmap!
+must perform pattern matching on an argument of type \lstinline!Option[A]!:
 \begin{lstlisting}
-def fmap[A, B](f: A => B): Option[A] => Option[B] = {
+def fmap[A, B](f: A => B)(pa: Option[A]): Option[B] = pa match {
   case None       => 
     val x: A = ??? // Cannot compute x here!
     ...
   case Some(a)    =>
     val x: A = a   // Can compute x in this scope.
-    ... }
+    ...
+}
 \end{lstlisting}
-
-\vspace{-0.9\baselineskip}
-\end{wrapfigure}%
-
-\noindent Since the case \lstinline!None! has no values of type \lstinline!A!,
+Since the case \lstinline!None! has no values of type \lstinline!A!,
 we are unable to compute a value \lstinline!x! in that scope (as
 long as \lstinline!fmap! remains a fully parametric function). 
 
-\textsf{``}Being able\textsf{''} to compute \lstinline!x:A! means that, if needed,
+\textsf{``}Being able\textsf{''} to compute \lstinline!x: A! means that, if needed,
 the code should be able to \emph{return} \lstinline!x! as a result
 value. This requires computing \lstinline!x! in all cases, not just
-within one part (\lstinline!case ...!) of a pattern-matching expression. 
-
-The body of \lstinline!fmap! also cannot compute any values of type
-\lstinline!B!. Since no arguments of type \lstinline!B! are given,
-the only way of obtaining a value of type \lstinline!B! would be
-to apply the function \lstinline!f: A => B! to \emph{some} value
-of type \lstinline!A!. But we just saw that the body of \lstinline!fmap!
-cannot compute any values of type \lstinline!A!.
-
-Another example where one cannot compute a value of a certain type
-is the following code:
-
-\begin{wrapfigure}{l}{0.54\columnwidth}%
-\vspace{-0.1\baselineskip}
+within one part (\lstinline!case ...!) of a pattern-matching expression.
+In other words, we should be able to implement the following type
+signature:
 \begin{lstlisting}
-def before[A, B, C](f: A => B, g: B => C): A => C = {
-  //  val h: C => A = ???   // Cannot compute h here!
-  a => g(f(a)) // Can compute a value of type A => C.
+def bad[A, B](f: A => B)(pa: Option[A]): A = ???
+\end{lstlisting}
+
+So, the question \textsf{``}can we compute a value of type \lstinline!A!
+within a fully parametric function with arguments of type \lstinline!B!
+and \lstinline!C!\textsf{''} is equivalent to the question \textsf{``}can be implement
+a fully parametric function of type \lstinline!(B, C) => A!\textsf{''}. From
+now on, we will focus on the latter kind of questions.
+
+Here are some other examples where \emph{no} fully parametric code
+can implement a given type signature: 
+\begin{lstlisting}
+def bad2[A, B](f: A => B): A = ???
+
+def bad3[A, B, C](p: A => Either[B, C]): Either[A => B, A => C] = ???
+\end{lstlisting}
+
+The problem with \lstinline!bad2! is that no data of type \lstinline!A!
+is given, while the given function \lstinline!f! returns values of
+type \lstinline!B!, not \lstinline!A!. 
+
+The problem with \lstinline!bad3! is that it needs to hard-code the
+decision of whether to return the \lstinline!Left! or the \lstinline!Right!
+part of \lstinline!Either!. That decision cannot depend on the function
+\lstinline!p! because one cannot pattern-match on a function, and
+because \lstinline!bad3! does not receive any data of type \lstinline!A!
+and so cannot call \lstinline!p!. Suppose \lstinline!bad3! is hard-coded
+to always return a \lstinline!Left(f)! with some \lstinline!f: A => B!.
+It is then necessary to compute \lstinline!f! from \lstinline!p!,
+but that is impossible: the given function \lstinline!p! may return
+either \lstinline!Left(b)! or \lstinline!Right(c)! for different
+values of its argument (of type \lstinline!A!). This data is insufficient
+to create a function of type \lstinline!A => B!. Similarly, \lstinline!bad3!
+is not able to return \lstinline!Right(f)! with some \lstinline!f: A => C!.
+
+In all these examples, we see that the impossibility of implementing
+a type signature means that the information given in a function\textsf{'}s
+arguments is in some way insufficient for computing the result value.
+
+The type signature inverse to that of \lstinline!bad3! is:
+\begin{lstlisting}
+def good3[A, B, C](q: Either[A => B, A => C]): A => Either[B, C] = ???
+\end{lstlisting}
+This type signature \emph{can} be implemented, but only in one way:
+\begin{lstlisting}
+def good3[A, B, C](q: Either[A => B, A => C]): A => Either[B, C] = q match {
+  case Left(k)    => { a => Left(k(a))  }
+  case Right(k)   => { a => Right(k(a)) }
 }
 \end{lstlisting}
 
-\vspace{-1.2\baselineskip}
-\end{wrapfigure}%
+So, when working with fully parametric code and looking at some type
+signature of a function, we may ask the question \textemdash{} is
+that type signature implementable, and if so, can we derive the code
+by just \textsf{``}following the types\textsf{''}? It is remarkable that this question
+can be asked at all. When working with non-functional programming
+languages, the notion of fully parametric functions is usually not
+relevant, and implementations cannot be derived from types. But in
+functional programming, fully parametric functions are used often.
+It is then important for the programmer to know whether a given fully
+parametric type signature can be implemented, and if so, to be able
+to derive the code.
 
-\noindent The body of \lstinline!before! may only use the arguments
-\lstinline!f! and \lstinline!g!. We can compose \lstinline!f! and
-\lstinline!g! to get a value of type \lstinline!A => C!. But it
-is impossible to compute a value \lstinline!h! of type \lstinline!C => A!,
-no matter what code we try to write. The reason is that the body of
-\lstinline!before! has no given values of type \lstinline!A! and
-no functions that return values of type \lstinline!A!, so a nameless
-function such as \lstinline!{c:C => ???}! cannot compute a return
-value of type \lstinline!A!. Since a fully parametric function cannot
-create values of an arbitrary type \lstinline!A! from scratch, computing
-\lstinline!h! within the body of \lstinline!before! seems to be
-impossible.
+Can we prove rigorously that the functions \lstinline!bad!, \lstinline!bad2!,
+\lstinline!bad3! cannot be implemented by any fully parametric code?
+Or, perhaps, we were mistaken and a clever trick \emph{could} produce
+some code for those type signatures? 
 
-Can we prove rigorously that a value of type \lstinline!C => A! cannot
-be computed within the body of \lstinline!before!? Or, perhaps, a
-clever trick could produce a value of that type? So far, we only saw
-informal arguments about whether values of certain types can be computed.
-To make those arguments rigorous, we need to translate statements
-such as \textsf{``}a fully parametric function \lstinline!before! can compute
-a value of type \lstinline!C => A!\textsf{''} into mathematical formulas
-with rules for proving them true or false.
+So far, we only saw informal arguments about whether values of certain
+types can be computed. To make those arguments rigorous, we need to
+translate statements such as \textsf{``}a fully parametric function \lstinline!before!
+can compute a value of type \lstinline!C => A!\textsf{''} into mathematical
+formulas with rules for proving them true or false.
 
 The first step towards a rigorous mathematical formulation is to choose
 a precise notation. In Section~\ref{subsec:Disjunctions-and-conjunctions},
@@ -149,7 +163,7 @@ we are interested in proving statements like this:
 \end{align}
 Here $X$, $Y$, ..., $Z$, $A$ may be either type parameters or
 more complicated type expressions, such as $B\rightarrow C$ or $(C\rightarrow D)\rightarrow E$,
-built from other type parameters.
+built from some type parameters.
 
 If values of types $X$, $Y$, ..., $Z$ are given, it means we \textsf{``}already
 have\textsf{''} values of those types, i.e., the propositions ${\cal CH}(X)$,
@@ -166,50 +180,67 @@ are called \textbf{premises}\index{sequent (in logic)!premises} and
 the proposition ${\cal CH}(A)$ is called the \textbf{goal}\index{sequent (in logic)!goal}
 of the sequent.
 
-Sequents provide a notation for the questions about what types of
-values may be computed by fully parametric functions. Since our goal
-is to answer such questions rigorously, we will need to be able to
-\emph{prove} sequents of the form~(\ref{eq:ch-example-sequent}).
-The following sequents correspond to some examples we just saw:
+Sequents provide a notation for the questions about types of fully
+parametric functions. Since our goal is to answer such questions rigorously,
+we will need to be able to \emph{prove} sequents of the form~(\ref{eq:ch-example-sequent}).
+The following sequents correspond to the type signatures we just saw:
 \begin{align*}
 {\color{greenunder}\text{\texttt{fmap} for \texttt{Option}}:}\quad & {\cal CH}(\text{\texttt{A => B}})\vdash{\cal CH}(\text{\texttt{Option[A] => Option[B]}})\\
 {\color{greenunder}\text{the function \texttt{before}}:}\quad & {\cal CH}(\text{\texttt{A => B}}),{\cal CH}(\text{\texttt{B => C}})\vdash{\cal CH}(\text{\texttt{A => C}})\\
-{\color{greenunder}\text{value of type }A\text{ within \texttt{fmap}}:}\quad & {\cal CH}(\text{\texttt{A => B}}),{\cal CH}(\text{\texttt{Option[A]}})\vdash{\cal CH}(\text{\texttt{A}})\\
-{\color{greenunder}\text{value of type }C\rightarrow A\text{ within \texttt{before}}:}\quad & {\cal CH}(\text{\texttt{A => B}}),{\cal CH}(\text{\texttt{B => C}})\vdash{\cal CH}(\text{\texttt{C => A}})
+{\color{greenunder}\text{the function }\text{\texttt{bad}}:}\quad & {\cal CH}(\text{\texttt{A => B}}),{\cal CH}(\text{\texttt{Option[A]}})\vdash{\cal CH}(\text{\texttt{A}})\\
+{\color{greenunder}\text{the function }\text{\texttt{bad2}}:}\quad & {\cal CH}(\text{\texttt{A => B}}),{\cal CH}(\text{\texttt{B => C}})\vdash{\cal CH}(\text{\texttt{A}})
 \end{align*}
-So far, we only gave informal arguments towards proving the first
-two sequents and \emph{disproving} the last two. We will now develop
-tools for proving sequents rigorously. We will then be able to prove
-that a given fully parametric function can compute values of a certain
-type (or that it cannot).
+So far, we only saw informal arguments towards proving the first two
+sequents and disproving the last two. We will now develop tools for
+proving sequents rigorously. 
 
 In formal logic, sequents are proved\index{proof (in logic)} by starting
 with certain axioms and following certain derivation rules. Different
 choices of axioms and derivation rules will give different \emph{logics}.
 We will need to discover the correct logic for reasoning about sequents
-with ${\cal CH}$-propositions. That logic\textsf{'}s axioms and derivation
-rules will give correct answers about implementable and non-implementable
-types.
+with ${\cal CH}$-propositions. To discover that logic\textsf{'}s complete
+set of axioms and derivation rules, we need to examine systematically
+what types and code constructions are possible in a fully parametric
+function. The resulting logic is known under the name \textsf{``}constructive
+logic\textsf{''}. That logic\textsf{'}s axioms and derivation rules directly correspond
+to programming language constructions allowed by fully parametric
+code. For that reason, constructive logic gives correct answers about
+implementable and non-implementable type signatures of fully parametric
+functions.
+
+We will then be able to borrow the results and methods already available
+in the mathematical literature on formal logic. The main result is
+an algorithm (called LJT) for finding a proof for a given sequent
+in the constructive logic. If a proof is found, the algorithm also
+provides the code of a function that has the type signature corresponding
+to the sequent. If a proof is not found, it means that the given type
+signature cannot be implemented by fully parametric code.
 
 \subsection{Type notation and ${\cal CH}$-propositions for standard type constructions\label{subsec:Type-notation-and-standard-type-constructions}}
 
 A proposition ${\cal CH}(A)$ may be true with one set of premises
 such as ${\cal CH}(X)$, ${\cal CH}(Y)$, ..., ${\cal CH}(Z)$ but
 false with another. Here and in the following sections, we will be
-reasoning about ${\cal CH}$-propositions within the body of a \emph{chosen}
-fully parametric function, i.e., with a fixed set of premises. We
-will then temporarily omit the premises and write just ${\cal CH}(A)$
-instead of ${\cal CH}(X),{\cal CH}(Y),...,{\cal CH}(Z)\vdash{\cal CH}(A)$.
-In later sections, we will need to write full sets of premises for
-sequents.
+reasoning about ${\cal CH}$-propositions within sequents of the form:
+\[
+{\cal CH}(X),{\cal CH}(Y),...,{\cal CH}(Z)\vdash{\cal CH}(A)
+\]
+that represent type signatures of fully parametric functions. It will
+be convenient to shorten the notation and to denote all premises by
+the symbol $\Gamma$. We will then write just $\Gamma\vdash{\cal CH}(A)$
+instead of ${\cal CH}(X),{\cal CH}(Y),...,{\cal CH}(Z)\vdash{\cal CH}(A)$. 
 
 In Section~\ref{subsec:Disjunctions-and-conjunctions} we saw examples
 of reasoning about ${\cal CH}$-propositions for case classes and
 for disjunctive types. We will now extend this reasoning systematically
 to all type constructions that fully parametric programs could use.
-A special type notation\index{type notation} explained in this section
-will help us write type expressions more concisely. (See Appendix~\ref{chap:Appendix-Notations}
-for a summary of our type notation.)
+The result will be that we can rewrite ${\cal CH}$-propositions with
+arbitrary type expressions, such as ${\cal CH}($\lstinline!Either[(A, A), Option[B] => Either[(A, B), C]]!$)$,
+in terms of ${\cal CH}$-propositions for simple type parameters:
+${\cal CH}(A)$, ${\cal CH}(B)$, etc. A special type notation\index{type notation}
+explained in this section will help us write type expressions more
+concisely. (See Appendix~\ref{chap:Appendix-Notations} for a summary
+of our type notation.)
 
 There exist \textbf{six} \textbf{standard type constructions}\index{six type constructions}
 supported by all functional languages: primitive types (including
@@ -242,19 +273,12 @@ final case class N1()
 \end{lstlisting}
 defines a named unit type. We can compute a value of type \lstinline!N1!
 without using any other given values:
-
-\begin{wrapfigure}{l}{0.42\columnwidth}%
-\vspace{-0.8\baselineskip}
 \begin{lstlisting}
 val x: N1 = N1()
 \end{lstlisting}
-
-\vspace{-0.9\baselineskip}
-\end{wrapfigure}%
-
-\noindent So, the proposition ${\cal CH}($\lstinline!N1!$)$ is
-always true. Named unit types are also denoted by $\bbnum 1$, just
-as the \lstinline!Unit! type itself.
+So, the proposition ${\cal CH}($\lstinline!N1!$)$ is always true.
+Named unit types are also denoted by $\bbnum 1$, just as the \lstinline!Unit!
+type itself.
 
 \paragraph{1b) Rule for the void type}
 
@@ -272,6 +296,7 @@ def f[...]: ... {
    ...
    val x: String = "abc" // We can always compute a `String` value.
    ...
+}
 \end{lstlisting}
 So, the rule for primitive types is the same as that for the \lstinline!Unit!
 type. For example, $\mathcal{CH}(\text{String})=True$.
@@ -316,9 +341,9 @@ is translated to the type notation as:
 \[
 \text{RootsOfQ}\triangleq\bbnum 1+\text{Double}+\text{Double}\times\text{Double}\quad.
 \]
-Here, the type notation is significantly shorter because it omits
-all case class names and part names from the type definitions. Using
-the type notation, the rule for disjunctive types is written as:
+Here the type notation is significantly shorter because it omits all
+case class names and part names from the type definitions. Using the
+type notation, the rule for disjunctive types is written as:
 \[
 {\cal CH}\left(A+B+...+C\right)={\cal CH}(A)\vee{\cal CH}(B)\vee...\vee{\cal CH}(C)\quad.
 \]
@@ -329,27 +354,20 @@ the type notation, the rule for disjunctive types is written as:
 Consider now a function type such as \lstinline!A => B!. This type
 is written in the type notation as $A\rightarrow B$. To compute a
 value of that type, we need to write code like this:
-
-\begin{wrapfigure}{l}{0.5\columnwidth}%
-\vspace{-0.65\baselineskip}
 \begin{lstlisting}
 val f: A => B = { (a: A) =>
   ??? // Compute a value of type B in this scope.
 }
 \end{lstlisting}
-
-\vspace{-0.9\baselineskip}
-\end{wrapfigure}%
-
-\noindent The inner scope of the function needs to compute a value
-of type $B$, and the given value \lstinline!a:A! may be used for
-that. So, ${\cal CH}(A\rightarrow B)$ is true if and only if we are
-able to compute a value of type $B$ when we are given a value of
-type $A$. To translate this statement into the language of logical
-propositions, we need to use the logical\index{logical implication}
-\textbf{implication}, ${\cal CH}(A)\Rightarrow{\cal CH}(B)$, which
-means that ${\cal CH}(B)$ can be proved if we already have a proof
-of ${\cal CH}(A)$. So, the rule for function types is:
+The inner scope of this function needs to compute a value of type
+$B$, and the given value \lstinline!a:A! may be used for that. So,
+${\cal CH}(A\rightarrow B)$ is true if and only if we are able to
+compute a value of type $B$ when we are given a value of type $A$.
+To translate this statement into the language of logical propositions,
+we need to use the logical\index{logical implication} \textbf{implication},
+${\cal CH}(A)\Rightarrow{\cal CH}(B)$, which means that ${\cal CH}(B)$
+can be proved if we already have a proof of ${\cal CH}(A)$. So, the
+rule for function types is:
 \[
 {\cal CH}(A\rightarrow B)={\cal CH}(A)\Rightarrow{\cal CH}(B)\quad.
 \]
@@ -373,7 +391,8 @@ and is equivalent to:
 \forall(A,B).\,{\cal CH}\left(A\rightarrow(A\rightarrow B)\rightarrow B\right)\quad.
 \]
 The symbol $\forall$ means \textsf{``}for all\textsf{''} and is called the \index{universal quantifier (forall)@universal quantifier ($\forall$)}\textbf{universal
-quantifier} in logic. 
+quantifier} in logic. We read $\forall A.\,{\cal CH}(B)$ as the proposition
+\textsf{``}for all types $A$, we can compute a value of type $B$\textsf{''}.
 
 The type notation for the type signature of \lstinline!f! is written
 in one of the following ways:
@@ -423,6 +442,16 @@ and their parts. However, those names only add convenience for programmers
 and do not affect the computational properties of types. The type
 notation is designed to support nameless type expressions.
 
+The rules just shown will allow us to express ${\cal CH}$-propositions
+for complicated types via ${\cal CH}$-propositions for type parameters.
+Then any type signature can be rewritten as a sequent that contains
+${\cal CH}$-propositions only for the individual type parameters. 
+
+In this way, we see a correspondence between fully parametric type
+signatures and logical sequents that express the proposition \textsf{``}the
+type signature can be implemented\textsf{''}. This is the first half of the
+Curry-Howard correspondence.
+
 Table~\ref{tab:ch-correspondence-type-notation-CH-propositions}
 summarizes the type notation and shows how to translate it into logic
 formulas with ${\cal CH}$-propositions. Apart from recursive types
@@ -453,50 +482,48 @@ case, parentheses are necessary, e.g., in the type expression $\left(\forall A.\
 \end{itemize}
 \begin{table}
 \begin{centering}
-\begin{tabular}{|c|c|c|c|}
+\begin{tabular}{|c|c|c|}
 \hline 
-\textbf{\small{}Type construction} & \textbf{\small{}Scala syntax} & \textbf{\small{}Type notation} & \textbf{\small{}${\cal CH}$-proposition}\tabularnewline
+\textbf{\small{}Scala syntax} & \textbf{\small{}Type notation} & \textbf{\small{}${\cal CH}$-proposition}\tabularnewline
 \hline 
 \hline 
-{\small{}type parameter} & \lstinline![A]! & $A$ & ${\cal CH}(A)$\tabularnewline
+\lstinline![A]! & $A$ & ${\cal CH}(A)$\tabularnewline
 \hline 
-{\small{}product type (tuple)}  & \lstinline!(A, B)! & $A\times B$ & ${\cal CH}(A)$ $\wedge$ ${\cal CH}(B)$\tabularnewline
+\lstinline!(A, B)! & $A\times B$ & ${\cal CH}(A)$ $\wedge$ ${\cal CH}(B)$\tabularnewline
 \hline 
-{\small{}disjunctive type}  & \lstinline!Either[A, B]! & $A+B$ & ${\cal CH}(A)$ $\vee$ ${\cal CH}(B)$\tabularnewline
+\lstinline!Either[A, B]! & $A+B$ & ${\cal CH}(A)$ $\vee$ ${\cal CH}(B)$\tabularnewline
 \hline 
-{\small{}function type}  & \lstinline!A => B! & $A\rightarrow B$ & ${\cal CH}(A)$ $\Rightarrow$ ${\cal CH}(B)$\tabularnewline
+\lstinline!A => B! & $A\rightarrow B$ & ${\cal CH}(A)$ $\Rightarrow$ ${\cal CH}(B)$\tabularnewline
 \hline 
-{\small{}unit or a \textsf{``}named unit\textsf{''} type} & \lstinline!Unit! & $\bbnum 1$ & ${\cal CH}(\bbnum 1)=True$\tabularnewline
+\lstinline!Unit! & $\bbnum 1$ & ${\cal CH}(\bbnum 1)=True$\tabularnewline
 \hline 
-{\small{}primitive type} & {\small{}}\lstinline!Int!{\small{}, }\lstinline!String!{\small{},
+{\small{}}\lstinline!Int!{\small{}, }\lstinline!String!{\small{},
 ...} & {\small{}$\text{Int}$, $\text{String}$, ...} & ${\cal CH}(\text{Int})=True$\tabularnewline
 \hline 
-{\small{}void type} & \lstinline!Nothing! & $\bbnum 0$ & ${\cal CH}(\bbnum 0)=False$\tabularnewline
+\lstinline!Nothing! & $\bbnum 0$ & ${\cal CH}(\bbnum 0)=False$\tabularnewline
 \hline 
-{\small{}value parameterized by type} & \lstinline!def f[A]: F[A]! & $f^{A}:F^{A}$ & $\forall A.\,{\cal CH}(F^{A})$\tabularnewline
+\lstinline!def f[A]: F[A]! & $f^{A}:F^{A}$ & $\forall A.\,{\cal CH}(F^{A})$\tabularnewline
 \hline 
-{\small{}type with quantifier} & \lstinline!val f: [A] => F[A]!{\small{} (Scala 3)} & $f:\forall A.\,F^{A}$ & $\forall A.\,{\cal CH}(F^{A})$\tabularnewline
+\lstinline!val f: [A] => F[A]!{\small{} (Scala 3)} & $f:\forall A.\,F^{A}$ & $\forall A.\,{\cal CH}(F^{A})$\tabularnewline
 \hline 
 \end{tabular}
 \par\end{centering}
-\caption{The correspondence\index{type notation} between type constructions
-and ${\cal CH}$-propositions.\label{tab:ch-correspondence-type-notation-CH-propositions}}
+\caption{The correspondence\index{type notation} between types and ${\cal CH}$-propositions.\label{tab:ch-correspondence-type-notation-CH-propositions}}
 \end{table}
 
 
-\subsection{Solved examples: Type notation\index{solved examples}}
+\subsection{Examples: Type notation\index{examples (with code)}}
 
 From now on, we will prefer to write types in the type notation rather
 than in the Scala syntax. The type notation allows us to write nameless
-type expressions and makes the structure of complicated types more
-clear, compared with the Scala syntax. Names of types and parts of
-types are, of course, helpful for reminding programmers of the meaning
-of data in a program. However, writing names for every part of every
-type is not helpful for reasoning about the properties of types. Type
-notation makes reasoning about types easier, as we will see throughout
-this chapter. Once the programmer has finished deriving the necessary
-types and verifying their properties, the type notation can be straightforwardly
-translated into Scala code. Let us get some experience doing that.
+type expressions and makes the structure of complicated types clearer
+than in the Scala syntax. Names of types and parts of types are, of
+course, helpful for reminding programmers of the meaning of data in
+a program. However, writing names for every part of every type does
+not help reasoning about the properties of types. Once the programmer
+has finished deriving the necessary types and verifying their properties,
+the type notation can be straightforwardly translated into Scala code.
+Let us get some experience doing that.
 
 \subsubsection{Example \label{subsec:Example-ch-dupl-function}\ref{subsec:Example-ch-dupl-function}}
 
@@ -513,11 +540,11 @@ Begin by writing the code of the function:
 def delta(x: ...) = (x, x)
 \end{lstlisting}
 To derive the most general type for \lstinline!delta!, first assume
-\lstinline!x:A!, where \lstinline!A! is a type parameter; then the
-tuple \lstinline!(x, x)! has type \lstinline!(A, A)!. We do not
-see any constraints on the type parameter \lstinline!A!. So, \lstinline!A!
-represents an arbitrary type and needs to be added to the type signature
-of \lstinline!delta!:
+\lstinline!x: A!, where \lstinline!A! is a type parameter; then
+the tuple \lstinline!(x, x)! has type \lstinline!(A, A)!. We do
+not see any constraints on the type parameter \lstinline!A!. So,
+\lstinline!A! represents an arbitrary type and needs to be added
+to the type signature of \lstinline!delta!:
 \begin{lstlisting}
 def delta[A](x: A): (A, A) = (x, x)
 \end{lstlisting}
@@ -679,7 +706,7 @@ rather than $\text{id}\triangleq\forall A.\,x^{:A}\rightarrow x$.
 \subsubsection{Exercise \label{subsec:Exercise-type-notation-1}\ref{subsec:Exercise-type-notation-1}}
 
 Define a Scala disjunctive type \lstinline!Q[T, A]! corresponding
-to the type notation:
+to this type notation:
 \[
 Q^{T,A}\triangleq\bbnum 1+T\times A+\text{Int}\times(T\rightarrow T)+\text{String}\times A\quad.
 \]
@@ -687,8 +714,8 @@ Q^{T,A}\triangleq\bbnum 1+T\times A+\text{Int}\times(T\rightarrow T)+\text{Strin
 
 \subsubsection{Exercise \label{subsec:Exercise-type-notation-2}\ref{subsec:Exercise-type-notation-2}}
 
-Rewrite \lstinline!Either[(A, Int), Either[(A, Char), (A, Float)]]!
-in the type notation. 
+Convert the type \lstinline!Either[(A, Int), Either[(A, Char), (A, Float)]]!
+from Scala syntax to the type notation. 
 
 \subsubsection{Exercise \label{subsec:Exercise-type-notation-3}\ref{subsec:Exercise-type-notation-3}}
 
@@ -791,11 +818,13 @@ book is available at \texttt{\href{https://homepages.phonecoop.coop/randj/richar
 \subsection{The rules of proof for ${\cal CH}$-propositions\label{subsec:The-rules-of-proof}}
 
 To derive the suitable logical axioms and proof rules systematically,
-let us examine what makes a ${\cal CH}$-proposition true. A sequent
-${\cal CH}(A)\vdash{\cal CH}(X)$ is true when a value of type $X$
-can be computed by fully parametric code that may only use a given
-value of type $A$. To describe all possible ways of computing a value
-of type $X$, we need to enumerate all possible ways of \emph{writing
+let us examine what could make a sequent with ${\cal CH}$-propositions
+true.
+
+A sequent ${\cal CH}(A)\vdash{\cal CH}(X)$ is true when a value of
+type $X$ can be computed by fully parametric code that may only use
+a given value of type $A$. To describe all possible ways of computing
+a value of type $X$, we need to enumerate all possible ways of \emph{writing
 code} for a fully parametric function body. The requirement of full
 parametricity means that we are not allowed to use any specific types
 such as \lstinline!Int! or \lstinline!String!, any concrete values
@@ -819,7 +848,7 @@ def f[A, B, ...](a: A, b: B): X = {   // Any given type signature.
   val x6: B = x5._2                   // 6) Use a tuple.
   val x7: Either[A, B] = Right(x6)    // 7) Create values of a disjunctive type.
   val x8 = x7 match { ... }           // 8) Use values of a disjunctive type.
-}     // 9) Call f() itself recursively. Not included here because not supported by CH-propositions.
+}     // 9) Call f() itself recursively. Not included here because recursion is not supported by CH-propositions.
 \end{lstlisting}
 The proposition ${\cal CH}(X)$ is true if we can create a sequence
 of computed values such as \lstinline!x1!, \lstinline!x2!, ...,
@@ -829,7 +858,7 @@ will give a proof rule in the logic.
 
 It is important that there are only a finite number of allowed code
 constructions. This defines rigorously the concept of \textsf{``}fully parametric
-code\textsf{''}\index{fully parametric!code} and allows us to \emph{prove}
+code\textsf{''}\index{fully parametric!code|textit} and allows us to \emph{prove}
 ${\cal CH}$-propositions.
 
 Reasoning about proof rules is easier with a compact notation. To
@@ -845,13 +874,20 @@ constructs\index{eight code constructions}. That code combination
 can be translated into a combination of logic rules, which will produce
 a proof of the proposition ${\cal CH}(X)$.
 
-In the following text, we will need to use the full formulation~(\ref{eq:ch-CH-proposition-def})
-of ${\cal CH}$-propositions and write them as sequents such as Eq.~(\ref{eq:ch-example-sequent}).
-For brevity, we define $\alpha\triangleq{\cal CH}(A)$, $\beta\triangleq{\cal CH}(B)$,
-etc. It is also customary to use the letter $\Gamma$ to denote a
-set of premises, such as ${\cal CH}(X)$, ${\cal CH}(Y)$, ..., ${\cal CH}(Z)$
-in Eq.~(\ref{eq:ch-example-sequent}). So, we can write a shorter
-formula $\Gamma\vdash\alpha$ instead of the sequent~(\ref{eq:ch-example-sequent}).
+In this way, we will get a correspondence between proofs of sequents
+and fully parametric programs. This is the second half of the Curry-Howard
+correspondence.
+
+In the following text, we will need to write ${\cal CH}$-propositions
+such as Eq.~(\ref{eq:ch-CH-proposition-def}) as sequents such as
+Eq.~(\ref{eq:ch-example-sequent}). As we have seen, ${\cal CH}$-propositions
+involving complicated type expressions can be always rewritten via
+${\cal CH}$-propositions for individual type parameters (${\cal CH}(A)$,
+${\cal CH}(B)$, etc.). So, we will only need sequents involving such
+${\cal CH}$-propositions. For brevity, we denote $\alpha\triangleq{\cal CH}(A)$,
+$\beta\triangleq{\cal CH}(B)$, etc. We will use the letter $\Gamma$
+to stand for a set of premises and write a shorter formula $\Gamma\vdash\alpha$
+instead of the sequent~(\ref{eq:ch-example-sequent}).
 
 With these notations, we list the rules for proving ${\cal CH}$-propositions
 and the corresponding code:
@@ -1009,7 +1045,7 @@ sequent proof rules are:
 \]
 The proof code can be written as:
 \[
-\text{Proof}\left(\Gamma\vdash\alpha\right)=\pi_{1}\left(\text{Proof}\left(\Gamma\vdash\alpha\wedge\beta\right)\right)\quad,\quad\quad\text{Proof}\left(\Gamma\vdash\beta\right)=\pi_{2}\left(\text{Proof}\left(\Gamma\vdash\alpha\wedge\beta\right)\right)\quad,
+\text{Proof}\left(\Gamma\vdash\alpha\right)=\pi_{1}\left(\text{Proof}\left(\Gamma\vdash\alpha\wedge\beta\right)\right)\quad,\quad\text{Proof}\left(\Gamma\vdash\beta\right)=\pi_{2}\left(\text{Proof}\left(\Gamma\vdash\alpha\wedge\beta\right)\right)\quad,
 \]
 where we introduced the notation $\pi_{1}$ and $\pi_{2}$ to mean
 the Scala code \lstinline!_._1! and \lstinline!_._2!.
@@ -1035,28 +1071,22 @@ sequent proof rules are:
 \]
 The corresponding proof code can be written using the case class names
 \lstinline!Left! and \lstinline!Right! as:
-\[
-\text{Proof}\left(\Gamma\vdash\alpha\vee\beta\right)=\text{Left}\,(\text{Proof}\left(\Gamma\vdash\alpha\right))\quad,\quad\quad\text{Proof}\left(\Gamma\vdash\alpha\vee\beta\right)=\text{Right}\,(\text{Proof}\left(\Gamma\vdash\beta\right))\quad.
-\]
+\begin{align*}
+\text{Proof}\left(\Gamma\vdash\alpha\vee\beta\right) & =\text{Left}\,(\text{Proof}\left(\Gamma\vdash\alpha\right))\quad,\\
+\text{Proof}\left(\Gamma\vdash\alpha\vee\beta\right) & =\text{Right}\,(\text{Proof}\left(\Gamma\vdash\beta\right))\quad.
+\end{align*}
 
 
 \paragraph{8) Use a disjunctive value}
 
 Pattern matching is the basic way of using a value of type \lstinline!Either[A, B]!:
-
-\begin{wrapfigure}{l}{0.42\columnwidth}%
-\vspace{-1\baselineskip}
 \begin{lstlisting}
 val result: C = (e: Either[A, B]) match {
   case Left(x:A)    => expr1(x)
   case Right(y:B)   => expr2(y)
 }
 \end{lstlisting}
-
-\vspace{-1.2\baselineskip}
-\end{wrapfigure}%
-
-\noindent Here, \lstinline!expr1(x)! is an expression of type \lstinline!C!
+Here, \lstinline!expr1(x)! is an expression of type \lstinline!C!
 computed using \lstinline!x:A! and any previously computed values.
 Similarly, \lstinline!expr2(y)! is computed using \lstinline!y:B!
 and previous values. The values used in computation correspond to
@@ -1109,18 +1139,11 @@ short.
 type\label{subsec:Example:-Proving-a-ch-proposition}}
 
 We will implement a fully parametric function:
-
-\begin{wrapfigure}{l}{0.45\columnwidth}%
-\vspace{-0.75\baselineskip}
 \begin{lstlisting}
 def f[A, B]: ((A => A) => B) => B = ???
 \end{lstlisting}
-
-\vspace{-0.9\baselineskip}
-\end{wrapfigure}%
-
-\noindent Implementing this function is the same as being able to
-compute a value of type $F$, where $F$ is defined as:
+Implementing this function is the same as being able to compute a
+value of type $F$, where $F$ is defined as:
 \[
 F\triangleq\forall(A,B).\,((A\rightarrow A)\rightarrow B)\rightarrow B\quad.
 \]
@@ -1190,7 +1213,7 @@ code expressions.
 \begin{figure}
 \begin{centering}
 {\footnotesize{}}%
-\fbox{\begin{minipage}[t]{0.5\columnwidth}%
+\fbox{\begin{minipage}[t]{0.7\columnwidth}%
 \begin{center}
 {\footnotesize{}}{\footnotesize{}\Tree[ .$\emptyset\vdash((\alpha\Rightarrow\alpha)\Rightarrow\beta)\Rightarrow\beta $ [ .{rule \textsf{``}$\text{create function}$\textsf{''}} [ .$(\alpha\Rightarrow\alpha)\Rightarrow\beta\vdash\beta$ [ .{rule \textsf{``}$\text{use function}$\textsf{''}} [ .$(\alpha\Rightarrow\alpha)\Rightarrow\beta\vdash\alpha\Rightarrow\alpha$ [ .{rule \textsf{``}$\text{create function}$\textsf{''}} [ .$\Gamma_1,\alpha\vdash\alpha$ {axiom \textsf{``}$\text{use arg}$\textsf{''}} ] ] ] [ .$(\alpha\Rightarrow\alpha)\Rightarrow\beta\vdash(\alpha\Rightarrow\alpha)\Rightarrow\beta$ {axiom \textsf{``}$\text{use arg}$\textsf{''}} ] ] ] ] ]}
 \par\end{center}%
@@ -1251,9 +1274,7 @@ do not provide an algorithm for finding a proof tree automatically.
 It turns out that one can replace the rules in Table~\ref{tab:Proof-rules-of-constructive-and-boolean}
 by a different but equivalent set of derivation rules that \emph{do}
 give an algorithm (called the \textsf{``}\index{LJT algorithm}LJT algorithm\textsf{''},
-see Section~\ref{app:The-LJT-algorithm} below). That algorithm first
-translates a type signature containing tuples, disjunctive types,
-and function types into a logical formula. Then the algorithm either
+see Section~\ref{app:The-LJT-algorithm} below). That algorithm either
 finds that the given formula cannot be proved, or it finds a proof
 and infers code that has the given type signature.
 
@@ -1308,10 +1329,10 @@ can \emph{prove} that the given type signature cannot be implemented.
 The \lstinline!curryhoward! library will then print an error message,
 and compilation will fail.
 
-As another example, let us verify that the type signature from Section~\ref{subsec:Example:-Failure-of-Boolean-logic}
+As another example, let us verify that the type signature from Section~\ref{subsec:Motivation-and-outlook}
 is not implementable:
 \begin{lstlisting}
-@ def bad[A, B, C](g: A => Either[B, C]): Either[A => B, A => C]   =   implement
+@ def bad2[A, B, C](g: A => Either[B, C]): Either[A => B, A => C]   =   implement
 cmd4.sc:1: type (A => Either[B, C]) => Either[A => B, A => C] cannot be implemented
 \end{lstlisting}
 
@@ -1328,13 +1349,472 @@ order to use the LJT algorithm well, a programmer needs to learn how
 to infer code from types by hand. We will practice doing that throughout
 the book.
 
+\subsection{The LJT algorithm\label{app:The-LJT-algorithm}}
+
+In the previous section, we saw an example showing that the rules
+in Table~\ref{tab:Proof-rules-of-constructive-and-boolean} do not
+provide an algorithm for finding a proof for a given sequent.
+
+To illustrate this problem on another example, let us try proving
+the sequent:
+\[
+A,B\vee C\vdash(A\wedge B)\vee C\quad.
+\]
+We expect that this sequent is provable because we can write the corresponding
+Scala code:
+\begin{lstlisting}
+def f[A, B, C](a: A): Either[B, C] => Either[(A, B), C] = {
+  case Left(b)    => Left((a, b))
+  case Right(c)   => Right(c)
+}
+\end{lstlisting}
+How can we obtain a proof of this sequent according to the rules in
+Table~\ref{tab:Proof-rules-of-constructive-and-boolean}? We find
+that we could potentially apply the rules \textsf{``}create \lstinline!Left!\textsf{''},
+\textsf{``}create \lstinline!Right!\textsf{''}, \textsf{``}use \lstinline!Either!\textsf{''}, and
+\textsf{``}use function\textsf{''}. However, no matter what rule we choose, we will
+get stuck at the next step. Let us see why:
+
+To apply \textsf{``}create \lstinline!Left!\textsf{''}, we first need to prove the
+sequent $A,B\vee C\vdash A\wedge B$. But this sequent cannot be proved:
+we do not necessarily have values of both types $A$ and $B$ if we
+are only given values of type $A$ and of type \lstinline!Either[B, C]!.
+To apply \textsf{``}create \lstinline!Right!\textsf{''}, we need to prove the sequent
+$A,B\vee C\vdash C$. Again, we find that this sequent cannot be proved.
+The next choice is the rule \textsf{``}use \lstinline!Either!\textsf{''} that matches
+any goal of the sequent as the proposition $\gamma$. But we are then
+required to choose two new propositions ($\alpha$ and $\beta$) such
+that we can prove $A,B\vee C\vdash\alpha\vee\beta$ as well as $A,B\vee C,\alpha\vdash(A\wedge B)\vee C$
+and $A,B\vee C,\beta\vdash(A\wedge B)\vee C$. It is not clear how
+we should choose $\alpha$ and $\beta$ in order to make progress
+in the proof. The remaining rule, \textsf{``}use function\textsf{''}, similarly requires
+us to choose a new proposition $\alpha$ such that we can prove $A,B\vee C\vdash\alpha$
+and $A,B\vee C\vdash\alpha\Rightarrow((A\wedge B)\vee C)$. The rules
+give us no guidance for choosing $\alpha$ appropriately.
+
+To see that the rules in Table~\ref{tab:Proof-rules-for-constructive-logic}
+are not helpful for proof search, note that the rules \textsf{``}use function\textsf{''}
+and \textsf{``}use \lstinline!Either!\textsf{''} require us to choose new unknown
+propositions and to prove more complicated sequents than the ones
+we had before. For instance, the rule \textsf{``}use function\textsf{''} gives a proof
+of $\Gamma\vdash\beta$ only if we first choose some other proposition
+$\alpha$ and prove the sequents $\Gamma\vdash\alpha$ and $\Gamma\vdash\alpha\Rightarrow\beta$.
+The rule does not say how to choose the proposition $\alpha$ correctly.
+We need to guess the correct $\alpha$ by trial and error. Even after
+choosing $\alpha$ in some way, we will have to prove a more complicated
+sequent ($\Gamma\vdash\alpha\Rightarrow\beta$). It is not guaranteed
+that we are getting closer to finding the proof of the initial sequent
+($\Gamma\vdash\beta$). 
+
+It is far from obvious how to overcome that difficulty. Mathematicians
+have studied the constructive logic for more than 60 years, trying
+to replace the rules in Table~\ref{tab:Proof-rules-of-constructive-and-boolean}
+by a different but equivalent set of derivation rules that require
+no guessing when looking for a proof. The first partial success came
+in 1935 with an algorithm called \textsf{``}LJ\textsf{''}.\footnote{See \texttt{\href{https://en.wikipedia.org/wiki/Sequent_calculus\#Overview}{https://en.wikipedia.org/wiki/Sequent\_calculus\#Overview}}}
+The LJ algorithm still has a significant problem: one of its derivation
+rules may be applied infinitely many times. So, the LJ algorithm is
+not guaranteed to terminate without some heuristics for avoiding an
+infinite loop. A terminating version of the LJ algorithm, called \index{LJT algorithm}LJT,
+was formulated in 1992.\footnote{An often cited paper by R.~Dyckhoff\index{Roy Dyckhoff} is \texttt{\href{https://philpapers.org/rec/DYCCSC}{https://philpapers.org/rec/DYCCSC}}.
+For the history of that research, see \texttt{\href{https://research-repository.st-andrews.ac.uk/handle/10023/8824}{https://research-repository.st-andrews.ac.uk/handle/10023/8824}}} 
+
+We will first present the LJ algorithm. Although that algorithm does
+not guarantee termination, it is simpler to understand and to apply
+by hand. Then we will show how to modify the LJ algorithm in order
+to obtain the always-terminating LJT algorithm.
+
+\subsubsection*{The LJ algorithm}
+
+Figure~\ref{fig:Rules-of-the-LJ-algorithm} shows the LJ algorithm\textsf{'}s
+axioms and derivation rules. Each rule says that the bottom sequent
+will be proved if proofs are given for sequent(s) at the top. For
+each possible sub-expression (conjunction $X\wedge Y$, disjunction
+$X\vee Y$, and implication $X\Rightarrow Y$) there is one rule where
+that sub-expression is a premise (at \textsf{``}left\textsf{''}) and one rule where
+that sub-expression is the goal (at \textsf{``}right\textsf{''}). Those sub-expressions
+are shown in blue in Figure~\ref{fig:Rules-of-the-LJ-algorithm}
+to help us look for a proof. To find out which rules apply, we match
+some part of the sequent with a blue sub-expression.
+
+\begin{figure}
+\begin{centering}
+\fbox{\begin{minipage}[t]{0.7\linewidth}%
+\begin{align*}
+\frac{}{\Gamma,X\vdash{\color{blue}X}}~(\text{Id})\qquad & \qquad\frac{}{\Gamma\vdash{\color{blue}\top}}~(\text{True})\\
+\frac{\Gamma,A\Rightarrow B\vdash A\quad\Gamma,B\vdash C}{\Gamma,{\color{blue}A\Rightarrow B}\vdash C}~(\text{Left}\Rightarrow)\qquad & \qquad\frac{\Gamma,A\vdash B}{\Gamma\vdash{\color{blue}A\Rightarrow B}}~(\text{Right}\Rightarrow)\\
+\frac{\Gamma,A_{i}\vdash C}{\Gamma,{\color{blue}A_{1}\wedge A_{2}}\vdash C}~(\text{Left}\wedge_{i})\qquad & \qquad\frac{\Gamma\vdash A\quad\quad\Gamma\vdash B}{\Gamma\vdash{\color{blue}A\wedge B}}~(\text{Right}\wedge)\\
+\frac{\Gamma,A\vdash C\quad\Gamma,B\vdash C}{\Gamma,{\color{blue}A\vee B}\vdash C}~(\text{Left}\vee)\qquad & \qquad\frac{\Gamma\vdash A_{i}}{\Gamma\vdash{\color{blue}A_{1}\vee A_{2}}}~(\text{Right}\vee_{i})
+\end{align*}
+%
+\end{minipage}}
+\par\end{centering}
+\caption{Axioms and derivation rules of the LJ algorithm. Each of the rules
+\textquotedblleft ($\text{Left}\wedge_{i}$)\textquotedblright{} and
+\textquotedblleft ($\text{Right}\vee_{i}$)\textquotedblright{} have
+two versions, with $i=1$ or $i=2$. \label{fig:Rules-of-the-LJ-algorithm}}
+\end{figure}
+
+It turns out that the rules in Figure~\ref{fig:Rules-of-the-LJ-algorithm}
+are \emph{equivalent} to the rules in Table~\ref{tab:Proof-rules-for-constructive-logic}.
+The proof is beyond the scope of this book. We only remark that this
+equivalence is far from obvious. To prove it, one needs to demonstrate
+that any sequent derived through the first set of rules is also derivable
+through the second set, and vice versa.
+
+To illustrate the LJ algorithm, let us prove the sequent~(\ref{eq:ch-example-sequent-2}).
+Denote that sequent by $S_{0}$:
+\[
+S_{0}\triangleq\emptyset\vdash\left(\left(\alpha\Rightarrow\alpha\right)\Rightarrow\beta\right)\Rightarrow\beta\quad.
+\]
+ Since the goal of $S_{0}$ contains an implication, we use the rule
+\textsf{``}($\text{Right}\Rightarrow$)\textsf{''} and get a sequent $S_{1}$:
+\[
+S_{1}\triangleq\left(\alpha\Rightarrow\alpha\right)\Rightarrow\beta\vdash\beta\quad.
+\]
+Now the implication is in the premise, so we use the rule \textsf{``}($\text{Left}\Rightarrow$)\textsf{''}
+and get two new sequents:
+\[
+S_{2}\triangleq\left(\alpha\Rightarrow\alpha\right)\Rightarrow\beta\vdash\alpha\Rightarrow\alpha\quad,\quad\quad S_{3}\triangleq\beta\vdash\beta\quad.
+\]
+Sequent $S_{3}$ follows from the \textsf{``}(Id)\textsf{''} axiom, so it remains
+to prove $S_{2}$. Since $S_{2}$ contains an implication both as
+a premise and as the goal, we may apply either the rule \textsf{``}($\text{Left}\Rightarrow$)\textsf{''}
+or the rule \textsf{``}($\text{Right}\Rightarrow$)\textsf{''}. We choose to apply
+\textsf{``}($\text{Left}\Rightarrow$)\textsf{''} and get two new sequents:
+\[
+S_{4}\triangleq\left(\alpha\Rightarrow\alpha\right)\Rightarrow\beta\vdash\alpha\Rightarrow\alpha\quad,\quad\quad S_{5}:\beta\vdash\alpha\Rightarrow\alpha\quad.
+\]
+Notice that $S_{4}=S_{2}$. So, our proof search is getting into an
+infinite loop trying to prove the same sequent $S_{2}$ over and over
+again. We can prove $S_{5}$ but this will not help us break the loop.
+
+Once we recognize the problem, we backtrack to the point where we
+chose to apply \textsf{``}($\text{Left}\Rightarrow$)\textsf{''} to $S_{2}$. That
+was a bad choice, so let us instead apply \textsf{``}($\text{Right}\Rightarrow$)\textsf{''}
+to $S_{2}$. This yields a new sequent $S_{6}$:
+\[
+S_{6}\triangleq\left(\alpha\Rightarrow\alpha\right)\Rightarrow\beta,\alpha\vdash\alpha\quad.
+\]
+This sequent follows from the \textsf{``}(Id)\textsf{''}axiom. There are no more sequents
+to prove, so the proof of $S_{0}$ is finished. It can be drawn as
+a \index{proof tree}\textbf{proof tree} like this:
+\[
+\xymatrix{\xyScaleY{1.5pc}\xyScaleX{4pc} &  &  & (\text{Id})\\
+\ar[r]\sp(0.35){S_{0}} & (\text{Right}\Rightarrow)\ar[r]\sp(0.5){S_{1}} & (\text{Left}\Rightarrow)\ar[r]\sp(0.5){S_{2}}\ar[ru]\sp(0.6){S_{3}} & (\text{Right}\Rightarrow)\ar[r]\sp(0.65){S_{6}} & (\text{Id})
+}
+\]
+The nodes of the proof tree are axioms or derivation rules, and the
+edges are intermediate sequents required by the rules. Some rule nodes
+branch into several sequents because some rules require more than
+one new sequent to be proved. The leaves of the tree are axioms that
+do not require proving any further sequents. 
+
+\subsubsection*{Extracting code from proofs}
+
+According to the Curry-Howard correspondence, a sequent (such as $A,B,...,C\vdash X$)
+represents the task of writing a fully parametric code expression
+of type $X$ that uses some given values of types $A$, $B$, ...,
+$C$. The sequent is true (i.e., can be proved) if that code expression
+can be found. So, the code serves as an \textsf{``}evidence of proof\textsf{''} for
+the sequent.
+
+\begin{figure}
+\begin{centering}
+{\small{}}%
+\noindent\fbox{\begin{minipage}[t]{1\columnwidth - 2\fboxsep - 2\fboxrule}%
+{\small{}
+\begin{align*}
+\frac{}{\Gamma,A\vdash{\color{blue}A}}~(\text{Id})\quad & \quad\text{Proof}\,(\Gamma,A\vdash A)_{\text{given }p^{:\Gamma},x^{:A}}=x\\
+\frac{}{\Gamma\vdash{\color{blue}\top}}~(\text{True})\quad & \quad\text{Proof}\,(\Gamma\vdash\top)_{\text{given }p^{:\Gamma}}=1\\
+\frac{\Gamma,A\Rightarrow B\vdash A\quad\Gamma,B\vdash C}{\Gamma,{\color{blue}A\Rightarrow B}\vdash C}~(\text{Left}\Rightarrow)\quad & \quad\text{Proof}\,(\Gamma,A\Rightarrow B\vdash C)_{\text{given }p^{:\Gamma},q^{:A\rightarrow B}}\\
+ & \quad\quad=\text{Proof}\,(\Gamma,B\vdash C)_{\text{given }p,b^{:B}}\\
+\text{where} & \quad b^{:B}\triangleq q\big(\text{Proof}\,(\Gamma,A\Rightarrow B\vdash A)_{\text{given }p,q}\big)\\
+\frac{\Gamma,A\vdash B}{\Gamma\vdash{\color{blue}A\Rightarrow B}}~(\text{Right}\Rightarrow)\quad & \quad\text{Proof}\,(\Gamma\vdash A\Rightarrow B)_{\text{given }p^{:\Gamma}}\\
+ & \quad\quad=x^{:A}\rightarrow\text{Proof}\,(\Gamma,A\vdash B)_{\text{given }p^{:\Gamma},x^{:A}}\\
+\frac{\Gamma,A\vdash C}{\Gamma,{\color{blue}A\wedge B}\vdash C}~(\text{Left}\wedge_{1})\quad & \quad\text{Proof}\,(\Gamma,A\wedge B\vdash C)_{\text{given }p^{:\Gamma},(a^{:A}\times b^{:B})}\\
+ & \quad\quad=\text{Proof}\,(\Gamma,A\vdash C)_{\text{given }p^{:\Gamma},a^{:A}}\\
+\frac{\Gamma,B\vdash C}{\Gamma,{\color{blue}A\wedge B}\vdash C}~(\text{Left}\wedge_{2})\quad & \quad\text{Proof}\,(\Gamma,A\wedge B\vdash C)_{\text{given }p^{:\Gamma},(a^{:A}\times b^{:B})}\\
+ & \quad\quad=\text{Proof}\,(\Gamma,B\vdash C)_{\text{given }p^{:\Gamma},b^{:B}}\\
+\frac{\Gamma\vdash A\quad\quad\Gamma\vdash B}{\Gamma\vdash{\color{blue}A\wedge B}}~(\text{Right}\wedge)\quad & \quad\text{Proof}\,(\Gamma\vdash A\wedge B)_{\text{given }p^{:\Gamma}}\\
+ & \quad\quad=\text{Proof}\,(\Gamma\vdash A)_{\text{given }p^{:\Gamma}}\\
+ & \quad\quad\quad\times\text{Proof}\,(\Gamma\vdash B)_{\text{given }p^{:\Gamma}}\\
+\frac{\Gamma,A\vdash C\quad\quad\Gamma,B\vdash C}{\Gamma,{\color{blue}A\vee B}\vdash C}~(\text{Left}\vee)\quad & \quad\text{Proof}\,(\Gamma,A\vee B\vdash C)_{\text{given }p^{:\Gamma},q^{:A+B}}\\
+ & \quad\quad=q\triangleright\begin{array}{|c||c|}
+ & C\\
+\hline A & x^{:A}\rightarrow\text{Proof}\,(\Gamma,A\vdash C)_{\text{given }p,x}\\
+B & y^{:B}\rightarrow\text{Proof}\,(\Gamma,B\vdash C)_{\text{given }p,y}
+\end{array}\\
+\frac{\Gamma\vdash A}{\Gamma\vdash{\color{blue}A\vee B}}~(\text{Right}\vee_{1})\quad & \quad\text{Proof}\,(\Gamma\vdash A\vee B)_{\text{given }p^{:\Gamma}}=\text{Proof}\,(\Gamma\vdash A)+\bbnum 0^{:B}\\
+\frac{\Gamma\vdash B}{\Gamma\vdash{\color{blue}A\vee B}}~(\text{Right}\vee_{2})\quad & \quad\text{Proof}\,(\Gamma\vdash A\vee B)_{\text{given }p^{:\Gamma}}=\bbnum 0^{:A}+\text{Proof}\,(\Gamma\vdash B)
+\end{align*}
+}%
+\end{minipage}}{\small\par}
+\par\end{centering}
+\caption{\label{fig:proof-transformers-for-LJ-rules}Proof transformers for
+the rules of the LJ algorithm.}
+\end{figure}
+
+In the previous subsection, we have found a proof of the sequent $S_{0}$,
+which represents the task of writing a fully parametric function with
+type signature $(\left(A\rightarrow A\right)\rightarrow B)\rightarrow B$).
+Let us now see how we can extract the code of that function from the
+proof of the sequent $S_{0}$.
+
+We start from the leaves of the proof tree and move step by step towards
+the initial sequent. At each step, we shorten the proof tree by replacing
+some sequent by its corresponding evidence-of-proof code. Eventually
+we will replace the initial sequent by its corresponding code. Let
+us see how this procedure works for the proof tree of the sequent
+$S_{0}$ shown in the previous section.
+
+Since the leaves are axioms, let us write the code corresponding to
+each axiom of LJ:
+\begin{align*}
+ & \frac{}{\Gamma,X\vdash X}~(\text{Id})\quad:\quad\quad\text{Proof}\,(\Gamma,X\vdash X)_{\text{given }p^{:\Gamma},x^{:X}}=x\quad;\\
+ & \frac{}{\Gamma\vdash\top}~(\text{True})\quad:\quad\quad\text{Proof}\,(\Gamma\vdash\top)_{\text{given }p^{:\Gamma}}=1\quad.
+\end{align*}
+Here we denote explicitly the values (such as $p$ and $x$) given
+as premises to the sequent. The notation $p^{:\Gamma}$ means all
+values given in the set of premises $\Gamma$. Below we will assume
+that the propositions $\alpha$ and $\beta$ correspond to types $A$
+and $B$; that is, $\alpha\triangleq{\cal CH}(A)$ and $\beta\triangleq{\cal CH}(B)$.
+
+The leaves in the proof tree for $S_{0}$ are the \textsf{``}($\text{Id}$)\textsf{''}
+axioms used to prove the sequents $S_{3}$ and $S_{6}$. Let us write
+the code that serves as the \textsf{``}evidence of proof\textsf{''} for these sequents.
+For brevity, we denote $\gamma\triangleq\left(\alpha\Rightarrow\alpha\right)\Rightarrow\beta$
+and $C\triangleq\left(A\rightarrow A\right)\rightarrow B$, so that
+$\gamma={\cal CH}(C)$. Then we can write:
+\begin{align*}
+ & S_{3}\triangleq\beta\vdash\beta\quad,\quad\quad\text{Proof}\,(S_{3})_{\text{given }y^{:B}}=y\quad,\\
+ & S_{6}\triangleq\gamma,\alpha\vdash\alpha\quad,\quad\quad\text{Proof}\,(S_{6})_{\text{given }q^{:C},x^{:A}}=x\quad.
+\end{align*}
+Note that the proof of $S_{6}$ does not use the first given value
+$q^{:C}$ (corresponding to the premise $\gamma$).
+
+We now shorten the proof tree by replacing the sequents $S_{3}$ and
+$S_{6}$ by their \textsf{``}evidence of proof\textsf{''}:
+\[
+\xymatrix{\xyScaleY{1.5pc}\xyScaleX{4pc} &  &  & \square\\
+\ar[r]\sp(0.35){S_{0}} & (\text{Right}\Rightarrow)\ar[r]\sp(0.5){S_{1}} & (\text{Left}\Rightarrow)\ar[r]\sp(0.5){S_{2}}\ar[ru]\sp(0.6){(y)_{\text{given }y^{:B}}} & (\text{Right}\Rightarrow)\ar[r]\sp(0.65){(x)_{\text{given }q^{:C},x^{:A}}} & \square
+}
+\]
+
+The next step is to consider the proof of $S_{2}$, which is found
+by applying the rule \textsf{``}($\text{Right}\Rightarrow$)\textsf{''}. This rule
+promises to give a proof of $S_{2}$ if we have a proof of $S_{6}$.
+In order to extract code from that rule, we can write a function that
+transforms a proof of $S_{6}$ into a proof of $S_{2}$. We call this
+function the \textbf{proof transformer}\index{Curry-Howard correspondence!proof transformer}\index{proof transformer}
+corresponding to the rule \textsf{``}($\text{Right}\Rightarrow$)\textsf{''}. That
+rule and its transformer are defined as:
+\begin{align*}
+\frac{\Gamma,A\vdash B}{\Gamma\vdash A\Rightarrow B}~(\text{Right}\Rightarrow)\quad: & \quad\quad\text{Proof}\,(\Gamma\vdash A\Rightarrow B)_{\text{given }p^{:\Gamma}}\\
+ & \quad\quad=x^{:A}\rightarrow\text{Proof}\,(\Gamma,A\vdash B)_{\text{given }p^{:\Gamma},x^{:A}}\quad.
+\end{align*}
+Applying the proof transformer to the known proof of $S_{6}$, we
+obtain a proof of $S_{2}$:
+\[
+\text{Proof}\,(S_{2})_{\text{given }q^{:C}}=x^{:A}\rightarrow\text{Proof}\,(S_{6})_{\text{given }q^{:C},x^{:A}}=(x^{:A}\rightarrow x)_{\text{given }q^{:C}}\quad.
+\]
+The proof tree can be now shortened to:
+\[
+\xymatrix{\xyScaleY{1.5pc}\xyScaleX{3.5pc} &  &  & \square\\
+\ar[r]\sp(0.35){S_{0}} & (\text{Right}\Rightarrow)\ar[r]\sp(0.5){S_{1}} & (\text{Left}\Rightarrow)\ar[rr]\sp(0.62){(x^{:A}\rightarrow x)_{\text{given }q^{:C}}}\ar[ru]\sp(0.6){(y)_{\text{given }y^{:B}}} &  & \square
+}
+\]
+
+The next step is to get the proof of $S_{1}$ obtained by applying
+the rule \textsf{``}($\text{Left}\Rightarrow$)\textsf{''}. That rule requires two
+previous sequents, so its transformer is a function of two previously
+obtained proofs:
+\begin{align*}
+ & \frac{\Gamma,A\Rightarrow B\vdash A\quad\quad\Gamma,B\vdash C}{\Gamma,A\Rightarrow B\vdash C}~(\text{Left}\Rightarrow)\quad:\\
+ & \text{Proof}\,(\Gamma,A\Rightarrow B\vdash C)_{\text{given }p^{:\Gamma},q^{:A\rightarrow B}}=\text{Proof}\,(\Gamma,B\vdash C)_{\text{given }p^{:\Gamma},b^{:B}}\\
+ & \quad\quad\text{where}\quad b^{:B}\triangleq q\big(\text{Proof}\,(\Gamma,A\Rightarrow B\vdash A)_{\text{given }p^{:\Gamma},q^{:A\rightarrow B}}\big)\quad.
+\end{align*}
+In the proof tree shown above, we obtain a proof of $S_{1}$ by applying
+this proof transformer to the proofs of $S_{2}$ and $S_{3}$:
+\begin{align*}
+ & \text{Proof}\,(S_{1})_{\text{given }q^{:C}}=\text{Proof}\,(S_{3})_{\text{given }b^{:B}}\text{ where }b^{:B}\triangleq q(\text{Proof}\,(S_{2}))_{\text{given }q^{:C}}\\
+ & \quad=b\text{ where }b^{:B}\triangleq q(x^{:A}\rightarrow x)_{\text{given }q^{:C}}=q(x^{:A}\rightarrow x)_{\text{given }q^{:C}}\quad.
+\end{align*}
+Substituting this proof into the proof tree, we shorten the tree to:
+\[
+\xymatrix{\xyScaleY{1.5pc}\xyScaleX{3.5pc}\ar[r]\sp(0.35){S_{0}} & (\text{Right}\Rightarrow)\ar[r]\sp(0.65){q(x^{:A}\rightarrow x)_{\text{given }q^{:C}}} & \square}
+\]
+
+It remains to obtain the proof of $S_{0}$ by applying the proof transformer
+of the rule \textsf{``}($\text{Right}\Rightarrow$)\textsf{''}:
+\begin{align*}
+ & \text{Proof}\,(S_{0})=\text{Proof}\,(\emptyset\vdash(\alpha\Rightarrow\alpha)\Rightarrow\beta)\Rightarrow\beta)\\
+ & =q^{:(A\rightarrow A)\rightarrow B}\rightarrow\text{Proof}\,(S_{1})_{\text{given }q^{:C}}=q^{:(A\rightarrow A)\rightarrow B}\rightarrow q(x^{:A}\rightarrow x)\quad.
+\end{align*}
+The proof tree is now shortened to the code expression $q^{:(A\rightarrow A)\rightarrow B}\rightarrow q(x^{:A}\rightarrow x)$
+has type $\left(\left(A\rightarrow A\right)\rightarrow B\right)\rightarrow B$.
+So, that code is an evidence of proof for $S_{0}$. In this way, we
+have derived the code of a fully parametric function from its type
+signature.
+
+Figure~\ref{fig:proof-transformers-for-LJ-rules} shows the proof
+transformers for all the rules of the LJ algorithm. Apart from the
+special rule \textsf{``}($\text{Left}\Rightarrow$)\textsf{''}, all other rules have
+proof transformers using just one of the code constructions (\textsf{``}create
+function\textsf{''}, \textsf{``}create tuple\textsf{''}, \textsf{``}use tuple\textsf{''}, etc.) allowed within
+fully parametric code.
+
+\subsubsection*{The LJT algorithm}
+
+As we have seen, the LJ algorithm enters a loop if the rule \textsf{``}($\text{Left}\Rightarrow$)\textsf{''}
+gives a sequent we already had at a previous step. That rule requires
+us to prove two new sequents:
+\[
+\frac{\Gamma,A\Rightarrow B\vdash A\quad\quad\Gamma,B\vdash C}{\Gamma,A\Rightarrow B\vdash C}~(\text{Left}\Rightarrow)\quad.
+\]
+A sign of trouble is that the first of these sequents ($\Gamma,A\Rightarrow B\vdash A$)
+does not have a simpler form than the initial sequent ($\Gamma,A\Rightarrow B\vdash C$).
+So, it is not clear that we are getting closer to completing the proof.
+If $A=C$, the new sequent will simply repeat the initial sequent,
+immediately creating a loop.
+
+In some cases, a repeated sequent will occur after more than one step.
+It is not easy to formulate rigorous conditions for stopping the loop
+or for avoiding the rule \textsf{``}($\text{Left}\Rightarrow$)\textsf{''}.
+
+The LJT algorithm solves this problem by removing the rule \textsf{``}($\text{Left}\Rightarrow$)\textsf{''}
+from the LJ algorithm. Instead, \emph{four} new rules are introduced.
+Each of these rules contains a different pattern instead of $A$ in
+the premise $A\Rightarrow C$:
+\begin{align*}
+\text{(}A\text{ is atomic)\,}\frac{\Gamma,A,B\vdash D}{\Gamma,A,{\color{blue}A\Rightarrow B}\vdash D}~(\text{Left}\Rightarrow_{A})\qquad & \quad\frac{\Gamma,A\Rightarrow B\Rightarrow C\vdash D}{\Gamma,{\color{blue}(A\wedge B)\Rightarrow C}\vdash D}~(\text{Left}\Rightarrow_{\wedge})\\
+\frac{\Gamma,B\Rightarrow C\vdash A\Rightarrow B\quad\quad\Gamma,C\vdash D}{\Gamma,{\color{blue}(A\Rightarrow B)\Rightarrow C}\vdash D}~(\text{Left}\Rightarrow_{\Rightarrow})\qquad & \quad\frac{\Gamma,A\Rightarrow C,B\Rightarrow C\vdash D}{\Gamma,{\color{blue}(A\vee B)\Rightarrow C}\vdash D}~(\text{Left}\Rightarrow_{\vee})
+\end{align*}
+The rule \textsf{``}$\text{Left}\Rightarrow_{A}$\textsf{''} applies only if the implication
+starts with an \textsf{``}atomic\textsf{''} type expression, i.e., a single type parameter
+or a unit type. In all other cases, the implication must start with
+a conjunction, a disjunction, or an implication, which means that
+one of the three remaining rules will apply.
+
+The LJT algorithm retains all the rules in Figure~\ref{fig:proof-transformers-for-LJ-rules}
+except the rule \textsf{``}($\text{Left}\Rightarrow$)\textsf{''}, which is replaced
+by the four new rules. It is far from obvious that the new rules are
+equivalent to the old ones. It took mathematicians several decades
+to come up with the LJT rules and to prove their validity. This book
+will rely on that result and will not attempt to prove it.
+
+The proof transformers for the new rules are shown in Figure~\ref{fig:proof-transformers-for-LJT-rules}.
+Figures~\ref{fig:proof-transformers-for-LJ-rules}\textendash \ref{fig:proof-transformers-for-LJT-rules}
+define the set of proof transformers sufficient for using the LJT
+algorithm in practice. The \index{curryhoward library@\texttt{curryhoward} library}\lstinline!curryhoward!
+library\texttt{}\footnote{See \texttt{\href{https://github.com/Chymyst/curryhoward}{https://github.com/Chymyst/curryhoward}}}
+implements these proof transformers.
+
+The most complicated of the new rules is the rule \textsf{``}($\text{Left}\Rightarrow_{\Rightarrow}$)\textsf{''}.
+It is far from obvious why the rule $\text{Left}\Rightarrow_{\Rightarrow}$
+is useful or even correct. This rule is based on a non-trivial logic
+identity: 
+\[
+\left(\left(A\rightarrow B\right)\rightarrow C\right)\rightarrow\left(A\rightarrow B\right)\,\Longleftrightarrow\,\left(B\rightarrow C\right)\rightarrow\left(A\rightarrow B\right)\quad.
+\]
+Consider the type at the left-hand side of this identity:
+\[
+\left(\left(A\rightarrow B\right)\rightarrow C\right)\rightarrow B\rightarrow C\quad.
+\]
+A function with that type can be written as: 
+\[
+f=k^{:\left(A\rightarrow B\right)\rightarrow C}\rightarrow b^{:B}\rightarrow k\,(\_^{:A}\rightarrow b)\quad.
+\]
+The function $f$ occurs in the proof transformer for the rule $\text{Left}\Rightarrow_{\Rightarrow}$
+(shown below in Table~\ref{fig:proof-transformers-for-LJT-rules}).
+Note that this $f$ applies $k$ to a function $(\_\rightarrow b)$
+that ignores its argument. We expect to be able to simplify the resulting
+expression at the place when $(\_\rightarrow b)$ is applied to some
+argument expression, which we can then ignore. For this reason, applying
+the transformer for the rule $\text{Left}\Rightarrow_{\Rightarrow}$
+results in evidence-of-proof code that is longer than the code obtained
+via LJ\textsf{'}s rule transformers. The code obtained via the LJT algorithm
+needs to be simplified symbolically.
+
+As an example of using the LJT algorithm, we again prove the sequent
+from the previous section: $S_{0}=\emptyset\vdash((\alpha\Rightarrow\alpha)\Rightarrow\beta)\Rightarrow\beta$.
+At each step, only one LJT rule applies to each sequent. The initial
+part of the proof tree looks like this:\vspace{-1\baselineskip}
+\[
+\xymatrix{\xyScaleY{1.5pc}\xyScaleX{6pc} &  &  & ~\\
+\ar[r]\sp(0.4){\emptyset\vdash((\alpha\Rightarrow\alpha)\Rightarrow\beta)\Rightarrow\beta} & (\text{Right}\Rightarrow)\ar[r]\sp(0.5){(\alpha\Rightarrow\alpha)\Rightarrow\beta\vdash\beta} & (\text{Left}\Rightarrow_{\Rightarrow})\ar[ru]\sp(0.65){\beta\vdash\beta}\ar[r]\sp(0.65){\alpha\Rightarrow\beta\vdash\alpha\Rightarrow\alpha} & ~
+}
+\]
+The proofs for the sequents $\beta\vdash\beta$ and $\alpha\Rightarrow\beta\vdash\alpha\Rightarrow\alpha$
+are the same as before:
+\[
+\text{Proof}\,(\beta\vdash\beta)_{\text{given }y^{:B}}=y\quad,\quad\quad\text{Proof}\,(\alpha\Rightarrow\beta\vdash\alpha\Rightarrow\alpha)_{\text{given }r^{:A\rightarrow B}}=x^{:A}\rightarrow x\quad.
+\]
+Substituting these proofs into the proof transformer of the rule \textsf{``}($\text{Left}\Rightarrow_{\Rightarrow}$)\textsf{''}
+produces this code:
+\begin{align*}
+ & \text{Proof}\,((\alpha\Rightarrow\alpha)\Rightarrow\beta\vdash\beta)_{\text{given }q^{:(A\rightarrow A)\rightarrow B}}=q\big(\text{Proof}\,(\alpha\Rightarrow\beta\vdash\alpha\Rightarrow\alpha)_{\text{given }r^{:A\rightarrow B}}\big)\\
+ & \quad\quad\text{where }r^{:A\rightarrow B}=a^{:A}\rightarrow q(\_^{:A}\rightarrow a)\\
+ & =q(x^{:A}\rightarrow x)\quad.
+\end{align*}
+The proof of $\alpha\Rightarrow\beta\vdash\alpha\Rightarrow\alpha$
+does not actually use the intermediate value $r^{:A\rightarrow B}$
+provided by the proof transformer. As a symbolic simplification step,
+we may simply omit the code of $r$. The \lstinline!curryhoward!
+library always performs symbolic simplification after applying the
+LJT algorithm. 
+
+\begin{figure}
+\begin{centering}
+{\small{}}%
+\noindent\fbox{\begin{minipage}[t]{1\columnwidth - 2\fboxsep - 2\fboxrule}%
+{\small{}
+\begin{align*}
+\frac{\Gamma,A,B\vdash D}{\Gamma,A,{\color{blue}A\Rightarrow B}\vdash D}~(\text{Left}\Rightarrow_{A})\quad & \quad\text{Proof}\,(\Gamma,A,A\Rightarrow B\vdash D)_{\text{given }p^{:\Gamma},x^{:A},q^{:A\rightarrow B}}\\
+ & \quad\quad=\text{Proof}\,(\Gamma,A,B\vdash D)_{\text{given }p,x,q(x)}\\
+\frac{\Gamma,A\Rightarrow B\Rightarrow C\vdash D}{\Gamma,{\color{blue}(A\wedge B)\Rightarrow C}\vdash D}~(\text{Left}\Rightarrow_{\wedge})\quad & \quad\text{Proof}\,(\Gamma,(A\wedge B)\Rightarrow C\vdash D)_{\text{given }p^{:\Gamma},q^{:A\times B\rightarrow C}}\\
+ & \quad\quad=\text{Proof}\,(\Gamma,\\
+ & \quad\quad\quad A\Rightarrow B\Rightarrow C\vdash D)_{\text{given }p,(a^{:A}\rightarrow b^{:B}\rightarrow q(a\times b))}\\
+\frac{\Gamma,A\Rightarrow C,B\Rightarrow C\vdash D}{\Gamma,{\color{blue}(A\vee B)\Rightarrow C}\vdash D}~(\text{Left}\Rightarrow_{\vee})\quad & \quad\text{Proof}\,(\Gamma,(A\vee B)\Rightarrow C\vdash D)_{\text{given }p^{:\Gamma},q^{:A+B\rightarrow C}}\\
+ & \quad\quad=\text{Proof}\,(\Gamma,A\Rightarrow C,B\Rightarrow C\vdash D)_{\text{given }p,r,s}\\
+ & \quad\quad\text{where}~r\triangleq a^{:A}\rightarrow q(a+\bbnum 0)\\
+ & \quad\quad\text{ and }s\triangleq b^{:B}\rightarrow q(\bbnum 0+b)\\
+\frac{\Gamma,B\Rightarrow C\vdash A\Rightarrow B\quad\Gamma,C\vdash D}{\Gamma,{\color{blue}(A\Rightarrow B)\Rightarrow C}\vdash D}~(\text{Left}\Rightarrow_{\Rightarrow})\quad & \quad\text{Proof}\,(\Gamma,(A\Rightarrow B)\Rightarrow C\vdash D)_{\text{given }p^{:\Gamma},q^{:\left(A\rightarrow B\right)\rightarrow C}}\\
+ & \quad\quad=\text{Proof}\,(\Gamma,C\vdash D)_{\text{given }p,c}\\
+ & \quad\quad\text{ where}~c^{:C}\triangleq q\big(\text{Proof}\,(\Gamma,\\
+ & \quad\quad\quad\quad\quad\quad\quad\quad B\Rightarrow C\vdash A\Rightarrow B)_{\text{given }p,r}\big)\\
+ & \quad\quad\text{ and }r^{:B\rightarrow C}\triangleq b^{:B}\rightarrow q(\_^{:A}\rightarrow b)
+\end{align*}
+}%
+\end{minipage}}{\small\par}
+\par\end{centering}
+\caption{\label{fig:proof-transformers-for-LJT-rules}Proof transformers for
+the four new rules of the \index{LJT algorithm|textit}LJT algorithm.}
+\end{figure}
+
+The reason the LJT algorithm terminates is that each rule replaces
+a given sequent by one or more sequents with simpler premises or goals.\footnote{The paper \texttt{\href{http://citeseer.ist.psu.edu/viewdoc/summary?doi=10.1.1.35.2618}{http://citeseer.ist.psu.edu/viewdoc/summary?doi=10.1.1.35.2618}}
+shows that the LJT algorithm terminates by giving an explicit decreasing
+measure on proof trees.} This guarantees that the proof search will terminate either with
+a complete proof or with a sequent to which no more rules apply. An
+example of such a \textsf{``}dead-end\textsf{''} sequent is $\alpha\vdash\beta$ where
+$\alpha$ and $\beta$ are different, unrelated propositions. When
+no more rules apply, the LJT algorithm concludes that the initial
+sequent cannot be proved.
+
+To \emph{prove} that there is no proof, one needs to use methods
+that are beyond the scope of this book. An introduction to the required
+techniques is in the book \textsf{``}Proof and Disproof in Formal Logic\textsf{''}
+by R.~Bornat\index{Richard Bornat} (see footnote~\ref{fn:Bornat-proof-book}
+on page~\pageref{fn:Bornat-proof-book}).
+
 \subsection{Failure of Boolean logic in reasoning about $\mathcal{CH}$-propositions\label{subsec:Example:-Failure-of-Boolean-logic}}
 
-Programmers are most familiar with the \index{Boolean logic}Boolean
-logic whose operations are written in Scala as \lstinline!x && y!
-(conjunction), \lstinline!x || y! (disjunction), and \lstinline*!x*
-(negation). However, it turns out that the Boolean logic does \emph{not}
-always produce correct conclusions when reasoning about ${\cal CH}$-propositions.
+Programmers are familiar with the \index{Boolean logic}Boolean logic
+whose operations are written in Scala as \lstinline!x && y! (conjunction),
+\lstinline!x || y! (disjunction), and \lstinline*!x* (negation).
+However, it turns out that the Boolean logic does \emph{not} always
+produce correct conclusions when reasoning about ${\cal CH}$-propositions.
 One needs to use the constructive logic to reason correctly about
 implementable type signatures.
 
@@ -1381,9 +1861,9 @@ is true in Boolean logic.
 
 Here is the truth table for the formulas $\forall(\alpha,\beta).\,(\alpha\wedge\beta)\Rightarrow\alpha$
 and $\forall(\alpha,\beta).\,\alpha\Rightarrow(\alpha\wedge\beta)$.
-The first formula is true in Boolean logic since all values in its
-column are $True$, while the second formula is not true since one
-value in the last column is $False$:
+The first formula is true since all values in its column are $True$,
+while the second formula is not true since one value in the last column
+is $False$:
 \begin{center}
 {\small{}}%
 \begin{tabular}{|c|c|c|c|c|}
@@ -1420,19 +1900,19 @@ be implemented.
 \hline 
 {\footnotesize{}$\forall\alpha.\,\alpha\Rightarrow True$} & {\footnotesize{}$\forall A.\,A\rightarrow\bbnum 1$} & \lstinline!def toUnit[A](x: A): Unit = ()!\tabularnewline
 \hline 
-{\footnotesize{}$\forall(\alpha,\beta).\,\alpha\Rightarrow(\alpha\vee\beta)$} & {\footnotesize{}$\forall(A,B).\,A\rightarrow A+B$} & \lstinline!def toL[A, B](x: A): Either[A, B] = Left(x)!\tabularnewline
+{\footnotesize{}$\forall(\alpha,\beta).\,\alpha\Rightarrow(\alpha\vee\beta)$} & {\footnotesize{}$\forall(A,B).\,A\rightarrow A+B$} & \lstinline!def f[A, B](x: A): Either[A, B] = Left(x)!\tabularnewline
 \hline 
-{\footnotesize{}$\forall(\alpha,\beta).\,(\alpha\wedge\beta)\Rightarrow\alpha$} & {\footnotesize{}$\forall(A,B).\,A\times B\rightarrow A$} & \lstinline!def first[A, B](p: (A, B)): A = p._1!\tabularnewline
+{\footnotesize{}$\forall(\alpha,\beta).\,(\alpha\wedge\beta)\Rightarrow\alpha$} & {\footnotesize{}$\forall(A,B).\,A\times B\rightarrow A$} & \lstinline!def f[A, B](p: (A, B)): A = p._1!\tabularnewline
 \hline 
-{\footnotesize{}$\forall(\alpha,\beta).\,\alpha\Rightarrow(\beta\Rightarrow\alpha)$} & {\footnotesize{}$\forall(A,B).\,A\rightarrow(B\rightarrow A)$} & \lstinline!def const[A, B](x: A): B => A = (_ => x)!\tabularnewline
+{\footnotesize{}$\forall(\alpha,\beta).\,\alpha\Rightarrow(\beta\Rightarrow\alpha)$} & {\footnotesize{}$\forall(A,B).\,A\rightarrow(B\rightarrow A)$} & \lstinline!def f[A, B](x: A): B => A = (_ => x)!\tabularnewline
 \hline 
 \end{tabular}
 \par\end{centering}
 \caption{Examples of logical formulas that are true theorems in Boolean logic.\label{tab:Logical-formulas-Boolean-theorems}}
 \end{table}
 
-Table~\ref{tab:Logical-formulas-not-Boolean-theorems} some examples
-of formulas that are \emph{not true} in Boolean logic. Translated
+Table~\ref{tab:Logical-formulas-not-Boolean-theorems} shows some
+examples of formulas that are \emph{not true} in Boolean logic. Translated
 into type formulas and then into Scala, these formulas yield type
 signatures that \emph{cannot} be implemented by fully parametric functions.
 
@@ -1468,28 +1948,28 @@ The first example is given by the following type:
 \begin{equation}
 \forall(A,B,C).\,\left(A\rightarrow B+C\right)\rightarrow\left(A\rightarrow B\right)+\left(A\rightarrow C\right)\quad,\label{eq:ch-example-boolean-bad-type}
 \end{equation}
-which corresponds to the Scala type signature:
+which corresponds to the Scala type signature (shown in Section~\ref{subsec:Motivation-and-outlook}):
 \begin{lstlisting}
-def bad[A, B, C](g: A => Either[B, C]): Either[A => B, A => C] = ???
+def bad2[A, B, C](g: A => Either[B, C]): Either[A => B, A => C] = ???
 \end{lstlisting}
-The function \lstinline!bad! \emph{cannot} be implemented via fully
+The function \lstinline!bad2! \emph{cannot} be implemented via fully
 parametric code. To see why, consider that the only available data
 is a function $g^{:A\rightarrow B+C}$, which returns values of type
 $B$ or $C$ depending (in some unknown way) on the input value of
-type $A$. The function \lstinline!bad! must return either a function
+type $A$. The function \lstinline!bad2! must return either a function
 of type $A\rightarrow B$ or a function of type $A\rightarrow C$.
-How can the code of \lstinline!bad! make that decision? The only
+How can the code of \lstinline!bad2! make that decision? The only
 input data is the function $g$ that takes an argument of type $A$.
 We could imagine applying $g$ to various arguments of type $A$ and
 to see whether $g$ returns a $B$ or a $C$. However, the type $A$
 is arbitrary, and a fully parametric function cannot produce a value
 of type $A$ in order to apply $g$ to it. So, the decision about
 whether to return $A\rightarrow B$ or $A\rightarrow C$ must be independent
-of $g$. That decision must be hard-coded in the function \lstinline!bad!.
+of $g$. That decision must be hard-coded in the function \lstinline!bad2!.
 
 Suppose we hard-coded the decision to return a function of type $A\rightarrow B$.
 How would we create a function of type $A\rightarrow B$ in the body
-of \lstinline!bad!? Given a value $x^{:A}$ of type $A$, we would
+of \lstinline!bad2!? Given a value $x^{:A}$ of type $A$, we would
 need to compute some value of type $B$. Since the type $B$ is arbitrary
 (it is a type parameter), we cannot produce a value of type $B$ from
 scratch. The only potential source of values of type $B$ is the given
@@ -1650,25 +2130,19 @@ In both cases, we have only one possible expression of the correct
 type.
 
 Similarly, the implementation of \lstinline!f2! leaves us no choices:
-
-\begin{wrapfigure}{l}{0.65\columnwidth}%
-\vspace{-0.5\baselineskip}
 \begin{lstlisting}
 def f2[A, B, C]: Either[(A, C), (B, C)] => (Either[A, B], C) = {
   case Left((a, c))   => (Left(a), c)  // No other choice here.
   case Right((b, c))  => (Right(b), c) // No other choice here.
 }
 \end{lstlisting}
-\vspace{-0.9\baselineskip}
-\end{wrapfigure}%
-
-\noindent The code of \lstinline!f1! and \lstinline!f2! never discards
-any given values; in other words, these functions appear to preserve
-information. We can formulate this property rigorously as a requirement
-that an arbitrary value \lstinline!x: (Either[A, B], C)! be mapped
-by \lstinline!f1! to some value \lstinline!y: Either[(A, C), (B, C)]!
-and then mapped by \lstinline!f2! back to \emph{the same} value \lstinline!x!.
-Similarly, any value \lstinline!y! of type \lstinline!Either[(A, C), (B, C)]!
+The code of \lstinline!f1! and \lstinline!f2! never discards any
+given values; in other words, these functions appear to preserve information.
+We can formulate this property rigorously as a requirement that an
+arbitrary value \lstinline!x: (Either[A, B], C)! be mapped by \lstinline!f1!
+to some value \lstinline!y: Either[(A, C), (B, C)]! and then mapped
+by \lstinline!f2! back to \emph{the same} value \lstinline!x!. Similarly,
+any value \lstinline!y! of type \lstinline!Either[(A, C), (B, C)]!
 should be transformed by \lstinline!f2! and then by \lstinline!f1!
 back to the same value \lstinline!y!.
 
@@ -1758,8 +2232,10 @@ in Scala, \lstinline!((A, B), C)! and \lstinline!(A, (B, C))!. We
 can define functions that convert between these types without information
 loss\index{information loss}:
 \begin{lstlisting}
-def f3[A, B, C]: (((A, B), C)) => (A, (B, C)) = { case ((a, b), c) => (a, (b, c)) }
-def f4[A, B, C]: (A, (B, C)) => (((A, B), C)) = { case (a, (b, c)) => ((a, b), c) }
+def f3[A, B, C]: (((A, B), C)) => (A, (B, C)) = { case ((a, b), c) =>
+                                                       (a, (b, c)) }
+def f4[A, B, C]: (A, (B, C)) => (((A, B), C)) = { case (a, (b, c)) =>
+                                                       ((a, b), c) }
 \end{lstlisting}
 By applying these functions to arbitrary values of types \lstinline!((A, B), C)!
 and \lstinline!(A, (B, C))!, it is easy to see that the functions
@@ -1788,24 +2264,17 @@ $g_{1}:\bbnum 1+A\rightarrow\bbnum 1$ and $g_{2}:\bbnum 1\rightarrow\bbnum 1+A$
 will not satisfy $g_{1}\bef g_{2}=\text{id}$. To verify this, we
 note that $g_{2}:\bbnum 1\rightarrow\bbnum 1+A$ must have this type
 signature:
-
-\begin{wrapfigure}{l}{0.4\columnwidth}%
-\vspace{-0.8\baselineskip}
 \begin{lstlisting}
 def g2[A]: Unit => Option[A] = ???
 \end{lstlisting}
-
-\vspace{-1\baselineskip}
-\end{wrapfigure}%
-
-\noindent This function must always return \lstinline!None!, since
-a fully parametric function cannot produce values of an arbitrary
-type \lstinline!A! from scratch. Therefore, $g_{1}\bef g_{2}$ is
-also a function that always returns \lstinline!None!. The function
-$g_{1}\bef g_{2}$ has type signature $\bbnum 1+A\rightarrow\bbnum 1+A$
-or, in Scala syntax, \lstinline!Option[A] => Option[A]!, and is not
-equal to the identity function, because the identity function does
-\emph{not} always return \lstinline!None!.
+This function must always return \lstinline!None!, since a fully
+parametric function cannot produce values of an arbitrary type \lstinline!A!
+from scratch. Therefore, $g_{1}\bef g_{2}$ is also a function that
+always returns \lstinline!None!. The function $g_{1}\bef g_{2}$
+has type signature $\bbnum 1+A\rightarrow\bbnum 1+A$ or, in Scala
+syntax, \lstinline!Option[A] => Option[A]!, and is not equal to the
+identity function, because the identity function does \emph{not} always
+return \lstinline!None!.
 
 Another example of a logical identity without a type equivalence is
 the distributive law:
@@ -1934,7 +2403,7 @@ void type needs a special technique that we will now develop while
 verifying the type isomorphisms $\bbnum 0\times A\cong\bbnum 0$ and
 $\bbnum 0+A\cong A$.
 
-\subsubsection{Example \label{subsec:ch-Example-0-times-A}\ref{subsec:ch-Example-0-times-A}\index{solved examples}}
+\subsubsection{Example \label{subsec:ch-Example-0-times-A}\ref{subsec:ch-Example-0-times-A}\index{examples (with code)}}
 
 Verify the type equivalence $\bbnum 0\times A\cong\bbnum 0$.
 
@@ -1961,12 +2430,12 @@ Verify the type equivalence $\bbnum 0+A\cong A$.
 
 \subparagraph{Solution}
 
-Recall that the type notation $\bbnum 0+A$ represents the Scala type
-\lstinline!Either[Nothing, A]!. We need to show that any value of
-that type can be mapped without loss of information to a value of
-type \lstinline!A!, and vice versa. This means implementing functions
-$f_{1}:\bbnum 0+A\rightarrow A$ and $f_{2}:A\rightarrow\bbnum 0+A$
-such that $f_{1}\bef f_{2}=\text{id}$ and $f_{2}\bef f_{1}=\text{id}$.
+The type notation $\bbnum 0+A$ corresponds to the Scala type \lstinline!Either[Nothing, A]!.
+We need to show that any value of that type can be mapped without
+loss of information to a value of type \lstinline!A!, and vice versa.
+This means implementing functions $f_{1}:\bbnum 0+A\rightarrow A$
+and $f_{2}:A\rightarrow\bbnum 0+A$ such that $f_{1}\bef f_{2}=\text{id}$
+and $f_{2}\bef f_{1}=\text{id}$.
 
 The argument of $f_{1}$ is of type \lstinline!Either[Nothing, A]!.
 How can we create a value of that type? Our only choices are to create
@@ -2000,9 +2469,6 @@ the \lstinline!Left! and the \lstinline!Right! parts of the disjunctive
 type \lstinline!Either!. This notation agrees with the behavior of
 the Scala compiler, which will infer the types \lstinline!Either[A, Nothing] !or
 \lstinline!Either[Nothing, A]! for these parts:
-
-\begin{wrapfigure}{l}{0.53\columnwidth}%
-\vspace{-0.6\baselineskip}
 \begin{lstlisting}
 def toLeft[A, B]: A => Either[A, B] = x => Left(x)
 def toRight[A, B]: B => Either[A, B] = y => Right(y)
@@ -2013,16 +2479,11 @@ res0: Either[Int, Nothing] = Left(123)
 scala> toRight("abc")
 res1: Either[Nothing, String] = Right("abc")
 \end{lstlisting}
-
-\vspace{-2\baselineskip}
-\end{wrapfigure}%
-
-\noindent We can write the functions \lstinline!toLeft! and \lstinline!toRight!
+We can write the functions \lstinline!toLeft! and \lstinline!toRight!
 in a code notation as:
-\begin{align*}
- & \text{toLeft}^{A,B}\triangleq x^{:A}\rightarrow x+\bbnum 0^{:B}\quad,\\
- & \text{toRight}^{A,B}\triangleq y^{:B}\rightarrow\bbnum 0^{:A}+y\quad.
-\end{align*}
+\[
+\text{toLeft}^{A,B}\triangleq x^{:A}\rightarrow x+\bbnum 0^{:B}\quad,\quad\quad\text{toRight}^{A,B}\triangleq y^{:B}\rightarrow\bbnum 0^{:A}+y\quad.
+\]
 In this notation, a value of the disjunctive type is shown without
 using Scala class names such as \lstinline!Either!, \lstinline!Right!,
 and \lstinline!Left!. This shortens the writing and speeds up code
@@ -2090,11 +2551,8 @@ Verify the type equivalence $A+B\cong B+A$.
 \subparagraph{Solution}
 
 The corresponding Scala types are \lstinline!Either[A, B]! and \lstinline!Either[B, A]!.
-We use pattern matching to implement the functions required for the
-type equivalence:
-
-\begin{wrapfigure}{l}{0.55\columnwidth}%
-\vspace{-0.86\baselineskip}
+Use pattern matching to implement the functions required for the type
+equivalence:
 \begin{lstlisting}
 def f1[A, B]: Either[A, B] => Either[B, A] = {
   case Left(a)    => Right(a) // No other choice here.
@@ -2102,9 +2560,6 @@ def f1[A, B]: Either[A, B] => Either[B, A] = {
 }
 def f2[A, B]: Either[B, A] => Either[A, B] = f1[B, A]
 \end{lstlisting}
-
-\vspace{-1.2\baselineskip}
-\end{wrapfigure}%
 The functions \lstinline!f1! and \lstinline!f2! are implemented
 by code that can be derived unambiguously from the type signatures.
 For instance, the line \lstinline!case Left(a) => ...! is required
@@ -2151,17 +2606,13 @@ f_{1}\triangleq x^{:A+B}\rightarrow\begin{cases}
 Since both the argument and the result of $f_{1}$ are disjunctive
 types with $2$ parts each, it is convenient to write the code of
 $f_{1}$ as a $2\times2$ \emph{matrix} that maps the input parts
-to the output parts:\index{disjunctive type!in matrix notation}\index{matrix notation}\begin{wrapfigure}{l}{0.5\columnwidth}%
-\vspace{-0.5\baselineskip}
+to the output parts:\index{disjunctive type!in matrix notation}\index{matrix notation}
 \begin{lstlisting}
 def f1[A, B]: Either[A, B] => Either[B, A] = {
   case Left(a)    => Right(a)
   case Right(b)   => Left(b)
 }
 \end{lstlisting}
-\vspace{-2\baselineskip}
-\end{wrapfigure}%
-\vspace{-0.6\baselineskip}
 \[
 f_{1}\triangleq\,\begin{array}{|c||cc|}
  & B & A\\
@@ -2169,8 +2620,6 @@ f_{1}\triangleq\,\begin{array}{|c||cc|}
 B & b^{:B}\rightarrow b & \bbnum 0
 \end{array}\quad.
 \]
-\vspace{-0.5\baselineskip}
-
 The rows of the matrix correspond to the \lstinline!case! rows in
 the Scala code. There is one row for each part of the disjunctive
 type of the argument. The columns of the matrix correspond to the
@@ -2183,18 +2632,13 @@ In this way, we translate each line of the \lstinline!match / case!
 expression into a code matrix.
 
 The code of $f_{2}$ is written similarly. Let us rename arguments
-for clarity:\hfill{}~\begin{wrapfigure}[4]{l}{0.5\columnwidth}%
-\vspace{-0.7\baselineskip}
+for clarity:\hfill{}
 \begin{lstlisting}
 def f2[A, B]: Either[B, A] => Either[A, B] = {
   case Left(y)    => Right(y)
   case Right(x)   => Left(x)
 }
 \end{lstlisting}
-\vspace{-1.5\baselineskip}
-\end{wrapfigure}%
-
-\vspace{-1.5\baselineskip}
 \[
 f_{2}\triangleq\,\begin{array}{|c||cc|}
  & A & B\\
@@ -2202,10 +2646,8 @@ f_{2}\triangleq\,\begin{array}{|c||cc|}
 A & x^{:A}\rightarrow x & \bbnum 0
 \end{array}\quad.
 \]
-\vspace{-0.8\baselineskip}
-
-\noindent The forward composition $f_{1}\bef f_{2}$ is computed by
-the standard rules of row-by-column matrix multiplication.\footnote{\texttt{\href{https://en.wikipedia.org/wiki/Matrix_multiplication}{https://en.wikipedia.org/wiki/Matrix\_multiplication}}}
+The forward composition $f_{1}\bef f_{2}$ is computed by the standard
+rules of row-by-column matrix multiplication.\footnote{\texttt{\href{https://en.wikipedia.org/wiki/Matrix_multiplication}{https://en.wikipedia.org/wiki/Matrix\_multiplication}}}
 Any terms containing $\bbnum 0$ are omitted, and the remaining functions
 are composed:
 \begin{align*}
@@ -2218,10 +2660,10 @@ B & b^{:B}\rightarrow b & \bbnum 0
 \hline B & \bbnum 0 & y^{:B}\rightarrow y\\
 A & x^{:A}\rightarrow x & \bbnum 0
 \end{array}\\
-{\color{greenunder}\text{matrix multiplication/composition}:}\quad & =\,\,\begin{array}{|c||cc|}
+{\color{greenunder}\text{matrix composition}:}\quad & =\,\,\begin{array}{|c||cc|}
  & A & B\\
-\hline A & (a^{:A}\rightarrow a)\bef(x^{:A}\rightarrow x) & \bbnum 0\\
-B & \bbnum 0 & (b^{:B}\rightarrow b)\bef(y^{:B}\rightarrow y)
+\hline A & \gunderline{(a^{:A}\rightarrow a)\bef(x^{:A}\rightarrow x)} & \bbnum 0\\
+B & \bbnum 0 & \gunderline{(b^{:B}\rightarrow b)\bef(y^{:B}\rightarrow y)}
 \end{array}\\
 {\color{greenunder}\text{function composition}:}\quad & =\,\begin{array}{|c||cc|}
  & A & B\\
@@ -2248,9 +2690,9 @@ b^{:B}\rightarrow b & \bbnum 0
 \bbnum 0 & y^{:B}\rightarrow y\\
 x^{:A}\rightarrow x & \bbnum 0
 \end{array}\\
-{\color{greenunder}\text{matrix multiplication/composition}:}\quad & =\,\,\begin{array}{||cc|}
-(a^{:A}\rightarrow a)\bef(x^{:A}\rightarrow x) & \bbnum 0\\
-\bbnum 0 & (b^{:B}\rightarrow b)\bef(y^{:B}\rightarrow y)
+{\color{greenunder}\text{matrix composition}:}\quad & =\,\,\begin{array}{||cc|}
+\gunderline{(a^{:A}\rightarrow a)\bef(x^{:A}\rightarrow x)} & \bbnum 0\\
+\bbnum 0 & \gunderline{(b^{:B}\rightarrow b)\bef(y^{:B}\rightarrow y)}
 \end{array}\\
 {\color{greenunder}\text{function composition}:}\quad & =\,\begin{array}{||cc|}
 \text{id} & \bbnum 0\\
@@ -2394,7 +2836,7 @@ functions \lstinline!f1! and \lstinline!f2! that will work correctly
 in all applications, because the meaning of these data types will
 be application-dependent. We call this type equivalence \textbf{accidental}\index{type equivalence!accidental}.
 
-\subsubsection{Example \label{subsec:ch-Example-cardinality-option-either}\ref{subsec:ch-Example-cardinality-option-either}\index{solved examples}}
+\subsubsection{Example \label{subsec:ch-Example-cardinality-option-either}\ref{subsec:ch-Example-cardinality-option-either}\index{examples (with code)}}
 
 Are the types \lstinline!Option[A]! and \lstinline!Either[Unit, A]!
 equivalent? Check whether the corresponding logic identity and arithmetic
@@ -2471,8 +2913,8 @@ and the exponential formula gives:
 \left|A\rightarrow B\right|=(2^{32})^{\left(2^{32}\right)}=2^{32\times2^{32}}=2^{2^{37}}\approx10^{4.1\times10^{10}}\quad.
 \]
 This number greatly exceeds the number of atoms in the observable
-Universe!\footnote{Estimated to be between $10^{78}$ and $10^{82}$, see \texttt{\href{https://www.universetoday.com/36302/atoms-in-the-universe/amp/}{https://www.universetoday.com/36302/atoms-in-the-universe/amp/}}}
-However, almost all of those functions will map integers to integers
+Universe.\footnote{Estimated in \texttt{\href{https://www.universetoday.com/36302/atoms-in-the-universe/amp/}{https://www.universetoday.com/36302/atoms-in-the-universe/amp/}}
+to be between $10^{78}$ and $10^{82}$.} However, almost all of those functions will map integers to integers
 in extremely complicated (and practically useless) ways. The code
 of those functions will be much larger than the available memory of
 a realistic computer. So, the number of practically implementable
@@ -2505,22 +2947,22 @@ those types usually cannot be transformed into simpler types.
 \begin{centering}
 \begin{tabular}{|c|c|c|}
 \hline 
-\textbf{\small{}Logical identity (if holds)} & \textbf{\small{}Type equivalence} & \textbf{\small{}Arithmetic identity}\tabularnewline
+\textbf{\footnotesize{}Logical identity (if holds)} & \textbf{\footnotesize{}Type equivalence} & \textbf{\footnotesize{}Arithmetic identity}\tabularnewline
 \hline 
 \hline 
-{\small{}$\left(True\Rightarrow\alpha\right)=\alpha$} & {\small{}$\bbnum 1\rightarrow A\cong A$} & {\small{}$a^{1}=a$}\tabularnewline
+{\footnotesize{}$\left(True\Rightarrow\alpha\right)=\alpha$} & {\footnotesize{}$\bbnum 1\rightarrow A\cong A$} & {\footnotesize{}$a^{1}=a$}\tabularnewline
 \hline 
-{\small{}$\left(False\Rightarrow\alpha\right)=True$} & {\small{}$\bbnum 0\rightarrow A\cong\bbnum 1$} & {\small{}$a^{0}=1$}\tabularnewline
+{\footnotesize{}$\left(False\Rightarrow\alpha\right)=True$} & {\footnotesize{}$\bbnum 0\rightarrow A\cong\bbnum 1$} & {\footnotesize{}$a^{0}=1$}\tabularnewline
 \hline 
-{\small{}$\left(\alpha\Rightarrow True\right)=True$} & {\small{}$A\rightarrow\bbnum 1\cong\bbnum 1$} & {\small{}$1^{a}=1$}\tabularnewline
+{\footnotesize{}$\left(\alpha\Rightarrow True\right)=True$} & {\footnotesize{}$A\rightarrow\bbnum 1\cong\bbnum 1$} & {\footnotesize{}$1^{a}=1$}\tabularnewline
 \hline 
-{\small{}$\left(\alpha\Rightarrow False\right)\neq False$} & {\small{}$A\rightarrow\bbnum 0\not\cong\bbnum 0$} & {\small{}$0^{a}\neq0$}\tabularnewline
+{\footnotesize{}$\left(\alpha\Rightarrow False\right)\neq False$} & {\footnotesize{}$A\rightarrow\bbnum 0\not\cong\bbnum 0$} & {\footnotesize{}$0^{a}\neq0$}\tabularnewline
 \hline 
-{\small{}$\left(\alpha\vee\beta\right)\Rightarrow\gamma=\left(\alpha\Rightarrow\gamma\right)\wedge\left(\beta\Rightarrow\gamma\right)$} & {\small{}$A+B\rightarrow C\cong\left(A\rightarrow C\right)\times\left(B\rightarrow C\right)$} & {\small{}$c^{a+b}=c^{a}\times c^{b}$}\tabularnewline
+{\footnotesize{}$\left(\alpha\vee\beta\right)\Rightarrow\gamma=\left(\alpha\Rightarrow\gamma\right)\wedge\left(\beta\Rightarrow\gamma\right)$} & {\footnotesize{}$A+B\rightarrow C\cong\left(A\rightarrow C\right)\times\left(B\rightarrow C\right)$} & {\footnotesize{}$c^{a+b}=c^{a}\times c^{b}$}\tabularnewline
 \hline 
-{\small{}$(\alpha\wedge\beta)\Rightarrow\gamma=\alpha\Rightarrow\left(\beta\Rightarrow\gamma\right)$} & {\small{}$A\times B\rightarrow C\cong A\rightarrow B\rightarrow C$} & {\small{}$c^{a\times b}=(c^{b})^{a}$}\tabularnewline
+{\footnotesize{}$(\alpha\wedge\beta)\Rightarrow\gamma=\alpha\Rightarrow\left(\beta\Rightarrow\gamma\right)$} & {\footnotesize{}$A\times B\rightarrow C\cong A\rightarrow B\rightarrow C$} & {\footnotesize{}$c^{a\times b}=(c^{b})^{a}$}\tabularnewline
 \hline 
-{\small{}$\alpha\Rightarrow\left(\beta\wedge\gamma\right)=\left(\alpha\Rightarrow\beta\right)\wedge\left(\alpha\Rightarrow\gamma\right)$} & {\small{}$A\rightarrow B\times C\cong\left(A\rightarrow B\right)\times\left(A\rightarrow C\right)$} & {\small{}$\left(b\times c\right)^{a}=b^{a}\times c^{a}$}\tabularnewline
+{\footnotesize{}$\alpha\Rightarrow\left(\beta\wedge\gamma\right)=\left(\alpha\Rightarrow\beta\right)\wedge\left(\alpha\Rightarrow\gamma\right)$} & {\footnotesize{}$A\rightarrow B\times C\cong\left(A\rightarrow B\right)\times\left(A\rightarrow C\right)$} & {\footnotesize{}$\left(b\times c\right)^{a}=b^{a}\times c^{a}$}\tabularnewline
 \hline 
 \end{tabular}
 \par\end{centering}
@@ -2530,7 +2972,7 @@ and arithmetic identities.\label{tab:Logical-identities-with-function-types}}
 
 We will now prove some of the type identities in Table~\ref{tab:Logical-identities-with-function-types}.
 
-\subsubsection{Example \label{subsec:ch-Example-type-identity-f}\ref{subsec:ch-Example-type-identity-f}\index{solved examples}}
+\subsubsection{Example \label{subsec:ch-Example-type-identity-f}\ref{subsec:ch-Example-type-identity-f}\index{examples (with code)}}
 
 Verify the type equivalence $\bbnum 1\rightarrow A\cong A$.
 
@@ -2819,7 +3261,7 @@ B & g
 It remains to verify that $f_{1}\bef f_{2}=\text{id}$ and $f_{2}\bef f_{1}=\text{id}$.
 To compute $f_{1}\bef f_{2}$, we write (omitting types):
 \begin{align*}
-f_{1}\bef f_{2} & =\big(h\rightarrow(a\rightarrow h(a+\bbnum 0))\times(b\rightarrow h(\bbnum 0+b))\big)\bef\bigg(f\times g\rightarrow\,\begin{array}{||c|}
+f_{1}\bef f_{2}= & \big(h\rightarrow(a\rightarrow h(a+\bbnum 0))\times(b\rightarrow h(\bbnum 0+b))\big)\bef\bigg(f\times g\rightarrow\,\begin{array}{||c|}
 f\\
 g
 \end{array}\,\bigg)\\
@@ -2920,11 +3362,11 @@ q
 
 To prove that $f_{2}\bef f_{1}=\text{id}$, use the notation~(\ref{eq:forward-notation-}):
 \begin{align*}
- & f_{2}\bef f_{1}=\bigg(f\times g\rightarrow\,\begin{array}{||c|}
+f_{2}\bef f_{1}= & \bigg(f\times g\rightarrow\,\begin{array}{||c|}
 f\\
 g
 \end{array}\,\bigg)\bef\big(h\rightarrow(a\rightarrow(a+\bbnum 0)\triangleright h)\times(b\rightarrow(\bbnum 0+b)\triangleright h)\big)\\
-{\color{greenunder}\text{compute composition}:}\quad & =f\times g\rightarrow\big(a\rightarrow\gunderline{\,\begin{array}{|cc|}
+{\color{greenunder}\text{composition}:}\quad & =f\times g\rightarrow\big(a\rightarrow\gunderline{\,\begin{array}{|cc|}
 a & \bbnum 0\end{array}\,\triangleright}\,\begin{array}{||c|}
 f\\
 g
@@ -2944,11 +3386,11 @@ and introduce new notation for applying matrices to row vectors. Once
 this notation is understood, the proof for $f_{1}\bef f_{2}=\text{id}$
 can be written as:
 \begin{align*}
-f_{1}\bef f_{2} & =\left(h\rightarrow(a\rightarrow(a+\bbnum 0)\triangleright h)\times(b\rightarrow(\bbnum 0+b)\triangleright h)\right)\bef\bigg(f\times g\rightarrow\,\begin{array}{||c|}
+f_{1}\bef f_{2}= & \left(h\rightarrow(a\rightarrow(a+\bbnum 0)\triangleright h)\times(b\rightarrow(\bbnum 0+b)\triangleright h)\right)\bef\bigg(f\times g\rightarrow\,\begin{array}{||c|}
 f\\
 g
 \end{array}\bigg)\\
-{\color{greenunder}\text{compute composition}:}\quad & =h\rightarrow\,\begin{array}{||c|}
+{\color{greenunder}\text{composition}:}\quad & =h\rightarrow\,\begin{array}{||c|}
 \,a\,\rightarrow\,\left|\begin{array}{cc}
 a & \bbnum 0\end{array}\right|\triangleright h\\
 b\rightarrow\left|\begin{array}{cc}
@@ -3026,16 +3468,16 @@ Compute the function composition $f_{1}\bef f_{2}$ and show that
 it is equal to an identity function:
 \begin{align*}
 {\color{greenunder}\text{expect to equal }\text{id}:}\quad & f_{1}\bef f_{2}=(g\rightarrow\gunderline{a\rightarrow b\rightarrow g(a\times b)})\bef\left(h\rightarrow a\times b\rightarrow h(a)(b)\right)\\
-{\color{greenunder}\text{substitute }h=a\rightarrow b\rightarrow g(a\times b):}\quad & \quad=g\rightarrow\gunderline{a\times b\rightarrow g(a\times b)}\\
+{\color{greenunder}\text{composition}:}\quad & \quad=g\rightarrow\gunderline{a\times b\rightarrow g(a\times b)}\\
 {\color{greenunder}\text{simplify function}:}\quad & \quad=\left(g\rightarrow g\right)=\text{id}\quad.
 \end{align*}
 Compute the function composition $f_{2}\bef f_{1}$ and show that
 it is equal to an identity function:
 \begin{align*}
 {\color{greenunder}\text{expect to equal }\text{id}:}\quad & f_{2}\bef f_{1}=(h\rightarrow\gunderline{a\times b\rightarrow h(a)(b)})\bef\left(g\rightarrow a\rightarrow b\rightarrow g(a\times b)\right)\\
-{\color{greenunder}\text{substitute }g=a\times b\rightarrow h(a)(b):}\quad & \quad=h\rightarrow a\rightarrow\gunderline{b\rightarrow h(a)(b)}\\
-{\color{greenunder}\text{simplify function }b\rightarrow h(a)(b):}\quad & \quad=h\rightarrow\gunderline{a\rightarrow h(a)}\\
-{\color{greenunder}\text{simplify function }a\rightarrow h(a)\text{ to }h:}\quad & \quad=\left(h\rightarrow h\right)=\text{id}\quad.
+{\color{greenunder}\text{composition}:}\quad & \quad=h\rightarrow a\rightarrow\gunderline{b\rightarrow h(a)(b)}\\
+{\color{greenunder}\text{simplify }b\rightarrow h(a)(b):}\quad & \quad=h\rightarrow\gunderline{a\rightarrow h(a)}\\
+{\color{greenunder}\text{simplify }a\rightarrow h(a)\text{ to }h:}\quad & \quad=\left(h\rightarrow h\right)=\text{id}\quad.
 \end{align*}
 
 
@@ -3127,7 +3569,7 @@ So, code for functions such as \lstinline!q! can only be derived
 by trial and error, informed by intuition. This book will help programmers
 to acquire the necessary intuition and technique.
 
-\subsection{Solved examples\index{solved examples}}
+\subsection{Examples\index{examples (with code)}}
 
 \subsubsection{Example \label{subsec:ch-solvedExample-1}\ref{subsec:ch-solvedExample-1}}
 
@@ -3138,14 +3580,14 @@ type.
 \subparagraph{Solution}
 
 Begin with the type \lstinline!Option[Boolean]!, which can be either
-\lstinline!None! or \lstinline!Some(x)! with an \lstinline!x:Boolean!.
-Since the type \lstinline!Boolean! has $2$ possible values, the
-type \lstinline!Option[Boolean]! has $3$ values:
+\lstinline!None! or \lstinline!Some(x)! with some value \lstinline!x: Boolean!.
+Because the type \lstinline!Boolean! has $2$ possible values, the
+type \lstinline!Option[Boolean]! has $3$ possible values:
 \[
 |\text{Opt}^{\text{Boolean}}|=\left|\bbnum 1+\text{Boolean}\right|=1+\left|\text{Boolean}\right|=1+2=3\quad.
 \]
 In the type notation, \lstinline!Boolean! is denoted by the symbol
-$\bbnum 2$, and the type \lstinline!Option[Boolean]! by $\bbnum 1+\bbnum 2$.
+$\bbnum 2$ and \lstinline!Option[Boolean]! by $\bbnum 1+\bbnum 2$.
 So, the type notation $\bbnum 1+\bbnum 2$ is consistent with the
 cardinality $3$ of that type:
 \[
@@ -3268,8 +3710,8 @@ This is precisely the information present in the type $A+A$ but missing
 in the type $A$.
 
 The code notation for these functions is:
-\[
-f_{1}\triangleq\,\begin{array}{|c||c|}
+\begin{align*}
+f_{1} & \triangleq\,\begin{array}{|c||c|}
  & A\\
 \hline A & a^{:A}\rightarrow a\\
 A & a^{:A}\rightarrow a
@@ -3277,15 +3719,16 @@ A & a^{:A}\rightarrow a
  & A\\
 \hline A & \text{id}\\
 A & \text{id}
-\end{array}\quad,\quad\quad f_{2}\triangleq a^{:A}\rightarrow a+\bbnum 0^{:A}=\,\begin{array}{|c||cc|}
+\end{array}\quad,\\
+f_{2} & \triangleq a^{:A}\rightarrow a+\bbnum 0^{:A}=\,\begin{array}{|c||cc|}
  & A & A\\
 \hline A & a^{:A}\rightarrow a & \bbnum 0
 \end{array}\,=\,\begin{array}{|c||cc|}
  & A & A\\
 \hline A & \text{id} & \bbnum 0
 \end{array}\quad.
-\]
-The composition of these functions is not equal to identity:
+\end{align*}
+The composition of these functions is \emph{not} equal to identity:
 \[
 f_{1}\bef f_{2}=\,\begin{array}{||c|}
 \text{id}\\
@@ -3335,9 +3778,10 @@ correct answers about implementability of type signatures.
 \subparagraph{Solution}
 
 Begin by rewriting the logical equality as two implications:
-\[
-(A\wedge B\Rightarrow C)\Rightarrow(A\Rightarrow C)\vee(B\Rightarrow C)\quad\text{ and }\quad\left((A\Rightarrow C)\vee(B\Rightarrow C)\right)\Rightarrow\left(\left(A\wedge B\right)\Rightarrow C\right)\quad.
-\]
+\begin{align*}
+(A\wedge B & \Rightarrow C)\Rightarrow(A\Rightarrow C)\vee(B\Rightarrow C)\\
+\quad\text{ and }\quad & \left((A\Rightarrow C)\vee(B\Rightarrow C)\right)\Rightarrow\left(\left(A\wedge B\right)\Rightarrow C\right)\quad.
+\end{align*}
 It is sufficient to show that one of these implications is incorrect.
 Rather than looking for a proof tree in the constructive logic (which
 would be difficult, since we need to demonstrate that \emph{no} proof
@@ -3374,21 +3818,12 @@ of type $B$. However, we have no values of type $B$. Similarly,
 we cannot compute a value $h^{:B\rightarrow C}$.
 
 The inverse type signature \emph{can} be implemented:
-
-\begin{wrapfigure}{l}{0.55\columnwidth}%
-\vspace{0.32\baselineskip}
 \begin{lstlisting}
 def f2[A,B,C]: Either[A=>C, B=>C] => ((A,B)) => C = {
   case Left(g)    =>   { case (a, b)    => g(a) }
   case Right(h)   =>   { case (a, b)    => h(b) }
 }
 \end{lstlisting}
-
-\vspace{-2.4\baselineskip}
-\end{wrapfigure}%
-\vspace{-1.2\baselineskip}
-
-\noindent 
 \[
 f_{2}\triangleq\,\begin{array}{|c||c|}
  & A\times B\rightarrow C\\
@@ -3396,7 +3831,6 @@ f_{2}\triangleq\,\begin{array}{|c||c|}
 B\rightarrow C & h^{:B\rightarrow C}\rightarrow a\times b\rightarrow h(b)
 \end{array}\quad.
 \]
-\vspace{-0.9\baselineskip}
 
 Let us now show that the logical identity:
 \begin{equation}
@@ -3648,9 +4082,6 @@ Now we can write code to implement the required type signature. Each
 time we have several choices of an implementation, we will choose
 to preserve information as much as possible.
 
-\begin{wrapfigure}{l}{0.45\columnwidth}%
-\vspace{-0\baselineskip}
-
 \begin{lstlisting}
 def map[A, B]: P[A] => (A => B) => P[B] =
   p => f => p match {
@@ -3659,11 +4090,8 @@ def map[A, B]: P[A] => (A => B) => P[B] =
     case P3(x)   => ???
   }
 \end{lstlisting}
-\vspace{-0.9\baselineskip}
-\end{wrapfigure}%
-
-\noindent In the case \lstinline!P2(x)!, we are required to produce
-a value of type $P^{B}$ from a value $x^{:A}$ and a function $f^{:A\rightarrow B}$.
+In the case \lstinline!P2(x)!, we are required to produce a value
+of type $P^{B}$ from a value $x^{:A}$ and a function $f^{:A\rightarrow B}$.
 Since $P^{B}$ is a disjunctive type with three parts, we can produce
 a value of type $P^{B}$ in three different ways: \lstinline!P1()!,
 \lstinline!P2(...)!, and \lstinline!P3(...)!. If we return \lstinline!P1()!,
@@ -3830,9 +4258,6 @@ which we may take the first part (of type $A$) to fill the typed
 hole $\text{???}^{:A}$. The second part of the pair is a value of
 type $S$ that we may use to fill the second typed hole, $\text{???}^{:S}$.
 So, the Scala code is:
-
-\begin{wrapfigure}{l}{0.62\columnwidth}%
-\vspace{-0.9\baselineskip}
 \begin{lstlisting}[numbers=left]
 def map[S, A, B]: State[S, A] => (A => B) => State[S, B] = {
   t => f => s =>
@@ -3840,14 +4265,11 @@ def map[S, A, B]: State[S, A] => (A => B) => State[S, B] = {
     (f(a), s2)     // We could also return `(f(a), s)` here.
 }
 \end{lstlisting}
-\vspace{-1.25\baselineskip}
-\end{wrapfigure}%
-
-\noindent Why not return the original value \lstinline!s! in the
-tuple $B\times S$, instead of the new value \lstinline!s2!? The
-reason is that we would like to preserve information as much as possible.
-If we return \lstinline!(f(a), s)! in line 4, we will have discarded
-the computed value \lstinline!s2!, which is a loss of information.
+Why not return the original value \lstinline!s! in the tuple $B\times S$,
+instead of the new value \lstinline!s2!? The reason is that we would
+like to preserve information as much as possible. If we return \lstinline!(f(a), s)!
+in line 4, we will have discarded the computed value \lstinline!s2!,
+which is a loss of information.
 
 To write the code notation for \lstinline!map!, we need to destructure
 the pair that $t(s)$ returns. We can write explicit destructuring
@@ -3912,9 +4334,12 @@ to:
 
 \subsubsection{Exercise \label{subsec:ch-Exercise-0}\ref{subsec:ch-Exercise-0}}
 
-Find the cardinality of the type \lstinline!P = Option[Boolean => Option[Boolean]]!.
+Find the cardinality of the following Scala type: 
+\begin{lstlisting}
+type P = Option[Boolean => Option[Boolean]]
+\end{lstlisting}
 Show that \lstinline!P! is equivalent to \lstinline!Option[Boolean] => Boolean!,
-and that the equivalence is accidental\index{type equivalence!accidental}
+but the equivalence is accidental\index{type equivalence!accidental}
 and not \textsf{``}natural\textsf{''}.
 
 \subsubsection{Exercise \label{subsec:ch-Exercise-1-a}\ref{subsec:ch-Exercise-1-a}}
@@ -4050,9 +4475,9 @@ type when no other disjunctive value is given\textsf{''}. These guidelines
 can be justified by referring to the rigorous rules of proof (Table~\ref{tab:Proof-rules-for-constructive-logic}).
 Sequents producing a value of type $A$ can be proved only if there
 is a premise containing $A$ or a function that returns a value of
-type $A$.\footnote{This is proved rigorously in the paper \texttt{\href{https://research-repository.st-andrews.ac.uk/handle/10023/8824}{https://research-repository.st-andrews.ac.uk/handle/10023/8824}}
-(2016) by R.~Dyckhoff.\index{Roy Dyckhoff} See the \textsf{``}Theorem\textsf{''}
-in section 6 (\textsf{``}Goal-directed pruning\textsf{''}).} One can derive a disjunction without hard-coding only if one already
+type $A$.\footnote{This is proved rigorously by R.~Dyckhoff\index{Roy Dyckhoff} as
+the \textsf{``}Theorem\textsf{''} in section 6 (\textsf{``}Goal-directed pruning\textsf{''}), see
+\texttt{\href{https://research-repository.st-andrews.ac.uk/handle/10023/8824}{https://research-repository.st-andrews.ac.uk/handle/10023/8824}}} One can derive a disjunction without hard-coding only if one already
 has a disjunction in the premises (and then the rule \textsf{``}use \lstinline!Either!\textsf{''}
 could apply).
 
@@ -4103,9 +4528,9 @@ types, disjunctive types (also called \textsf{``}sum\textsf{''} types because th
 correspond to arithmetic sums), and function types (also called \textsf{``}exponential\textsf{''}
 types because they correspond to arithmetic exponentials). Type expressions
 that contain only products and sum types are called \textbf{polynomial}\index{polynomial type}\index{types!polynomial types}.\footnote{These types are often called \textsf{``}algebraic data types\index{algebraic data types}\textsf{''}
-but this book prefers the more precise term \textsf{``}polynomial types\textsf{''}.} Type expressions that also contain function types may be called \textbf{exponential-polynomial}\index{exponential-polynomial type}\index{types!exponential-polynomial types}.
-This book focuses on exponential-polynomial types because they are
-sufficient for almost all design patterns used in functional programming.
+but this book prefers the more precise term \textsf{``}polynomial types\textsf{''}.} Type expressions that also contain function types are called \textbf{exponential-polynomial}\index{exponential-polynomial type}\index{types!exponential-polynomial types}.
+We focus on exponential-polynomial types because they are sufficient
+for almost all design patterns used in functional programming.
 
 There are no types corresponding to subtraction or division, so arithmetic
 equations such as:
@@ -4297,6 +4722,15 @@ parametric, it will work in the same way with all types $E$, including
 $E=\bbnum 0$. The code implements our intention via type parameters,
 giving a compile-time guarantee of correct results.
 
+So far, none of our examples involved the logical \textbf{negation}\index{negation (in logic)}
+operation. It is defined as:
+\[
+\neg\alpha\triangleq(\alpha\Rightarrow False)\quad.
+\]
+Its practical use is as limited as that of $False$ and the void type.
+However, logical negation plays an important role in Boolean logic,
+which we will discuss next.
+
 \subsection{Relationship between Boolean logic and constructive logic\label{subsec:Relationship-between-Boolean} }
 
 We have seen that some true theorems of Boolean logic are not true
@@ -4335,15 +4769,16 @@ lines are Boolean theorems that can be verified by calculation.
 \hline 
 {\small{}$\frac{\Gamma,\alpha\vdash\beta}{\Gamma\vdash\alpha\Rightarrow\beta}\quad(\text{create function})$} & {\small{}$\left(\neg\Gamma\vee\neg\alpha\vee\beta\right)=\left(\neg\Gamma\vee\left(\alpha\Rightarrow\beta\right)\right)$}\tabularnewline
 \hline 
-{\small{}$\frac{\Gamma\vdash\alpha\quad\quad\Gamma\vdash\alpha\Rightarrow\beta}{\Gamma\vdash\beta}\quad(\text{use function})$} & {\small{}$\left(\left(\neg\Gamma\vee\alpha\right)\wedge\left(\neg\Gamma\vee\left(\alpha\Rightarrow\beta\right)\right)\right)\Rightarrow\left(\neg\Gamma\vee\beta\right)$}\tabularnewline
+{\small{}$\frac{\Gamma\vdash\alpha\quad\Gamma\vdash\alpha\Rightarrow\beta}{\Gamma\vdash\beta}\quad(\text{use function})$} & {\small{}$\left(\left(\neg\Gamma\vee\alpha\right)\wedge\left(\neg\Gamma\vee\left(\alpha\Rightarrow\beta\right)\right)\right)\Rightarrow\left(\neg\Gamma\vee\beta\right)$}\tabularnewline
 \hline 
-{\small{}$\frac{\Gamma\vdash\alpha\quad\quad\Gamma\vdash\beta}{\Gamma\vdash\alpha\wedge\beta}\quad(\text{create tuple})$} & {\small{}$\left(\neg\Gamma\vee\alpha\right)\wedge\left(\neg\Gamma\vee\beta\right)=\left(\neg\Gamma\vee\left(\alpha\wedge\beta\right)\right)$}\tabularnewline
+{\small{}$\frac{\Gamma\vdash\alpha\quad\Gamma\vdash\beta}{\Gamma\vdash\alpha\wedge\beta}\quad(\text{create tuple})$} & {\small{}$\left(\neg\Gamma\vee\alpha\right)\wedge\left(\neg\Gamma\vee\beta\right)=\left(\neg\Gamma\vee\left(\alpha\wedge\beta\right)\right)$}\tabularnewline
 \hline 
 {\small{}$\frac{\Gamma\vdash\alpha\wedge\beta}{\Gamma\vdash\alpha}\quad(\text{use tuple-}1)$} & {\small{}$\left(\neg\Gamma\vee\left(\alpha\wedge\beta\right)\right)\Rightarrow\left(\neg\Gamma\vee\alpha\right)$}\tabularnewline
 \hline 
 {\small{}$\frac{\Gamma\vdash\alpha}{\Gamma\vdash\alpha\vee\beta}\quad(\text{create Left})$} & {\small{}$\left(\neg\Gamma\vee\alpha\right)\Rightarrow\left(\neg\Gamma\vee\left(\alpha\vee\beta\right)\right)$}\tabularnewline
 \hline 
-{\small{}$\frac{\Gamma\vdash\alpha\vee\beta\quad\quad\Gamma,\alpha\vdash\gamma\quad\quad\Gamma,\beta\vdash\gamma}{\Gamma\vdash\gamma}\quad(\text{use Either})$} & {\small{}$\left(\left(\neg\Gamma\vee\alpha\vee\beta\right)\wedge\left(\neg\Gamma\vee\neg\alpha\vee\gamma\right)\wedge\left(\neg\Gamma\vee\neg\beta\vee\gamma\right)\right)\Rightarrow\left(\neg\Gamma\vee\gamma\right)$}\tabularnewline
+{\small{}$\frac{\Gamma\vdash\alpha\vee\beta\quad\Gamma,\alpha\vdash\gamma\quad\Gamma,\beta\vdash\gamma}{\Gamma\vdash\gamma}\quad(\text{use Either})$} & {\small{}$\left(\neg\Gamma\vee\alpha\vee\beta\right)\wedge\left(\neg\Gamma\vee\neg\alpha\vee\gamma\right)\quad\quad$}\tabularnewline
+ & $\quad\quad\wedge\left(\neg\Gamma\vee\neg\beta\vee\gamma\right)\Rightarrow\left(\neg\Gamma\vee\gamma\right)$\tabularnewline
 \hline 
 \end{tabular}
 \par\end{centering}
@@ -4437,7 +4872,7 @@ uses the Boolean identity $\left(\alpha\Rightarrow\beta\right)=(\neg\alpha\vee\b
 which does not hold in the constructive logic, to translate the constructive
 axiom \textsf{``}$\text{use arg}$\textsf{''} into the Boolean axiom $\neg\alpha\vee\alpha=True$.
 The formula $\forall\alpha.\,\neg\alpha\vee\alpha=True$ is known
-as the \textbf{law of excluded middle}.\footnote{\texttt{\href{https://en.wikipedia.org/wiki/Law_of_excluded_middle}{https://en.wikipedia.org/wiki/Law\_of\_excluded\_middle}}}\index{law of excluded middle}
+as the \textbf{law of excluded middle}.\footnote{See \texttt{\href{https://en.wikipedia.org/wiki/Law_of_excluded_middle}{https://en.wikipedia.org/wiki/Law\_of\_excluded\_middle}}}\index{law of excluded middle}
 It is remarkable that the constructive logic \emph{does not have}
 the law of excluded middle. It is neither an axiom nor a derived theorem
 in constructive logic.
@@ -4488,14 +4923,17 @@ allow programmers to compare types as values and to determine what
 type was given to a type parameter when a function is applied:
 \begin{lstlisting}[mathescape=true]
 import scala.reflect.runtime.universe._
-def getType[T: TypeTag]: Type = weakTypeOf[T]   // Convert the type parameter T into a special value.
-def equalTypes[A: TypeTag, B: TypeTag]: Boolean = getType[A] =:= getType[B] // Compare types A and B.
+   // Convert the type parameter T into a special value.
+def getType[T: TypeTag]: Type = weakTypeOf[T]
+   // Compare types A and B.
+def equalTypes[A: TypeTag, B: TypeTag]: Boolean = getType[A] =:= getType[B]
 
-def excludedMiddle[A: TypeTag]: Either[A, A => Nothing] =  // excludedMiddle has type ${\color{dkgreen}\forall A.\left(A\rightarrow\bbnum 0\right)+A}$.
+  // excludedMiddle has type ${\color{dkgreen}\forall A.\left(A\rightarrow\bbnum 0\right)+A}$.
+def excludedMiddle[A: TypeTag]: Either[A, A => Nothing] =
    if (equalTypes[A, Nothing]) Right((identity _).asInstanceOf[A => Nothing])    // Return ${\color{dkgreen}\text{id}:\bbnum 0\rightarrow\bbnum 0}$.
-   else if (equalTypes[A, Int]) Left(123.asInstanceOf[A])          // Produce some value of type Int.
+   else if (equalTypes[A, Int]) Left(123.asInstanceOf[A])      // Produce some value of type Int.
    else if (equalTypes[A, Boolean]) Left(true.asInstanceOf[A]) // Produce some value of type Boolean.
-   else ???                  // Need to write many more definitions to support all other Scala types.
+   else ???        // Write more definitions to support all other Scala types.
 
 scala> excludedMiddle[Int]
 res0: Either[Int,Int => Nothing] = Left(123)
@@ -5495,432 +5933,3 @@ the foundation of the type system will be safe so that is the final
 lesson from the great Howard correspondence this concludes the tutorial
 \end{comment}
 
-
-\subsection{The LJT algorithm\label{app:The-LJT-algorithm}}
-
-In this chapter, we have seen how to derive code from a type signature
-as long as one has a proof of the sequent corresponding to that type
-signature. But Section~\ref{subsec:Example:-Proving-a-ch-proposition}
-gave an example showing that the rules in Table~\ref{tab:Proof-rules-of-constructive-and-boolean}
-do not provide an algorithm for finding a proof for a given sequent.
-
-To illustrate this problem on another example, let us try proving
-the sequent:
-\[
-A,B\vee C\vdash(A\wedge B)\vee C\quad.
-\]
-We expect that this sequent is provable because we can write the corresponding
-Scala code:
-\begin{lstlisting}
-def f[A, B, C](a: A): Either[B, C] => Either[(A, B), C] = {
-  case Left(b)    => Left((a, b))
-  case Right(c)   => Right(c)
-}
-\end{lstlisting}
-How can we obtain a proof of this sequent according to the rules in
-Table~\ref{tab:Proof-rules-of-constructive-and-boolean}? We find
-that we could potentially apply the rules \textsf{``}create \lstinline!Left!\textsf{''},
-\textsf{``}create \lstinline!Right!\textsf{''}, \textsf{``}use \lstinline!Either!\textsf{''}, and
-\textsf{``}use function\textsf{''}. However, no matter what rule we choose, we will
-get stuck at the next step. Let us see why:
-
-To apply \textsf{``}create \lstinline!Left!\textsf{''}, we first need to prove the
-sequent $A,B\vee C\vdash A\wedge B$. But this sequent cannot be proved:
-we do not necessarily have values of both types $A$ and $B$ if we
-are only given values of type $A$ and of type \lstinline!Either[B, C]!.
-To apply \textsf{``}create \lstinline!Right!\textsf{''}, we need to prove the sequent
-$A,B\vee C\vdash C$. Again, we find that this sequent cannot be proved.
-The next choice is the rule \textsf{``}use \lstinline!Either!\textsf{''} that matches
-any goal of the sequent as the proposition $\gamma$. But we are then
-required to choose two new propositions ($\alpha$ and $\beta$) such
-that we can prove $A,B\vee C\vdash\alpha\vee\beta$ as well as $A,B\vee C,\alpha\vdash(A\wedge B)\vee C$
-and $A,B\vee C,\beta\vdash(A\wedge B)\vee C$. It is not clear how
-we should choose $\alpha$ and $\beta$ in order to make progress
-in the proof. The remaining rule, \textsf{``}use function\textsf{''}, similarly requires
-us to choose a new proposition $\alpha$ such that we can prove $A,B\vee C\vdash\alpha$
-and $A,B\vee C\vdash\alpha\Rightarrow((A\wedge B)\vee C)$. The rules
-give us no guidance for choosing $\alpha$ appropriately.
-
-To see that the rules in Table~\ref{tab:Proof-rules-for-constructive-logic}
-are not helpful for proof search, note that the rules \textsf{``}use function\textsf{''}
-and \textsf{``}use \lstinline!Either!\textsf{''} require us to choose new unknown
-propositions and to prove more complicated sequents than the ones
-we had before. For instance, the rule \textsf{``}use function\textsf{''} gives a proof
-of $\Gamma\vdash\beta$ only if we first choose some other proposition
-$\alpha$ and prove the sequents $\Gamma\vdash\alpha$ and $\Gamma\vdash\alpha\Rightarrow\beta$.
-The rule does not say how to choose the proposition $\alpha$ correctly.
-We need to guess the correct $\alpha$ by trial and error. Even after
-choosing $\alpha$ in some way, we will have to prove a more complicated
-sequent ($\Gamma\vdash\alpha\Rightarrow\beta$). It is not guaranteed
-that we are getting closer to finding the proof of the initial sequent
-($\Gamma\vdash\beta$). 
-
-It is far from obvious how to overcome that difficulty. Mathematicians
-have studied the constructive logic for more than 60 years, trying
-to replace the rules in Table~\ref{tab:Proof-rules-of-constructive-and-boolean}
-by a different but equivalent set of derivation rules that require
-no guessing when looking for a proof. The first partial success came
-in 1935 with an algorithm called \textsf{``}LJ\textsf{''}.\footnote{See \texttt{\href{https://en.wikipedia.org/wiki/Sequent_calculus\#Overview}{https://en.wikipedia.org/wiki/Sequent\_calculus\#Overview}}}
-The LJ algorithm still has a significant problem: one of its derivation
-rules may be applied infinitely many times. So, the LJ algorithm is
-not guaranteed to terminate without some heuristics for avoiding an
-infinite loop. A terminating version of the LJ algorithm, called \index{LJT algorithm}LJT,
-was formulated in 1992.\footnote{The history of that research is described in \texttt{\href{https://research-repository.st-andrews.ac.uk/handle/10023/8824}{https://research-repository.st-andrews.ac.uk/handle/10023/8824}}.
-An often cited paper by R.~Dyckhoff\index{Roy Dyckhoff} is found
-at \texttt{\href{https://philpapers.org/rec/DYCCSC}{https://philpapers.org/rec/DYCCSC}}} 
-
-We will first present the LJ algorithm. Although that algorithm does
-not guarantee termination, it is simpler to understand and to apply
-by hand. Then we will show how to modify the LJ algorithm in order
-to obtain the always-terminating LJT algorithm.
-
-\subsubsection*{The LJ algorithm}
-
-Figure~\ref{fig:Rules-of-the-LJ-algorithm} shows the LJ algorithm\textsf{'}s
-axioms and derivation rules. Each rule says that the bottom sequent
-will be proved if proofs are given for sequent(s) at the top. For
-each possible sub-expression (conjunction $X\wedge Y$, disjunction
-$X\vee Y$, and implication $X\Rightarrow Y$) there is one rule where
-that sub-expression is a premise (at \textsf{``}left\textsf{''}) and one rule where
-that sub-expression is the goal (at \textsf{``}right\textsf{''}). Those sub-expressions
-are shown in blue in Figure~\ref{fig:Rules-of-the-LJ-algorithm}
-to help us look for a proof. To find out which rules apply, we match
-some part of the sequent with a blue sub-expression.
-
-\begin{figure}
-\begin{centering}
-\fbox{\begin{minipage}[t]{0.7\linewidth}%
-\begin{align*}
-\frac{}{\Gamma,X\vdash{\color{blue}X}}~(\text{Id})\qquad & \qquad\frac{}{\Gamma\vdash{\color{blue}\top}}~(\text{True})\\
-\frac{\Gamma,A\Rightarrow B\vdash A\quad\quad\Gamma,B\vdash C}{\Gamma,{\color{blue}A\Rightarrow B}\vdash C}~(\text{Left}\Rightarrow)\qquad & \qquad\frac{\Gamma,A\vdash B}{\Gamma\vdash{\color{blue}A\Rightarrow B}}~(\text{Right}\Rightarrow)\\
-\frac{\Gamma,A_{i}\vdash C}{\Gamma,{\color{blue}A_{1}\wedge A_{2}}\vdash C}~(\text{Left}\wedge_{i})\qquad & \qquad\frac{\Gamma\vdash A\quad\quad\Gamma\vdash B}{\Gamma\vdash{\color{blue}A\wedge B}}~(\text{Right}\wedge)\\
-\frac{\Gamma,A\vdash C\quad\quad\Gamma,B\vdash C}{\Gamma,{\color{blue}A\vee B}\vdash C}~(\text{Left}\vee)\qquad & \qquad\frac{\Gamma\vdash A_{i}}{\Gamma\vdash{\color{blue}A_{1}\vee A_{2}}}~(\text{Right}\vee_{i})
-\end{align*}
-%
-\end{minipage}}
-\par\end{centering}
-\caption{Axioms and derivation rules of the LJ algorithm. Each of the rules
-\textquotedblleft ($\text{Left}\wedge_{i}$)\textquotedblright{} and
-\textquotedblleft ($\text{Right}\vee_{i}$)\textquotedblright{} have
-two versions, with $i=1$ or $i=2$. \label{fig:Rules-of-the-LJ-algorithm}}
-\end{figure}
-
-It turns out that the rules in Figure~\ref{fig:Rules-of-the-LJ-algorithm}
-are \emph{equivalent} to the rules in Table~\ref{tab:Proof-rules-for-constructive-logic}.
-The proof is beyond the scope of this book. We only remark that this
-equivalence is far from obvious. To prove it, one needs to demonstrate
-that any sequent derived through the first set of rules is also derivable
-through the second set, and vice versa.
-
-To illustrate the LJ algorithm, let us prove the sequent~(\ref{eq:ch-example-sequent-2}).
-Denote that sequent by $S_{0}$:
-\[
-S_{0}\triangleq\emptyset\vdash\left(\left(\alpha\Rightarrow\alpha\right)\Rightarrow\beta\right)\Rightarrow\beta\quad.
-\]
- Since the goal of $S_{0}$ contains an implication, we use the rule
-\textsf{``}($\text{Right}\Rightarrow$)\textsf{''} and get a sequent $S_{1}$:
-\[
-S_{1}\triangleq\left(\alpha\Rightarrow\alpha\right)\Rightarrow\beta\vdash\beta\quad.
-\]
-Now the implication is in the premise, so we use the rule \textsf{``}($\text{Left}\Rightarrow$)\textsf{''}
-and get two new sequents:
-\[
-S_{2}\triangleq\left(\alpha\Rightarrow\alpha\right)\Rightarrow\beta\vdash\alpha\Rightarrow\alpha\quad,\quad\quad S_{3}\triangleq\beta\vdash\beta\quad.
-\]
-Sequent $S_{3}$ follows from the \textsf{``}(Id)\textsf{''} axiom, so it remains
-to prove $S_{2}$. Since $S_{2}$ contains an implication both as
-a premise and as the goal, we may apply either the rule \textsf{``}($\text{Left}\Rightarrow$)\textsf{''}
-or the rule \textsf{``}($\text{Right}\Rightarrow$)\textsf{''}. We choose to apply
-\textsf{``}($\text{Left}\Rightarrow$)\textsf{''} and get two new sequents:
-\[
-S_{4}\triangleq\left(\alpha\Rightarrow\alpha\right)\Rightarrow\beta\vdash\alpha\Rightarrow\alpha\quad,\quad\quad S_{5}:\beta\vdash\alpha\Rightarrow\alpha\quad.
-\]
-Notice that $S_{4}=S_{2}$. So, our proof search is getting into an
-infinite loop trying to prove the same sequent $S_{2}$ over and over
-again. We can prove $S_{5}$ but this will not help us break the loop.
-
-Once we recognize the problem, we backtrack to the point where we
-chose to apply \textsf{``}($\text{Left}\Rightarrow$)\textsf{''} to $S_{2}$. That
-was a bad choice, so let us instead apply \textsf{``}($\text{Right}\Rightarrow$)\textsf{''}
-to $S_{2}$. This yields a new sequent $S_{6}$:
-\[
-S_{6}\triangleq\left(\alpha\Rightarrow\alpha\right)\Rightarrow\beta,\alpha\vdash\alpha\quad.
-\]
-This sequent follows from the \textsf{``}(Id)\textsf{''}axiom. There are no more sequents
-to prove, so the proof of $S_{0}$ is finished. It can be drawn as
-a \index{proof tree}\textbf{proof tree} like this:
-\[
-\xymatrix{\xyScaleY{1.5pc}\xyScaleX{4pc} &  &  & (\text{Id})\\
-\ar[r]\sp(0.35){S_{0}} & (\text{Right}\Rightarrow)\ar[r]\sp(0.5){S_{1}} & (\text{Left}\Rightarrow)\ar[r]\sp(0.5){S_{2}}\ar[ru]\sp(0.6){S_{3}} & (\text{Right}\Rightarrow)\ar[r]\sp(0.65){S_{6}} & (\text{Id})
-}
-\]
-The nodes of the proof tree are axioms or derivation rules, and the
-edges are intermediate sequents required by the rules. Some rule nodes
-branch into several sequents because some rules require more than
-one new sequent to be proved. The leaves of the tree are axioms that
-do not require proving any further sequents. 
-
-\subsubsection*{Extracting code from proofs}
-
-According to the Curry-Howard correspondence, a sequent (such as $A,B,...,C\vdash X$)
-represents the task of writing a fully parametric code expression
-of type $X$ that uses some given values of types $A$, $B$, ...,
-$C$. The sequent is true (i.e., can be proved) if that code expression
-can be found. So, the code serves as an \textsf{``}evidence of proof\textsf{''} for
-the sequent.
-
-\begin{figure}
-\begin{centering}
-\noindent\fbox{\begin{minipage}[t]{1\columnwidth - 2\fboxsep - 2\fboxrule}%
-\begin{align*}
-\frac{}{\Gamma,A\vdash{\color{blue}A}}~(\text{Id})\quad & \quad\text{Proof}\,(\Gamma,A\vdash A)_{\text{given }p^{:\Gamma},x^{:A}}=x\\
-\frac{}{\Gamma\vdash{\color{blue}\top}}~(\text{True})\quad & \quad\text{Proof}\,(\Gamma\vdash\top)_{\text{given }p^{:\Gamma}}=1\\
-\frac{\Gamma,A\Rightarrow B\vdash A\quad\quad\Gamma,B\vdash C}{\Gamma,{\color{blue}A\Rightarrow B}\vdash C}~(\text{Left}\Rightarrow)\quad & \quad\text{Proof}\,(\Gamma,A\Rightarrow B\vdash C)_{\text{given }p^{:\Gamma},q^{:A\rightarrow B}}=\text{Proof}\,(\Gamma,B\vdash C)_{\text{given }p,b^{:B}}\\
- & \quad\quad\text{where}\quad b^{:B}\triangleq q\big(\text{Proof}\,(\Gamma,A\Rightarrow B\vdash A)_{\text{given }p,q}\big)\\
-\frac{\Gamma,A\vdash B}{\Gamma\vdash{\color{blue}A\Rightarrow B}}~(\text{Right}\Rightarrow)\quad & \quad\text{Proof}\,(\Gamma\vdash A\Rightarrow B)_{\text{given }p^{:\Gamma}}=x^{:A}\rightarrow\text{Proof}\,(\Gamma,A\vdash B)_{\text{given }p^{:\Gamma},x^{:A}}\\
-\frac{\Gamma,A\vdash C}{\Gamma,{\color{blue}A\wedge B}\vdash C}~(\text{Left}\wedge_{1})\quad & \quad\text{Proof}\,(\Gamma,A\wedge B\vdash C)_{\text{given }p^{:\Gamma},(a^{:A}\times b^{:B})}\\
- & \quad\quad=\text{Proof}\,(\Gamma,A\vdash C)_{\text{given }p^{:\Gamma},a^{:A}}\\
-\frac{\Gamma,B\vdash C}{\Gamma,{\color{blue}A\wedge B}\vdash C}~(\text{Left}\wedge_{2})\quad & \quad\text{Proof}\,(\Gamma,A\wedge B\vdash C)_{\text{given }p^{:\Gamma},(a^{:A}\times b^{:B})}\\
- & \quad\quad=\text{Proof}\,(\Gamma,B\vdash C)_{\text{given }p^{:\Gamma},b^{:B}}\\
-\frac{\Gamma\vdash A\quad\quad\Gamma\vdash B}{\Gamma\vdash{\color{blue}A\wedge B}}~(\text{Right}\wedge)\quad & \quad\text{Proof}\,(\Gamma\vdash A\wedge B)_{\text{given }p^{:\Gamma}}\\
- & \quad\quad=\text{Proof}\,(\Gamma\vdash A)_{\text{given }p^{:\Gamma}}\times\text{Proof}\,(\Gamma\vdash B)_{\text{given }p^{:\Gamma}}\\
-\frac{\Gamma,A\vdash C\quad\quad\Gamma,B\vdash C}{\Gamma,{\color{blue}A\vee B}\vdash C}~(\text{Left}\vee)\quad & \quad\text{Proof}\,(\Gamma,A\vee B\vdash C)_{\text{given }p^{:\Gamma},q^{:A+B}}\\
- & \quad\quad=q\triangleright\begin{array}{|c||c|}
- & C\\
-\hline A & x^{:A}\rightarrow\text{Proof}\,(\Gamma,A\vdash C)_{\text{given }p,x}\\
-B & y^{:B}\rightarrow\text{Proof}\,(\Gamma,B\vdash C)_{\text{given }p,y}
-\end{array}\\
-\frac{\Gamma\vdash A}{\Gamma\vdash{\color{blue}A\vee B}}~(\text{Right}\vee_{1})\quad & \quad\text{Proof}\,(\Gamma\vdash A\vee B)_{\text{given }p^{:\Gamma}}=\text{Proof}\,(\Gamma\vdash A)+\bbnum 0^{:B}\\
-\frac{\Gamma\vdash B}{\Gamma\vdash{\color{blue}A\vee B}}~(\text{Right}\vee_{2})\quad & \quad\text{Proof}\,(\Gamma\vdash A\vee B)_{\text{given }p^{:\Gamma}}=\bbnum 0^{:A}+\text{Proof}\,(\Gamma\vdash B)
-\end{align*}
-%
-\end{minipage}}
-\par\end{centering}
-\caption{\label{fig:proof-transformers-for-LJ-rules}Proof transformers for
-the rules of the LJ algorithm.}
-\end{figure}
-
-In the previous subsection, we have found a proof of the sequent $S_{0}$,
-which represents the task of writing a fully parametric function with
-type signature $(\left(A\rightarrow A\right)\rightarrow B)\rightarrow B$).
-Let us now see how we can extract the code of that function from the
-proof of the sequent $S_{0}$.
-
-We start from the leaves of the proof tree and move step by step towards
-the initial sequent. At each step, we shorten the proof tree by replacing
-some sequent by its corresponding evidence-of-proof code. Eventually
-we will replace the initial sequent by its corresponding code. Let
-us see how this procedure works for the proof tree of the sequent
-$S_{0}$ shown in the previous section.
-
-Since the leaves are axioms, let us write the code corresponding to
-each axiom of LJ:
-\begin{align*}
- & \frac{}{\Gamma,X\vdash X}~(\text{Id})\quad:\quad\quad\text{Proof}\,(\Gamma,X\vdash X)_{\text{given }p^{:\Gamma},x^{:X}}=x\quad;\\
- & \frac{}{\Gamma\vdash\top}~(\text{True})\quad:\quad\quad\text{Proof}\,(\Gamma\vdash\top)_{\text{given }p^{:\Gamma}}=1\quad.
-\end{align*}
-Here we denote explicitly the values (such as $p$ and $x$) given
-as premises to the sequent. The notation $p^{:\Gamma}$ means all
-values given in the set of premises $\Gamma$. Below we will assume
-that the propositions $\alpha$ and $\beta$ correspond to types $A$
-and $B$; that is, $\alpha\triangleq{\cal CH}(A)$ and $\beta\triangleq{\cal CH}(B)$.
-
-The leaves in the proof tree for $S_{0}$ are the \textsf{``}($\text{Id}$)\textsf{''}
-axioms used to prove the sequents $S_{3}$ and $S_{6}$. Let us write
-the code that serves as the \textsf{``}evidence of proof\textsf{''} for these sequents.
-For brevity, we denote $\gamma\triangleq\left(\alpha\Rightarrow\alpha\right)\Rightarrow\beta$
-and $C\triangleq\left(A\rightarrow A\right)\rightarrow B$, so that
-$\gamma={\cal CH}(C)$. Then we can write:
-\begin{align*}
- & S_{3}\triangleq\beta\vdash\beta\quad,\quad\quad\text{Proof}\,(S_{3})_{\text{given }y^{:B}}=y\quad,\\
- & S_{6}\triangleq\gamma,\alpha\vdash\alpha\quad,\quad\quad\text{Proof}\,(S_{6})_{\text{given }q^{:C},x^{:A}}=x\quad.
-\end{align*}
-Note that the proof of $S_{6}$ does not use the first given value
-$q^{:C}$ (corresponding to the premise $\gamma$).
-
-We now shorten the proof tree by replacing the sequents $S_{3}$ and
-$S_{6}$ by their \textsf{``}evidence of proof\textsf{''}:
-\[
-\xymatrix{\xyScaleY{1.5pc}\xyScaleX{4pc} &  &  & \square\\
-\ar[r]\sp(0.35){S_{0}} & (\text{Right}\Rightarrow)\ar[r]\sp(0.5){S_{1}} & (\text{Left}\Rightarrow)\ar[r]\sp(0.5){S_{2}}\ar[ru]\sp(0.6){(y)_{\text{given }y^{:B}}} & (\text{Right}\Rightarrow)\ar[r]\sp(0.65){(x)_{\text{given }q^{:C},x^{:A}}} & \square
-}
-\]
-
-The next step is to consider the proof of $S_{2}$, which is found
-by applying the rule \textsf{``}($\text{Right}\Rightarrow$)\textsf{''}. This rule
-promises to give a proof of $S_{2}$ if we have a proof of $S_{6}$.
-In order to extract code from that rule, we can write a function that
-transforms a proof of $S_{6}$ into a proof of $S_{2}$. We call this
-function the \textbf{proof transformer}\index{Curry-Howard correspondence!proof transformer}\index{proof transformer}
-corresponding to the rule \textsf{``}($\text{Right}\Rightarrow$)\textsf{''}. That
-rule and its transformer are defined as:
-\[
-\frac{\Gamma,A\vdash B}{\Gamma\vdash A\Rightarrow B}~(\text{Right}\Rightarrow)\quad:\quad\quad\text{Proof}\,(\Gamma\vdash A\Rightarrow B)_{\text{given }p^{:\Gamma}}=x^{:A}\rightarrow\text{Proof}\,(\Gamma,A\vdash B)_{\text{given }p^{:\Gamma},x^{:A}}\quad.
-\]
-Applying the proof transformer to the known proof of $S_{6}$, we
-obtain a proof of $S_{2}$:
-\[
-\text{Proof}\,(S_{2})_{\text{given }q^{:C}}=x^{:A}\rightarrow\text{Proof}\,(S_{6})_{\text{given }q^{:C},x^{:A}}=(x^{:A}\rightarrow x)_{\text{given }q^{:C}}\quad.
-\]
-The proof tree can be now shortened to:
-\[
-\xymatrix{\xyScaleY{1.5pc}\xyScaleX{3.5pc} &  &  & \square\\
-\ar[r]\sp(0.35){S_{0}} & (\text{Right}\Rightarrow)\ar[r]\sp(0.5){S_{1}} & (\text{Left}\Rightarrow)\ar[rr]\sp(0.62){(x^{:A}\rightarrow x)_{\text{given }q^{:C}}}\ar[ru]\sp(0.6){(y)_{\text{given }y^{:B}}} &  & \square
-}
-\]
-
-The next step is to get the proof of $S_{1}$ obtained by applying
-the rule \textsf{``}($\text{Left}\Rightarrow$)\textsf{''}. That rule requires two
-previous sequents, so its transformer is a function of two previously
-obtained proofs:
-\begin{align*}
- & \frac{\Gamma,A\Rightarrow B\vdash A\quad\quad\Gamma,B\vdash C}{\Gamma,A\Rightarrow B\vdash C}~(\text{Left}\Rightarrow)\quad:\\
- & \text{Proof}\,(\Gamma,A\Rightarrow B\vdash C)_{\text{given }p^{:\Gamma},q^{:A\rightarrow B}}=\text{Proof}\,(\Gamma,B\vdash C)_{\text{given }p^{:\Gamma},b^{:B}}\\
- & \quad\quad\text{where}\quad b^{:B}\triangleq q\big(\text{Proof}\,(\Gamma,A\Rightarrow B\vdash A)_{\text{given }p^{:\Gamma},q^{:A\rightarrow B}}\big)\quad.
-\end{align*}
-In the proof tree shown above, we obtain a proof of $S_{1}$ by applying
-this proof transformer to the proofs of $S_{2}$ and $S_{3}$:
-\begin{align*}
- & \text{Proof}\,(S_{1})_{\text{given }q^{:C}}=\text{Proof}\,(S_{3})_{\text{given }b^{:B}}\text{ where }b^{:B}\triangleq q(\text{Proof}\,(S_{2}))_{\text{given }q^{:C}}\\
- & \quad=b\text{ where }b^{:B}\triangleq q(x^{:A}\rightarrow x)_{\text{given }q^{:C}}=q(x^{:A}\rightarrow x)_{\text{given }q^{:C}}\quad.
-\end{align*}
-Substituting this proof into the proof tree, we shorten the tree to:
-\[
-\xymatrix{\xyScaleY{1.5pc}\xyScaleX{3.5pc}\ar[r]\sp(0.35){S_{0}} & (\text{Right}\Rightarrow)\ar[r]\sp(0.65){q(x^{:A}\rightarrow x)_{\text{given }q^{:C}}} & \square}
-\]
-
-It remains to obtain the proof of $S_{0}$ by applying the proof transformer
-of the rule \textsf{``}($\text{Right}\Rightarrow$)\textsf{''}:
-\begin{align*}
- & \text{Proof}\,(S_{0})=\text{Proof}\,(\emptyset\vdash(\alpha\Rightarrow\alpha)\Rightarrow\beta)\Rightarrow\beta)\\
- & =q^{:(A\rightarrow A)\rightarrow B}\rightarrow\text{Proof}\,(S_{1})_{\text{given }q^{:C}}=q^{:(A\rightarrow A)\rightarrow B}\rightarrow q(x^{:A}\rightarrow x)\quad.
-\end{align*}
-The proof tree is now shortened to a single code expression, $q^{:(A\rightarrow A)\rightarrow B}\rightarrow q(x^{:A}\rightarrow x)$,
-that serves as an evidence of proof for $S_{0}$ because this code
-has type $\left(\left(A\rightarrow A\right)\rightarrow B\right)\rightarrow B$.
-In this way, we have derived the code of a fully parametric function
-from its type signature.
-
-Figure~\ref{fig:proof-transformers-for-LJ-rules} shows the proof
-transformers for all the rules of the LJ algorithm. Apart from the
-special rule \textsf{``}($\text{Left}\Rightarrow$)\textsf{''}, all other rules have
-proof transformers using just one of the code constructions (\textsf{``}create
-function\textsf{''}, \textsf{``}create tuple\textsf{''}, \textsf{``}use tuple\textsf{''}, etc.) allowed within
-fully parametric code.
-
-\subsubsection*{The LJT algorithm}
-
-As we have seen, the LJ algorithm enters a loop if the rule \textsf{``}($\text{Left}\Rightarrow$)\textsf{''}
-gives a sequent we already had at a previous step. That rule requires
-us to prove two new sequents:
-\[
-\frac{\Gamma,A\Rightarrow B\vdash A\quad\quad\Gamma,B\vdash C}{\Gamma,A\Rightarrow B\vdash C}~(\text{Left}\Rightarrow)\quad.
-\]
-A sign of trouble is that the first of these sequents ($\Gamma,A\Rightarrow B\vdash A$)
-does not have a simpler form than the initial sequent ($\Gamma,A\Rightarrow B\vdash C$).
-So, it is not clear that we are getting closer to completing the proof.
-If $A=C$, the new sequent will simply repeat the initial sequent,
-immediately creating a loop.
-
-In some cases, a repeated sequent will occur after more than one step.
-It is not easy to formulate rigorous conditions for stopping the loop
-or for avoiding the rule \textsf{``}($\text{Left}\Rightarrow$)\textsf{''}.
-
-The LJT algorithm solves this problem by removing the rule \textsf{``}($\text{Left}\Rightarrow$)\textsf{''}
-from the LJ algorithm. Instead, \emph{four} new rules are introduced.
-Each of these rules contains a different pattern instead of $A$ in
-the premise $A\Rightarrow C$:
-\begin{align*}
-\text{(}A\text{ is atomic)\,}\frac{\Gamma,A,B\vdash D}{\Gamma,A,{\color{blue}A\Rightarrow B}\vdash D}~(\text{Left}\Rightarrow_{A})\qquad & \qquad\frac{\Gamma,A\Rightarrow B\Rightarrow C\vdash D}{\Gamma,{\color{blue}(A\wedge B)\Rightarrow C}\vdash D}~(\text{Left}\Rightarrow_{\wedge})\\
-\frac{\Gamma,B\Rightarrow C\vdash A\Rightarrow B\quad\quad\Gamma,C\vdash D}{\Gamma,{\color{blue}(A\Rightarrow B)\Rightarrow C}\vdash D}~(\text{Left}\Rightarrow_{\Rightarrow})\qquad & \qquad\frac{\Gamma,A\Rightarrow C,B\Rightarrow C\vdash D}{\Gamma,{\color{blue}(A\vee B)\Rightarrow C}\vdash D}~(\text{Left}\Rightarrow_{\vee})
-\end{align*}
-The rule \textsf{``}$\text{Left}\Rightarrow_{A}$\textsf{''} applies only if the implication
-starts with an \textsf{``}atomic\textsf{''} type expression, i.e., a single type parameter
-or a unit type. In all other cases, the implication must start with
-a conjunction, a disjunction, or an implication, which means that
-one of the three remaining rules will apply.
-
-The LJT algorithm retains all the rules in Figure~\ref{fig:proof-transformers-for-LJ-rules}
-except the rule \textsf{``}($\text{Left}\Rightarrow$)\textsf{''}, which is replaced
-by the four new rules. It is far from obvious that the new rules are
-equivalent to the old ones. It took mathematicians several decades
-to come up with the LJT rules and to prove their validity. This book
-will rely on that result and will not attempt to prove it.
-
-The proof transformers for the new rules are shown in Figure~\ref{fig:proof-transformers-for-LJT-rules}.
-Figures~\ref{fig:proof-transformers-for-LJ-rules}\textendash \ref{fig:proof-transformers-for-LJT-rules}
-define the set of proof transformers sufficient for using the LJT
-algorithm in practice. The \index{curryhoward library@\texttt{curryhoward} library}\lstinline!curryhoward!
-library\texttt{}\footnote{See \texttt{\href{https://github.com/Chymyst/curryhoward}{https://github.com/Chymyst/curryhoward}}}
-implements these proof transformers.
-
-The most complicated of the new rules is the rule \textsf{``}($\text{Left}\Rightarrow_{\Rightarrow}$)\textsf{''}.
-Applying that rule\textsf{'}s transformer results in evidence-of-proof code
-that is longer than the code obtained via LJ\textsf{'}s rule transformers.
-The resulting code will need to be simplified symbolically. 
-
-As an example of using the LJT algorithm, we prove the sequent $S_{0}=\emptyset\vdash((\alpha\Rightarrow\alpha)\Rightarrow\beta)\Rightarrow\beta$
-from the previous section. At each step, only one LJT rule applies
-to each sequent. The initial part of the proof tree looks like this:\vspace{-1\baselineskip}
-\[
-\xymatrix{\xyScaleY{1.5pc}\xyScaleX{6pc} &  &  & ~\\
-\ar[r]\sp(0.4){\emptyset\vdash((\alpha\Rightarrow\alpha)\Rightarrow\beta)\Rightarrow\beta} & (\text{Right}\Rightarrow)\ar[r]\sp(0.5){(\alpha\Rightarrow\alpha)\Rightarrow\beta\vdash\beta} & (\text{Left}\Rightarrow_{\Rightarrow})\ar[ru]\sp(0.65){\beta\vdash\beta}\ar[r]\sp(0.65){\alpha\Rightarrow\beta\vdash\alpha\Rightarrow\alpha} & ~
-}
-\]
-The proofs for the sequents $\beta\vdash\beta$ and $\alpha\Rightarrow\beta\vdash\alpha\Rightarrow\alpha$
-are the same as before:
-\[
-\text{Proof}\,(\beta\vdash\beta)_{\text{given }y^{:B}}=y\quad,\quad\quad\text{Proof}\,(\alpha\Rightarrow\beta\vdash\alpha\Rightarrow\alpha)_{\text{given }r^{:A\rightarrow B}}=x^{:A}\rightarrow x\quad.
-\]
-Substituting these proofs into the proof transformer of the rule \textsf{``}($\text{Left}\Rightarrow_{\Rightarrow}$)\textsf{''}
-produces this code:
-\begin{align*}
- & \text{Proof}\,((\alpha\Rightarrow\alpha)\Rightarrow\beta\vdash\beta)_{\text{given }q^{:(A\rightarrow A)\rightarrow B}}=q\big(\text{Proof}\,(\alpha\Rightarrow\beta\vdash\alpha\Rightarrow\alpha)_{\text{given }r^{:A\rightarrow B}}\big)\\
- & \quad\quad\text{where }r^{:A\rightarrow B}=a^{:A}\rightarrow q(\_^{:A}\rightarrow a)\\
- & =q(x^{:A}\rightarrow x)\quad.
-\end{align*}
-The proof of $\alpha\Rightarrow\beta\vdash\alpha\Rightarrow\alpha$
-does not actually use the intermediate value $r^{:A\rightarrow B}$
-provided by the proof transformer. As a symbolic simplification step,
-we may simply omit the code of $r$. The \lstinline!curryhoward!
-library always performs symbolic simplification after applying the
-LJT algorithm. 
-
-\begin{figure}
-\begin{centering}
-\noindent\fbox{\begin{minipage}[t]{1\columnwidth - 2\fboxsep - 2\fboxrule}%
-\begin{align*}
-\frac{\Gamma,A,B\vdash D}{\Gamma,A,{\color{blue}A\Rightarrow B}\vdash D}~(\text{Left}\Rightarrow_{A})\quad & \quad\text{Proof}\,(\Gamma,A,A\Rightarrow B\vdash D)_{\text{given }p^{:\Gamma},x^{:A},q^{:A\rightarrow B}}\\
- & \quad\quad=\text{Proof}\,(\Gamma,A,B\vdash D)_{\text{given }p,x,q(x)}\\
-\frac{\Gamma,A\Rightarrow B\Rightarrow C\vdash D}{\Gamma,{\color{blue}(A\wedge B)\Rightarrow C}\vdash D}~(\text{Left}\Rightarrow_{\wedge})\quad & \quad\text{Proof}\,(\Gamma,(A\wedge B)\Rightarrow C\vdash D)_{\text{given }p^{:\Gamma},q^{:A\times B\rightarrow C}}\\
- & \quad\quad=\text{Proof}\,(\Gamma,A\Rightarrow B\Rightarrow C\vdash D)_{\text{given }p,(a^{:A}\rightarrow b^{:B}\rightarrow q(a\times b))}\\
-\frac{\Gamma,A\Rightarrow C,B\Rightarrow C\vdash D}{\Gamma,{\color{blue}(A\vee B)\Rightarrow C}\vdash D}~(\text{Left}\Rightarrow_{\vee})\quad & \quad\text{Proof}\,(\Gamma,(A\vee B)\Rightarrow C\vdash D)_{\text{given }p^{:\Gamma},q^{:A+B\rightarrow C}}\\
- & \quad\quad=\text{Proof}\,(\Gamma,A\Rightarrow C,B\Rightarrow C\vdash D)_{\text{given }p,r,s}\\
- & \quad\quad\text{where}~r\triangleq a^{:A}\rightarrow q(a+\bbnum 0)\text{ and }s\triangleq b^{:B}\rightarrow q(\bbnum 0+b)\\
-\frac{\Gamma,B\Rightarrow C\vdash A\Rightarrow B\quad\quad\Gamma,C\vdash D}{\Gamma,{\color{blue}(A\Rightarrow B)\Rightarrow C}\vdash D}~(\text{Left}\Rightarrow_{\Rightarrow})\quad & \quad\text{Proof}\,(\Gamma,(A\Rightarrow B)\Rightarrow C\vdash D)_{\text{given }p^{:\Gamma},q^{:\left(A\rightarrow B\right)\rightarrow C}}\\
- & \quad\quad=\text{Proof}\,(\Gamma,C\vdash D)_{\text{given }p,c}\\
- & \quad\quad\text{ where}~c^{:C}\triangleq q\big(\text{Proof}\,(\Gamma,B\Rightarrow C\vdash A\Rightarrow B)_{\text{given }p,r}\big)\\
- & \quad\quad\text{ and }r^{:B\rightarrow C}\triangleq b^{:B}\rightarrow q(\_^{:A}\rightarrow b)
-\end{align*}
-%
-\end{minipage}}
-\par\end{centering}
-\caption{\label{fig:proof-transformers-for-LJT-rules}Proof transformers for
-the four new rules of the \index{LJT algorithm|textit}LJT algorithm.}
-\end{figure}
-
-The reason the LJT algorithm terminates is that each rule replaces
-a given sequent by one or more sequents with simpler premises or goals.\footnote{The paper \texttt{\href{http://citeseer.ist.psu.edu/viewdoc/summary?doi=10.1.1.35.2618}{http://citeseer.ist.psu.edu/viewdoc/summary?doi=10.1.1.35.2618}}
-shows that the LJT algorithm terminates by giving an explicit decreasing
-measure on proof trees.} This guarantees that the proof search will terminate either with
-a complete proof or with a sequent to which no more rules apply. An
-example of such a \textsf{``}dead-end\textsf{''} sequent is $\alpha\vdash\beta$ where
-$\alpha$ and $\beta$ are different, unrelated propositions. In that
-situation, the LJT algorithm concludes that the initial sequent cannot
-be proved.
-
-To \emph{prove} that there is no proof, one needs to use methods
-that are beyond the scope of this book. An introduction to the required
-techniques is in the book \textsf{``}Proof and Disproof in Formal Logic\textsf{''}
-by R.~Bornat\index{Richard Bornat} (see footnote~\ref{fn:Bornat-proof-book}
-on page~\pageref{fn:Bornat-proof-book}).
