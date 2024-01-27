@@ -127,13 +127,15 @@ mv $name.tex sofp.tex
 
 # Disable PDF hyperlinks and remove covers.
 LC_ALL=C sed -i.bak -e 's|colorlinks=true|colorlinks=false|; s|\\input{sofp-cover-page}||; s|\\input{sofp-back-cover-page}||; ' sofp.tex
-
+echo "Starting to prepare volume $v"
 pdflatex --interaction=batchmode sofp
 makeindex sofp.idx
 cp ../*.aux . # Enable references to other chapters.
 pdflatex --interaction=batchmode sofp
 
 mv sofp.pdf ../$name.pdf
+echo "Volume $v is prepared in $name.pdf"
 
 bash ../prepare_cover.sh ../$name.pdf "$pdftk"
 mv book_cover/sofp-3page-cover.pdf ../$name-3page-cover.pdf
+echo "Cover for volume $v is prepared in $name-3page-cover.pdf"
