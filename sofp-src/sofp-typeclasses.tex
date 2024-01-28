@@ -651,15 +651,20 @@ via typeclasses.
 (metadata extractors)}
 
 An application needs to work with data structures implemented in various
-external libraries. All those data structures are case classes containing
-certain metadata: \textsf{``}name\textsf{''} (a \lstinline!String!) and \textsf{``}count\textsf{''}
-(a \lstinline!Long! integer). However, the specific data structures
-define the metadata differently, each in its own way:
+external libraries:
 \begin{lstlisting}
-final case class Data1(p: String, q: String, r: Long) // "name" = p, "count" = r
-final case class Data2(s: String, c: Long, x: Int)    // "name" = s, "count" = c
-final case class Data3(x: Int, y: Long, z: String)    // "name" = z, "count" = x * y
+final case class Data1(firstName: String, lastName: String, r: Long)
+final case class Data2(c: Long, x: Boolean)
+final case class Data3(x: Int, y: Long, z: String)
 \end{lstlisting}
+All those data structures can be described by certain metadata: \textsf{``}name\textsf{''}
+(a \lstinline!String!) and \textsf{``}count\textsf{''} (a \lstinline!Long! integer).
+However, the business logic for computing the metadata is different
+for each data structure. For \lstinline!Data1!, the name is the concatenation
+of first and last name, and the count is \lstinline!r!. For \lstinline!Data2!,
+the name is \lstinline!"data2"! if \lstinline!x == true!; otherwise
+the name is \lstinline!"none"!. The count is \lstinline!c!. For
+\lstinline!Data3!, the name is \lstinline!z! and the count is \lstinline!x * y!.
 The task is to implement two functions, \lstinline!getName[T]! and
 \lstinline!getCount[T]!, for extracting the metadata out of the data
 structures of type \lstinline!T!, where \lstinline!T! is one of
@@ -692,8 +697,8 @@ The required typeclass instances are declared as implicit values within
 the companion object:
 \begin{lstlisting}
 object HasMetadata {    // Extract metadata from each type as appropriate.
-  implicit val data1 = HasMetadata[Data1](_.p, _.r)
-  implicit val data2 = HasMetadata[Data2](_.s, _.c)
+  implicit val data1 = HasMetadata[Data1](_.firstName + " " + _.lastName, _.r)
+  implicit val data2 = HasMetadata[Data2](if (_.x) "data2" else "none", _.c)
   implicit val data3 = HasMetadata[Data3](_.z, data3 => data3.x * data3.y)
 }
 \end{lstlisting}
@@ -705,7 +710,7 @@ def getName[T](t: T)(implicit ti: HasMetadata[T]): String = ti.getName(t)
 def getCount[T](t: T)(implicit ti: HasMetadata[T]): Long = ti.getCount(t)
 \end{lstlisting}
 Or we could use the typeclass constraint syntax, replacing \lstinline!ti!
-by calls to \lstinline!implicitly[...]!:
+by \lstinline!implicitly[...]!:
 \begin{lstlisting}
 def getName[T: HasMetadata](t: T): String = implicitly[HasMetadata[T]].getName(t)
 def getCount[T: HasMetadata](t: T): Long = implicitly[HasMetadata[T]].getCount(t)
@@ -740,8 +745,8 @@ implicit class ExtractorsSyntax[T: HasMetadata](t: T) {
 \end{lstlisting}
 With this definition, we can write:
 \begin{lstlisting}
-scala> Data2("abc", 123, 0).name
-res3: String = "abc"
+scala> Data2(123, true).name
+res3: String = "data2"
 
 scala> Data3(10, 20, "x").count
 res4: Long = 200
@@ -1154,10 +1159,12 @@ instance as well.
 
 Writing the types of the \lstinline!Semigroup!, \lstinline!HasDefault!,
 and \lstinline!Monoid! instances in the type notation, we get:
-\[
-\text{Semigroup}^{T}\triangleq T\times T\rightarrow T\quad,\quad\quad\text{HasDefault}^{T}\triangleq T\quad,\quad\quad\text{Monoid}^{T}\triangleq\left(T\times T\rightarrow T\right)\times T\quad.
-\]
-It is now clear that the following equivalence holds:
+\begin{align*}
+ & \text{Semigroup}^{T}\triangleq T\times T\rightarrow T\quad,\\
+ & \text{HasDefault}^{T}\triangleq T\quad,\\
+ & \text{Monoid}^{T}\triangleq\left(T\times T\rightarrow T\right)\times T\quad.
+\end{align*}
+It is now clear that the following type equivalence holds:
 \[
 \text{Monoid}^{T}\cong\text{Semigroup}^{T}\times\text{HasDefault}^{T}\quad.
 \]
@@ -1254,7 +1261,7 @@ This is currently the most common way of defining typeclasses in Scala.
 It is convenient to declare \lstinline!map! as an extension method
 on the \lstinline!Functor! type constructors:
 \begin{lstlisting}
-implicit class FunctorSyntax[F[_]: Functor, A](fa: F[A]) {    // Syntax helper class.
+implicit class FunctorSyntax[F[_]: Functor, A](fa: F[A]) {    // Syntax helper.
   def map[B](f: A => B): F[B] = implicitly[Functor[F]].map(fa)(f)
 }
 \end{lstlisting}
@@ -1264,9 +1271,10 @@ becomes available for values of functor types.
 Using the \lstinline!Functor! typeclass and the syntax helper, we
 can now implement the function \lstinline!inject!:
 \begin{lstlisting}
-def inject[F[_]: Functor, A, B](a: A, f: F[B]): F[(A, B)] = f.map { b => (a, b) }
+def inject[F[_]: Functor, A, B](a: A, f: F[B]): F[(A, B)] =
+  f.map { b => (a, b) }
 
-scala> inject("abc", Seq(1, 2, 3))   // Assuming that implicit Functor[Seq] is in scope.
+scala> inject("abc", Seq(1, 2, 3))   // An implicit Functor[Seq] must be in scope.
 res0: Seq[(String, Int)] = List(("abc", 1), ("abc", 2), ("abc", 3))
 \end{lstlisting}
  Just like the \lstinline!Monoid! typeclass, the code of the \lstinline!Functor!
@@ -1280,17 +1288,17 @@ the \lstinline!Functor! typeclass constraint, we can implement a
 function (in our terminology, a PTVF) that checks the functor laws
 for \emph{any} given type constructor \lstinline!F[_]!:
 \begin{lstlisting}
-import org.scalacheck.Arbitrary                                 // Necessary imports and definitions.
+import org.scalacheck.Arbitrary   // Necessary imports and definitions.
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 class FunctorTest extends Matchers with GeneratorDrivenPropertyChecks {
-  def checkFunctorLaws[F[_], A, B, C]()(implicit ff: Functor[F],     // Use the `Arbitrary` typeclass
-      fa: Arbitrary[F[A]], ab: Arbitrary[A => B], bc: Arbitrary[B => C]) = {    // from `scalacheck`.
+  def checkFunctorLaws[F[_], A, B, C]()(implicit ff: Functor[F],
+      fa: Arbitrary[F[A]], ab: Arbitrary[A => B], bc: Arbitrary[B => C]) = {
     forAll { (fa: F[A]) => fa.map(identity[A]) shouldEqual fa }  // Identity law. "For all `fa`, ..."
-    forAll { (f: A => B, g: B => C, fa: F[A]) =>          // Composition law. The assertion must hold
-      fa.map(f).map(g) shouldEqual fa.map(f andThen g)    // for all `f`, `g`, `fa`.
+    forAll { (f: A => B, g: B => C, fa: F[A]) =>          // Composition law. The assertion must hold for all `f`, `g`, `fa`.
+      fa.map(f).map(g) shouldEqual fa.map(f andThen g)
     }
   }
-  // Check the laws for F = Seq using specific types instead of type parameters A, B, C.
+  // Check the laws for F = Seq, A = Int, B = String, C = Double.
   checkFunctorLaws[Seq, Int, String, Double]()
 }
 \end{lstlisting}
@@ -1413,8 +1421,8 @@ def extractorPair[Z, A, B](implicit ti: Extractor[Z, A]) =
 \end{lstlisting}
 If $A$ has an \lstinline!Extractor! instance, the product of $A$
 with any type $B$ also has an \lstinline!Extractor! instance. Examples
-of this construction are $Z\times B$ and $P\times Q\times Z$ (since
-the type $Z$ itself has an \lstinline!Extractor! instance).
+of applying this construction are $Z\times B$ and $P\times Q\times Z$
+(since the type $Z$ itself has an \lstinline!Extractor! instance).
 
 \paragraph{Co-products}
 
@@ -1484,7 +1492,7 @@ f^{:A\rightarrow Z}\rightarrow c^{:C}\times g^{:C\rightarrow A}\rightarrow f(g(c
 def extractorFunc[Z, A, C](implicit ti: Extractor[Z, A]) =
   Extractor[Z, (C, C => A)] { case (c, g) => ti.extract(g(c)) }
 \end{lstlisting}
-Examples of this construction are the type expressions $C\times\left(C\rightarrow Z\right)$
+Examples of applying this construction are the type expressions $C\times\left(C\rightarrow Z\right)$
 and $D\times\left(D\rightarrow Z\times P\right)$.
 
 Another situation where an \lstinline!Extractor! instance exists
