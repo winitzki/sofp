@@ -37,8 +37,8 @@ only if we constrain the type parameter \lstinline!T! to be a type
 representing a suitable numeric value (e.g., \lstinline!Float!, \lstinline!Double!,
 or \lstinline!BigDecimal!).
 
-Another example of a similar situation is a function with type signature
-$A\times F^{B}\rightarrow F^{A\times B}$:
+Another example of a similar situation is a function we will call
+\lstinline!inject!, with type signature $A\times F^{B}\rightarrow F^{A\times B}$:
 \begin{lstlisting}
 def inject[F[_], A, B](a: A, f: F[B]): F[(A, B)] = f.map(b => (a, b)) // Must have `f.map`.
 \end{lstlisting}
@@ -109,7 +109,8 @@ val avg: [T] => Seq[T] => T = ...   // Scala 3 only.
 To emphasize that \lstinline!avg! is a TVF, we may write the type
 signature of \lstinline!avg! as:
 \begin{lstlisting}
-def avg[T: Fractional]: Seq[T] => T // Inconvenient in practice! Use avg[T: Fractional](s: Seq[T]): T
+def avg[T: Fractional]: Seq[T] => T // Inconvenient in practice!
+  // Better to define as: def avg[T: Fractional](s: Seq[T]): T
 \end{lstlisting}
 
 A type constructor such as \lstinline!Seq[_]! can be viewed as a
@@ -163,9 +164,9 @@ the following partial function \lstinline!p!:
 \begin{lstlisting}
 def p: Either[Int, String] => Int = { case Left(x) => x - 1 }
 \end{lstlisting}
-may be applied only to values of the form \lstinline!Left(...)!.
-Applying \lstinline!p! to a value \lstinline!Right(...)! will cause
-a run-time error. However, consider this code:
+may be applied only to values of type \lstinline!Left(...)!. Applying
+\lstinline!p! to a value \lstinline!Right(...)! will cause a run-time
+error. However, consider this code:
 \begin{lstlisting}
 val x = Seq(Left(1), Right("abc"), Left(2))
 
@@ -1399,9 +1400,10 @@ $a$ or only from $b$. So, it appears that we have two possibilities
 for implementing the typeclass for $A\times B$. Reasoning more rigorously,
 we see that computing a new typeclass instance from two previous ones
 requires implementing a conversion function with type signature:
-\[
-\forall(A,B,Z).\,\text{Extractor}^{A}\times\text{Extractor}^{B}\rightarrow\text{Extractor}^{A\times B}=\left(A\rightarrow Z\right)\times\left(B\rightarrow Z\right)\rightarrow A\times B\rightarrow Z\quad.
-\]
+\begin{align*}
+ & \forall(A,B,Z).\,\text{Extractor}^{A}\times\text{Extractor}^{B}\rightarrow\text{Extractor}^{A\times B}\\
+ & =\left(A\rightarrow Z\right)\times\left(B\rightarrow Z\right)\rightarrow A\times B\rightarrow Z\quad.
+\end{align*}
 We can derive only two fully parametric implementations of this type
 signature: 
 \[
@@ -1879,7 +1881,7 @@ we then always have a chosen value $r_{1}\triangleq1+\bbnum 0^{:S}$
 of type $R$. What if we compare functions only via their values at
 $r_{1}$?
 \begin{lstlisting}
-def equals[R, A: Eq](f: R => A, g: R => A): Boolean = f(r1) === g(r1)  // Violates the identity law.
+def equals[R, A: Eq](f: R => A, g: R => A): Boolean = f(r1) === g(r1)  // This violates the identity law.
 \end{lstlisting}
 The above code defines a comparison operation that violates the identity
 law: there are many functions \lstinline!f! and \lstinline!g! that
@@ -1965,20 +1967,20 @@ section.
 As an example, let us make an \lstinline!Eq! instance for the type
 $T$ defined by $T\triangleq\text{Int}+T+\text{Int}\times T\times T$:
 \begin{lstlisting}[mathescape=true]
-type S[A] = Either[Either[Int, A], (Int, (A, A))]  // Define $\color{dkgreen} S^{\scriptscriptstyle A} \triangleq\text{Int}+A+\text{Int}\times A\times A $.
-final case class T(s: S[T])                        // Recursive type equation T = S[T].
-def eqS[A](implicit ti: Eq[A]): Eq[S[A]] = {       // Function of type Eq[A] => Eq[S[A]].
-  implicit val e1 = eqEither[Int, A]               // Instance for $\color{dkgreen} \text{Int}+A $.
-  implicit val e2 = eqPair[A, A]                   // Instance for $\color{dkgreen} A\times A $.
-  implicit val e3 = eqPair[Int, (A, A)]            // Instance for $\color{dkgreen} \text{Int}\times A\times A $.
-  eqEither[Either[Int, A], (Int, (A, A))]          // Instance for $\color{dkgreen} \text{Int}+A+\text{Int}\times A\times A $.
+type S[A] = Either[Either[Int, A], (Int, (A, A))] // $\color{dkgreen} S^{\scriptscriptstyle A} \triangleq\text{Int}+A+\text{Int}\times A\times A $.
+final case class T(s: S[T])              // Recursive type equation T = S[T].
+def eqS[A](implicit ti: Eq[A]): Eq[S[A]] = {      // eqS[A]: Eq[A] => Eq[S[A]].
+  implicit val e1 = eqEither[Int, A]              // Instance for $\color{dkgreen} \text{Int}+A $
+  implicit val e2 = eqPair[A, A]                  // Instance for $\color{dkgreen} A\times A $.
+  implicit val e3 = eqPair[Int, (A, A)]           // Instance for $\color{dkgreen} \text{Int}\times A\times A $.
+  eqEither[Either[Int, A], (Int, (A, A))]         // Instance for $\color{dkgreen} \text{Int}+A+\text{Int}\times A\times A $.
 }
 implicit def eqT: Eq[T] = Eq { case (T(s1), T(s2)) => eqS(eqT).equal(s1, s2) }
 \end{lstlisting}
 To test that the recursion terminates, define a value of type $T$
-and run a comparison:
+and call \lstinline!===!:
 \begin{lstlisting}[mathescape=true]
-val t = T(Left(Right(T(Left(Left(10))))))          // $\color{dkgreen}t$ has type $\color{dkgreen} \bbnum 0+(10^{\scriptscriptstyle:\text{Int}}+\bbnum 0+\bbnum 0)^{\scriptscriptstyle:T}+\bbnum 0$.
+val t = T(Left(Right(T(Left(Left(10)))))) // $\color{dkgreen}t: \bbnum 0+(10^{\scriptscriptstyle:\text{Int}}+\bbnum 0+\bbnum 0)^{\scriptscriptstyle:T}+\bbnum 0$.
 
 scala> t === t
 res0: Boolean = true
@@ -2086,10 +2088,8 @@ in one of these two ways.\index{semigroup!{}\textsf{``}trivial\textsf{''} instan
 \paragraph{Products}
 
 If types $A$ and $B$ are semigroups, the product $A\times B$ also
-has a \lstinline!Semigroup! instance. 
-
-To compute that instance means, in the general case, to implement
-a function with type:
+has a \lstinline!Semigroup! instance. That instance is computed by
+a function we call \lstinline!semigroupPair!:
 \[
 \text{semigroupPair}:\forall(A,B).\,\text{Semigroup}^{A}\times\text{Semigroup}^{B}\rightarrow\text{Semigroup}^{A\times B}\quad.
 \]
@@ -2134,20 +2134,21 @@ do not depend on the order of parentheses:
 \paragraph{Co-products}
 
 To compute a \lstinline!Semigroup! instance for the co-product $A+B$
-of two semigroups, we need:
+of two semigroups, we need a function of type:
 \[
-\text{semigroupEither}:\forall(A,B).\,\text{Semigroup}^{A}\times\text{Semigroup}^{B}\rightarrow\text{Semigroup}^{A+B}\quad.
+\forall(A,B).\,\,\text{Semigroup}^{A}\times\text{Semigroup}^{B}\rightarrow\text{Semigroup}^{A+B}\quad.
 \]
 Writing out the type expressions, we get the type signature:
 \[
-\text{semigroupEither}:\forall(A,B).\,\left(A\times A\rightarrow A\right)\times\left(B\times B\rightarrow B\right)\rightarrow\left(A+B\right)\times\left(A+B\right)\rightarrow A+B\quad.
+\forall(A,B).\,\left(A\times A\rightarrow A\right)\times\left(B\times B\rightarrow B\right)\rightarrow\left(A+B\right)\times\left(A+B\right)\rightarrow A+B\quad.
 \]
-Begin by writing a function with a typed hole:
+Call this function \lstinline!semigroupEither! and begin writing
+code with a typed hole:
 \[
 \text{semigroupEither}\triangleq f^{:A\times A\rightarrow A}\times g^{:B\times B\rightarrow B}\rightarrow c^{:\left(A+B\right)\times\left(A+B\right)}\rightarrow\text{???}^{:A+B}\quad.
 \]
-Transforming the type expression $\left(A+B\right)\times\left(A+B\right)$
-into an equivalent disjunctive type:
+Transforming the type $\left(A+B\right)\times\left(A+B\right)$ into
+an equivalent disjunctive type:
 \[
 \left(A+B\right)\times\left(A+B\right)\cong A\times A+A\times B+B\times A+B\times B\quad,
 \]
@@ -2179,73 +2180,82 @@ f^{:A\times A\rightarrow A} & \bbnum 0\\
 \bbnum 0 & g^{:B\times B\rightarrow B}
 \end{array}\quad.
 \]
-The remaining two rows can be filled in four different ways:
+The remaining two rows in the matrix can be filled in four different
+ways:
 \begin{align*}
-f\times g\rightarrow\,\begin{array}{||cc|}
+\begin{array}{||cc|}
 f^{:A\times A\rightarrow A} & \bbnum 0\\
 a^{:A}\times b^{:B}\rightarrow a & \bbnum 0\\
 b^{:B}\times a^{:A}\rightarrow a & \bbnum 0\\
 \bbnum 0 & g^{:B\times B\rightarrow B}
-\end{array}~\quad,\quad\quad & ~f\times g\rightarrow\,\begin{array}{||cc|}
+\end{array}~\quad,\quad\quad & ~\begin{array}{||cc|}
 f & \bbnum 0\\
 \bbnum 0 & a^{:A}\times b^{:B}\rightarrow b\\
 \bbnum 0 & b^{:B}\times a^{:A}\rightarrow b\\
 \bbnum 0 & g
 \end{array}\quad,\\
-f\times g\rightarrow\,\begin{array}{||cc|}
+\begin{array}{||cc|}
 f^{:A\times A\rightarrow A} & \bbnum 0\\
 \bbnum 0 & a^{:A}\times b^{:B}\rightarrow b\\
 b^{:B}\times a^{:A}\rightarrow a & \bbnum 0\\
 \bbnum 0 & g^{:B\times B\rightarrow B}
-\end{array}\quad,\quad\quad & f\times g\rightarrow\,\begin{array}{||cc|}
+\end{array}\quad,\quad\quad & \,\begin{array}{||cc|}
 f & \bbnum 0\\
 a^{:A}\times b^{:B}\rightarrow a & \bbnum 0\\
 \bbnum 0 & b^{:B}\times a^{:A}\rightarrow b\\
 \bbnum 0 & g
 \end{array}\quad.
 \end{align*}
-The Scala code corresponding to the four possible definitions of $\oplus$
-is:
+This gives four possible definitions of $\oplus$. The corresponding
+Scala code is:
 \begin{lstlisting}[mathescape=true]
 def semigroupEither1[A: Semigroup, B: Semigroup] = Semigroup[Either[A, B]] {
   case (Left(a1), Left(a2))     =>  a1 |+| a2 // Here a1 |+| a2 is $\color{dkgreen} a_1 \oplus_A a_2 $.
   case (Right(b1), Right(b2))   =>  b1 |+| b2 // Here b1 |+| b2 is $\color{dkgreen} b_1 \oplus_B b_2$.
-  case (Left(a), Right(b))      =>  a         // "Take $\color{dkgreen}A$" - discard all data of type $\color{dkgreen}B$.
+  case (Left(a), Right(b))      =>  a      // "Take $\color{dkgreen}A$" - discard all data of type $\color{dkgreen}B$.
   case (Right(b), Left(a))      =>  a
 }
 def semigroupEither2[A: Semigroup, B: Semigroup] = Semigroup[Either[A, B]] {
   case (Left(a1), Left(a2))     =>  a1 |+| a2
   case (Right(b1), Right(b2))   =>  b1 |+| b2
-  case (Left(a), Right(b))      =>  b         // "Take $\color{dkgreen}B$" - discard all data of type $\color{dkgreen}A$.
+  case (Left(a), Right(b))      =>  b      // "Take $\color{dkgreen}B$" - discard all data of type $\color{dkgreen}A$.
   case (Right(b), Left(a))      =>  b
 }
 def semigroupEither3[A: Semigroup, B: Semigroup] = Semigroup[Either[A, B]] {
   case (Left(a1), Left(a2))     =>  a1 |+| a2
   case (Right(b1), Right(b2))   =>  b1 |+| b2
-  case (Left(a), Right(b))      =>  a         // "Take first" - discard ${\color{dkgreen}y}$ in ${\color{dkgreen}x\oplus y}$.
+  case (Left(a), Right(b))      =>  a      // "Take first" - discard ${\color{dkgreen}y}$ in ${\color{dkgreen}x\oplus y}$.
   case (Right(b), Left(a))      =>  b
 }
 def semigroupEither4[A: Semigroup, B: Semigroup] = Semigroup[Either[A, B]] {
   case (Left(a1), Left(a2))     =>  a1 |+| a2
   case (Right(b1), Right(b2))   =>  b1 |+| b2
-  case (Left(a), Right(b))      =>  b         // "Take last" - discard ${\color{dkgreen}x}$ in ${\color{dkgreen}x\oplus y}$.
+  case (Left(a), Right(b))      =>  b      // "Take last" - discard ${\color{dkgreen}x}$ in ${\color{dkgreen}x\oplus y}$.
   case (Right(b), Left(a))      =>  a
 }
 \end{lstlisting}
 The four different choices of the binary operation can be described
 as:
 
-1. (\textsf{``}Take $A$\textsf{''}) Discard all data of type $B$: $(a^{:A}+\bbnum 0)\oplus(\bbnum 0+b^{:B})=a$
-and $(\bbnum 0+b^{:B})\oplus(a^{:A}+\bbnum 0)=a$.
+1. (\textsf{``}Take $A$\textsf{''}) Discard all data of type $B$: 
+\[
+(a^{:A}+\bbnum 0)\oplus(\bbnum 0+b^{:B})=a\quad,\quad\quad(\bbnum 0+b^{:B})\oplus(a^{:A}+\bbnum 0)=a\quad.
+\]
 
-2. (\textsf{``}Take $B$\textsf{''}) Discard all data of type $A$: $(a^{:A}+\bbnum 0)\oplus(\bbnum 0+b^{:B})=b$
-and $(\bbnum 0+b^{:B})\oplus(a^{:A}+\bbnum 0)=b$.
+2. (\textsf{``}Take $B$\textsf{''}) Discard all data of type $A$: 
+\[
+(a^{:A}+\bbnum 0)\oplus(\bbnum 0+b^{:B})=b\quad,\quad\quad(\bbnum 0+b^{:B})\oplus(a^{:A}+\bbnum 0)=b\quad.
+\]
 
-3. (\textsf{``}Take first\textsf{''}) $x\oplus y$ discards $y$: $(a^{:A}+\bbnum 0)\oplus(\bbnum 0+b^{:B})=a$
-and $(\bbnum 0+b^{:B})\oplus(a^{:A}+\bbnum 0)=b$.
+3. (\textsf{``}Take first\textsf{''}) In $x\oplus y$, we discard $y$: 
+\[
+(a^{:A}+\bbnum 0)\oplus(\bbnum 0+b^{:B})=a\quad,\quad\quad(\bbnum 0+b^{:B})\oplus(a^{:A}+\bbnum 0)=b\quad.
+\]
 
-4. (\textsf{``}Take last\textsf{''}) $x\oplus y$ discards $x$: $(a^{:A}+\bbnum 0)\oplus(\bbnum 0+b^{:B})=b$
-and $(\bbnum 0+b^{:B})\oplus(a^{:A}+\bbnum 0)=a$.
+4. (\textsf{``}Take last\textsf{''}) In $x\oplus y$, we discard $x$: 
+\[
+(a^{:A}+\bbnum 0)\oplus(\bbnum 0+b^{:B})=b\quad,\quad\quad(\bbnum 0+b^{:B})\oplus(a^{:A}+\bbnum 0)=a\quad.
+\]
 
 \noindent Does the semigroup law~(\ref{eq:associativity-law-semigroup})
 hold for the new typeclass instance with any of these implementations?
@@ -2257,10 +2267,9 @@ do not depend on the order of inserted parentheses. Expressions of
 the form $x\oplus y\oplus z$ can have $8$ possible combinations
 of \lstinline!Left! and \lstinline!Right! types. Each of them needs
 to be checked against each of the $4$ implementations of $\oplus$.
-Instead of doing $32$ separate derivations, we will reason case by
-case.
+To avoid doing $32$ separate derivations, we will take shortcuts.
 
-First consider the case when all three values are of type \lstinline!Left(x)!.
+First, consider the case when all three values are of type \lstinline!Left(x)!.
 In all four implementations, the binary operation reduces to the binary
 operation of the semigroup $A$, which is associative since we assume
 that $A$ is a lawful semigroup:
@@ -3250,20 +3259,12 @@ where $F^{A}\triangleq S^{A,F^{A}}$}\tabularnewline
 Pointed functors provide the functionality of wrapping a given value
 in a \textsf{``}pure wrapper\textsf{''}. Another useful operation is \emph{extracting}
 a value from a given \textsf{``}wrapper\textsf{''}:
-
-\begin{wrapfigure}{l}{0.5\columnwidth}%
-\vspace{-0.8\baselineskip}
 \begin{lstlisting}
 def extract[A]: F[A] => A
 \end{lstlisting}
-\vspace{-0.5\baselineskip}
-\end{wrapfigure}%
-
-\noindent \vspace{-0.5\baselineskip}
 \[
 \text{ex}:\forall A.\,F^{A}\rightarrow A\quad.
 \]
-
 Functors having this operation are called \index{co-pointed functor}\textbf{co-pointed}.
 We may define the \lstinline!Copointed! typeclass\index{typeclass!Copointed@\texttt{Copointed}}
 as
@@ -3356,7 +3357,7 @@ def copointedId: Copointed[Id] = new Copointed[Id] { def ex[A]: Id[A] => A = ide
 
 Composition of two co-pointed functors $F$, $G$ is co-pointed:
 \[
-\text{ex}_{F\circ G}\triangleq h^{:F^{G^{A}}}\rightarrow\text{ex}_{G}(\text{ex}_{F}(h))\quad\text{ or equivalently }\quad\text{ex}_{F\circ G}=\text{ex}_{F}\bef\text{ex}_{G}\quad.
+\text{ex}_{F\circ G}\triangleq h^{:F^{G^{A}}}\rightarrow\text{ex}_{G}(\text{ex}_{F}(h))\quad\text{ or equivalently}:\quad\text{ex}_{F\circ G}=\text{ex}_{F}\bef\text{ex}_{G}\quad.
 \]
 \begin{lstlisting}
 def copointedFoG[F[_]: Copointed, G[_]: Copointed]: Copointed[Lambda[X => F[G[X]]]] =     
@@ -3415,9 +3416,6 @@ used in this proof, apply both sides to $a\times b$:
 For co-pointed functors $F$ and $G$, there is only one possible
 implementation of the type signature $\text{ex}_{F+G}:F^{A}+G^{A}\rightarrow A$,
 given that we have functions $\text{ex}_{F}$ and $\text{ex}_{G}$:
-
-\begin{wrapfigure}{l}{0.56\columnwidth}%
-\vspace{-0.85\baselineskip}
 \begin{lstlisting}
 def copointedEitherFG[F[_]: Copointed, G[_]: Copointed]:
              Copointed[Lambda[X => Either[F[X],G[X]]]] =
@@ -3428,10 +3426,6 @@ def copointedEitherFG[F[_]: Copointed, G[_]: Copointed]:
     }
   }
 \end{lstlisting}
-\vspace{-2.5\baselineskip}
-\end{wrapfigure}%
-
-\noindent \vspace{-0.15\baselineskip}
 \[
 \text{ex}_{F+G}\triangleq\,\begin{array}{|c||c|}
  & A\\
@@ -3485,11 +3479,12 @@ method by $\text{cpu}_{C}$, we can thus compute a value of type $P^{A}$
 as $h(\text{cpu}_{C})$. To extract $A$ from $P^{A}$, we need to
 assume additionally that $P$ is co-pointed and use its method $\text{ex}_{P}:P^{A}\rightarrow A$.
 Finally, we have:
-\begin{equation}
-\text{ex}_{L}\triangleq h^{:C^{A}\rightarrow P^{A}}\rightarrow\text{ex}_{P}(h(\text{cpu}_{C}))\quad\quad\text{ or equivalently}:\quad\quad h^{:C^{A}\rightarrow P^{A}}\triangleright\text{ex}_{L}=\text{cpu}_{C}\triangleright h\triangleright\text{ex}_{P}\quad.\label{eq:def-of-ex-for-C-mapsto-P}
-\end{equation}
+\begin{align}
+ & \text{ex}_{L}\triangleq h^{:C^{A}\rightarrow P^{A}}\rightarrow\text{ex}_{P}(h(\text{cpu}_{C}))\label{eq:def-of-ex-for-C-mapsto-P}\\
+{\color{greenunder}\text{ or equivalently}:}\quad & h^{:C^{A}\rightarrow P^{A}}\triangleright\text{ex}_{L}=\text{cpu}_{C}\triangleright h\triangleright\text{ex}_{P}\quad.\nonumber 
+\end{align}
 To verify the naturality law, we apply both sides to an arbitrary
-$h^{:C^{A}\rightarrow P^{A}}$ and compute
+$h^{:C^{A}\rightarrow P^{A}}$ and get:
 \begin{align*}
 {\color{greenunder}\text{expect to equal }h\triangleright\text{ex}_{L}\bef f:}\quad & h\triangleright f^{\uparrow L}\bef\text{ex}_{L}=(h\triangleright f^{\uparrow L})\,\gunderline{\triangleright\,\text{ex}_{L}}\\
 {\color{greenunder}\text{use Eq.~(\ref{eq:def-of-ex-for-C-mapsto-P})}:}\quad & =\text{cpu}_{C}\triangleright(h\triangleright f^{\uparrow L})\triangleright\text{ex}_{P}=\text{cpu}_{C}\triangleright\gunderline{(h\triangleright f^{\uparrow L})}\bef\text{ex}_{P}\\
@@ -3503,15 +3498,14 @@ h\triangleright\text{ex}_{L}\bef f=\text{cpu}_{C}\triangleright h\triangleright\
 This is possible only if $\text{cpu}_{C}\triangleright f^{\downarrow C}=\text{pu}_{C}$
 for all $f$. This motivates us to assume that law as the \index{naturality law!of pure for contrafunctors@of \texttt{pure} for contrafunctors}\textbf{naturality
 law} of $\text{cpu}_{C}$ for pointed contrafunctors. With that last
-assumption, we have finished proving the naturality law of $\text{ex}_{L}$.
-The code for $\text{ex}_{L}$ is
+assumption, the naturality law of $\text{ex}_{L}$ is proved. The
+code for $\text{ex}_{L}$ is:
 \begin{lstlisting}[mathescape=true]
 def copointedFunc[C[_]: Pointed, P[_]: Copointed]: Copointed[Lambda[X => C[X] => P[X]]] =
   new Copointed[Lambda[X => C[X] => P[X]]] {
     def ex[A]: (C[A] => P[A]) => A = h => extract[P, A](h(cpure[C, A]))
-  }      // In Scala 2.13: h => cpure[C, A] pipe h pipe extract[P, A] as in ${\color{dkgreen} h\rightarrow\text{pu}_{C}\triangleright h\triangleright\text{ex}_{P} }$
+  }      // In Scala 2.13: h => cpure[C, A] pipe h pipe extract[P, A], which corresponds to ${\color{dkgreen} h\rightarrow\text{pu}_{C}\triangleright h\triangleright\text{ex}_{P} }$
 \end{lstlisting}
-
 We will analyze pointed contrafunctors and their naturality law in
 Section~\ref{subsec:Pointed-contrafunctors}.
 
@@ -3534,9 +3528,10 @@ exists and satisfies the corresponding \textbf{naturality law}:\index{naturality
 \end{equation}
 Assuming that $S$ is co-pointed, we can finally define $\text{ex}_{F}$
 by recursion:
-\[
-\text{ex}_{F}\triangleq s^{:S^{A,F^{A}}}\rightarrow s\triangleright\big(\text{bimap}_{S}(\text{id})(\text{ex}_{F})\big)\triangleright\text{ex}_{S}\quad\text{ or equivalently}\quad\text{ex}_{F}\triangleq\text{bimap}_{S}(\text{id})(\text{ex}_{F})\bef\text{ex}_{S}\quad.
-\]
+\begin{align*}
+ & \text{ex}_{F}\triangleq s^{:S^{A,F^{A}}}\rightarrow s\triangleright\big(\text{bimap}_{S}(\text{id})(\text{ex}_{F})\big)\triangleright\text{ex}_{S}\\
+{\color{greenunder}\text{ or equivalently}:}\quad & \text{ex}_{F}\triangleq\text{bimap}_{S}(\text{id})(\text{ex}_{F})\bef\text{ex}_{S}\quad.
+\end{align*}
 To verify the naturality law of $\text{ex}_{F}$, we denote recursive
 uses by an overline and compute:
 \begin{align*}
@@ -3555,11 +3550,7 @@ tree functor:
 \[
 F^{A}\triangleq S^{A,F^{A}}=A+F^{A}\times F^{A}\quad.
 \]
-The bifunctor $S$ is co-pointed because there exists a suitable function,
-$\text{ex}_{S}:S^{A,A}\rightarrow A$.
-
-\begin{wrapfigure}{l}{0.47\columnwidth}%
-\vspace{0.35\baselineskip}
+The bifunctor $S$ is co-pointed because there exists a function $\text{ex}_{S}:S^{A,A}\rightarrow A$.
 \begin{lstlisting}
 type S[A, R] = Either[A, (R, R)]
 def exS[A]: S[A, A] => A = {
@@ -3567,13 +3558,6 @@ def exS[A]: S[A, A] => A = {
   case Right((a1, a2))  => a1 // Could be a2.
 }
 \end{lstlisting}
-
-\vspace{-2.25\baselineskip}
-\end{wrapfigure}%
-
-~
-
-\noindent \vspace{-0.2\baselineskip}
 \[
 \text{ex}_{S}\triangleq\,\begin{array}{|c||c|}
  & A\\
@@ -3581,10 +3565,8 @@ def exS[A]: S[A, A] => A = {
 A\times A & \pi_{1}
 \end{array}\quad.
 \]
-\vspace{-0.75\baselineskip}
-
-\noindent This function extracts the left-most leaf of a binary tree
-because it is using the projection $\pi_{1}$ (not $\pi_{2}$).
+This function extracts the left-most leaf of a binary tree because
+it is using the projection $\pi_{1}$ (not $\pi_{2}$).
 
 To implement the co-pointed instance $\text{ex}_{F}$ for the binary
 tree functor, we need to use the implementation of $\text{bimap}_{S}$:
@@ -3699,8 +3681,8 @@ To verify that, compute:
 {\color{greenunder}\text{composition law of contrafunctor }C:}\quad & =\text{wu}_{C}\triangleright(\gunderline{f\bef(\_^{:B}\rightarrow1)})^{\downarrow C}\\
 {\color{greenunder}\text{compute function composition}:}\quad & =\text{wu}_{C}\triangleright(\_^{:A}\rightarrow1)^{\downarrow C}=\text{cpu}_{C}^{A}\quad.
 \end{align*}
-So, a pointed contrafunctor instance for $C^{\bullet}$ is equivalent
-to a chosen value of type $C^{\bbnum 1}$.
+So, a pointed contrafunctor instance for $C^{\bullet}$ is just a
+chosen value of type $C^{\bbnum 1}$.
 \begin{lstlisting}
 final case class Pointed[F[_]](wu: F[Unit])
 def cpure[F[_]: Pointed : Contrafunctor, A]: F[A] = implicitly[Pointed[F]].wu.cmap(_ => ())
@@ -3781,17 +3763,18 @@ def pointedFuncFC[C[_]: Pointed, F[_]]: Pointed[Lambda[X => F[X] => C[X]]] =
 
 \paragraph{Recursive types}
 
-The recursive construction for contrafunctors (see Statement~\ref{subsec:functor-Statement-contrafunctor-recursive-1})
-is $C^{A}\triangleq S^{A,C^{A}}$ where $S^{A,R}$ is a contrafunctor
-in $A$ and a functor in $R$. Values of type $C^{\bbnum 1}$ will
-exist when the recursive type equation $T\triangleq S^{\bbnum 1,T}$
-defines a non-void type $T$. This condition is similar to that for
-pointed functors, and the resulting construction is the same.
+Statement~\ref{subsec:functor-Statement-contrafunctor-recursive-1}
+shows the recursive construction for contrafunctors: $C^{A}\triangleq S^{A,C^{A}}$,
+where $S^{A,R}$ is a contrafunctor in $A$ and a functor in $R$.
+Values of type $C^{\bbnum 1}$ will exist when the recursive type
+equation $T\triangleq S^{\bbnum 1,T}$ defines a non-void type $T$.
+This condition is similar to that for pointed functors, and the resulting
+construction is the same.
 
 \paragraph{Summary}
 
 Can we recognize a pointed contrafunctor $C$ by looking at its type
-expression, e.g.
+expression, for example this one:
 \[
 C^{A,B}\triangleq\left(\bbnum 1+A\rightarrow B\right)+(\text{String}\times A\times B\rightarrow\text{String})\text{ with respect to type parameter }A?
 \]
@@ -3807,17 +3790,17 @@ So, the contrafunctor $C^{A,B}$ is pointed with respect to $A$.
 \textbf{\footnotesize{}Construction} & \textbf{\footnotesize{}Type signature to implement}\tabularnewline
 \hline 
 \hline 
-{\footnotesize{}Constant functor returning a fixed type $Z$} & {\footnotesize{}value of type $Z$}\tabularnewline
+{\footnotesize{}Constant functor; $Z$ is a fixed type} & {\footnotesize{}value of type $Z$}\tabularnewline
 \hline 
-{\footnotesize{}Composition of pointed functors/contrafunctors} & {\footnotesize{}$\text{Pointed}^{F^{\bullet}}\times\text{Pointed}^{G^{\bullet}}\rightarrow\text{Pointed}^{F^{G^{\bullet}}}$}\tabularnewline
+{\footnotesize{}Composition of functors/contrafunctors} & {\footnotesize{}$\text{Pointed}^{F^{\bullet}}\times\text{Pointed}^{G^{\bullet}}\rightarrow\text{Pointed}^{F^{G^{\bullet}}}$}\tabularnewline
 \hline 
-{\footnotesize{}Product of pointed contrafunctors $F$ and $G$} & {\footnotesize{}$\text{Pointed}^{F^{\bullet}}\times\text{Pointed}^{G^{\bullet}}\rightarrow\text{Pointed}^{F^{\bullet}\times G^{\bullet}}$}\tabularnewline
+{\footnotesize{}Product of contrafunctors $F$ and $G$} & {\footnotesize{}$\text{Pointed}^{F^{\bullet}}\times\text{Pointed}^{G^{\bullet}}\rightarrow\text{Pointed}^{F^{\bullet}\times G^{\bullet}}$}\tabularnewline
 \hline 
 {\footnotesize{}Co-product of a pointed $F$ and any $G$} & {\footnotesize{}$\text{Pointed}^{F^{\bullet}}\times\text{Contrafunctor}^{G^{\bullet}}\rightarrow\text{Pointed}^{F^{\bullet}+G^{\bullet}}$}\tabularnewline
 \hline 
-{\footnotesize{}Function from a functor $F$ to a pointed $C$} & {\footnotesize{}$\text{Pointed}^{C^{\bullet}}\times\text{Functor}^{F^{\bullet}}\rightarrow\text{Pointed}^{F^{\bullet}\rightarrow C^{\bullet}}$}\tabularnewline
+{\footnotesize{}Function type, $F^{A}\rightarrow C^{A}$} & {\footnotesize{}$\text{Pointed}^{C^{\bullet}}\times\text{Functor}^{F^{\bullet}}\rightarrow\text{Pointed}^{F^{\bullet}\rightarrow C^{\bullet}}$}\tabularnewline
 \hline 
-{\footnotesize{}Recursive type} & {\footnotesize{}$\text{Pointed}^{C^{\bullet}}\rightarrow\text{Pointed}^{S^{\bullet,C^{\bullet}}}$
+{\footnotesize{}Recursive type} & {\footnotesize{}$\text{Pointed}^{C^{\bullet}}\rightarrow\text{Pointed}^{S^{\bullet,C^{\bullet}}}$,
 where $C^{A}\triangleq S^{A,C^{A}}$}\tabularnewline
 \hline 
 \end{tabular}
@@ -3832,10 +3815,9 @@ typeclass.\label{tab:Type-constructions-for-pointed-contrafunctor}}
 What problems can we solve now?
 \begin{itemize}
 \item Define arbitrary PTVFs using typeclass constraints on type parameters.
-\item Define typeclasses and typeclass instances for types and for type
-constructors.
+\item Define typeclasses and instances for types and for type constructors.
 \item Implement \lstinline!Monoid!, \lstinline!Functor!, and other standard
-typeclasses, and prove their laws.
+typeclasses; prove their laws.
 \item Use known constructions to derive typeclass instances from previous
 ones.
 \end{itemize}
@@ -4199,15 +4181,14 @@ $C^{A}\triangleq A\rightarrow\text{Int}$.
 
 \subparagraph{Solution}
 
-An instance value must contain the \lstinline!contramap! method of
-type $\forall(A,B).\,C^{A}\rightarrow(B\rightarrow A)\rightarrow C^{B}$.
+We must encode the \lstinline!contramap! method of type $\forall(A,B).\,C^{A}\rightarrow(B\rightarrow A)\rightarrow C^{B}$.
 This signature has type parameters, so the typeclass needs to be implemented
 as a \lstinline!trait!:
 \begin{lstlisting}
 trait Contrafunctor[C[_]] { def contramap[A, B](c: C[A])(f: B => A): C[B] }
 \end{lstlisting}
 A typeclass instance for the type constructor $C^{A}\triangleq A\rightarrow\text{Int}$
-is created by
+is created by:
 \begin{lstlisting}
 type C[A] = A => Int
 implicit val contrafunctorC = new Contrafunctor[C] {
@@ -4313,9 +4294,6 @@ If we lift these functions to the contrafunctor $C$, we will get
 $\pi_{1}^{\downarrow C}:C^{A}\rightarrow C^{A\times B}$ and $\pi_{2}^{\downarrow C}:C^{B}\rightarrow C^{A\times B}$.
 The required type signature is then implemented via a \lstinline!match!
 expression like this:
-
-\begin{wrapfigure}{l}{0.55\columnwidth}%
-\vspace{-0.75\baselineskip}
 \begin{lstlisting}
 def f[C[_]: Contrafunctor, A, B]
                : Either[C[A], C[B]] => C[(A, B)] = {
@@ -4323,11 +4301,7 @@ def f[C[_]: Contrafunctor, A, B]
   case Right(cb)   => cb.contramap { case (a, b) => b }
 }
 \end{lstlisting}
-
-\vspace{-3\baselineskip}
-\end{wrapfigure}%
-
-\noindent In the code notation:\vspace{-0.25\baselineskip}
+In the code notation:
 \[
 f^{:C^{A}+C^{B}\rightarrow C^{A\times B}}\triangleq\,\begin{array}{|c||c|}
  & C^{A\times B}\\
@@ -4335,7 +4309,6 @@ f^{:C^{A}+C^{B}\rightarrow C^{A\times B}}\triangleq\,\begin{array}{|c||c|}
 C^{B} & \pi_{2}^{\downarrow C}
 \end{array}\quad.
 \]
-\vspace{-0.85\baselineskip}
 
 To show that it is not possible to implement a function $g$ with
 the inverse type signature:
@@ -4400,13 +4373,13 @@ and trying various combinations, we eventually find a suitable functor:
 $F^{A}\triangleq(P\rightarrow A)+(Q\rightarrow A)$. The type signature
 of $g$ becomes:
 \[
-g:\forall(A,B).\,\left((P\rightarrow A)+(Q\rightarrow A)\right)\times\left((P\rightarrow B)+(Q\rightarrow B)\right)\rightarrow(P\rightarrow A\times B)+(Q\rightarrow A\times B)\quad.
+\left((P\rightarrow A)+(Q\rightarrow A)\right)\times\left((P\rightarrow B)+(Q\rightarrow B)\right)\rightarrow(P\rightarrow A\times B)+(Q\rightarrow A\times B)\quad.
 \]
-The argument of the function $g$ has the following type:
+The argument of that function has the following type:
 \[
-\left((P\rightarrow A)+(Q\rightarrow A)\right)\times\left((P\rightarrow B)+(Q\rightarrow B)\right)\quad,
+\left((P\rightarrow A)+(Q\rightarrow A)\right)\times\left((P\rightarrow B)+(Q\rightarrow B)\right)\quad.
 \]
-which can be transformed equivalently into a disjunction of four cases:
+This is equivalent to a disjunction of four cases:
 \[
 (P\rightarrow A)\times(P\rightarrow B)+(P\rightarrow A)\times(Q\rightarrow B)+(Q\rightarrow A)\times(P\rightarrow B)+(Q\rightarrow A)\times(Q\rightarrow B)\quad.
 \]
@@ -4435,19 +4408,11 @@ is not applicative.
 
 \subsubsection{Example \label{subsec:tc-Example-pointed-alternative}\ref{subsec:tc-Example-pointed-alternative}{*}}
 
-(R.~O\textsf{'}Connor\index{Russell O\textsf{'}Connor} \footnote{This example is based on the post \texttt{\href{https://mail.haskell.org/pipermail/haskell-cafe/2015-November/122357.html}{https://mail.haskell.org/pipermail/haskell-cafe/2015-November/122357.html}}})
+(R.~O\textsf{'}Connor\index{Russell O\textsf{'}Connor} \footnote{See \texttt{\href{https://mail.haskell.org/pipermail/haskell-cafe/2015-November/122357.html}{https://mail.haskell.org/pipermail/haskell-cafe/2015-November/122357.html}}})
 Assume that a functor $F$ admits a function $p$ with type signature:
-
-\begin{wrapfigure}{l}{0.63\columnwidth}%
-\vspace{-0.75\baselineskip}
 \begin{lstlisting}
 def p[A, B, F[_]: Functor]: Either[A, F[B]] => F[Either[A, B]]
 \end{lstlisting}
-
-\vspace{-0.6\baselineskip}
-\end{wrapfigure}%
-
-\noindent ~\vspace{-0.5\baselineskip}
 \[
 p^{A,B}:A+F^{B}\rightarrow F^{A+B}\quad,
 \]
@@ -4481,9 +4446,6 @@ val wu[F[_]: Functor]: F[Unit] = p[Unit, Nothing](Left(())).map { case Left(_) =
 
 Conversely, assuming that $F$ is pointed, we use its $\text{pu}_{F}$
 function to define $p$ as:
-
-\begin{wrapfigure}{l}{0.58\columnwidth}%
-\vspace{-0.2\baselineskip}
 \begin{lstlisting}
 def p[F[_]: Functor : Pointed, A, B]
               : Either[A, F[B]] => F[Either[A, B]] = {
@@ -4491,11 +4453,6 @@ def p[F[_]: Functor : Pointed, A, B]
   case Right(fb)   => fb.map { b => Right[A, B](b) }
 }
 \end{lstlisting}
-
-\vspace{-4\baselineskip}
-\end{wrapfigure}%
-
-\noindent \vspace{-0.75\baselineskip}
 \[
 p^{A,B}\triangleq\,\begin{array}{|c||c|}
  & F^{A+B}\\
@@ -4507,9 +4464,10 @@ F^{B} & (b^{:B}\rightarrow\bbnum 0^{:A}+b)^{\uparrow F}
 It remains to show that $p$ satisfies the required laws. The identity
 law holds because:
 \begin{align*}
-{\color{greenunder}\text{expect to equal }(b^{:B}\rightarrow\bbnum 0+b)^{\uparrow F}:}\quad & p^{\bbnum 0,B}=\,\begin{array}{|c||c|}
+ & \quad{\color{greenunder}\text{expect to equal }(b^{:B}\rightarrow\bbnum 0+b)^{\uparrow F}:}\quad\\
+ & p^{\bbnum 0,B}=\,\begin{array}{|c||c|}
  & F^{\bbnum 0+B}\\
-\hline \bbnum 0 & \text{(we may delete this line)}\\
+\hline \bbnum 0 & \text{(we may ignore this line)}\\
 F^{B} & (b^{:B}\rightarrow\bbnum 0+b)^{\uparrow F}
 \end{array}\,=(b^{:B}\rightarrow\bbnum 0+b)^{\uparrow F}\quad.
 \end{align*}
@@ -4533,7 +4491,8 @@ F^{B+C} & (x^{:B+C}\rightarrow\bbnum 0^{:A}+x)^{\uparrow F}
  & F^{A+B+C}\\
 \hline A & (a^{:A}\rightarrow a+\bbnum 0^{:B+C})\bef\text{pu}_{F}\\
 B+F^{C} & p^{B,C}\bef(x^{:B+C}\rightarrow\bbnum 0^{:A}+x)^{\uparrow F}
-\end{array}\,=\,\begin{array}{|c||c|}
+\end{array}\\
+ & =\,\,\begin{array}{|c||c|}
  & F^{A+B+C}\\
 \hline A & (a^{:A}\rightarrow a+\bbnum 0^{:B+C})\bef\text{pu}_{F}\\
 B & (b^{:B}\rightarrow b+\bbnum 0^{:C})\bef\text{pu}_{F}\bef(x^{:B+C}\rightarrow\bbnum 0^{:A}+x)^{\uparrow F}\\
@@ -4560,9 +4519,12 @@ F^{C} & (c^{:C}\rightarrow\bbnum 0^{:A+B}+c)^{\uparrow F}
 The only remaining difference is in the second lines of the matrices.
 We write those lines separately: 
 \begin{align*}
-{\color{greenunder}\text{expect to equal }(b^{:B}\rightarrow\bbnum 0^{:A}+b+\bbnum 0^{:C})\bef\text{pu}_{F}:}\quad & (b^{:B}\rightarrow b+\bbnum 0^{:C})\bef\gunderline{\text{pu}_{F}\bef(x^{:B+C}\rightarrow\bbnum 0^{:A}+x)^{\uparrow F}}\\
-{\color{greenunder}\text{naturality law of }\text{pu}_{F}:}\quad & =\gunderline{(b^{:B}\rightarrow b+\bbnum 0^{:C})\bef(x^{:B+C}\rightarrow\bbnum 0^{:A}+x)}\bef\text{pu}_{F}\\
-{\color{greenunder}\text{compute function composition}:}\quad & =(b^{:B}\rightarrow\bbnum 0^{:A}+b+\bbnum 0^{:C})\bef\text{pu}_{F}\quad.
+ & \quad{\color{greenunder}\text{expect to equal }(b^{:B}\rightarrow\bbnum 0^{:A}+b+\bbnum 0^{:C})\bef\text{pu}_{F}:}\quad\\
+ & (b^{:B}\rightarrow b+\bbnum 0^{:C})\bef\gunderline{\text{pu}_{F}\bef(x^{:B+C}\rightarrow\bbnum 0^{:A}+x)^{\uparrow F}}\\
+ & \quad{\color{greenunder}\text{naturality law of }\text{pu}_{F}:}\quad\\
+ & =\gunderline{(b^{:B}\rightarrow b+\bbnum 0^{:C})\bef(x^{:B+C}\rightarrow\bbnum 0^{:A}+x)}\bef\text{pu}_{F}\\
+ & \quad{\color{greenunder}\text{compute function composition}:}\quad\\
+ & =(b^{:B}\rightarrow\bbnum 0^{:A}+b+\bbnum 0^{:C})\bef\text{pu}_{F}\quad.
 \end{align*}
 This completes the proof of the required laws.
 
@@ -5019,13 +4981,14 @@ satisfies the associativity law:
 
 Both sides of the law evaluate to the same partial function of type
 $\text{Int}\rightarrow A$:
-\[
-(a_{1}\pplus a_{2})\pplus a_{3}=a_{1}\pplus(a_{2}\pplus a_{3})=i^{:\text{Int}_{[0,n_{1}+n_{2}+n_{3}-1]}}\rightarrow\begin{cases}
+\begin{align*}
+ & (a_{1}\pplus a_{2})\pplus a_{3}=a_{1}\pplus(a_{2}\pplus a_{3})\\
+ & =i^{:\text{Int}_{[0,n_{1}+n_{2}+n_{3}-1]}}\rightarrow\begin{cases}
 0\leq i<n_{1}: & a_{1}(i)\\
 n_{1}\leq i<n_{1}+n_{2}: & a_{2}(i-n_{1})\\
 n_{1}+n_{2}\leq i<n_{1}+n_{2}+n_{3}: & a_{3}(i-n_{1}-n_{2})
 \end{cases}\quad.
-\]
+\end{align*}
 
 Now we establish a rigorous equivalence between the \lstinline!List!
 and \lstinline!Array! types.
@@ -5039,11 +5002,12 @@ subset of integers $i$ within the range $0\leq i\leq n-1$.
 
 \subparagraph{Proof}
 
-We need to implement two isomorphism maps $f_{1}$, $f_{2}$ and show
-that:
+We need to implement two isomorphism maps $f_{1}$, $f_{2}$ with
+types:
 \[
-f_{1}:\text{Array}_{n}^{A}\rightarrow\text{List}^{A}\quad,\quad\quad f_{2}:\text{List}^{A}\rightarrow\text{Array}_{n}^{A}\quad,\quad\quad f_{1}\bef f_{2}=\text{id}\quad,\quad\quad f_{2}\bef f_{1}=\text{id}\quad.
+f_{1}:\text{Array}_{n}^{A}\rightarrow\text{List}^{A}\quad,\quad\quad f_{2}:\text{List}^{A}\rightarrow\text{Array}_{n}^{A}\quad,
 \]
+and and show that $f_{1}\bef f_{2}=\text{id}$ and $f_{2}\bef f_{1}=\text{id}$.
 
 To implement $f_{1}$, we proceed by induction in $n$. The base case
 is $n=0$, and we map $\text{Array}_{0}$ into an empty list. The
@@ -5249,7 +5213,7 @@ are often called \textsf{``}higher-kinded types\index{types!higher-kinded}\texts
 For higher-order TTFs, Scala requires syntax such as \lstinline!Functor[F[_]]!
 or \lstinline!F[_[_]]!, for example:
 \begin{lstlisting}[mathescape=true]
-// Ap1 and Ap2 will simply substitute type arguments into type constructors of various kinds.
+// Ap1 and Ap2 substitute type arguments into various type constructors.
 type Ap1[F[_], A] = F[A]   // $\text{Ap1} : ((*\rightarrow*) \times*)\rightarrow* $
 type Ap2[P[_[_], _], Q[_], R] = P[Q, R] // Ap2: $\color{dkgreen}(((*\rightarrow*)\times*\rightarrow*)\times(*\rightarrow*)\times*)\rightarrow* $
 type G[A] = Either[(A, A, String), A]   // G: $\color{dkgreen} *\rightarrow* $
@@ -5281,26 +5245,29 @@ in practice.
 The first example is converting integers to floating-point numbers.
 The ranges of the available types allow us to convert a \lstinline!Short!
 to a \lstinline!Float!, or an \lstinline!Int! to a \lstinline!Double!.
-Can we implement the type signature 
+We would like to implement a function with the type signature:
 \begin{lstlisting}
 def convertNumber[M, N](x: M): N
 \end{lstlisting}
 where the type parameters \lstinline!M!, \lstinline!N! are constrained
 to be either \lstinline!M = Short! and \lstinline!N = Float!, or
-\lstinline!M = Int! and \lstinline!N = Double!? (Later we may need
-to add support for more types.)
+\lstinline!M = Int! and \lstinline!N = Double!. As later we may
+need to add support for more types, the definition should be easy
+to extend.
 
 The second example is converting mutable data structures into the
 corresponding immutable ones. The Scala library contains data structures
 such as sequences, sets, and dictionaries; each data type has a mutable
-and an immutable version. Can we implement a function with type signature
+and an immutable version, for example, \lstinline!mutable.Set! and
+\lstinline!immutable.Set!, \lstinline!mutable.Map! and \lstinline!immutable.Map!,
+and so on. We would like to imlement a function with type signature:
 \begin{lstlisting}
 def convertData[Mut[_], Immut[_], A](data: Mut[A]): Immut[A]
 \end{lstlisting}
 where the type parameters \lstinline!Mut! and \lstinline!Immut!
 are constrained to represent the mutable / immutable versions of a
 supported data structure (for example, \lstinline!Mut = mutable.Set!
-and \lstinline!Immut = immutable.Set!, etc.)?
+and \lstinline!Immut = immutable.Set!, etc.).
 
 A typeclass constraint for a single type parameter, such as \lstinline!func[A: Monoid]!,
 is implemented by requiring an evidence value\index{evidence value}\index{typeclass!evidence parameter}
@@ -5367,10 +5334,10 @@ def add[U1, U2](x: Quantity[U1], y: Quantity[U2]): Quantity[U2] = ???
 \end{lstlisting}
 The parameter \lstinline!U! in \lstinline!Quantity[U]! is called
 a \textbf{phantom}\index{phantom type parameter} type parameter because
-\lstinline!Quantity[U]! contains no values that use \lstinline!U!.
-The parameter \lstinline!U! would not be phantom if \lstinline!Quantity[U]!
-were not a constant functor\index{constant functor!example of use}
-but instead contained values e.g., of type \lstinline!U! or of type
+values of type \lstinline!Quantity[U]! are defined without using
+\lstinline!U!. The parameter \lstinline!U! would not be phantom
+if \lstinline!Quantity[U]! were not a constant functor\index{constant functor!example of use}
+but instead contained values, e.g., of type \lstinline!U! or of type
 \lstinline!U => Double! or of some other type that uses \lstinline!U!. 
 
 The function \lstinline!add[U1, U2](x, y)! must impose a type relation
@@ -5413,7 +5380,7 @@ implicit class QuantityAdd[U1](x: Quantity[U1]) {
   def +[U2](y: Quantity[U2])(implicit ev: Convertible[U1, U2]): Quantity[U2] = add(x, y)
 }
 
-scala> 2.lb + 2.kg        // Compute 2 pounds + 2 kilograms; the result is in kilograms.
+scala> 2.lb + 2.kg // 2 pounds + 2 kilograms; the result is in kilograms.
 res1: Quantity[KG] = Quantity(2.907184)
 \end{lstlisting}
 
@@ -5428,7 +5395,7 @@ to kilograms). Then the \lstinline!Convertible! relation will be
 many-to-one\index{type relation!many-to-one} instead of many-to-many.
 The resulting code is:
 \begin{lstlisting}[frame=single,fillcolor={\color{black}},framesep={0.2mm},framexleftmargin=2mm,framexrightmargin=2mm,framextopmargin=2mm,framexbottommargin=2mm]
-trait KG; trait LB; trait OZ; trait KM; trait MI; trait FT             // Some supported units.
+trait KG; trait LB; trait OZ; trait KM; trait MI; trait FT // Supported units.
 
 // This type relation is many-to-1: it relates all mass units to KG and all length units to KM.
 final case class Convertible[U1, U2](multiplier: Double) extends AnyVal
@@ -5450,7 +5417,7 @@ final case class Quantity[U](value: Double) extends AnyVal { // Use `AnyVal` to 
       value * ev1.multiplier == q.value * ev2.multiplier
 }
 
-implicit class QuantitySyntax(x: Double) {    // Extension methods defined for convenience.
+implicit class QuantitySyntax(x: Double) { // Extension methods for convenience.
   def kg = Quantity[KG](x)
   def lb = Quantity[LB](x)
   def oz = Quantity[OZ](x)
@@ -5475,7 +5442,7 @@ scala> 1.km + 2.lb      // Compile-time error: cannot add kilometers to pounds.
        1.km + 2.lb
             ^
 
-scala> trait YD; implicit val cYD = Convertible[YD, KM](0.0009144)  // Add support for yards.
+scala> trait YD; implicit val cYD = Convertible[YD, KM](0.0009144)  // Adding support for yards.
 defined trait YD
 cIN: Convertible[YD,KM] = Convertible(9.144E-4)
 
@@ -5565,9 +5532,9 @@ producing duplicate instances by choosing which implicit conversions
 to import:
 \begin{lstlisting}
 final case class TC[A]()
-final case class TC1[A]()(implicit val tc: TC[A])                      // TC1 inherits TC.
+final case class TC1[A]()(implicit val tc: TC[A])   // TC1 inherits TC.
 object TC1 { implicit def toTC[A](implicit x: TC1[A]): TC[A] = x.tc }
-final case class TC2[A]()(implicit val tc: TC[A])                      // TC2 inherits TC.
+final case class TC2[A]()(implicit val tc: TC[A])   // TC2 inherits TC.
 object TC2 { implicit def toTC[A](implicit x: TC2[A]): TC[A] = x.tc }
 // The function f requires A to have both TC1 and TC2 instances and then wants to access TC instance.
 def f[A: TC1 : TC2]() = {
@@ -5579,8 +5546,9 @@ def f[A: TC1 : TC2]() = {
 
 The problem of duplicate inherited instances can be solved with less
 work for the programmer if the typeclasses are implemented using a
-special, more complicated encoding.\footnote{See slides 5\textendash 14 of the talk by \index{John de Goes}John
-de Goes: \texttt{\href{https://www.slideshare.net/jdegoes/scalaz-8-a-whole-new-game}{https://www.slideshare.net/jdegoes/scalaz-8-a-whole-new-game}}}
+special, more complicated encoding.\footnote{See \texttt{\href{https://www.slideshare.net/jdegoes/scalaz-8-a-whole-new-game}{https://www.slideshare.net/jdegoes/scalaz-8-a-whole-new-game}},
+slides 5\textendash 14 of the talk by \index{John de Goes}John de
+Goes.}
 
 \subsection{$P$-typeclasses, their laws and structure\label{subsec:P-algebraic-typeclasses}}
 
@@ -5710,9 +5678,10 @@ the type $E\rightarrow A$ if the type $A$ belongs to the $P$-typeclass.
 Using the fact that $P$ is a functor, an evidence value of type $P^{E\rightarrow A}\rightarrow E\rightarrow A$
 can be computed from an evidence value of type $P^{A}\rightarrow A$
 like this:
-\[
-q:(P^{A}\rightarrow A)\rightarrow P^{E\rightarrow A}\rightarrow E\rightarrow A\quad,\quad\quad q\triangleq h^{:P^{A}\rightarrow A}\rightarrow p^{:P^{E\rightarrow A}}\rightarrow e^{:E}\rightarrow p\triangleright(x^{:E\rightarrow A}\rightarrow e\triangleright x)^{\uparrow P}\triangleright h\quad.
-\]
+\begin{align*}
+ & q:(P^{A}\rightarrow A)\rightarrow P^{E\rightarrow A}\rightarrow E\rightarrow A\quad,\\
+ & q\triangleq h^{:P^{A}\rightarrow A}\rightarrow p^{:P^{E\rightarrow A}}\rightarrow e^{:E}\rightarrow p\triangleright(x^{:E\rightarrow A}\rightarrow e\triangleright x)^{\uparrow P}\triangleright h\quad.
+\end{align*}
 
 As in the case of the product construction, this argument does not
 prove that the laws will hold for the new typeclass instances. We
