@@ -78,7 +78,7 @@ case $v in
   cat sofp.tex | remove_part2 | remove_part3  > $name.tex
   sed -i.bak -e 's|\(of Functional Programming\)|\1, Part I|; s|\(\\part{.*}\)|\\setcounter{page}{'$firstpage'}\\setcounter{part}{'$firstpart'}\\setcounter{chapter}{'$firstchapter'}\1|;' $name.tex
   sed -i.bak -e 's|% End of title.|\\vspace{0.2in}\\centerline{\\fontsize{20pt}{20pt}\\selectfont{Part I: Introductory level}}|' book_cover/sofp-cover-page-no-bg.tex
-  sed -i.bak -e 's|\(of Functional Programming\)|\1, Part I|;' book_cover/sofp-spine.tex
+  sed -i.bak -e 's|\(of Functional Programming\)|\1 - Part I|;' book_cover/sofp-spine.tex
 
   # Replace ISBN information.
   echo "Using volume $v ISBN '$vol1_ISBN'"
@@ -94,7 +94,7 @@ case $v in
 
   sed -i.bak -e 's|\(of Functional Programming\)|\1, Part II|; s|\(\\part{.*}\)|\\setcounter{page}{'$firstpage'}\\setcounter{part}{'$firstpart'}\\setcounter{chapter}{'$firstchapter'}\1|;' $name.tex
   sed -i.bak -e 's|% End of title.|\\vspace{0.2in}\\centerline{\\fontsize{20pt}{20pt}\\selectfont{Part II: Intermediate level}}|' book_cover/sofp-cover-page-no-bg.tex
-  sed -i.bak -e 's|\(of Functional Programming\)|\1, Part II|;' book_cover/sofp-spine.tex
+  sed -i.bak -e 's|\(of Functional Programming\)|\1 - Part II|;' book_cover/sofp-spine.tex
 
   # Replace ISBN information.
   echo "Using volume $v ISBN '$vol2_ISBN'"
@@ -110,7 +110,7 @@ case $v in
 
   sed -i.bak -e 's|\(of Functional Programming\)|\1, Part III|; s|\(\\part{.*}\)|\\setcounter{page}{'$firstpage'}\\setcounter{part}{'$firstpart'}\\setcounter{chapter}{'$firstchapter'}\1|;' $name.tex
   sed -i.bak -e 's|% End of title.|\\vspace{0.2in}\\centerline{\\fontsize{20pt}{20pt}\\selectfont{Part III: Advanced level}}|' book_cover/sofp-cover-page-no-bg.tex
-  sed -i.bak -e 's|\(of Functional Programming\)|\1, Part III|;' book_cover/sofp-spine.tex
+  sed -i.bak -e 's|\(of Functional Programming\)|\1 - Part III|;' book_cover/sofp-spine.tex
 
   # Replace ISBN information.
   echo "Using volume $v ISBN '$vol3_ISBN'"
