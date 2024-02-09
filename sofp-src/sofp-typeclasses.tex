@@ -1358,36 +1358,27 @@ by
 \begin{lstlisting}
 final case class Extractor[Z, T](extract: T => Z)
 \end{lstlisting}
-What kind of types can have an Extractor typeclass instance? To answer
-that question, we apply structural analysis and check whether any
-of the standard type constructions produce new typeclass instances.
+What kind of types can have an \lstinline!Extractor! typeclass instance?
+To answer that question, we apply structural analysis and check whether
+any of the standard type constructions produce new typeclass instances.
 The results are summarized in Table~\ref{tab:Type-constructions-for-Extractor}.
 Let us show the required calculations.
 
 \paragraph{Fixed types}
 
 We check whether an \lstinline!Extractor! typeclass instance can
-be computed for the \lstinline!Unit! type or for another fixed type
-$C$. To compute $\text{Extractor}^{\bbnum 1}=\bbnum 1\rightarrow Z$
-requires creating a value of type $Z$ from scratch, which we cannot
-do in a fully parametric function. For a fixed type $C$, a value
-of type $\text{Extractor}^{C}=C\rightarrow Z$ can be computed only
-if we can compute a value of type $Z$ given a value of type $C$.
-This is possible only if we choose $C$ as $C=Z$. The typeclass instance
-for $\text{Extractor}^{Z}$ is implemented as an identity function
-of type $Z\rightarrow Z$:
+be computed for the \lstinline!Unit! type or for a fixed type $C$.
+To compute $\text{Extractor}^{\bbnum 1}=\bbnum 1\rightarrow Z$ requires
+creating a value of type $Z$ from scratch, which a fully parametric
+function cannot do. For a fixed type $C$, a value of type $\text{Extractor}^{C}=C\rightarrow Z$
+can be computed only if we can compute a value of type $Z$ given
+a value of type $C$. This is possible, for instance, if $C=Z$. The
+typeclass instance for $\text{Extractor}^{Z}$ is implemented as an
+identity function of type $Z\rightarrow Z$:
 \begin{lstlisting}
 implicit def extractorZ[Z] = Extractor[Z, Z](identity)
 \end{lstlisting}
 
-
-\paragraph{Type parameters}
-
-Creating a typeclass instance $\text{Extractor}^{A}$ for an arbitrary
-type $A$ means to compute $\forall A.\,A\rightarrow Z$; this is
-not possible since we cannot create values of type $Z$ using only
-a value of an unknown type $A$. So, there is no \lstinline!Extractor!
-for arbitrary types \lstinline!A!.
 
 \paragraph{Products}
 
@@ -1781,9 +1772,9 @@ does not work as expected when comparing values of a function type,
 e.g., \lstinline!Int => Int!: 
 \begin{lstlisting}
 import Eq._
-implicit def eqTypeA[A] = Eq[A](_ == _)
+implicit def eqTypeA[A] = Eq[A](_ == _)    // Use == for all types.
 
-scala> ((n: Int) => n) === ((n: Int) => n)
+scala> ((n: Int) => n) === ((n: Int) => n) // These two functions are the same.
 res1: Boolean = false 
 \end{lstlisting}
 Our expectations about equality comparisons are formalized via the
@@ -2836,13 +2827,13 @@ B\ar[r]\sp(0.5){\text{pu}_{F}} & F^{B}
 \]
 This motivates the following definition: A functor $F^{\bullet}$
 is \index{pointed functor|textit}\textbf{pointed} if there exists
-a fully parametric function $\text{pu}_{F}:\forall A.\,A\rightarrow F^{A}$
-satisfying the naturality law~(\ref{eq:naturality-law-of-pure})
-for any function $f^{:A\rightarrow B}$.
+a function $\text{pu}_{F}:\forall A.\,A\rightarrow F^{A}$ satisfying
+the naturality law~(\ref{eq:naturality-law-of-pure}) for any function
+$f^{:A\rightarrow B}$.
 
 It turns out that we can avoid checking the naturality law of pointed
 functors if we use a trick: reduce \lstinline!pure! to a simpler
-but equivalent form for which the law is satisfied automatically.
+but equivalent form for which no law checking is needed.
 
 Both sides of the naturality law~(\ref{eq:naturality-law-of-pure})
 are functions of type $A\rightarrow F^{B}$. The trick is to choose
@@ -2923,10 +2914,67 @@ equivalent}\index{type equivalence}: each one can be converted into
 the other and back without loss of information (as long as we assume
 the naturality law of $\text{pu}_{F}$). We may define a pointed functor
 equivalently as a functor with a chosen value $\text{wu}_{F}$ of
-type $F^{\bbnum 1}$. When reasoning about pointed functors, it is
-simpler to use the definition via the \textsf{``}wrapped unit\textsf{''} ($\text{wu}_{F}$)
-because it has a simpler type and no laws. When writing code, the
-\lstinline!pure! method is more convenient.
+type $F^{\bbnum 1}$. 
+
+As an example, consider the functor $F^{A}\triangleq\bbnum 1+A\times A$.
+It is a pointed functor, but there are two possible instances of \lstinline!Pointed[F]!.
+The two versions of $\text{pu}_{F}$ are:
+\begin{lstlisting}
+type F[A] = Option[(A, A)]
+def pure1[A](a: A): F[A] = None
+def pure2[A](a: A): F[A] = Some((a, a))
+\end{lstlisting}
+\[
+\text{pu}_{1F}\triangleq a^{:A}\rightarrow\bbnum 1+\bbnum 0^{:A\times A}\quad,\quad\quad\text{pu}_{2F}\triangleq a^{:A}\rightarrow\bbnum 0+a\times a\quad.
+\]
+The corresponding values $\text{wu}_{1F}$ and $\text{wu}_{2F}$ are
+defined by:
+\begin{lstlisting}
+val wu1: F[Unit] = None
+val wu2: F[Unit] = Some(((), ()))
+\end{lstlisting}
+\[
+\text{wu}_{1F}\triangleq\bbnum 1+\bbnum 0^{:\bbnum 1\times\bbnum 1}\quad,\quad\quad\text{wu}_{2F}\triangleq\bbnum 0+1\times1\quad.
+\]
+To check the equivalence between \lstinline!pure! and \lstinline!wu!,
+first note that:
+\[
+\text{pu}_{1F}(1)=\text{wu}_{1F}\quad,\quad\quad\text{pu}_{2F}(1)=\text{wu}_{2F}\quad.
+\]
+Then we need to show that $\text{pu}_{1F}$ and $\text{pu}_{2F}$
+can be restored from $\text{wu}_{1F}$ and $\text{wu}_{2F}$. For
+that, we need $F$\textsf{'}s \lstinline!map! method:
+\begin{lstlisting}
+def fmap[A, B](f: A => B): F[A] => F[B] = {
+  case None           => None
+  case Some((x, y))   => Some((f(x), f(y)))
+}
+\end{lstlisting}
+\[
+f^{\uparrow F}\triangleq\,\begin{array}{|c||cc|}
+ & \bbnum 1 & B\times B\\
+\hline \bbnum 1 & \text{id} & \bbnum 0\\
+A\times A & \bbnum 0 & f\boxtimes f
+\end{array}\quad.
+\]
+Now we can compute:
+\begin{align*}
+ & \text{wu}_{1F}\triangleright(\_\rightarrow a)^{\uparrow F}=\,\begin{array}{|cc|}
+1 & \bbnum 0\end{array}\,\triangleright\,\begin{array}{|cc|}
+\text{id} & \bbnum 0\\
+\bbnum 0 & (\_\rightarrow a)\boxtimes(\_\rightarrow a)
+\end{array}\,=1+\bbnum 0^{:A\times A}=\text{pu}_{1F}(a)\quad,\\
+ & \text{wu}_{2}\triangleright(\_\rightarrow a)^{\uparrow F}=\,\begin{array}{|cc|}
+\bbnum 0 & 1\times1\end{array}\,\triangleright\,\begin{array}{|cc|}
+\text{id} & \bbnum 0\\
+\bbnum 0 & (\_\rightarrow a)\boxtimes(\_\rightarrow a)
+\end{array}\,=\bbnum 0+a\times a=\text{pu}_{1F}(a)\quad.
+\end{align*}
+
+When reasoning about pointed functors, it is simpler to use the definition
+via the \textsf{``}wrapped unit\textsf{''} ($\text{wu}_{F}$) because it has a simpler
+type and no laws. When writing code, the \lstinline!pure! method
+is more convenient.
 
 \subsection{Pointed functors: structural analysis\label{subsec:Pointed-functors:-structural-analysis}}
 
@@ -5672,7 +5720,7 @@ For now, we note that the co-product construction \emph{cannot} be
 derived in general for arbitrary $P$-typeclasses: given evidence
 values of types $P^{A}\rightarrow A$ and $P^{B}\rightarrow B$, it
 is not guaranteed that we can compute a value of type $P^{A+B}\rightarrow A+B$.
-Indeed, we have seen that some $P$-typeclasses, such as monads or
+Indeed, we will see that some $P$-typeclasses, such as monads or
 applicative functors, do not support the co-product construction.
 
 \paragraph{Functions}
@@ -5744,13 +5792,12 @@ which is not of the form $P^{A}\rightarrow A$ for any functor $P$.
 Another such typeclass is \lstinline!Copointed!, whose method $F^{A}\rightarrow A$
 is not of the form $P^{F}\rightarrow F$ even if we add more type
 parameters. However, the methods of these typeclasses can be written
-in the inverted form, $A\rightarrow P^{A}$, with some functor $P$.
-Based on that description, some general results can be proved also
-for those typeclasses; for instance, the \emph{co-product} construction
-(rather than the product construction) applies to them. Given values
-of types $A\rightarrow P^{A}$ and $B\rightarrow P^{B}$, we can produce
-a value of type $A+B\rightarrow P^{A+B}$, i.e., a co-product instance,
-but not necessarily a value of type $A\times B\rightarrow P^{A\times B}$,
+as $A\rightarrow P^{A}$ with some functor $P$. Based on that description,
+some general results can be proved also for those typeclasses; for
+instance, the \emph{co-product} construction (rather than the product
+construction) works for  them. Given values of types $A\rightarrow P^{A}$
+and $B\rightarrow P^{B}$, we can produce a value of type $A+B\rightarrow P^{A+B}$,
+i.e., a co-product instance, but not necessarily a value of type $A\times B\rightarrow P^{A\times B}$,
 which would be a product-type instance. 
 
 An example of a typeclass to which neither description applies is
