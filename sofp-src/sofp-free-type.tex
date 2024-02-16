@@ -612,14 +612,18 @@ final case class Op[F[_], A](op: F[A]) extends MonadDSL[F, A] // Wrap all domain
 \end{lstlisting}
 
 The runner for \lstinline!MonadDSL! needs to run the effects described
-by the effect constructor \lstinline!F!. We try passing \lstinline!F!\textsf{'}s
-runner as an additional curried argument to \lstinline!MonadDSL!\textsf{'}s
-runner:
+by the effect constructor \lstinline!F!. For convenience, we will
+implement the runner as a \lstinline!run! method in the \lstinline!MonadDSL!
+object. We try passing \lstinline!F!\textsf{'}s runner as an additional curried
+argument to \lstinline!MonadDSL!\textsf{'}s runner:
 \begin{lstlisting}
-def run[F[_], A](runner: F[A] => A): MonadDSL[F, A] => A = { // This code does not compile.
-  case Val(a)          => a
-  case bind@Bind(pa)   => run(runner)(bind.f(run(runner)(pa)))
-  case Op(op)          => runner(op)
+object MonadDSL {
+  def pure[F[_], A](a: A): MonadDSL[F, A] = Val(a)
+  def run[F[_], A](runner: F[A] => A): MonadDSL[F, A] => A = { // This code does not compile.
+    case Val(a)          => a
+    case bind@Bind(pa)   => run(runner)(bind.f(run(runner)(pa)))
+    case Op(op)          => runner(op)
+  }
 }
 \end{lstlisting}
 However, this code gives a type error. The type of \lstinline!bind.f!
@@ -648,9 +652,9 @@ To achieve that, we define a new type \lstinline!Runner! as a Scala
 trait encapsulating the type signature of an effect runner. The two
 effect runners can then be declared as values of type \lstinline!Runner!:
 \begin{lstlisting}
-trait Runner[F[_]] { def run[X]: F[X] => X }
-val runnerComplex = new Runner[PrgComplexC] { def run[X]: PrgComplexC[X] => X = runComplexC[X] }
-val runnerFile = new Runner[PrgFileC] { def run[X]: PrgFileC[X] => X = runFileC[X] } 
+trait Runner[F[_]] { def apply[X]: F[X] => X }
+val runnerComplex = new Runner[PrgComplexC] { def apply[X]: PrgComplexC[X] => X = runComplexC[X] }
+val runnerFile = new Runner[PrgFileC] { def apply[X]: PrgFileC[X] => X = runFileC[X] } 
 \end{lstlisting}
 
 Function values that encapsulate a type parameter are called \textbf{polymorphic
@@ -672,13 +676,13 @@ The programmer does not need to declare a trait \lstinline!Runner!
 in Scala 3 because the compiler does that automatically for polymorphic
 functions.
 
-Using the \lstinline!Runner! type, we rewrite the code for the function
-\lstinline!run! as:
+Using the \lstinline!Runner! type, we rewrite the code for \lstinline!run!
+as:
 \begin{lstlisting}
 def run[F[_], A](runner: Runner[F]): MonadDSL[F, A] => A = {
   case Val(a)          => a
   case bind@Bind(pa)   => run(runner)(bind.f(run(runner)(pa)))
-  case Op(op)          => runner.run(op)
+  case Op(op)          => runner.apply(op)
 }
 \end{lstlisting}
 We can now define \lstinline!PrgComplex! through \lstinline!MonadDSL!
@@ -918,7 +922,7 @@ is reasonable to transform \lstinline!Bind! into a call to \lstinline!Try!\texts
 def runTry[F[_], A](runnerTry: RunnerTry[F]): MonadDSL[F, A] => Try[A] = {
   case Val(a)          => Success(a)
   case bind@Bind(pa)   => runTry(runner)(pa).flatMap(bind.f andThen runTry(runner)) // Use flatMap from Try.
-  case Op(op)          => runner.run(op)
+  case Op(op)          => runner.apply(op)
 } *** check that this code works
 \end{lstlisting}
 
@@ -1095,7 +1099,7 @@ def run[F[_], A](runner: Runner[F]): Free4[F, A] => A = {
   case Val(a)            => a
   case bind @ Bind(pa)   => run(runner)(bind.f(run(runner)(pa)))
   case fmap @ FMap(pa)   => fmap.f(run(runner)(pa))
-  case Op(op)            => runner.run(op)
+  case Op(op)            => runner.apply(op)
 } *** check that this code works
 \end{lstlisting}
 
@@ -2083,7 +2087,7 @@ Now we can write the code of the runner for $\text{FFR}^{F,A}$:
 \begin{lstlisting}
 def runFFR[F[_], A](runner: Runner[F]): FFR[F, A] => A = {
   case FMap(f, p)   => f(runFFR(runner)(p))
-  case Op(op)       => runner.run(op)
+  case Op(op)       => runner.apply(op)
 }*** check if this works
 \end{lstlisting}
 The code notation for this function is:
@@ -2220,7 +2224,7 @@ final case class FMap[F[_], X, Y](f: X => Y, p: F[X]) extends FF[F, Y] {
   def map[Z](g: Y => Z): FF[F, Z] = FMap[F, X, Z](f andThen g, p)
 }
 def runFF[F[_], A](runner: Runner[F]): FF[F, A] => A = {
-  case FMap(f, p)   => f(runner.run(p))
+  case FMap(f, p)   => f(runner.apply(p))
 }*** check if this works
 \end{lstlisting}
 
@@ -2294,7 +2298,7 @@ final case class FMap[F[_], X, Y](f: FuncSeq[X, Y], p: F[X]) extends FFS[F, Y] {
   def map[Z](g: Y => Z): FFS[F, Z] = FMap[F, X, Z](f append g, p)
 }
 def runFF[F[_], A](runner: Runner[F]): FFS[F, A] => A = {
- case FMap(f, p) => runSeq(runner.run(p), f)
+ case FMap(f, p) => runSeq(runner.apply(p), f)
 }*** check if this works
 \end{lstlisting}
 
@@ -2394,11 +2398,11 @@ the simplification Free5{[}F, F{[}A{]}{]} because this creates a recursive
 definition of Free5{[}F, A{]} whose recursive use modifies the type
 parameter A of Free5
 
-\subsection{Free pointed functors}
+\subsection{Free pointed functors and contrafunctors}
 
-\subsection{Free filterable functors}
+\subsection{Free filterable functors and contrafunctors}
 
-\subsection{Free applicative functors}
+\subsection{Free applicative functors and contrafunctors}
 
 \section{Advanced applications}
 
@@ -2438,7 +2442,12 @@ the monad laws. Free constructions of other typeclasses are motivated
 by analogy with the free monad and its various encodings. Can we formulate
 any properties or laws that validate the correctness of those constructions?
 Are all the different encodings equally safe to use? We will now develop
-the necessary theory for answering these questions.
+the necessary theory for answering these questions in the case of
+$P$-typeclasses for ordinary types. (The notion of a \textsf{``}$P$-typeclass\textsf{''}
+was introduced in Section~\ref{subsec:P-typeclasses}.) We expect
+that $P$-typeclasses for type constructors will have similar properties,
+although the technical details of the proofs will be more difficult
+to work out.
 
 \subsection{Free constructions for $P$-typeclasses\label{subsec:Free-constructions-for-inductive-typeclasses}}
 
@@ -2460,16 +2469,17 @@ So, the monoid laws will hold after running a \textsf{``}free monoid program\tex
 even when the chosen encoding $\text{FM}^{T}$ violates some of the
 monoid laws.
 
-To generalize from monoids to other typeclasses, it helps to use the
-notion of a \textsf{``}$P$-typeclass\textsf{''} introduced in Section~\ref{subsec:P-algebraic-typeclasses}.
-For a given (covariant) functor $P$, a $P$\textbf{-typeclass} \index{$P$-typeclass}
+To generalize from monoids to other typeclasses, recall the definition
+of a $P$-typeclass (Section~\ref{subsec:P-typeclasses}): For a
+given (covariant) functor $P$, a $P$\textbf{-typeclass} \index{$P$-typeclass}
 has the evidence data equivalent to a value of type $P^{A}\rightarrow A$.
 For the \lstinline!Monoid! typeclass, the structure functor is $P^{A}\triangleq\bbnum 1+A\times A$,
 and the evidence data has type $A\times\left(A\times A\rightarrow A\right)$,
 which is equivalent to $P^{A}\rightarrow A$. The two parts of the
 disjunctive type $\bbnum 1+A\times A$ correspond to the \emph{arguments}
 of the monoid\textsf{'}s two operations: the empty value ($e_{A}$) and the
-binary operation ($\oplus_{A}$). 
+binary operation ($\oplus_{A}$). The $P$-typeclass combines all
+methods of a typeclass into a single value (of type $P^{A}\rightarrow A$).
 
 The next step is to generalize the property of \textsf{``}preserving the monoid\textsf{'}s
 operations\textsf{''} to an arbitrary $P$-typeclass. Given two monoids $M$
@@ -3742,13 +3752,16 @@ using the fact that $\text{ftn}_{E}=\text{run}_{E}(\text{id})$:
 \[
 \gunderline{\text{ftn}_{E}}\bef s=\text{run}_{E}^{E^{C},E^{C}}(\text{id}^{:E^{C}\rightarrow E^{C}})\bef s\overset{?}{=}s^{\uparrow E}\bef\gunderline s=s^{\uparrow E}\bef\text{run}_{E}^{C,C}(\text{id}^{:C\rightarrow C})\quad.
 \]
-The $P$-algebraic naturality law~(\ref{eq:free-typeclass-encoding-P-algebraic-naturality-law})
-with $g=s$ and $r=\text{id}^{:E^{C}\rightarrow E^{C}}$ gives for
-the left-hand side:
+The $P$-algebraic naturality law~(\ref{eq:free-typeclass-encoding-P-algebra-naturality-law})
+with{*}{*}{*} we modified that law to use eval instead of run, so
+rewrite this proof too!{*}{*}{*} $g=s$ and $r=\text{id}^{:E^{C}\rightarrow E^{C}}$
+gives for the left-hand side:
 \[
 \text{run}_{E}^{E^{C},E^{C}}(\text{id}^{:E^{C}\rightarrow E^{C}})\bef s=\text{run}_{E}^{E^{C},C}(\gunderline{\text{id}^{:E^{C}\rightarrow E^{C}}\bef s})=\text{run}_{E}^{E^{C},C}(s)\quad.
 \]
-The right-hand side is simplified using the naturality law~(\ref{eq:free-typeclass-encoding-naturality-law})
+The right-hand side is simplified using {*}{*}{*} we modified that
+law to use eval instead of run, so rewrite this proof too!{*}{*}{*}the
+naturality law~(\ref{eq:free-typeclass-encoding-P-algebra-naturality-law})
 with $f=s$ and $r=\text{id}^{:E^{C}\rightarrow E^{C}}$:
 \[
 s^{\uparrow E}\bef\text{run}_{E}^{C,C}(\text{id}^{:E^{C}\rightarrow E^{C}})=\text{run}_{E}^{E^{C},C}(s\bef\text{id}^{:E^{C}\rightarrow E^{C}})=\text{run}_{E}^{E^{C},C}(s)\quad.
@@ -4748,10 +4761,12 @@ Prove the following type equivalences involving quantified types:
 
 \textbf{(d)} $\exists Z.\,Z\times\left(A\rightarrow Z\right)\times\left(Z\rightarrow B\right)\cong B\times\left(A\rightarrow B\right)\quad.$
 
-\subsubsection{Exercise \label{subsec:Exercise-free-type-9-1}\ref{subsec:Exercise-free-type-9-1}{*}}
+\subsubsection{Exercise \label{subsec:Exercise-free-type-9-1}\ref{subsec:Exercise-free-type-9-1}}
 
-Prove the following type equivalences involving quantified type constructors
-(the types $A$, $B$, $C$, $D$ are fixed):
+Prove the following type equivalences involving quantified type constructors.
+The types $A$, $B$, $C$, $D$ are fixed, and the quantifier $\forall F^{\bullet}$
+assumes that $F$ is a (covariant) functor and that all functions
+are fully parametric.
 
 \textbf{(a)} $\forall F^{\bullet}.\,F^{A}\cong\bbnum 0\quad.$
 
