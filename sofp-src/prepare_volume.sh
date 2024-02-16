@@ -1,5 +1,5 @@
 # Prepare the printable PDF file of volume v of the book. v = 1, 2, 3.
-# The files are designed for printing and will have no PDF hyperlinks.
+# The files are designed for printing and will have no color in the PDF hyperlinks.
 
 function pdfPages {
  local file="$1"
@@ -80,6 +80,9 @@ case $v in
   sed -i.bak -e 's|% End of title.|\\vspace{0.2in}\\centerline{\\fontsize{20pt}{20pt}\\selectfont{Part I: Introductory level}}|' book_cover/sofp-cover-page-no-bg.tex
   sed -i.bak -e 's|\(of Functional Programming\)|\1 - Part I|;' book_cover/sofp-spine.tex
 
+  # Replace lulu.com hyperlink.
+  sed -i.bak -e 's|{https://www.lulu.com/[^}]*}|{'"$vol1_url"'}|;' $name.tex
+
   # Replace ISBN information.
   echo "Using volume $v ISBN '$vol1_ISBN'"
   sed -i.bak -e 's|\({\\footnotesize{}\)ISBN: [^}]*\(}\\\\\)|\1'"$vol1_ISBN"'\2|;' $name.tex
@@ -96,6 +99,9 @@ case $v in
   sed -i.bak -e 's|% End of title.|\\vspace{0.2in}\\centerline{\\fontsize{20pt}{20pt}\\selectfont{Part II: Intermediate level}}|' book_cover/sofp-cover-page-no-bg.tex
   sed -i.bak -e 's|\(of Functional Programming\)|\1 - Part II|;' book_cover/sofp-spine.tex
 
+  # Replace lulu.com hyperlink.
+  sed -i.bak -e 's|{https://www.lulu.com/[^}]*}|{'"$vol2_url"'}|;' $name.tex
+
   # Replace ISBN information.
   echo "Using volume $v ISBN '$vol2_ISBN'"
   sed -i.bak -e 's|\({\\footnotesize{}\)ISBN: [^}]*\(}\\\\\)|\1'"$vol2_ISBN"'\2|;' $name.tex
@@ -111,6 +117,9 @@ case $v in
   sed -i.bak -e 's|\(of Functional Programming\)|\1, Part III|; s|\(\\part{.*}\)|\\setcounter{page}{'$firstpage'}\\setcounter{part}{'$firstpart'}\\setcounter{chapter}{'$firstchapter'}\1|;' $name.tex
   sed -i.bak -e 's|% End of title.|\\vspace{0.2in}\\centerline{\\fontsize{20pt}{20pt}\\selectfont{Part III: Advanced level}}|' book_cover/sofp-cover-page-no-bg.tex
   sed -i.bak -e 's|\(of Functional Programming\)|\1 - Part III|;' book_cover/sofp-spine.tex
+
+  # Replace lulu.com hyperlink.
+  sed -i.bak -e 's|{https://www.lulu.com/[^}]*}|{'"$vol3_url"'}|;' $name.tex
 
   # Replace ISBN information.
   echo "Using volume $v ISBN '$vol3_ISBN'"
