@@ -32,6 +32,9 @@ cd $dir
 
 tar jxf ../sofp-src.tar.bz2
 mv sofp-src/* .
+# Special handling for random-pages files.
+mkdir random-pages
+mv random-pages*png random-pages/
 
 cp ../sofp*.tex ../sofp.* .
 cp ../book_cover/* ./book_cover/
@@ -74,61 +77,50 @@ function get_chapter {
 case $v in
 1)
   firstchapter=$(get_chapter ../sofp-nameless-functions.aux)
-  echo "Detected previous chapter $firstchapter, first page $firstpage, previous part number $firstpart"
   cat sofp.tex | remove_part2 | remove_part3  > $name.tex
-  sed -i.bak -e 's|\(of Functional Programming\)|\1, Part I|; s|\(\\part{.*}\)|\\setcounter{page}{'$firstpage'}\\setcounter{part}{'$firstpart'}\\setcounter{chapter}{'$firstchapter'}\1|;' $name.tex
-  sed -i.bak -e 's|% End of title.|\\vspace{0.2in}\\centerline{\\fontsize{20pt}{20pt}\\selectfont{Part I: Introductory level}}|' book_cover/sofp-cover-page-no-bg.tex
-  sed -i.bak -e 's|\(of Functional Programming\)|\1 - Part I|;' book_cover/sofp-spine.tex
-
-  # Replace lulu.com hyperlink.
-  sed -i.bak -e 's|{https://www.lulu.com/[^}]*}|{'"$vol1_url"'}|;' $name.tex
-
-  # Replace ISBN information.
-  echo "Using volume $v ISBN '$vol1_ISBN'"
-  sed -i.bak -e 's|\({\\footnotesize{}\)ISBN: [^}]*\(}\\\\\)|\1'"$vol1_ISBN"'\2|;' $name.tex
-  # Add barcode to back cover.
-  sed -i.bak -e 's|%\(.*\){barcode}.*|\1{'$vol1_ISBN_barcode'}|' book_cover/sofp-back-cover-no-bg.tex
-       ;;
+  title1="Part I"
+  title2="Part I: Introductory level"
+  url="$vol1_url"
+  isbn="$vol1_ISBN"
+  barcode="$vol1_ISBN_barcode"
+  ;;
 
 2)
   firstchapter=$(get_chapter ../sofp-functors.aux)
-  echo "Detected previous chapter $firstchapter, first page $firstpage, previous part number $firstpart"
   cat sofp.tex | remove_part1 | remove_part3  > $name.tex
-
-  sed -i.bak -e 's|\(of Functional Programming\)|\1, Part II|; s|\(\\part{.*}\)|\\setcounter{page}{'$firstpage'}\\setcounter{part}{'$firstpart'}\\setcounter{chapter}{'$firstchapter'}\1|;' $name.tex
-  sed -i.bak -e 's|% End of title.|\\vspace{0.2in}\\centerline{\\fontsize{20pt}{20pt}\\selectfont{Part II: Intermediate level}}|' book_cover/sofp-cover-page-no-bg.tex
-  sed -i.bak -e 's|\(of Functional Programming\)|\1 - Part II|;' book_cover/sofp-spine.tex
-
-  # Replace lulu.com hyperlink.
-  sed -i.bak -e 's|{https://www.lulu.com/[^}]*}|{'"$vol2_url"'}|;' $name.tex
-
-  # Replace ISBN information.
-  echo "Using volume $v ISBN '$vol2_ISBN'"
-  sed -i.bak -e 's|\({\\footnotesize{}\)ISBN: [^}]*\(}\\\\\)|\1'"$vol2_ISBN"'\2|;' $name.tex
-  # Add barcode to back cover.
-  sed -i.bak -e 's|%\(.*\){barcode}.*|\1{'$vol2_ISBN_barcode'}|' book_cover/sofp-back-cover-no-bg.tex
-       ;;
+  title1="Part II"
+  title2="Part II: Intermediate level"
+  url="$vol2_url"
+  isbn="$vol2_ISBN"
+  barcode="$vol2_ISBN_barcode"
+  ;;
 
 3)
   firstchapter=$(get_chapter ../sofp-free-type.aux)
-  echo "Detected previous chapter $firstchapter, first page $firstpage, previous part number $firstpart"
   cat sofp.tex | remove_part1 | remove_part2  > $name.tex
-
-  sed -i.bak -e 's|\(of Functional Programming\)|\1, Part III|; s|\(\\part{.*}\)|\\setcounter{page}{'$firstpage'}\\setcounter{part}{'$firstpart'}\\setcounter{chapter}{'$firstchapter'}\1|;' $name.tex
-  sed -i.bak -e 's|% End of title.|\\vspace{0.2in}\\centerline{\\fontsize{20pt}{20pt}\\selectfont{Part III: Advanced level}}|' book_cover/sofp-cover-page-no-bg.tex
-  sed -i.bak -e 's|\(of Functional Programming\)|\1 - Part III|;' book_cover/sofp-spine.tex
-
-  # Replace lulu.com hyperlink.
-  sed -i.bak -e 's|{https://www.lulu.com/[^}]*}|{'"$vol3_url"'}|;' $name.tex
-
-  # Replace ISBN information.
-  echo "Using volume $v ISBN '$vol3_ISBN'"
-  sed -i.bak -e 's|\({\\footnotesize{}\)ISBN: [^}]*\(}\\\\\)|\1'"$vol3_ISBN"'\2|;' $name.tex
-  # Add barcode to back cover.
-  sed -i.bak -e 's|%\(.*\){barcode}.*|\1{'$vol3_ISBN_barcode'}|' book_cover/sofp-back-cover-no-bg.tex
-       ;;
+  title1="Part III"
+  title2="Part III: Advanced level"
+  url="$vol3_url"
+  isbn="$vol3_ISBN"
+  barcode="$vol3_ISBN_barcode"
+  ;;
 
 esac
+
+  echo "Detected previous chapter $firstchapter, first page $firstpage, previous part number $firstpart"
+
+  sed -i.bak -e 's|\(of Functional Programming\)|\1, '"$title1"'|; s|\(\\part{.*}\)|\\setcounter{page}{'$firstpage'}\\setcounter{part}{'$firstpart'}\\setcounter{chapter}{'$firstchapter'}\1|;' $name.tex
+  sed -i.bak -e 's|% End of title.|\\vspace{0.2in}\\centerline{\\fontsize{20pt}{20pt}\\selectfont{'"$title2"'}}|' book_cover/sofp-cover-page-no-bg.tex
+  sed -i.bak -e 's|\(of Functional Programming\)|\1 - '"$title1"'|;' book_cover/sofp-spine.tex
+
+  # Replace lulu.com hyperlink.
+  sed -i.bak -e 's|{https://www.lulu.com/[^}]*}{\(Print on demand[^}]*\)}|{'"$url"'}{\1}|;' $name.tex
+
+  # Replace ISBN information.
+  echo "Using volume $v ISBN '$isbn'"
+  sed -i.bak -e 's|\({\\footnotesize{}\)ISBN: [^}]*\(}\\\\\)|\1'"$isbn"'\2|;' $name.tex
+  # Add barcode to back cover.
+  sed -i.bak -e 's|%\(.*\){barcode}.*|\1{'"$barcode"'}|' book_cover/sofp-back-cover-no-bg.tex
 
 cp book_cover/* .
 
