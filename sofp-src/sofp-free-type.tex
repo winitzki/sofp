@@ -612,14 +612,18 @@ final case class Op[F[_], A](op: F[A]) extends MonadDSL[F, A] // Wrap all domain
 \end{lstlisting}
 
 The runner for \lstinline!MonadDSL! needs to run the effects described
-by the effect constructor \lstinline!F!. We try passing \lstinline!F!\textsf{'}s
-runner as an additional curried argument to \lstinline!MonadDSL!\textsf{'}s
-runner:
+by the effect constructor \lstinline!F!. For convenience, we will
+implement the runner as a \lstinline!run! method in the \lstinline!MonadDSL!
+object. We try passing \lstinline!F!\textsf{'}s runner as an additional curried
+argument to \lstinline!MonadDSL!\textsf{'}s runner:
 \begin{lstlisting}
-def run[F[_], A](runner: F[A] => A): MonadDSL[F, A] => A = { // This code does not compile.
-  case Val(a)          => a
-  case bind@Bind(pa)   => run(runner)(bind.f(run(runner)(pa)))
-  case Op(op)          => runner(op)
+object MonadDSL {
+  def pure[F[_], A](a: A): MonadDSL[F, A] = Val(a)
+  def run[F[_], A](runner: F[A] => A): MonadDSL[F, A] => A = { // This code does not compile.
+    case Val(a)          => a
+    case bind@Bind(pa)   => run(runner)(bind.f(run(runner)(pa)))
+    case Op(op)          => runner(op)
+  }
 }
 \end{lstlisting}
 However, this code gives a type error. The type of \lstinline!bind.f!
@@ -648,9 +652,9 @@ To achieve that, we define a new type \lstinline!Runner! as a Scala
 trait encapsulating the type signature of an effect runner. The two
 effect runners can then be declared as values of type \lstinline!Runner!:
 \begin{lstlisting}
-trait Runner[F[_]] { def run[X]: F[X] => X }
-val runnerComplex = new Runner[PrgComplexC] { def run[X]: PrgComplexC[X] => X = runComplexC[X] }
-val runnerFile = new Runner[PrgFileC] { def run[X]: PrgFileC[X] => X = runFileC[X] } 
+trait Runner[F[_]] { def apply[X]: F[X] => X }
+val runnerComplex = new Runner[PrgComplexC] { def apply[X]: PrgComplexC[X] => X = runComplexC[X] }
+val runnerFile = new Runner[PrgFileC] { def apply[X]: PrgFileC[X] => X = runFileC[X] } 
 \end{lstlisting}
 
 Function values that encapsulate a type parameter are called \textbf{polymorphic
@@ -672,13 +676,13 @@ The programmer does not need to declare a trait \lstinline!Runner!
 in Scala 3 because the compiler does that automatically for polymorphic
 functions.
 
-Using the \lstinline!Runner! type, we rewrite the code for the function
-\lstinline!run! as:
+Using the \lstinline!Runner! type, we rewrite the code for \lstinline!run!
+as:
 \begin{lstlisting}
 def run[F[_], A](runner: Runner[F]): MonadDSL[F, A] => A = {
   case Val(a)          => a
   case bind@Bind(pa)   => run(runner)(bind.f(run(runner)(pa)))
-  case Op(op)          => runner.run(op)
+  case Op(op)          => runner.apply(op)
 }
 \end{lstlisting}
 We can now define \lstinline!PrgComplex! through \lstinline!MonadDSL!
@@ -753,12 +757,12 @@ final case class Read(p: JPath)  extends PrgFileC[String]
 \end{lstlisting}
 
 Typically, a type constructor \lstinline!F! defined in this way will
-be an \textsf{``}unfunctor\textsf{''}\index{unfunctor}. In the example shown above,
-\lstinline!PrgFileC! cannot be a functor because it is impossible
-to create values of type \lstinline!PrgFileC[A]! with an arbitrary
-type \lstinline!A! (the type \lstinline!A! must be either \lstinline!JPath!
-or \lstinline!String!). However, in some cases the effect constructor
-\lstinline!F! could be itself a lawful functor.
+be a GADT\index{GADT}. In the example shown above, \lstinline!PrgFileC!
+cannot be a functor because it is impossible to create values of type
+\lstinline!PrgFileC[A]! with an arbitrary type \lstinline!A! (the
+type \lstinline!A! must be either \lstinline!JPath! or \lstinline!String!).
+However, in some cases the effect constructor \lstinline!F! could
+be itself a lawful functor.
 
 Next, we implement an \textsf{``}effect runner\textsf{''} \index{effect runner}for
 \lstinline!F!. An \textbf{effect runner} for an effect constructor
@@ -772,8 +776,8 @@ in values of type \lstinline!F[A]! then the runner only needs to
 work for those types. In the \lstinline!PrgFile! DSL, the runner
 only needs to work with arguments of types \lstinline!PrgFileC[JPath]!
 and \lstinline!PrgFileC[String]! because those are the only allowed
-types of values that can be wrapped by the unfunctor \lstinline!PrgFileC!.
-The runner will never be given an argument of type \lstinline!PrgFile[X]!
+types of values that can be wrapped by  \lstinline!PrgFileC!. The
+runner will never be given an argument of type \lstinline!PrgFile[X]!
 with an arbitrary unknown \lstinline!X!. However, different effect
 constructors may have different allowed types, and \lstinline!MonadDSL!
 needs to be able to work with any effect constructor. So, the runner\textsf{'}s
@@ -918,7 +922,7 @@ is reasonable to transform \lstinline!Bind! into a call to \lstinline!Try!\texts
 def runTry[F[_], A](runnerTry: RunnerTry[F]): MonadDSL[F, A] => Try[A] = {
   case Val(a)          => Success(a)
   case bind@Bind(pa)   => runTry(runner)(pa).flatMap(bind.f andThen runTry(runner)) // Use flatMap from Try.
-  case Op(op)          => runner.run(op)
+  case Op(op)          => runner.apply(op)
 } *** check that this code works
 \end{lstlisting}
 
@@ -1000,8 +1004,8 @@ are three examples that we will call \lstinline!Free1!, \lstinline!Free2!,
 and \lstinline!Free3!. 
 
 In a 2012 blog post,\footnote{See \texttt{\href{http://www.haskellforall.com/2012/06/you-could-have-invented-free-monads.html}{http://www.haskellforall.com/2012/06/you-could-have-invented-free-monads.html}}}
-\index{Gabriella Gonzalez (known as Gabriel Gonzalez prior to 2021)}G.~Gonzalez
-showed a free monad corresponding to this Scala code:
+\index{Gabriella Gonzalez}G.~Gonzalez showed a free monad corresponding
+to this Scala code:
 \begin{lstlisting}
 abstract class Free1[F[_]: Functor, T] {
   def flatMap[A](f: T => Free1[F, A]): Free1[F, A] = this match {
@@ -1095,7 +1099,7 @@ def run[F[_], A](runner: Runner[F]): Free4[F, A] => A = {
   case Val(a)            => a
   case bind @ Bind(pa)   => run(runner)(bind.f(run(runner)(pa)))
   case fmap @ FMap(pa)   => fmap.f(run(runner)(pa))
-  case Op(op)            => runner.run(op)
+  case Op(op)            => runner.apply(op)
 } *** check that this code works
 \end{lstlisting}
 
@@ -2039,8 +2043,8 @@ Consider the \lstinline!Functor! typeclass whose only method is \lstinline!fmap!
 \text{fmap}:\left(A\rightarrow B\right)\rightarrow F^{A}\rightarrow F^{B}\quad.
 \]
 For some type constructors $F$, the \lstinline!fmap! method is not
-available. An example is when $F$ is a contrafunctor or an unfunctor.
-(See Section~\ref{subsec:Examples-of-non-functors} for more examples.)
+available. An example is when $F$ is a contrafunctor or a GADT. (See
+Section~\ref{subsec:Examples-of-non-functors} for more examples.)
 Let us now apply the raw tree encoding recipe to the \lstinline!Functor!
 typeclass. The result will be a new type constructor that we call
 a \textbf{free functor on} $F$.\index{free functor} Here $F$ is
@@ -2083,7 +2087,7 @@ Now we can write the code of the runner for $\text{FFR}^{F,A}$:
 \begin{lstlisting}
 def runFFR[F[_], A](runner: Runner[F]): FFR[F, A] => A = {
   case FMap(f, p)   => f(runFFR(runner)(p))
-  case Op(op)       => runner.run(op)
+  case Op(op)       => runner.apply(op)
 }*** check if this works
 \end{lstlisting}
 The code notation for this function is:
@@ -2220,7 +2224,7 @@ final case class FMap[F[_], X, Y](f: X => Y, p: F[X]) extends FF[F, Y] {
   def map[Z](g: Y => Z): FF[F, Z] = FMap[F, X, Z](f andThen g, p)
 }
 def runFF[F[_], A](runner: Runner[F]): FF[F, A] => A = {
-  case FMap(f, p)   => f(runner.run(p))
+  case FMap(f, p)   => f(runner.apply(p))
 }*** check if this works
 \end{lstlisting}
 
@@ -2294,7 +2298,7 @@ final case class FMap[F[_], X, Y](f: FuncSeq[X, Y], p: F[X]) extends FFS[F, Y] {
   def map[Z](g: Y => Z): FFS[F, Z] = FMap[F, X, Z](f append g, p)
 }
 def runFF[F[_], A](runner: Runner[F]): FFS[F, A] => A = {
- case FMap(f, p) => runSeq(runner.run(p), f)
+ case FMap(f, p) => runSeq(runner.apply(p), f)
 }*** check if this works
 \end{lstlisting}
 
@@ -2394,11 +2398,11 @@ the simplification Free5{[}F, F{[}A{]}{]} because this creates a recursive
 definition of Free5{[}F, A{]} whose recursive use modifies the type
 parameter A of Free5
 
-\subsection{Free pointed functors}
+\subsection{Free pointed functors and contrafunctors}
 
-\subsection{Free filterable functors}
+\subsection{Free filterable functors and contrafunctors}
 
-\subsection{Free applicative functors}
+\subsection{Free applicative functors and contrafunctors}
 
 \section{Advanced applications}
 
@@ -2438,7 +2442,12 @@ the monad laws. Free constructions of other typeclasses are motivated
 by analogy with the free monad and its various encodings. Can we formulate
 any properties or laws that validate the correctness of those constructions?
 Are all the different encodings equally safe to use? We will now develop
-the necessary theory for answering these questions.
+the necessary theory for answering these questions in the case of
+$P$-typeclasses for ordinary types. (The notion of a \textsf{``}$P$-typeclass\textsf{''}
+was introduced in Section~\ref{subsec:P-typeclasses}.) We expect
+that $P$-typeclasses for type constructors will have similar properties,
+although the technical details of the proofs will be more difficult
+to work out.
 
 \subsection{Free constructions for $P$-typeclasses\label{subsec:Free-constructions-for-inductive-typeclasses}}
 
@@ -2460,16 +2469,17 @@ So, the monoid laws will hold after running a \textsf{``}free monoid program\tex
 even when the chosen encoding $\text{FM}^{T}$ violates some of the
 monoid laws.
 
-To generalize from monoids to other typeclasses, it helps to use the
-notion of a \textsf{``}$P$-typeclass\textsf{''} introduced in Section~\ref{subsec:P-algebraic-typeclasses}.
-For a given (covariant) functor $P$, a $P$\textbf{-typeclass} \index{$P$-typeclass}
+To generalize from monoids to other typeclasses, recall the definition
+of a $P$-typeclass (Section~\ref{subsec:P-typeclasses}): For a
+given (covariant) functor $P$, a $P$\textbf{-typeclass} \index{$P$-typeclass}
 has the evidence data equivalent to a value of type $P^{A}\rightarrow A$.
 For the \lstinline!Monoid! typeclass, the structure functor is $P^{A}\triangleq\bbnum 1+A\times A$,
 and the evidence data has type $A\times\left(A\times A\rightarrow A\right)$,
 which is equivalent to $P^{A}\rightarrow A$. The two parts of the
 disjunctive type $\bbnum 1+A\times A$ correspond to the \emph{arguments}
 of the monoid\textsf{'}s two operations: the empty value ($e_{A}$) and the
-binary operation ($\oplus_{A}$). 
+binary operation ($\oplus_{A}$). The $P$-typeclass combines all
+methods of a typeclass into a single value (of type $P^{A}\rightarrow A$).
 
 The next step is to generalize the property of \textsf{``}preserving the monoid\textsf{'}s
 operations\textsf{''} to an arbitrary $P$-typeclass. Given two monoids $M$
@@ -2496,19 +2506,13 @@ So far, we have functions of types $P^{M}\rightarrow M$, $M\rightarrow N$,
 and $P^{N}\rightarrow N$. It appears promising to arrange these functions
 in a type diagram. The missing edge of the diagram is a function of
 type $P^{M}\rightarrow P^{N}$.
-
-\begin{wrapfigure}{l}{0.2\columnwidth}%
-\vspace{-1.15\baselineskip}
 \[
 \xymatrix{\xyScaleY{1.4pc}\xyScaleX{3.0pc}P^{M}\ar[r]\sp(0.5){\ p_{M}}\ar[d]\sp(0.45){\,f^{\uparrow P}} & M\ar[d]\sp(0.45){\,f}\\
 P^{N}\ar[r]\sp(0.5){~p_{N}} & N
 }
 \]
-\vspace{-0.6\baselineskip}
-\end{wrapfigure}%
-
-\noindent Let us see what happens if we use $f^{\uparrow P}$ as that
-function and require that the resulting diagram should commute:\vspace{-0.4\baselineskip}
+Let us see what happens if we use $f^{\uparrow P}$ as that function
+and require that the resulting diagram should commute:
 \begin{equation}
 p_{M}\bef f=f^{\uparrow P}\bef p_{N}\quad.\label{eq:p-algebra-morphism-law}
 \end{equation}
@@ -2657,7 +2661,7 @@ all $T$.
 \textbf{(b)} The functor $E$ is pointed\index{pointed functor}:
 there exists a natural transformation $\text{pu}_{E}^{T}:T\rightarrow E^{T}$.
 
-\textbf{(c)} There exists a \textsf{``}universal evaluator\textsf{''} function ($\text{eval}_{E}^{C}:E^{C}\rightarrow C$)
+\textbf{(c)} There exists an \textsf{``}evaluator\textsf{''} function ($\text{eval}_{E}^{C}:E^{C}\rightarrow C$)
 whose type parameter $C$ is restricted to $P$-algebras $C$ whose
 structure map $p_{C}:P^{C}\rightarrow C$ obeys all those $P$-typeclass
 laws that $E^{T}$ obeys. The evaluator function must satisfy:
@@ -2668,7 +2672,7 @@ laws that $E^{T}$ obeys. The evaluator function must satisfy:
 {\color{greenunder}P\text{-algebra naturality law}:}\quad & \text{for any }P\text{-algebra morphism }g^{:C\rightarrow D}:\quad\text{eval}_{E}^{C}\bef g=g^{\uparrow E}\bef\text{eval}_{E}^{D}\quad.\label{eq:free-typeclass-encoding-P-algebra-naturality-law}
 \end{align}
 The requirement that $C$ should obey \textsf{``}all\textsf{''} the laws of $E^{T}$
-means that, for any type $T$, if $E^{T}$ obeys any $P$-typeclass
+means that, for any type $T$, if $E^{T}$ obeys a $P$-typeclass
 law (such as an identity law, an associativity law, etc.) then $C$
 must also obey the same law. The type $C$ might obey \emph{more}
 laws than $E^{T}$, but any law that holds for $E^{T}$ must also
@@ -2676,10 +2680,10 @@ hold for $C$. (Section~\ref{subsec:Describing-laws-of-P-typeclasses-as-values}
 will describe $P$-typeclass laws in more detail, but we do not yet
 need the techniques developed there.)
 
-\textbf{(d)} The function $\text{eval}_{E}^{C}$ has a uniqueness
-property: there is only one $P$-algebra morphism $f:E^{C}\rightarrow C$
-obeying the left identity law ($\text{pu}_{E}^{C}\bef f=\text{id}$),
-namely $f=\text{eval}_{E}^{C}$. $\square$
+\textbf{(d)} The evaluator function $\text{eval}_{E}^{C}$ has a uniqueness
+property: any $P$-algebra morphism $f:E^{C}\rightarrow C$ obeying
+the left identity law ($\text{pu}_{E}^{C}\bef f=\text{id}$) must
+be equal to $f=\text{eval}_{E}^{C}$. $\square$
 
 The uniqueness property reflects a programmer\textsf{'}s expectation that there
 is only one correct way of running (i.e., evaluating) a free $P$-typeclass
@@ -2978,18 +2982,11 @@ is a monad. The monad $E$\textsf{'}s \lstinline!flatten! function ($\text{ftn}_{
 is equal to the unique $P$-algebra morphism $\text{eval}_{E}^{E^{A}}$
 between $P$-algebras $E^{E^{A}}$ and $E^{A}$. The $P$-algebra
 morphism law of $\text{ftn}_{E}$ is:
-
-\begin{wrapfigure}{l}{0.2\columnwidth}%
-\vspace{-2.15\baselineskip}
 \[
 \xymatrix{\xyScaleY{1.4pc}\xyScaleX{3.0pc}P^{E^{E^{A}}}\ar[r]\sp(0.5){\text{ftn}_{E}^{\uparrow P}}\ar[d]\sp(0.4){p_{E}^{E^{A}}} & P^{E^{A}}\ar[d]\sp(0.4){p_{E}^{A}}\\
 E^{E^{A}}\ar[r]\sp(0.5){\text{ftn}_{E}} & E^{A}
 }
 \]
-\vspace{-0.6\baselineskip}
-\end{wrapfigure}%
-
-\noindent ~\vspace{-1\baselineskip}
 \begin{equation}
 \text{ftn}_{E}^{\uparrow P}\bef p_{E}^{A}=p_{E}^{E^{A}}\bef\text{ftn}_{E}\quad.\label{eq:P-algebra-morphism-law-of-flatten}
 \end{equation}
@@ -3007,12 +3004,13 @@ The \lstinline!flatten! method ($\text{ftn}_{E}$) is defined as:
 The code for $\text{ftn}_{E}$ uses the evaluator function $\text{eval}_{E}^{C}$
 with $C=E^{A}$. This is justified because $E^{A}$ is a $P$-algebra.
 The condition that $C$ should satisfy all the laws of $E^{A}$ holds
-trivially, as since $C=E^{A}$.
+trivially, since $C=E^{A}$.
 
 By Definition~\ref{subsec:Definition-free-P-typeclass-encoding}(c),
 we find that $\text{ftn}_{E}$ is a $P$-algebra morphism. 
 
-The monad\textsf{'}s two identity laws follow from the identity laws in Definition~\ref{subsec:Definition-free-P-typeclass-encoding}(c):
+The monad\textsf{'}s two identity laws follow from the identity laws given
+in Definition~\ref{subsec:Definition-free-P-typeclass-encoding}(c):
 \begin{align*}
  & \text{pu}_{E}\bef\text{ftn}_{E}=\text{pu}_{E}\bef\text{eval}_{E}^{E^{A}}=\text{id}\quad.\\
  & \text{pu}_{E}^{\uparrow E}\bef\text{ftn}_{E}=\text{pu}_{E}^{\uparrow E}\bef\text{eval}_{E}^{E^{A}}=\text{id}\quad.
@@ -3133,7 +3131,7 @@ the evidence values. A type $T$ belongs to that $P$-typeclass if
 there exists an evidence value $p_{T}:P^{T}\rightarrow T$ that satisfies
 the $l_{i}$-law~(\ref{eq:P-typeclass-law}) for each of the specified
 law functions $l_{i}$. For brevity, we also say that the $l_{i}$-laws
-\textsf{``}\textbf{hold for} $T$\textsf{''} as long as it is clear how what evidence
+\textsf{``}\textbf{hold for} $T$\textsf{''} as long as it is clear what evidence
 value $p_{T}$ is implied. $\square$
 
 Another approach to typeclass laws is by describing the two sides
@@ -3213,27 +3211,28 @@ Since the law is supposed to work in the same way for all types $T$,
 we add a universal quantifier ($\forall T$). The type of \textsf{``}pairs
 of law expression trees\textsf{''} (\lstinline!LawET!) becomes:
 \begin{equation}
-\text{LawET}_{P}\triangleq\forall T.\,(\text{Int}\rightarrow T)\rightarrow\text{FPR}^{T}\times\text{FPR}^{T}\quad.\label{eq:law-expression-tree-type}
+\text{LawET}\triangleq\forall T.\,(\text{Int}\rightarrow T)\rightarrow\text{FPR}^{T}\times\text{FPR}^{T}\quad.\label{eq:law-expression-tree-type}
 \end{equation}
 
 How does a given value \lstinline!et: LawET! specify a law of a $P$-typeclass
 (the \textsf{``}\lstinline!et!-law\textsf{''})? Suppose we need to verify whether
 a type $T$ with a $P$-algebra structure map $p_{T}$ obeys the \lstinline!et!-law.
 First, we apply \lstinline!et! to an arbitrary function \lstinline!f: Int => T!
-and obtain a pair \lstinline!(lhs, rhs)! of values of type \lstinline!FPR[T]!:
+and obtain a pair \lstinline!(lhs, rhs)! of expression trees of type
+\lstinline!FPR[T]!:
 \begin{lstlisting}
 val f: Int => T = ...
 val (lhs: FPR[T], rhs: FPR[T]) = et(f)
 \end{lstlisting}
-Then we evaluate both expression trees using $T$\textsf{'}s operations (that
+Then we evaluate those expression trees using $T$\textsf{'}s operations (that
 is, data from the structure map $p_{T}$):
 \begin{lstlisting}
 val (lhsT: T, rhsT: T) = (runner(id)(lhs), runner(id)(rhs))
 \end{lstlisting}
 The \lstinline!et!-law is then the condition \lstinline!lhsT == rhsT!.
 
-The types \lstinline!LawF! and \lstinline!LawET! appear to be different
-but turn out to be \emph{equivalent}:
+The types \lstinline!LawF! and \lstinline!LawET! turn out to be
+\emph{equivalent}:
 
 \subsubsection{Statement \label{subsec:Statement-equivalence-law-function-law-expression-tree-P-typeclass}\ref{subsec:Statement-equivalence-law-function-law-expression-tree-P-typeclass}}
 
@@ -3245,7 +3244,7 @@ respectively) are equivalent to each other and to the type $\text{FPR}^{\text{In
 
 To verify the first type equivalence ($\text{LawF}\cong\text{FPR}^{\text{Int}}\times\text{FPR}^{\text{Int}}$):
 \begin{align*}
- & \forall A.\,(P^{A}\rightarrow A)\gunderline{\times}\,(\text{Int}\rightarrow A)\rightarrow A\times A\\
+ & \forall A.\,(P^{A}\rightarrow A)\,\gunderline{\times}\,(\text{Int}\rightarrow A)\rightarrow A\times A\\
  & \cong\forall A.\,(P^{A}+\text{Int}\rightarrow A)\rightarrow\gunderline{A\times A}\\
  & \cong\forall A.\,(P^{A}+\text{Int}\rightarrow A)\rightarrow\bbnum 2\rightarrow A\\
  & \cong\bbnum 2\rightarrow\forall A.\,(P^{A}+\text{Int}\rightarrow A)\rightarrow A\quad.
@@ -3279,7 +3278,7 @@ with a structure map $p_{M}:P^{M}\rightarrow M$, we take an arbitrary
 function $f:\text{Int}\rightarrow M$ and compute a value $c$ of
 type $M\times M$:
 \[
-c^{:M\times M}\triangleq e\triangleright f^{\uparrow\text{LawE}}\triangleright\big(\text{run}_{\text{FPR}^{M}}^{M,M}(\text{id})\boxtimes\text{run}_{\text{FPR}^{M}}^{M,M}(\text{id})\big)\quad.
+c^{:M\times M}\triangleq e\triangleright f^{\uparrow\text{LawE}}\triangleright\big(\text{run}_{\text{FPR}^{M}}^{M,M}(\text{id})\boxtimes\text{run}_{\text{FPR}^{M}}^{M,M}(\text{id})\big)***eval,not\ run!\quad.
 \]
 Now, the $e$-law consists of the requirement that $c$ must be a
 pair of equal values, for any $f$. In this way, a law expression
@@ -3310,7 +3309,7 @@ an $l$-law:
 
 \textbf{(a)} Suppose that the $l$-law holds for $M$ and $\phi$
 is \emph{surjective}. Then the $l$-law also holds for $N$. (In this
-sense, a $P$-algebra morphism \textsf{``}preserves\textsf{''} the $P$-typeclass
+sense, surjective $P$-algebra morphism \textsf{``}preserve\textsf{''} the $P$-typeclass
 laws.)
 
 \textbf{(b)} Suppose the $l$-law holds for $N$ but \emph{not} for
@@ -3447,21 +3446,19 @@ directly.
 
 \subsubsection{Statement \label{subsec:Statement-compatible-retract-of-free-monad}\ref{subsec:Statement-compatible-retract-of-free-monad}}
 
-Let $P$ be a traversable functor and let $E$ be a functor such that:
+Let $P$ be a polynomial functor and let $E$ be a functor such that:
 
 1. For any type $T$, the type $E^{T}$ is a $P$-algebra with a structure
 map $p_{E}^{T}:P^{E^{T}}\rightarrow E^{T}$ natural in $T$. 
 
-2. There exist natural transformations $\text{pu}_{E}^{T}:T\rightarrow E^{T}$
-and $\text{in}_{E}^{T}:E^{T}\rightarrow\text{FPR}^{T}$ (which is
-\emph{not} required to be a $P$-algebra morphism).
+2. There exist natural transformations $\text{in}_{E}^{T}:E^{T}\rightarrow\text{FPR}^{T}$
+(which is \emph{not} required to be a $P$-algebra morphism) and $\text{pu}_{E}^{T}:T\rightarrow E^{T}$.
 
 3. The following properties hold:
 \begin{equation}
 \text{pu}_{E}^{T}\bef\text{in}_{E}^{T}=\text{pu}_{\text{FPR}}^{T}\quad,\quad\quad\text{in}_{E}^{T}\bef(\text{pu}_{E}^{T})^{\uparrow\text{FPR}}\bef\text{eval}_{\text{FPR}}^{E^{T}}=\text{id}^{:E^{T}\rightarrow E^{T}}\quad.\label{eq:laws-of-in-E-free-P-typeclass-encoding}
 \end{equation}
-The last requirement says that the (unique) $P$-algebra morphism
-$(\text{pu}_{E}^{T})^{\uparrow\text{FPR}}\bef\text{eval}_{\text{FPR}}^{E^{T}}$
+The last requirement says that the function $(\text{pu}_{E}^{T})^{\uparrow\text{FPR}}\bef\text{eval}_{\text{FPR}}^{E^{T}}$
 of type $\text{FPR}^{T}\rightarrow E^{T}$ is the left inverse to
 the function $\text{in}_{E}^{T}$. This indicates that $\text{in}_{E}^{T}:E^{T}\rightarrow\text{FPR}^{T}$
 is injective\index{injective function}. So, $E^{T}$ is a subset
@@ -3477,11 +3474,12 @@ fact $E^{T}$ does satisfy more laws for some $T$; say for $T=\bbnum 0$.{*}{*}{*}
 formulate this requirement precisely, we use law expressions $e:\text{FPR}^{\text{Int}}\times\text{FPR}^{\text{Int}}$
 for describing $P$-typeclass laws (see Section~\ref{subsec:Describing-laws-of-P-typeclasses-as-values}).
 We say that $E^{T}$ obeys \textsf{``}no other laws than those of the $P$-typeclass\textsf{''}
-if for any $e:\text{FPR}^{\text{Int}}\times\text{FPR}^{\text{Int}}$
+if for any $P$-algebra $C$ that obeys all the $P$-typeclass laws
+and for any $e:\text{FPR}^{\text{Int}}\times\text{FPR}^{\text{Int}}$
 whose corresponding $e$-law holds for $E^{T}$, the same $e$-law
-will also hold for any $P$-algebra $C$ that satisfies all the $P$-typeclass
-laws. (A counterexample is an $E^{T}$ that satisfies all the standard
-monoid laws and in addition the commutativity law. By Statement~\ref{subsec:Statement-P-algebra-morphisms-and-laws},
+will also hold for $C$. (A counterexample is an $E^{T}$ that satisfies
+all the standard monoid laws and in addition the commutativity law.
+By Statement~\ref{subsec:Statement-P-algebra-morphisms-and-laws},
 there cannot be a surjective monoid morphism $E^{M}\rightarrow M$
 when $M$ is a non-commutative monoid. Yet, that morphism would have
 existed if $E$ were a valid encoding of a free monoid.)
@@ -3490,10 +3488,10 @@ If assumptions 1-5 hold then:
 
 \textbf{(a)} The functor $E$ is a free $P$-typeclass encoding. When
 the function $\text{in}_{E}$ is itself a $P$-algebra morphism then
-the encoding $E$ is equivalent to \lstinline!FPR!. (This statement
-does \emph{not} require $\text{in}_{E}^{T}$ to be a $P$-algebra
-morphism. Then we are able to describe free $P$-typeclass encodings
-$E^{T}$ that are different from $\text{FPR}^{T}$.)
+the encoding $E$ is equivalent to \lstinline!FPR!. (We do \emph{not}
+require $\text{in}_{E}^{T}$ to be a $P$-algebra morphism. Then we
+are able to describe free $P$-typeclass encodings $E$ that are different
+from $\text{FPR}$.)
 
 \textbf{(b)} The universal evaluator $\text{eval}_{E}^{C}$ does not
 depend on the choice of the function $\text{in}_{E}$ as long as the
@@ -3524,13 +3522,13 @@ there exists only one $P$-algebra morphism with this $r$, namely
 $r^{\uparrow\text{FPR}}\bef\text{eval}_{\text{FPR}}$. That morphism
 is, however, equal to the identity function due to Eq.~(\ref{eq:free-typeclass-encoding-right-identity-law}):
 \[
-r^{\uparrow\text{FPR}}\bef\text{eval}_{\text{FPR}}=\text{pu}_{\text{FPR}}^{\uparrow\text{FPR}}\bef\text{eval}_{\text{FPR}}=\text{id}^{:\text{FPR}^{T}\rightarrow\text{FPR}^{T}}\quad.
+\gunderline{r^{\uparrow\text{FPR}}}\bef\text{eval}_{\text{FPR}}=\text{pu}_{\text{FPR}}^{\uparrow\text{FPR}}\bef\text{eval}_{\text{FPR}}=\text{id}^{:\text{FPR}^{T}\rightarrow\text{FPR}^{T}}\quad.
 \]
 We find that we must have $g_{E}^{T}=\text{id}$. It means that the
 $P$-algebra morphisms $\text{in}_{E}^{T}$ and $g$ are inverses
-of each other and give an \emph{isomorphism} (a type equivalence that
-preserves the $P$-typeclass operations) between $P$-algebras $E^{T}$
-and $\text{FPR}^{T}$. 
+of each other and give a $P$-algebra \emph{isomorphism} (a type equivalence
+that preserves the $P$-typeclass operations) between $E^{T}$ and
+$\text{FPR}^{T}$. 
 
 To show that $E$ is a $P$-typeclass encoding, we look at the conditions
 in Definition~\ref{subsec:Definition-free-P-typeclass-encoding}.
@@ -3675,18 +3673,11 @@ notion of a \textsf{``}\index{monad algebra}monad algebra\textsf{''}:
 Given a monad $E$, a type $C$ is an $E$-\textbf{monad algebra}
 if $C$ is an $E$-algebra with a structure map $s:E^{C}\rightarrow C$
 that additionally obeys the following laws:
-
-\begin{wrapfigure}{l}{0.2\columnwidth}%
-\vspace{-2.15\baselineskip}
 \[
 \xymatrix{\xyScaleY{1.4pc}\xyScaleX{2.5pc}C\ar[r]\sp(0.5){\text{pu}_{E}}\ar[dr]\sb(0.5){\,\text{id}} & E^{C}\ar[d]\sp(0.45){s} & E^{E^{C}}\ar[d]\sb(0.45){s^{\uparrow E}}\ar[r]\sp(0.55){\text{ftn}_{E}} & E^{C}\ar[d]\sb(0.45){s}\\
  & C & E^{C}\ar[r]\sp(0.5){s} & C
 }
 \]
-\vspace{-0.6\baselineskip}
-\end{wrapfigure}%
-
-\noindent ~\vspace{-2\baselineskip}
 \begin{align*}
 {\color{greenunder}\text{identity law of monad algebras}:}\quad & \text{pu}_{E}^{C}\bef s=\text{id}^{:C\rightarrow C}\quad,\\
 {\color{greenunder}\text{composition law of monad algebras}:}\quad & \text{ftn}_{E}\bef s=s^{\uparrow E}\bef s\quad.
@@ -3761,13 +3752,16 @@ using the fact that $\text{ftn}_{E}=\text{run}_{E}(\text{id})$:
 \[
 \gunderline{\text{ftn}_{E}}\bef s=\text{run}_{E}^{E^{C},E^{C}}(\text{id}^{:E^{C}\rightarrow E^{C}})\bef s\overset{?}{=}s^{\uparrow E}\bef\gunderline s=s^{\uparrow E}\bef\text{run}_{E}^{C,C}(\text{id}^{:C\rightarrow C})\quad.
 \]
-The $P$-algebraic naturality law~(\ref{eq:free-typeclass-encoding-P-algebraic-naturality-law})
-with $g=s$ and $r=\text{id}^{:E^{C}\rightarrow E^{C}}$ gives for
-the left-hand side:
+The $P$-algebraic naturality law~(\ref{eq:free-typeclass-encoding-P-algebra-naturality-law})
+with{*}{*}{*} we modified that law to use eval instead of run, so
+rewrite this proof too!{*}{*}{*} $g=s$ and $r=\text{id}^{:E^{C}\rightarrow E^{C}}$
+gives for the left-hand side:
 \[
 \text{run}_{E}^{E^{C},E^{C}}(\text{id}^{:E^{C}\rightarrow E^{C}})\bef s=\text{run}_{E}^{E^{C},C}(\gunderline{\text{id}^{:E^{C}\rightarrow E^{C}}\bef s})=\text{run}_{E}^{E^{C},C}(s)\quad.
 \]
-The right-hand side is simplified using the naturality law~(\ref{eq:free-typeclass-encoding-naturality-law})
+The right-hand side is simplified using {*}{*}{*} we modified that
+law to use eval instead of run, so rewrite this proof too!{*}{*}{*}the
+naturality law~(\ref{eq:free-typeclass-encoding-P-algebra-naturality-law})
 with $f=s$ and $r=\text{id}^{:E^{C}\rightarrow E^{C}}$:
 \[
 s^{\uparrow E}\bef\text{run}_{E}^{C,C}(\text{id}^{:E^{C}\rightarrow E^{C}})=\text{run}_{E}^{E^{C},C}(s\bef\text{id}^{:E^{C}\rightarrow E^{C}})=\text{run}_{E}^{E^{C},C}(s)\quad.
@@ -3811,8 +3805,8 @@ Suppose $E$ is a free $P$-typeclass encoding according to Definition~\ref{subsec
 If $C$ and $D$ are any given $E$-algebras, the proof of Statement~\ref{subsec:Statement-Monad-algebra-is-P-typeclass}
 defines functions $p_{C}$, $p_{D}$ that make $C$ and $D$ into
 $P$-algebras. If $f:C\rightarrow D$ is any $E$-algebra morphism,
-show that $f$ is at the same time a $P$-algebra morphism between
-the $P$-algebras $C$ and $D$. $\square$
+show that $f$ is also a $P$-algebra morphism between the $P$-algebras
+$C$ and $D$. $\square$
 
 We can now use monad algebras to prove that certain typeclass constructions
 always give new and lawful typeclass instances. {*}{*}{*}
@@ -4279,8 +4273,8 @@ Generalize to arbitrary type classes:
 Type class $C$ is defined by its operations{\footnotesize{} $C^{X}\rightarrow X$}
 (with a suitable $C^{\bullet}$)
 
-call $C^{\bullet}$ the \textbf{structure functor} of the inductive
-typeclass $C$
+call $C^{\bullet}$ the \textbf{structure functor} of the $P$-typeclass
+$C$
 
 Tree encoding of \textsf{``}free $C$ over $Z$\textsf{''} is recursive, $\text{FreeC}^{Z}\triangleq Z+C^{\text{FreeC}^{Z}}$
 
@@ -4717,8 +4711,8 @@ For a fixed monoid $L$, define a typeclass $\text{Mod}_{L}$ (called
 \textsf{``}acts\textsf{''} on $P$ via a function act$:L\rightarrow P\rightarrow P$,
 with laws $\text{act}\,x\bef\text{act}\,y=\text{act}\left(x\bef y\right)$
 and $\text{act}\left(e_{L}\right)=\text{id}$. - Monoid morphism between
-$L$ and $\text{MF}^{P}$. Show that $\text{Mod}_{L}$ is an inductive
-typeclass. Implement a free $L$-module on a type $Z$. 
+$L$ and $\text{MF}^{P}$. Show that $\text{Mod}_{L}$ is a $P$-typeclass.
+Implement a free $L$-module on a type $Z$. 
 
 \subsubsection{Exercise \label{subsec:Exercise-free-type-3}\ref{subsec:Exercise-free-type-3}}
 
@@ -4767,10 +4761,12 @@ Prove the following type equivalences involving quantified types:
 
 \textbf{(d)} $\exists Z.\,Z\times\left(A\rightarrow Z\right)\times\left(Z\rightarrow B\right)\cong B\times\left(A\rightarrow B\right)\quad.$
 
-\subsubsection{Exercise \label{subsec:Exercise-free-type-9-1}\ref{subsec:Exercise-free-type-9-1}{*}}
+\subsubsection{Exercise \label{subsec:Exercise-free-type-9-1}\ref{subsec:Exercise-free-type-9-1}}
 
-Prove the following type equivalences involving quantified type constructors
-(the types $A$, $B$, $C$, $D$ are fixed):
+Prove the following type equivalences involving quantified type constructors.
+The types $A$, $B$, $C$, $D$ are fixed, and the quantifier $\forall F^{\bullet}$
+assumes that $F$ is a (covariant) functor and that all functions
+are fully parametric.
 
 \textbf{(a)} $\forall F^{\bullet}.\,F^{A}\cong\bbnum 0\quad.$
 
@@ -4980,7 +4976,8 @@ F^{T^{T^{A}}} & \bbnum 0 & \overline{\text{ftn}}_{T}^{\uparrow F}
  & F^{A}\\
 \hline A & \text{pu}_{F}\\
 F^{T^{A}} & \overline{p}^{\uparrow F}\bef\text{ftn}_{F}
-\end{array}\,=\,\begin{array}{|c||c|}
+\end{array}\\
+ & \quad=\,\begin{array}{|c||c|}
  & F^{A}\\
 \hline A & \text{pu}_{F}\\
 F^{T^{A}} & \overline{p}^{\uparrow F}\bef\text{ftn}_{F}\\
@@ -5059,12 +5056,13 @@ holds for types parameterized by a type constructor:
 \subsubsection{Statement \label{subsec:Statement-covariant-yoneda-identity-for-type-constructors}\ref{subsec:Statement-covariant-yoneda-identity-for-type-constructors}
 (covariant Yoneda identity for functors)\index{Yoneda identity!for functors}}
 
-Assume that $P^{\bullet}$ is any type constructor and $S^{F^{\bullet}}$
-is a higher-order functor\index{functor!higher-order}\index{higher-order functor},
-i.e., $S$ depends covariantly on an arbitrary type constructor $F^{\bullet}$.
-(An example of such $S$ is $S^{F^{\bullet}}\triangleq F^{\text{Int}}\times F^{\text{String}}$.)
+Assume that $P^{\bullet}$ is any type constructor and $S$ is a higher-order
+functor\index{functor!higher-order}\index{higher-order functor}.
+That is, $S^{F^{\bullet}}$ is a type that depends covariantly on
+an arbitrary type constructor $F^{\bullet}$. (An example of such
+$S$ is $S^{F^{\bullet}}\triangleq F^{\text{Int}}\times F^{\text{String}}$.)
 Then the type $S^{P^{\bullet}}$ is equivalent to the function type
-$\forall F^{\bullet}.\,(P^{\bullet}\leadsto F^{\bullet})\rightarrow S^{F}$,
+$\forall F^{\bullet}.\,(P^{\bullet}\leadsto F^{\bullet})\rightarrow S^{F^{\bullet}}$,
 where the function is required to be natural in the parameter $F^{\bullet}$.
 The corresponding naturality law for functions $\sigma$ of type $\forall F^{\bullet}.\,(P^{\bullet}\leadsto F^{\bullet})\rightarrow S^{F}$
 involves arbitrary type constructors $Q^{\bullet}$, $R^{\bullet}$,
@@ -5087,7 +5085,7 @@ brevity, we will write just $F$ and $P$ instead of $F^{\bullet}$
 and $P^{\bullet}$.
 
 The isomorphism is implemented via two functions \lstinline!toC!
-and \lstinline!fromC!,
+and \lstinline!fromC!:
 \begin{align*}
 \text{toC}:S^{P}\rightarrow\forall F.\,(P\leadsto F)\rightarrow S^{F}\quad, & \quad\quad\text{toC}\triangleq s^{:S^{P}}\rightarrow\forall F.\,g^{:P\leadsto F}\rightarrow s\triangleright g^{\uparrow S}\quad,\\
 \text{fromC}:(\forall F.\,(P\leadsto F)\rightarrow S^{F})\rightarrow S^{P}\quad, & \quad\quad\text{fromC}\triangleq\sigma^{:\forall F.\,(P\leadsto F)\rightarrow S^{F}}\rightarrow\sigma^{P}(\text{id}^{:P\leadsto P})\quad.
@@ -5246,23 +5244,15 @@ $\text{unfix}_{1}:T_{1}\rightarrow F^{T_{1}}$, $\text{fix}_{2}:F^{T_{2}}\rightar
 and $\text{unfix}_{2}:T_{2}\rightarrow F^{T_{2}}$. A function $f:T_{1}\rightarrow T_{2}$
 is \index{fixpoint-preserving function}\textbf{fixpoint-preserving}
 if the compatibility law holds:
-
-\begin{wrapfigure}{l}{0.32\columnwidth}%
-\vspace{-2\baselineskip}
 \[
 \xymatrix{\xyScaleY{1.0pc}\xyScaleX{3pc}T_{1}\ar[d]\sp(0.45){f}\ar[r]\sp(0.5){\text{unfix}_{1}} & F^{T_{1}}\ar[d]\sp(0.4){f^{\uparrow F}}\ar[r]\sp(0.5){\text{fix}_{1}} & T_{1}\ar[d]\sp(0.45){f}\\
 T_{2}\ar[r]\sp(0.5){\text{unfix}_{2}} & F^{T_{2}}\ar[r]\sp(0.5){\text{fix}_{2}} & T_{2}
 }
 \]
-\vspace{-1\baselineskip}
-\end{wrapfigure}%
-
-~\vspace{-1\baselineskip}
 \begin{align*}
  & \text{fix}_{1}\bef f=f^{\uparrow F}\bef\text{fix}_{2}\quad,\\
  & \text{unfix}_{1}\bef f^{\uparrow F}=f\bef\text{unfix}_{2}\quad.
 \end{align*}
-\vspace{-0.5\baselineskip}
 
 To show that both $f_{1}$ and $f_{2}$ are fixpoint-preserving, we
 note that {*}{*}{*}
@@ -5291,10 +5281,8 @@ encoding\textsf{''}. For the purposes of this book, they are the same. See
 for discussion.}
 
 Consider a recursive type $T$ defined by a fixpoint equation $T\triangleq F^{T}$
-with a given structure functor $F$. We could write a Church encoding
-for $T$ as $\forall X.\,(T\rightarrow X)\rightarrow X$ or as $\forall X.\,(F^{T}\rightarrow X)\rightarrow X$,
-but these encodings give no advantages. It turns out that another,
-more useful Church encoding for $T$ is:
+with a given structure functor $F$. It turns out that a useful Church
+encoding for $T$ is:
 \begin{equation}
 T\cong\forall X.\,(F^{X}\rightarrow X)\rightarrow X\quad\text{if the type }T\text{ is defined by }T\triangleq F^{T}\quad.\label{eq:Church-encoding-recursive-type}
 \end{equation}
@@ -5311,11 +5299,11 @@ where the type $A$ cannot depend on the quantified type $X$.
 
 The following statement\footnote{See also the papers \textsf{``}A note on strong dinaturality\textsf{''} (\texttt{\href{https://web.archive.org/web/20110601105059/http://www.cs.ioc.ee/~tarmo/papers/fics10.pdf}{http://www.cs.ioc.ee/$\sim$tarmo/papers/fics10.pdf}})
 and \textsf{``}Build, augment, and destroy universally\textsf{''} (\texttt{\href{https://kodu.ut.ee/~varmo/papers/aplas04.ps.gz}{https://kodu.ut.ee/$\sim$varmo/papers/aplas04.ps.gz}}).} shows that the Church encoding~(\ref{eq:Church-encoding-recursive-type})
-is a fixpoint:
+is a fixpoint of $F$:
 
 \subsubsection{Statement \label{subsec:Statement-Church-encoding-recursive-type-covariant}\ref{subsec:Statement-Church-encoding-recursive-type-covariant}}
 
-For a given structure functor $F$, define the type $T$ as
+For a given recursion scheme $F$, define the type $T$ as:
 \[
 T\triangleq\forall X.\,(F^{X}\rightarrow X)\rightarrow X\quad.
 \]
@@ -5325,7 +5313,7 @@ which for the given type $T$ has the following form: for any $r^{:F^{A}\rightarr
 $s^{:F^{B}\rightarrow B}$, and $f^{:A\rightarrow B}$: 
 
 \begin{equation}
-\text{if }\quad r\bef f=f^{\uparrow F}\bef s\quad\text{ then }\quad r\triangleright t^{A}\triangleright f=s\triangleright t^{B}\quad.\label{eq:strong-dinaturality-for-church-encoded-fix-unfix}
+\text{if }\quad r\bef f=f^{\uparrow F}\bef s\quad\text{ then }\quad r^{:F^{A}\rightarrow A}\triangleright t^{A}\triangleright f^{:A\rightarrow B}=s^{:F^{B}\rightarrow B}\triangleright t^{B}\quad.\label{eq:strong-dinaturality-for-church-encoded-fix-unfix}
 \end{equation}
 Defined in this way, the type $T$ is a solution of the fixpoint equation
 $T\cong F^{T}$. (Strong dinaturality holds for all fully parametric
@@ -5394,22 +5382,19 @@ the same result when applied to an arbitrary argument $q^{:F^{Y}\rightarrow Y}$
 \begin{equation}
 \text{fix}^{\uparrow F}\triangleright t^{F^{T}}\triangleright\big(p^{:\forall X.\,(F^{X}\rightarrow X)\rightarrow X}\rightarrow p^{Y}(q)\big)^{\uparrow F}\triangleright q\overset{?}{=}t^{Y}(q^{:F^{Y}\rightarrow Y})\quad.\label{eq:unfix-fix-identity-derivation1}
 \end{equation}
-To proceed, we need to use the strong dinaturality law of $t$ with
-suitable $r$, $s$, and $f$:
-\begin{equation}
-r^{:F^{A}\rightarrow A}\triangleright t^{A}\triangleright f^{:A\rightarrow B}=s^{:F^{B}\rightarrow B}\triangleright t^{B}\quad.\label{eq:unfix-fix-strong-dinaturality-derivation1}
-\end{equation}
-This law will reproduce Eq.~(\ref{eq:unfix-fix-identity-derivation1})
-if we choose $r$, $s$, and $f$ such that:
+To proceed, we need to use the strong dinaturality law~(\ref{eq:strong-dinaturality-for-church-encoded-fix-unfix})
+of $t$ with suitable $r$, $s$, and $f$. That law will reproduce
+Eq.~(\ref{eq:unfix-fix-identity-derivation1}) if we choose $r$,
+$s$, and $f$ such that:
 \[
 r=\text{fix}^{\uparrow F}\quad,\quad\quad f=\big(p^{:\forall X.\,(F^{X}\rightarrow X)\rightarrow X}\rightarrow q\triangleright p^{Y}\big)^{\uparrow F}\bef q\quad,\quad\quad s=q\quad.
 \]
 For these equations to hold, the type parameters $A$ and $B$ must
-be set appropriately in Eq.~(\ref{eq:unfix-fix-strong-dinaturality-derivation1}).
+be set appropriately in Eq.~(\ref{eq:strong-dinaturality-for-church-encoded-fix-unfix}).
 The type of $\text{fix}^{\uparrow F}$ is $F^{F^{T}}\rightarrow F^{T}$,
 which means that $A=F^{T}$. The type of $q$ is $F^{Y}\rightarrow Y$,
 so $B=Y$. This agrees with the type of $f^{:A\rightarrow B}$. So,
-the strong dinaturality law~(\ref{eq:unfix-fix-strong-dinaturality-derivation1})
+the strong dinaturality law~(\ref{eq:strong-dinaturality-for-church-encoded-fix-unfix})
 will yield Eq.~(\ref{eq:unfix-fix-identity-derivation1}) as long
 as the chosen variables satisfy the condition
 \[
