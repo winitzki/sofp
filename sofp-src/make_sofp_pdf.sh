@@ -107,7 +107,7 @@ function add_lulu {
 function assemble_sources {
 	# Include graphics files referenced as images.
 	cp ../README.md README_build.md
-	tar jcvf "$name-src.tar.bz2" README*.md excluded_words $name*lyx $name*tex `grep -o 'includegraphics[^}]*}' $name*tex | sed -e 's,[^{]*{\([^}]*\)}.*,\1.*,' |while read f; do ls $f ; done` *.sh  > /dev/null
+	tar jcvf "$name-src.tar.bz2" README*.md excluded_words $name*lyx $name*tex `grep -o 'includegraphics[^}]*}' $name*tex | sed -e 's,[^{]*{\([^}]*\)}.*,\1.*,' |while read f; do ls $f ; done` *.sh  >& /dev/null
 }
 
 # This requires pdftk to be installed on the path. Edit the next line as needed.
