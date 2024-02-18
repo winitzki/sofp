@@ -32,9 +32,6 @@ cd $dir
 
 tar jxf ../sofp-src.tar.bz2
 mv sofp-src/* .
-# Special handling for random-pages files.
-mkdir random-pages
-mv random-pages*png random-pages/
 
 cp ../sofp*.tex ../sofp.* .
 cp ../book_cover/* ./book_cover/

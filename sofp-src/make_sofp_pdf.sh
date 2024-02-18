@@ -31,6 +31,7 @@ function source_hash {
 
 # Make a PDF package with embedded source archive.
 
+# This function is not used now.
 function run_latex_many_times {
 	local base="$1"
 	echo "LaTeX Warning - Rerun" > "$base.log"
@@ -104,12 +105,9 @@ function add_lulu {
 }
 
 function assemble_sources {
-	rm -rf "$srcbase"
-	mkdir "$srcbase"
-	# Copy the required source files to "$srcbase"/. Include graphics files referenced as images.
-	cp ../README.md excluded_words $name*lyx $name*tex `grep -o 'includegraphics[^}]*}' $name*tex | sed -e 's,[^{]*{\([^}]*\)}.*,\1.*,' |while read f; do ls $f ; done` *.sh "$srcbase"/
-	tar jcf "$name-src.tar.bz2" "$srcbase"/*
-	rm -rf "$srcbase"/
+	# Include graphics files referenced as images.
+	cp ../README.md README_build.md
+	tar jcvf "$name-src.tar.bz2" README*.md excluded_words $name*lyx $name*tex `grep -o 'includegraphics[^}]*}' $name*tex | sed -e 's,[^{]*{\([^}]*\)}.*,\1.*,' |while read f; do ls $f ; done` *.sh  > /dev/null
 }
 
 # This requires pdftk to be installed on the path. Edit the next line as needed.
@@ -162,7 +160,8 @@ assemble_sources &
 
 echo "Creating a full PDF file..."
 
-make_pdf_with_index "$name"  # Output is $name.pdf, main file is $name.tex, and other .tex files are \include'd.
+# Output is $name.pdf, main file is $name.tex, and other .tex files are \include'd.
+make_pdf_with_index "$name" >& /dev/null
 
 # Wait until assemble_sources is finished.
 wait
@@ -214,7 +213,7 @@ if [ x"$1" == x-nolulu ]; then
 	# Create a pdf file without references to lulu.com and without lulu.com's ISBN.
 	mv "$name".pdf "$name"-lulu.pdf
 	remove_lulu $name
-	make_pdf_with_index "$name" fast
+	make_pdf_with_index "$name" fast >& /dev/null
 	create_draft $name $draft-nolulu.pdf
 
 	# The main file "$name".pdf has lulu.com information.
