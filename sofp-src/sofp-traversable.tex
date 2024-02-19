@@ -4138,30 +4138,35 @@ morphism between $\text{MF}^{M}$ and $M$.
 
 \section{Discussion and further developments}
 
-\subsection{Laws of \texttt{traverse} and properties of \texttt{zipWithIndex}\label{subsec:Laws-of-traverse-and-zipWithIndex}}
+\subsection{The missing laws of \texttt{traverse} and \texttt{zipWithIndex}\label{subsec:Laws-of-traverse-and-zipWithIndex}}
+
+The two laws of \lstinline!traverse! shown in this chapter do \emph{not}
+in fact guarantee that \lstinline!traverse! behaves as programmers
+expect. To see that, we consider the generalization of \lstinline!zipWithIndex!
+to arbitrary traversable functors. We will then try proving two intuitively
+reasonable properties of \lstinline!zipWithIndex! by assuming only
+that the two laws of \lstinline!traverse! hold. We will find that
+we \emph{cannot} prove one of these properties without assuming further
+laws of \lstinline!traverse!.
 
 Sections~\ref{subsec:Decorating-a-tree1}\textendash \ref{subsec:Decorating-a-tree-breadth-first-traversal}
-defined the method \lstinline!zipWithIndex! for different orders
-of tree traversal. In a similar way, we may define \lstinline!zipWithIndex!
+defined the method \lstinline!zipWithIndex! for certain choices of
+a tree traversal order. In a similar way, we may define \lstinline!zipWithIndex!
 (denoted $\text{zwi}_{L}$ for brevity) for any traversable functor
-$L$. In this section, we will prove some intuitively reasonable properties
-of \lstinline!zipWithIndex! by assuming only that the laws of \lstinline!traverse!
-hold. This will serve as an additional evidence that the laws of \lstinline!traverse!
-correspond to a programmer\textsf{'}s intuitions about code.
-
-To implement \lstinline!zipWithIndex! for $L$, we use $L$\textsf{'}s \lstinline!traverse!
-method ($\text{trav}_{L}^{F,A,B}$) and chose the applicative functor
-$F$ as the \lstinline!State! monad with internal state of type \lstinline!Int!:
+$L$. We use $L$\textsf{'}s \lstinline!traverse! method ($\text{trav}_{L}^{F,A,B}$)
+and chose the applicative functor $F$ as the \lstinline!State! monad
+with internal state of type \lstinline!Int!:
 \[
 F^{A}\triangleq\text{State}^{\text{Int},A}\triangleq\text{Int}\rightarrow A\times\text{Int}\quad.
 \]
-The internal state represents a current value of the index. The code
+The internal state represents the current value of the index while
+we iterate over values of type $A$ stored within $L^{A}$. The code
 of \lstinline!zipWithIndex! applies \lstinline!traverse! to a function
 of type $A\rightarrow\text{State}^{S,A\times\text{Int}}$ that increments
 the index:
 \begin{align}
  & \text{zwi}_{L}^{A}:L^{A}\rightarrow L^{A\times\text{Int}}\quad,\nonumber \\
- & \text{zwi}_{L}^{A}\triangleq\text{trav}_{L}^{F,A,A\times\text{Int}}(a^{:A}\rightarrow s^{:\text{Int}}\rightarrow(a\times s)\times(s+1))\bef\text{run}_{\text{State}}(0^{:\text{Int}})\quad,\label{eq:definition-of-zwi}
+ & \text{zwi}_{L}^{A}\triangleq\text{trav}_{L}^{F,A,A\times\text{Int}}(a^{:A}\rightarrow s^{:\text{Int}}\rightarrow(a\times s)\times(s+1))\bef\text{run}_{\text{State}}(0^{:\text{Int}})\quad.\label{eq:definition-of-zwi}
 \end{align}
 Here $\text{run}_{\text{State}}(0^{:\text{Int}})$ is the \lstinline!State!
 monad\textsf{'}s runner defined by Eq.~(\ref{eq:definition-of-runState})
@@ -4174,13 +4179,13 @@ What are a programmer\textsf{'}s intuitive expectations about \lstinline!zipWith
 when applied to arbitrary traversable functors $L$? First, \lstinline!zipWithIndex!
 applied to a value $p:L^{A}$ should produce a value of type $L^{A\times\text{Int}}$
 that preserves the structure of $p$ and just adds indices at places
-where some data of type $A$ is stored within $p$. Second, \lstinline!zipWithIndex!
+where data of type $A$ is stored within $p$. Second, \lstinline!zipWithIndex!
 should produce a \emph{different} index for every value of type $A$
-stored within $p$. Let us now formulate those intuitions as equations
-that rigorously express the expected properties of \lstinline!zipWithIndex!.
+stored within $p$. To express these properties rigorously, let us
+formulate them as equations.
 
 The first property is that the value $p:L^{A}$ must be restored if
-we remove the index values:
+we remove the integer index values:
 \begin{lstlisting}
 p.zipWithIndex.map(_._1) == p
 \end{lstlisting}
@@ -4188,27 +4193,46 @@ p.zipWithIndex.map(_._1) == p
 p\triangleright\text{zwi}_{L}\triangleright\pi_{1}^{\uparrow L}=p\quad.
 \]
 
-The second property means that each index can be mapped to a distinct
-value of type $A$ stored within $p$. Begin by computing a value
-$q\triangleq p\triangleright\text{zwi}_{L}\triangleright\pi_{2}^{\uparrow L}$
-of type $L^{\text{Int}}$. Then $q$ has the same structure as $p$
-but carries integer index values instead of values of type $A$. We
-expect that the original data ($p$) can be restored if we replace
-the index values in $q$ by the corresponding values of type $A$.
-In other words, there should exist a function $f:\text{Int}\rightarrow A$
-such that $p$ can be restored from $f$ and $q$ as $p=q\triangleright f^{\uparrow L}$.
-This also means that there should be an injective map from the type
-$L^{A}$ to the type $(\text{Int}\rightarrow A)\times L^{\text{Int}}$.
+The second property says that each distinct value of type $A$ stored
+within $p$ should have a different index. Equivalently, each index
+should be mapped to a distinct value of type $A$ stored within $p$.
+To express this property via an equation, begin by computing $\text{zwi}_{L}(p)$
+and then discard the values of type $A$, leaving only the indices.
+The result is a value $q\triangleq p\triangleright\text{zwi}_{L}\triangleright\pi_{2}^{\uparrow L}$
+of type $L^{\text{Int}}$. We expect $q$ to have the same shape and
+structure as $p$ except that $q$ carries integer index values instead
+of values of type $A$. The original value ($p$) can be restored
+if we replace all index values in $q$ by the corresponding values
+of type $A$. So, for any given $p$ there should exist a function
+$f_{p}:\text{Int}\rightarrow A$ such that $p$ can be recovered from
+$f_{p}$ and $q$ as $p=q\triangleright f_{p}^{\uparrow L}$. In other
+words:
+\[
+\forall p^{:L^{A}}:\quad p=p\triangleright\text{zwi}_{L}\triangleright\pi_{2}^{\uparrow L}\triangleright f_{p}^{\uparrow L}\quad.
+\]
+We can formulate this property in another way: There must exist a
+\textsf{``}tabulating\textsf{''} function (denoted by $\text{tab}_{L}^{A}$):
+\[
+\text{tab}_{L}^{A}:L^{A\times\text{Int}}\rightarrow(\text{Int}\rightarrow A)\times L^{\text{Int}}\quad,
+\]
+such that:
+\[
+\text{zwi}_{L}\bef\text{tab}_{L}\bef(f^{:\text{Int}\rightarrow A}\times q^{:L^{\text{Int}}}\rightarrow q\triangleright f^{\uparrow L})=\text{id}^{:L^{A}\rightarrow L^{A}}\quad.
+\]
+So, the function $\text{zwi}_{L}\bef\text{tab}_{L}$ is an injective
+function of type $L^{A}\rightarrow(\text{Int}\rightarrow A)\times L^{\text{Int}}$.
 
 We will now prove the first property of \lstinline!zipWithIndex!,
-assuming only that $L$ is a lawful traversable functor. In that proof,
-we will need a special subtype of the \lstinline!State! monad:
+assuming only that $L$ is a lawful traversable functor.
+
+In that proof, we will use a special subtype of the \lstinline!State!
+monad.
 
 \subsubsection{Statement \label{subsec:Statement-constant-value-state-monad}\ref{subsec:Statement-constant-value-state-monad}}
 
-We define a \textsf{``}constant-function \lstinline!State! monad\textsf{''}, which
-we denote by $\text{CFState}^{S,A}$, like this: Write the type of
-a \lstinline!State! monad equivalently as $\text{State}^{S,A}\triangleq S\rightarrow A\times S\cong(S\rightarrow A)\times(S\rightarrow S)$
+Define a \textsf{``}constant-function \lstinline!State! monad\textsf{''}, which we
+denote by $\text{CFState}^{S,A}$, like this: Write the type of a
+\lstinline!State! monad equivalently as $\text{State}^{S,A}\triangleq S\rightarrow A\times S\cong(S\rightarrow A)\times(S\rightarrow S)$
 and consider values of that type, $p^{:S\rightarrow A}\times q^{:S\rightarrow S}$,
 such that $p^{:S\rightarrow A}$ is a\emph{ constant} function (independent
 of its argument). In other words, the wrapped value of type $A$ is
@@ -4411,12 +4435,30 @@ and compute:
 \end{align*}
  $\square$
 
-The second property of \lstinline!zipWithIndex! does \emph{not} seem
-to be provable using the laws of traverse; see Problem~\ref{par:Problem-traverse-law}(b).
-However, it appears to be natural to expect that \lstinline!zipWithIndex!
+The second property of \lstinline!zipWithIndex! says that \lstinline!zipWithIndex!
 assigns different indices to each value of type $A$ stored inside
-a data structure of type $L^{A}$. Perhaps another law of \lstinline!traverse!
-is needed? 
+a data structure of type $L^{A}$. This property does \emph{not} seem
+to be provable using the two laws of \lstinline!traverse!. One reason
+is that an \textsf{``}indexing\textsf{''} function $f_{p}:\text{Int}\rightarrow A$
+can be computed only by traversing the entire data structure $p$.
+In other words, $f$ is itself a result of a traversal operation.
+We want to prove a property of \lstinline!traverse! that combines
+$f$ with another traversal (\lstinline!zipWithIndex!) of the same
+initial data ($p$). But there are no laws of \lstinline!traverse!
+that involve composition of traversals of the same initial container.
+A new law of \lstinline!traverse! is necessary. Such a law (involving
+inverse traversals) was first proposed in 2012.\footnote{See \texttt{\href{https://www.cs.ox.ac.uk/jeremy.gibbons/publications/backwards.pdf}{https://www.cs.ox.ac.uk/jeremy.gibbons/publications/backwards.pdf}}}
+One year later it was shown that the properties of \lstinline!zipWithIndex!
+can be derived for arbitrary polynomial functors $L$ without assuming
+any new laws of \lstinline!traverse! but using techniques of dependent
+type theory.\footnote{See \texttt{\href{https://www.cs.ox.ac.uk/jeremy.gibbons/publications/uitbaf.pdf}{https://www.cs.ox.ac.uk/jeremy.gibbons/publications/uitbaf.pdf}}}
+Those techniques are beyond the scope of this book, as the required
+theory is complicated but has no immediate practical use. Because
+all polynomial functors are traversable (and no other functors are),
+it is not as important to be able to characterize \lstinline!traverse!
+via laws. In practice, there is no uncertainty about how to implement
+a law-abiding \lstinline!traverse! correctly, for any given polynomial
+functor and traversal order.
 
 \subsection{Traversable contrafunctors and profunctors are not useful}
 
