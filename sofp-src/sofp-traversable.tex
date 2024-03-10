@@ -22,14 +22,15 @@ style.
 \texttt{traverse}\label{subsec:From-reduce-and-foldleft-to-foldmap}}
 
 The type signatures of \lstinline!reduce! and \lstinline!foldLeft!
-for a sequence of type \lstinline!Seq[A]! can be written as:
+for a sequence of type \lstinline!Seq[A]! may be written as:
 \begin{lstlisting}
 def reduce[A](xs: Seq[A])(update: (A, A) => A): A
 def foldLeft[A, B](xs: Seq[A])(b0: B)(update: (B, A) => B): B
 \end{lstlisting}
-\[
-\text{reduce}:\text{Seq}^{A}\rightarrow(A\times A\rightarrow A)\rightarrow A\quad,\quad\quad\text{foldLeft}:\text{Seq}^{A}\rightarrow B\rightarrow(B\times A\rightarrow B)\rightarrow B\quad.
-\]
+\begin{align*}
+ & \text{reduce}:\text{Seq}^{A}\rightarrow(A\times A\rightarrow A)\rightarrow A\quad,\\
+ & \text{foldLeft}:\text{Seq}^{A}\rightarrow B\rightarrow(B\times A\rightarrow B)\rightarrow B\quad.
+\end{align*}
 In \lstinline!foldLeft!, the accumulated result is of a different
 type ($B$) than the type of sequence elements ($A$). So, \lstinline!foldLeft!
 is a more general version of \lstinline!reduce!. We can implement
@@ -313,13 +314,14 @@ def trav[A, B, F[_]: Applicative : Functor](f: A => F[B])(t: T2[A]): F[T2[B]] = 
 }
 \end{lstlisting}
 In the code notation, this function looks like this:
-\[
-\text{trav}\,(f^{:A\rightarrow F^{B}})\triangleq\,\begin{array}{|c||c|}
+\begin{align*}
+ & \text{trav}\,(f^{:A\rightarrow F^{B}})\\
+ & \triangleq\,\begin{array}{|c||c|}
  & F^{B+\text{T2}^{B}\times\text{T2}^{B}}\\
 \hline A & f\bef(b^{:B}\rightarrow b+\bbnum 0^{:\text{T2}^{B}\times\text{T2}^{B}})^{\uparrow F}\\
 \text{T2}^{A}\times\text{T2}^{A} & \big(\overline{\text{trav}}\,(f)\boxtimes\overline{\text{trav}}\,(f)\big)\bef\text{zip}_{F}\bef(l^{:\text{T2}^{B}}\times r^{:\text{T2}^{B}}\rightarrow\bbnum 0^{:B}+l\times r)^{\uparrow F}
 \end{array}\quad.
-\]
+\end{align*}
 
 The code first traverses the two sub-branches (using recursive calls
 to \lstinline!trav!) and then combines the resulting values. So,
@@ -338,15 +340,15 @@ by pattern matching:
 \begin{lstlisting}[numbers=left]
 def trav[A, B, F[_]: Applicative : Functor](f: A => F[B])(t: PTree[A]): F[PTree[B]] = t match {
   case Leaf(a)     => f(a).map(b => Leaf(b))           // Reproduce the Leaf structure under F.
-  case Branch(t)   => ???  // Here t has type PTree[(A, A)].
+  case Branch(p)   => ???  // Here p has type PTree[(A, A)].
 }
 \end{lstlisting}
-In line 3, we have a pattern variable \lstinline!t! of type \lstinline!PTree[(A, A)]!,
+In line 3, we have a pattern variable \lstinline!p! of type \lstinline!PTree[(A, A)]!,
 but we need to obtain a value of type \lstinline!F[Branch[B]]! in
 that scope. Since a \lstinline!Branch! contains a recursive instance
 of the type \lstinline!PTree!, it seems we need to use a recursive
 call of \lstinline!trav! here. However, we cannot apply \lstinline!trav(f)!
-to \lstinline!t! because the types do not match. We will be able
+to \lstinline!p! because the types do not match. We will be able
 to apply \lstinline!trav! if instead of \lstinline!f: A => F[B]!
 we had a function of type \lstinline!(A, A) => F[(B, B)]!. We can
 create such a function out of \lstinline!f! using $F$\textsf{'}s \lstinline!zip!
@@ -356,14 +358,14 @@ method:
 \end{lstlisting}
  So, we write:
 \begin{lstlisting}
-  case Branch(t)   => trav { case (a1, a2) => f(a1) zip f(a2) }(t); ??? } // Have F[PTree[(B, B)]].
+  case Branch(p)   => trav { case (a1, a2) => f(a1) zip f(a2) }(p); ??? } // Have F[PTree[(B, B)]].
 \end{lstlisting}
 We can now use $F$\textsf{'}s \lstinline!map! method to restore the \lstinline!Branch!
 structure under $F$. The complete code is:
 \begin{lstlisting}
 def trav[A, B, F[_]: Applicative : Functor](f: A => F[B])(t: PTree[A]): F[PTree[B]] = t match {
   case Leaf(a)     => f(a).map(b => Leaf(b))           // Reproduce the Leaf structure under F.
-  case Branch(t)   => (trav[(A, A), (B, B), F] { case (a1, a2) => f(a1) zip f(a2) }(t)
+  case Branch(p)   => (trav[(A, A), (B, B), F] { case (a1, a2) => f(a1) zip f(a2) }(p)
                       ).map(x => Branch(x))          // Reproduce the Branch structure under F.
 }
 \end{lstlisting}
@@ -422,9 +424,10 @@ A special case of a monoid is \lstinline!List[A]!; its \lstinline!combine!
 operation is the concatenation of lists. If we use \lstinline!foldMap!
 with the monoid \lstinline!M = List[A]! and the function \lstinline!f: A => List[A]!
 that creates a single-element list, we obtain a function \lstinline!toList!
-that converts a tree \lstinline!T2[A]! into \lstinline!List[A]!:
+that converts a tree \lstinline!T2[A]! into \lstinline!List[A]!,
+given a \lstinline!Monoid! instance for \lstinline!List[A]!:
 \begin{lstlisting}
-def toList[A]: T2[A] => List[A] = foldMap[A, List[A]](List(_)) // Need a Monoid instance for List[A].
+def toList[A]: T2[A] => List[A] = foldMap[A, List[A]](List(_))
 \end{lstlisting}
 
 In the same way, we may implement \lstinline!toList: L[A] => List[A]!
@@ -466,7 +469,7 @@ res0: List[Int] = List(8, 3, 5, 4)
 }{\footnotesize\par}
 
 \noindent ~~\lstinline!toList(!{\tiny{} \Tree[ 8 [ [ 3 5 ] 4 ] ] }\lstinline!)!{\small{}}\\
-{\small{}~~~ $=\left[8,3,5,4\right]$}{\small\par}
+{\small{}~~~ $=\left[8,3,5,4\right]$}\\
 
 Let us now implement another version of \lstinline!toList!, called
 \lstinline!toList2!, that performs the \emph{breadth-first} traversal
@@ -505,7 +508,7 @@ a special helper function (\lstinline!listMerge!) for merging the
 nested lists in this way:
 \begin{lstlisting}
 def listMerge[A](l: List[List[A]], r: List[List[A]]): List[List[A]] = (l, r) match {
-  case (Nil, r)               => r        // Keep the elements from the longer list.
+  case (Nil, r)               => r  // Keep the elements from the longer list.
   case (l, Nil)               => l
   case (lh :: lt, rh :: rt)   => (lh ++ rh) :: listMerge(lt, rt)
 }
@@ -599,11 +602,11 @@ In this section, we will implement \lstinline!zipWithIndex! for a
 The code of \lstinline!zipWithIndexDF! will have the form:
 \begin{lstlisting}
 final case class St[A](run: Int => (A, Int))    // A State monad with internal state of type Int.
-                         // Assume that we have defined Applicative and Functor instances for St.
-def computeIndex[A]: A => St[(A, Int)] = ???                 // Define the "decoration" function.
+// Assume that we have defined Applicative and Functor instances for St.
+def computeIndex[A]: A => St[(A, Int)] = ???  // Define the "decoration" function.
 def zipWithIndexDF[A](tree: T2[A]): T2[(A, Int)] = {
   val afterTraverse: St[T2[(A, Int)]] = trav[A, (A, Int), St](computeIndex)(tree)
-  afterTraverse.run(0)._1                        // Run the State monad and get the result value.
+  afterTraverse.run(0)._1  // Run the State monad and get the result value.
 }
 \end{lstlisting}
 This will be a depth-first traversal if \lstinline!trav! is the function
@@ -657,10 +660,10 @@ tree \lstinline!t2 =!{\tiny{}\Tree[ 8 [ [ 3 5 ] 4 ] ]} could be
 represented by the following nested list:
 \begin{lstlisting}
 List(
-  List(),                                                // No leaves at level 0.
-  List( Left(8) ),                                       // One leaf at level 1.
-  List( Right(Right(4)) ),                               // One leaf at level 2.
-  List( Right(Left(Left(3))), Right(Left(Right(5))) ),   // Two leaves at level 3.
+  List(),                                            // No leaves at level 0.
+  List( Left(8) ),                                   // One leaf at level 1.
+  List( Right(Right(4)) ),                           // One leaf at level 2.
+  List( Right(Left(Left(3))), Right(Left(Right(5))) ), // Two leaves at level 3.
 )
 \end{lstlisting}
 This data structure makes it easy to iterate over the leaf values
@@ -686,9 +689,9 @@ final case class More[A](a: List[A], tail: TD[Either[A, A]]) extends TD[A]
 The tree descriptor for the tree \lstinline!t2! shown above will
 then look like this:
 \begin{lstlisting}
-val td2: TD[Int] = More(List(), More(                          // No leaves at level 0.
-    List( Left(8) ), More(                                     // The leaf at level 1.
-      List( Right(Right(4)) ), Last(                           // The leaf at level 2.
+val td2: TD[Int] = More(List(), More(   // No leaves at level 0.
+    List( Left(8) ), More(              // One leaf at level 1.
+      List( Right(Right(4)) ), Last(    // One leaf at level 2.
         List( Right(Left(Left(3))), Right(Left(Right(5))) ),   // Two leaves at level 3.
 ))))
 \end{lstlisting}
@@ -713,7 +716,7 @@ def tdToT2[A]: TD[A] => T2[A] = ???
 Begin implementing the first function by pattern matching:
 \begin{lstlisting}[numbers=left]
 def t2ToTD[A]: T2[A] => TD[A] = {
-  case Leaf(a)        => Last(List(a))                      // A leaf at level 0.
+  case Leaf(a)        => Last(List(a))   // One leaf at level 0.
   case Branch(l, r)   => ( t2ToTD(l),  t2ToTD(r) ); ???     // How to combine the subtrees?
 }
 \end{lstlisting}
@@ -926,7 +929,7 @@ tree with the breadth-first traversal index:
 \begin{lstlisting}
 def zipWithIndexBF[A](tree: T2[A]): T2[(A, Int)] = {
   val afterTraverse: St[T2[(A, Int)]] = travBF[A, (A, Int), St](computeIndex)(tree)
-  afterTraverse.run(0)._1                        // Run the State monad and get the result value.
+  afterTraverse.run(0)._1  // Run the State monad and get the result value.
 }
 
 scala> zipWithIndexBF(t2)
@@ -1061,8 +1064,8 @@ is in a left or in a right branch and at what depth). An example of
 such a computation is \textsf{``}pretty-printing\textsf{''} that converts trees into
 a text form. In the \LaTeX{} format used to typeset this book, the
 tree {\tiny{} \Tree[ 8 [ [ 3 5 ] 4 ] ] } is represented by the text
-string \lstinline!"\Tree[ 8 [ [ 3 5 ] 4 ] ]"!. We may write the following
-code for converting trees to this format:
+string \lstinline!"\Tree[ 8 [ [ 3 5 ] 4 ] ]"!. The following code
+converts trees into the \LaTeX{} format:
 \begin{lstlisting}
 def printLaTeX[A](t: T2[A])(toString: A => String): String = {
   def printLaTeXSubtree: T2[A] => String = {
@@ -1604,7 +1607,7 @@ val f: Z => Either[Int, (Z, Z)] = {
 \end{lstlisting}
 The implementation of \lstinline!evenOdd! is now complete. To test:
 
-\begin{wrapfigure}{l}{0.74\columnwidth}%
+\begin{wrapfigure}{l}{0.84\columnwidth}%
 \vspace{-0.95\baselineskip}
 \begin{lstlisting}
 scala> evenOdd(3)
@@ -1614,16 +1617,17 @@ res0: T2[Int] = Branch(Leaf(3), Branch(Branch(Leaf(1), Leaf(0)), Leaf(2)))
 \vspace{0\baselineskip}
 \end{wrapfigure}%
 
-\noindent ~{\tiny{}\Tree[ 3 [ [ 1 0 ] 2 ] ]}
+\noindent \vspace{0.3\baselineskip}
+ {\tiny{}\Tree[ 3 [ [ 1 0 ] 2 ] ]}\\
 
 \noindent $\square$
 
 The kind of reasoning shown in Examples~\ref{subsec:Example-unfold-list}\textendash \ref{subsec:Example-unfold-tree-evenodd}
-is called \textbf{co-induction}\index{co-induction}. It is related
-to mathematical induction but is significantly different from the
-reasoning required to write the code for a folding operation (which
-is directly modeled on induction). In co-induction, the base cases
-are not at the beginning of the computation but \textsf{``}in the future\textsf{''}.
+is known as reasoning by \textbf{co-induction}\index{co-induction}.
+It is related to mathematical induction but is significantly different
+from the reasoning required to write the code for a folding operation
+(which is directly modeled on induction). In co-induction, the base
+cases are not at the beginning of the computation but \textsf{``}in the future\textsf{''}.
 Note that \lstinline!unfold(f)(z)! will call itself whenever the
 value $f(z)$ of type $S^{A,Z}$ contains additional values of type
 $Z$. The programmer must carefully choose a suitable type $Z$ and
@@ -1658,7 +1662,7 @@ eagerly). This data structure supports unfolding with \emph{any} function
 $f:Z\rightarrow S^{A,Z}$ because the recursive evaluation of $f$
 at the branches is always delayed. For instance, \lstinline!unfold!
 can generate a value of type $L^{A}$ whose tree structure has the
-form {\tiny{}\Tree[ 1 [ 2  [3 ... ] ] ]} with unbounded size:
+form {\tiny{}\Tree[ 1 [ 2  [3 ... ] ] ]} with unbounded size:\vspace{0.6\baselineskip}
 \begin{lstlisting}
 type S[A, R] = Either[A, Unit => (R, R)]
 
@@ -1696,7 +1700,7 @@ To test this code, let us truncate the infinite structure \lstinline!tree1toInf!
 at depth $4$. The result is a finite tree of type \lstinline!T2[Int]!,
 where the unevaluated part of the tree is shown as \textsf{``}\lstinline!-1!\textsf{''}: 
 
-\begin{wrapfigure}{l}{0.65\columnwidth}%
+\begin{wrapfigure}{l}{0.82\columnwidth}%
 \vspace{-0.95\baselineskip}
 \begin{lstlisting}
 scala> toT2(maxDepth = 3, default = -1)(tree1toInf)
@@ -1760,7 +1764,7 @@ $\text{trav}_{S}$ with a binary tree recursion scheme. We will use
 the \lstinline!State! monad as the functor $F$:
 \begin{lstlisting}
 final case class St[A](run: Int => (A, Int))  { // A State monad with internal state of type Int.
-  import io.chymyst.ch.implement                // Implement the monad methods automatically.
+  import io.chymyst.ch.implement                // Derive these methods automatically from types.
   def flatMap[B](f: A => St[B]): St[B] = implement
   def map[B](f: A => B): St[B] = implement
 }
@@ -1797,7 +1801,7 @@ To test the code, apply \lstinline!zipWithDepth! to a sample tree
 \lstinline!t2! used earlier in Sections~\ref{subsec:Decorating-a-tree-breadth-first-traversal}
 and~\ref{subsec:Tasks-not-implementable-via-traverse}:
 
-\begin{wrapfigure}{l}{0.7\columnwidth}%
+\begin{wrapfigure}{l}{0.78\columnwidth}%
 \vspace{-0.75\baselineskip}
 \begin{lstlisting}
 scala> zipWithDepth(t2)
@@ -1924,7 +1928,8 @@ def reduceE[M: Monoid]: L[M] => M
 def toList[A]: L[A] => List[A]
 \end{lstlisting}
 \begin{align*}
- & \text{foldLeft}_{L}:L^{A}\rightarrow B\rightarrow(B\times A\rightarrow B)\rightarrow B\quad,\quad\quad\text{foldMap}_{L}:(A\rightarrow M)\rightarrow L^{A}\rightarrow M\quad,\\
+ & \text{foldLeft}_{L}:L^{A}\rightarrow B\rightarrow(B\times A\rightarrow B)\rightarrow B\quad,\\
+ & \text{foldMap}_{L}:(A\rightarrow M)\rightarrow L^{A}\rightarrow M\quad,\\
  & \text{reduceE}_{L}:L^{M}\rightarrow M\quad,\quad\quad\text{toList}_{L}:L^{A}\rightarrow\text{List}^{A}\quad.
 \end{align*}
 We will now show that these four functions are equivalent, assuming
@@ -2015,8 +2020,8 @@ new method we call \lstinline!foldFn! (\textsf{``}fold with function\textsf{''})
 \[
 \text{foldFn}:L^{B\rightarrow B}\rightarrow B\rightarrow B\quad,
 \]
-as long as \lstinline!foldLeft! satisfies the naturality law with
-respect to its type parameter $A$.
+as long as \lstinline!foldLeft! obeys the naturality law with respect
+to its type parameter $A$.
 
 \textbf{(c)} The functions \lstinline!foldFn! and \lstinline!reduceE!
 are equivalent as long as \lstinline!foldFn! obeys the laws~(\ref{eq:foldFn-first-special-law})
@@ -2034,7 +2039,7 @@ without assuming parametricity.
 \subparagraph{Proof}
 
 \textbf{(a)} The equivalence of \lstinline!foldMap! and \lstinline!reduceE!
-follows from Statement~\ref{subsec:Statement-tr-equivalent-to-ftr}
+can be derived from Statement~\ref{subsec:Statement-tr-equivalent-to-ftr}
 if we assume that \lstinline!foldMap! satisfies the naturality law
 with respect to the type parameter $A$. To prove that equivalence,
 we just need to set $F^{A}\triangleq L^{A}$, $G^{B}\triangleq M$,
@@ -2048,7 +2053,8 @@ curried function of type $A\rightarrow B\rightarrow B$ (similarly
 to what was done in Section~\ref{subsec:From-reduce-and-foldleft-to-foldmap}).
 The result is a function we denote by \lstinline!fldl!:
 \begin{align*}
- & \text{fldl}:(A\rightarrow B\rightarrow B)\rightarrow L^{A}\rightarrow B\rightarrow B\quad,\quad\quad\text{fldl}\,(u^{:A\rightarrow B\rightarrow B})(p^{:L^{A}})(z^{:B})\triangleq\text{foldLeft}\,(p)(z)(\tilde{u})\quad,\\
+ & \text{fldl}:(A\rightarrow B\rightarrow B)\rightarrow L^{A}\rightarrow B\rightarrow B\quad,\\
+ & \text{fldl}\,(u^{:A\rightarrow B\rightarrow B})(p^{:L^{A}})(z^{:B})\triangleq\text{foldLeft}\,(p)(z)(\tilde{u})\quad,\\
  & \text{where we defined}:\quad\tilde{u}^{:B\times A\rightarrow B}\triangleq b^{:B}\times a^{:A}\rightarrow u\left(a\right)(b)\quad.
 \end{align*}
 The function \lstinline!fldl! is equivalent to \lstinline!foldLeft!
@@ -2088,8 +2094,7 @@ $M$\textsf{'}s identity law:
 \begin{equation}
 \text{inMF}\,(m)(e_{M})=e_{M}\oplus m=m\quad.\label{eq:identity-law-of-inMF}
 \end{equation}
-
-The function \lstinline!inMF! is a monoid morphism because the two
+The function \lstinline!inMF! is a monoid morphism since the two
 laws of Definition~\ref{subsec:Definition-monoid-morphism} hold:
 \begin{align*}
  & \text{inMF}\,(e_{M})=n^{:M}\rightarrow n\oplus_{M}e_{M}=n^{:M}\rightarrow n=\text{id}^{:M\rightarrow M}=e_{_{\text{MF}^{M}}}\quad,\\
@@ -2154,9 +2159,11 @@ signature shown above, we define \lstinline!foldFn! via Eq.~(\ref{eq:foldFn-via-
 and then define a new \lstinline!reduceE!$^{\prime}$ via Eq.~(\ref{eq:reduceE-via-foldFn}).
 We need to show that \lstinline!reduceE!$^{\prime}=$ \lstinline!reduceE!:
 \begin{align*}
-{\color{greenunder}\text{expect to equal }\text{reduceE}\left(p\right):}\quad & \text{reduceE}^{\prime}(p^{:L^{M}})=\text{foldFn}\,(p\triangleright\text{inMF}^{\uparrow L})(e_{M})=\text{reduceE}\,(p\triangleright\text{inMF}^{\uparrow L})(e_{M})\\
+{\color{greenunder}\text{expect to equal }\text{reduceE}\left(p\right):}\quad & \text{reduceE}^{\prime}(p^{:L^{M}})=\text{foldFn}\,(p\triangleright\text{inMF}^{\uparrow L})(e_{M})\\
+ & =\text{reduceE}\,(p\triangleright\text{inMF}^{\uparrow L})(e_{M})\\
 {\color{greenunder}\text{rewrite using }\triangleright\text{-notation}:}\quad & =e_{M}\triangleright\big(p\triangleright\gunderline{\text{inMF}^{\uparrow L}\bef\text{reduceE}}\big)\\
-{\color{greenunder}\text{use Eq.~(\ref{eq:monoidal-naturality-law-of-reduceE-inMF})}:}\quad & =e_{M}\triangleright\big(p\triangleright\text{reduceE}\bef\text{inMF}\big)=\gunderline{\text{inMF}}\,(p\triangleright\text{reduceE})\gunderline{(e_{M})}\\
+{\color{greenunder}\text{use Eq.~(\ref{eq:monoidal-naturality-law-of-reduceE-inMF})}:}\quad & =e_{M}\triangleright\big(p\triangleright\text{reduceE}\bef\text{inMF}\big)\\
+ & =\gunderline{\text{inMF}}\,(p\triangleright\text{reduceE})\gunderline{(e_{M})}\\
 {\color{greenunder}\text{use Eq.~(\ref{eq:identity-law-of-inMF})}:}\quad & =p\triangleright\text{reduceE}=\text{reduceE}\,(p)\quad.
 \end{align*}
 
@@ -2165,9 +2172,11 @@ will always satisfy the laws~(\ref{eq:foldFn-first-special-law})
 and~(\ref{eq:foldFn-second-special-law}). To verify that the law~(\ref{eq:foldFn-first-special-law})
 holds:
 \begin{align*}
-{\color{greenunder}\text{expect to equal }\text{foldFn}^{B}(p):}\quad & \text{foldFn}^{B\rightarrow B}(p^{:L^{B\rightarrow B}}\triangleright\text{inMF}^{\uparrow L})(e_{\text{MF}})=\text{reduceE}\,(p\triangleright\text{inMF}^{\uparrow L})(e_{\text{MF}})\\
+{\color{greenunder}\text{expect to equal }\text{foldFn}^{B}(p):}\quad & \text{foldFn}^{B\rightarrow B}(p^{:L^{B\rightarrow B}}\triangleright\text{inMF}^{\uparrow L})(e_{\text{MF}})\\
+ & =\text{reduceE}\,(p\triangleright\text{inMF}^{\uparrow L})(e_{\text{MF}})\\
  & =e_{\text{MF}}\triangleright(p\triangleright\gunderline{\text{inMF}^{\uparrow L}\bef\text{reduceE}})\\
-{\color{greenunder}\text{use Eq.~(\ref{eq:monoidal-naturality-law-of-reduceE-inMF})}:}\quad & =e_{\text{MF}}\triangleright\big(p\triangleright\text{reduceE}\bef\text{inMF}\big)=\gunderline{\text{inMF}}\,(p\triangleright\text{reduceE})\gunderline{(e_{\text{MF}})}\\
+{\color{greenunder}\text{use Eq.~(\ref{eq:monoidal-naturality-law-of-reduceE-inMF})}:}\quad & =e_{\text{MF}}\triangleright\big(p\triangleright\text{reduceE}\bef\text{inMF}\big)\\
+ & =\gunderline{\text{inMF}}\,(p\triangleright\text{reduceE})\gunderline{(e_{\text{MF}})}\\
 {\color{greenunder}\text{use Eq.~(\ref{eq:identity-law-of-inMF})}:}\quad & =p\triangleright\text{reduceE}=\text{reduceE}^{B\rightarrow B}(p)=\text{foldFn}^{B}(p)\quad.
 \end{align*}
 
@@ -2209,7 +2218,7 @@ as we will see below, only polynomial functors are traversable.)
 satisfies the law~(\ref{eq:foldFn-first-special-law}):
 \begin{align}
  & \phi\,(p^{:L^{E^{A}}})=\phi\,(p\triangleright\text{inF}^{\uparrow L})(\text{id}^{:A\rightarrow A})\quad,\label{eq:first-special-law-of-phi}\\
-{\color{greenunder}\text{where we defined}:}\quad & \quad\text{inF}:E^{A}\rightarrow E^{A}\rightarrow E^{A}\quad,\quad\quad\text{inF}\triangleq h^{:A\rightarrow A}\rightarrow k^{:A\rightarrow A}\rightarrow k\bef h\quad.\nonumber 
+{\color{greenunder}\text{where we defined}:}\quad & \quad\text{inF}:E^{A}\rightarrow E^{A}\rightarrow E^{A}\quad,\quad\text{inF}\triangleq h^{:A\rightarrow A}\rightarrow k^{:A\rightarrow A}\rightarrow k\bef h\quad.\nonumber 
 \end{align}
 
 \textbf{(b)} Any fully parametric function $\text{foldFn}:\forall A.\,L^{E^{A}}\rightarrow E^{A}$
@@ -2299,8 +2308,10 @@ h^{:A\rightarrow A}\rightarrow f\bef h\overset{?}{=}\text{inF}\bef(g^{:B\rightar
 We simplify separately each side of this equation and find that they
 are equal:
 \begin{align*}
-{\color{greenunder}\text{left-hand side}:}\quad & h^{:A\rightarrow A}\rightarrow f\bef h=h\rightarrow(k\rightarrow\gunderline{k(a_{0}))\bef h}=h\rightarrow k\rightarrow h(k(a_{0}))\quad,\\
-{\color{greenunder}\text{right-hand side}:}\quad & \gunderline{\text{inF}}\bef(g^{:B\rightarrow B}\rightarrow g\bef\gunderline f)=(h\rightarrow k\rightarrow k\bef h)\bef(g\rightarrow g\bef(k\rightarrow k(a_{0}))\\
+{\color{greenunder}\text{left-hand side}:}\quad & h^{:A\rightarrow A}\rightarrow f\bef h=h\rightarrow(k\rightarrow\gunderline{k(a_{0}))\bef h}\\
+ & \quad=h\rightarrow k\rightarrow h(k(a_{0}))\quad,\\
+{\color{greenunder}\text{right-hand side}:}\quad & \gunderline{\text{inF}}\bef(g^{:B\rightarrow B}\rightarrow g\bef\gunderline f)\\
+ & \quad=(h\rightarrow k\rightarrow k\bef h)\bef(g\rightarrow g\bef(k\rightarrow k(a_{0}))\\
 {\color{greenunder}\text{compute composition}:}\quad & \quad=h\rightarrow(k\rightarrow k\bef h)\bef(k\rightarrow k(a_{0}))=h\rightarrow k\rightarrow\gunderline{(k\bef h)(a_{0})}\\
  & \quad=h\rightarrow k\rightarrow h(k(a_{0})\quad.
 \end{align*}
@@ -2333,23 +2344,27 @@ with $A$, $B$, $x$, and $y$ chosen as:
 \[
 A\triangleq N\quad,\quad\quad B\triangleq M\quad,\quad\quad x^{:L^{N\rightarrow N}}\triangleq p\triangleright f^{\uparrow L}\triangleright\text{inMF}^{\uparrow L}\quad,\quad\quad y^{:L^{M\rightarrow M}}\triangleq p\triangleright\text{inMF}^{\uparrow L}\quad.
 \]
-Before we can use Eq.~(\ref{eq:strong-dinaturality-law-of-phi-with-f}),
+In order to use Eq.~(\ref{eq:strong-dinaturality-law-of-phi-with-f}),
 we need to verify that its precondition is satisfied:
-\[
-x\triangleright(h\rightarrow f\bef h)^{\uparrow L}=p\triangleright\big(f\bef\text{inMF}\bef(h\rightarrow f\bef h)\big)^{\uparrow L}\overset{?}{=}y\triangleright(g\rightarrow g\bef f)^{\uparrow L}=p\triangleright\big(\text{inMF}\bef(g\rightarrow g\bef f)\big)^{\uparrow L}\quad.
-\]
+\begin{align*}
+ & x\triangleright(h\rightarrow f\bef h)^{\uparrow L}=p\triangleright\big(f\bef\text{inMF}\bef(h\rightarrow f\bef h)\big)^{\uparrow L}\\
+ & \quad\overset{?}{=}y\triangleright(g\rightarrow g\bef f)^{\uparrow L}=p\triangleright\big(\text{inMF}\bef(g\rightarrow g\bef f)\big)^{\uparrow L}\quad.
+\end{align*}
 To show that this equation holds, we compare separately the lifted
 functions that are applied to $p$:
 \begin{align*}
- & f\bef\text{inMF}\bef(h\rightarrow f\bef h)=\big(m^{:M}\rightarrow n^{:N}\rightarrow n\oplus_{N}f(m)\big)\bef(h\rightarrow f\bef h)=m^{:M}\rightarrow l^{:M}\rightarrow f(l)\oplus_{N}f(m)\quad,\\
- & \text{inMF}\bef(g\rightarrow g\bef f)=(m^{:M}\rightarrow l^{:M}\rightarrow l\oplus_{M}m)\bef(g\rightarrow g\bef f)=m^{:M}\rightarrow l^{:M}\rightarrow f(l\oplus_{M}m)\quad.
+ & f\bef\text{inMF}\bef(h\rightarrow f\bef h)=\big(m^{:M}\rightarrow n^{:N}\rightarrow n\oplus_{N}f(m)\big)\bef(h\rightarrow f\bef h)\\
+ & \quad=m^{:M}\rightarrow l^{:M}\rightarrow f(l)\oplus_{N}f(m)\quad,\\
+ & \text{inMF}\bef(g\rightarrow g\bef f)=(m^{:M}\rightarrow l^{:M}\rightarrow l\oplus_{M}m)\bef(g\rightarrow g\bef f)\\
+ & \quad=m^{:M}\rightarrow l^{:M}\rightarrow f(l\oplus_{M}m)\quad.
 \end{align*}
 The two functions are equal because of the composition law of the
 monoid morphism $f$. So, the precondition of Eq.~(\ref{eq:strong-dinaturality-law-of-phi-with-f})
 holds, and we may use its conclusion:
-\[
-f\bef\text{foldFn}\,(x)\overset{!}{=}\text{foldFn}(y)\bef f\quad\text{or equivalently:}\quad\text{foldFn}\,(p\triangleright\text{inMF}^{\uparrow L})\bef f=f\bef\text{foldFn}(p\triangleright f^{\uparrow L}\bef\text{inMF}^{\uparrow L}).
-\]
+\begin{align*}
+ & f\bef\text{foldFn}\,(x)\overset{!}{=}\text{foldFn}(y)\bef f\\
+{\color{greenunder}\text{or equivalently}:}\quad & \text{foldFn}\,(p\triangleright\text{inMF}^{\uparrow L})\bef f=f\bef\text{foldFn}(p\triangleright f^{\uparrow L}\bef\text{inMF}^{\uparrow L}).
+\end{align*}
 This gives the law~(\ref{eq:foldFn-second-special-law}) if we use
 $f$\textsf{'}s monoid morphism identity law: $e_{M}\triangleright f=e_{N}$.
 
@@ -2373,13 +2388,14 @@ def reduceList[M: Monoid]: List[M] => M = {
   case head :: tail   => head |+| reduceList(tail)
 }
 \end{lstlisting}
-\[
-\text{reduceList}^{M}:\text{List}^{M}\rightarrow M\quad,\quad\quad\text{reduceList}\triangleq\,\begin{array}{|c||c|}
+\begin{align*}
+ & \text{reduceList}^{M}:\text{List}^{M}\rightarrow M\quad,\\
+ & \text{reduceList}\triangleq\,\begin{array}{|c||c|}
  & M\\
 \hline \bbnum 1 & \_\rightarrow e_{M}\\
 M\times\text{List}^{M} & h^{:M}\times t^{:\text{List}^{M}}\rightarrow h\oplus_{M}\overline{\text{reduceList}}\left(t\right)
 \end{array}\quad.
-\]
+\end{align*}
 
 
 \subparagraph{Proof}
@@ -2390,11 +2406,12 @@ naturality law:
 f^{\uparrow\text{List}}\bef\text{reduceList}=\text{reduceList}\bef f\quad.
 \]
 This law assumes that $f^{:M\rightarrow N}$ is a monoid morphism
-between two monoids $M$ and $N$. 
+between monoids $M$ and $N$. 
 
 Simplify the left-hand side of the law:
 \begin{align*}
- & f^{\uparrow\text{List}}\bef\text{reduceList}=\,\begin{array}{|c||cc|}
+ & f^{\uparrow\text{List}}\bef\text{reduceList}\\
+ & =\,\begin{array}{|c||cc|}
  & \bbnum 1 & N\times\text{List}^{N}\\
 \hline \bbnum 1 & \text{id} & \bbnum 0\\
 M\times\text{List}^{M} & \bbnum 0 & f\boxtimes f^{\uparrow\text{List}}
@@ -2403,7 +2420,7 @@ M\times\text{List}^{M} & \bbnum 0 & f\boxtimes f^{\uparrow\text{List}}
 \hline \bbnum 1 & \_\rightarrow e_{N}\\
 N\times\text{List}^{N} & h\times t\rightarrow h\oplus_{N}(t\triangleright\overline{\text{reduceList}})
 \end{array}\\
- & =\,\begin{array}{|c||c|}
+ & =\,\,\begin{array}{|c||c|}
  & N\\
 \hline \bbnum 1 & \_\rightarrow e_{N}\\
 M\times\text{List}^{M} & h\times t\rightarrow f(h)\oplus_{N}(t\triangleright f^{\uparrow\text{List}}\bef\overline{\text{reduceList}})
@@ -2416,7 +2433,8 @@ t\triangleright f^{\uparrow\text{List}}\bef\overline{\text{reduceList}}=t\triang
 \]
 The bottom-row expression in the last matrix is then rewritten to:
 \begin{align*}
- & f(h)\oplus_{N}(t\triangleright f^{\uparrow\text{List}}\bef\overline{\text{reduceList}})=f(h)\oplus_{N}f(\overline{\text{reduceList}}\left(t\right))\\
+ & f(h)\oplus_{N}(t\triangleright f^{\uparrow\text{List}}\bef\overline{\text{reduceList}})\\
+ & =f(h)\oplus_{N}f(\overline{\text{reduceList}}\left(t\right))\\
 {\color{greenunder}\text{monad morphism law}:}\quad & =f\big(h\oplus_{M}\overline{\text{reduceList}}\left(t\right)\big)\quad.
 \end{align*}
 Using the monad morphism identity law ($f(e_{M})=e_{N}$), we find:
@@ -2444,7 +2462,8 @@ via Eq.~(\ref{eq:toList-via-reduceE}) and then define a new function
 To show that \lstinline!reduceE!$^{\prime}=$ \lstinline!reduceE!,
 we write:
 \begin{align*}
- & \text{reduceE}^{\prime}=\text{toList}\bef\text{reduceList}=\gunderline{\text{pu}_{\text{List}}^{\uparrow L}\bef\text{reduceE}^{\text{List}^{M}}}\bef\text{reduceList}\\
+ & \text{reduceE}^{\prime}=\text{toList}\bef\text{reduceList}\\
+ & =\gunderline{\text{pu}_{\text{List}}^{\uparrow L}\bef\text{reduceE}^{\text{List}^{M}}}\bef\text{reduceList}\\
 {\color{greenunder}\text{Eq.~(\ref{eq:monoidal-naturality-law-of-reduceE}) with }N\triangleq\text{List}^{A}:}\quad & =\text{reduceE}^{M}\bef\text{pu}_{\text{List}}\bef\text{reduceList}\quad.
 \end{align*}
 It remains to show that the composition $\text{pu}_{\text{List}}\bef\text{reduceList}$
@@ -2478,7 +2497,8 @@ via Eq.~(\ref{eq:reduceE-via-toList}) and then define a new function
 To show that \lstinline!toList!$^{\prime}=$ \lstinline!toList!,
 we write:
 \begin{align*}
- & \text{toList}^{\prime}=\text{pu}_{\text{List}}^{\uparrow L}\bef\text{reduceE}^{\text{List}^{A}}=\gunderline{\text{pu}_{\text{List}}^{\uparrow L}\bef\text{toList}}\bef\text{reduceList}^{\text{List}^{A}}\\
+ & \text{toList}^{\prime}=\text{pu}_{\text{List}}^{\uparrow L}\bef\text{reduceE}^{\text{List}^{A}}\\
+ & =\gunderline{\text{pu}_{\text{List}}^{\uparrow L}\bef\text{toList}}\bef\text{reduceList}^{\text{List}^{A}}\\
 {\color{greenunder}\text{naturality of }\text{toList}:}\quad & =\text{toList}\bef\text{pu}_{\text{List}}^{\uparrow\text{List}}\bef\text{reduceList}^{\text{List}^{A}}\quad.
 \end{align*}
 It remains to show that the composition $\text{pu}_{\text{List}}^{\uparrow\text{List}}\bef\text{reduceList}$
@@ -2489,12 +2509,12 @@ is equal to the identity function:
 We use the definition of \lstinline!reduceList[M]! and set \lstinline!M!
 to the monoid type \lstinline!List[A]!:
 \begin{align*}
- & \text{pu}_{\text{List}}^{\uparrow\text{List}}\bef\text{reduceList}^{\text{List}^{A}}\\
- & =\,\begin{array}{|c||cc|}
+ & \text{pu}_{\text{List}}^{\uparrow\text{List}}\bef\text{reduceList}^{\text{List}^{A}}=\,\begin{array}{|c||cc|}
  & \bbnum 1 & \text{List}^{M}\times\text{List}^{\text{List}^{M}}\\
 \hline \bbnum 1 & \text{id} & \bbnum 0\\
 M\times\text{List}^{M} & \bbnum 0 & h\times t\rightarrow\text{pu}_{\text{List}}(h)\times(t\triangleright\text{pu}_{\text{List}}^{\uparrow\text{List}})
-\end{array}\,\bef\,\begin{array}{|c||c|}
+\end{array}\\
+ & \quad\quad\quad\bef\,\begin{array}{|c||c|}
  & \text{List}^{M}\\
 \hline \bbnum 1 & \_\rightarrow1+\bbnum 0\\
 \text{List}^{M}\times\text{List}^{\text{List}^{M}} & h\times t\rightarrow h\pplus\overline{\text{reduceList}}\left(t\right)
@@ -2506,7 +2526,7 @@ M\times\text{List}^{M} & h\times t\rightarrow\text{pu}_{\text{List}}(h)\pplus(t\
 \end{array}\quad.
 \end{align*}
 By the inductive assumption, a recursive call to \lstinline!reduceList!
-already satisfies Eq.~(\ref{eq:identity-for-reduceList-and-pure}):
+already obeys Eq.~(\ref{eq:identity-for-reduceList-and-pure}):
 \[
 t\triangleright\gunderline{\text{pu}_{\text{List}}^{\uparrow\text{List}}\triangleright\overline{\text{reduceList}}}=t\triangleright\text{id}=t\quad.
 \]
@@ -2570,7 +2590,7 @@ the type signature of \lstinline!toList! by a function that always
 returns an empty list. For \textsf{``}containers\textsf{''} that store some values
 of type \lstinline!A!, this implementation (although it is fully
 parametric) would be unacceptable since it loses information: \lstinline!toList(x)!
-always ignores its argument \lstinline!x!.
+always ignores  \lstinline!x!.
 
 To prohibit such implementations, we would like to impose a law that
 holds only when \lstinline!toList! extracts every value of type \lstinline!A!
@@ -2708,20 +2728,12 @@ the code examples earlier in this chapter.
 If $K$ and $L$ are foldable functors, we define the co-product $M^{A}\triangleq K^{A}+L^{A}$
 and the corresponding function $\text{toList}_{M}:K^{A}+L^{A}\rightarrow\text{List}^{A}$
 as:
-
-\begin{wrapfigure}{l}{0.6\columnwidth}%
-\vspace{-0.25\baselineskip}
 \begin{lstlisting}
 def toList_M[A]: Either[K[A], L[A]] => List[A] = {
   case Left(p)    => toList_K(p)
   case Right(q)   => toList_L(q)
 }
 \end{lstlisting}
-
-\vspace{-1\baselineskip}
-\end{wrapfigure}%
-
-\noindent ~\vspace{-2\baselineskip}
 \[
 \text{toList}_{M}\triangleq\,\begin{array}{|c||c|}
  & \text{List}^{A}\\
@@ -2729,7 +2741,6 @@ def toList_M[A]: Either[K[A], L[A]] => List[A] = {
 L^{A} & \text{toList}_{L}
 \end{array}\quad.
 \]
-\vspace{-0.6\baselineskip}
 
 
 \paragraph{Recursive types}
@@ -2769,8 +2780,8 @@ of this chapter.
 
 \subsection{Equivalence of \texttt{traverse} and \texttt{sequence}}
 
-The standard Scala library contains the method \lstinline!Future.sequence!
-in addition to \lstinline!Future.traverse!. The main use of \lstinline!Future.sequence!
+The Scala library contains the methods \lstinline!Future.sequence!
+and \lstinline!Future.traverse!. The main use of \lstinline!Future.sequence!
 is for transforming a sequence of \lstinline!Future! values that
 may run in parallel. The result is a single \lstinline!Future! value
 that waits until all parallel computations are finished. Omitting
@@ -2866,18 +2877,24 @@ $F$\textsf{'}s applicative methods (\lstinline!wu! and \lstinline!zip!).
 To formulate this requirement as an \textbf{applicative naturality
 law}\index{applicative naturality law!of traverse@of \texttt{traverse}},
 we write an equation similar to the second naturality law, except
-that the arbitrary function $f$ will now map the applicative functor
-$F$ to another \emph{arbitrary} applicative functor $G$:$\xymatrix{\xyScaleY{1.7pc}\xyScaleX{5.0pc}L^{A}\ar[rd]\sb(0.4){\text{trav}_{L}^{G,A,B}(g\bef f)~~}\ar[r]\sp(0.5){\text{trav}_{L}^{F,A,B}(g)} & F^{L^{B}}\ar[d]\sp(0.45){f}\\
+that the function $f$ will now map the applicative functor $F$ to
+another \emph{arbitrary} applicative functor $G$:
+\noindent \begin{center}
+$\xymatrix{\xyScaleY{1.7pc}\xyScaleX{5.0pc}L^{A}\ar[rd]\sb(0.4){\text{trav}_{L}^{G,A,B}(g\bef f)~~}\ar[r]\sp(0.5){\text{trav}_{L}^{F,A,B}(g)} & F^{L^{B}}\ar[d]\sp(0.45){f}\\
  & G^{L^{B}}
 }
 $
 \begin{equation}
 \text{trav}_{L}^{G,A,B}(g^{:A\rightarrow F^{B}}\bef f^{:F^{B}\rightarrow G^{B}})=\text{trav}_{L}^{F,A,B}(g)\bef f^{:F^{L^{B}}\rightarrow G^{L^{B}}}\quad.\label{eq:traverse-applicative-naturality-law}
 \end{equation}
+\par\end{center}
+
+\begin{flushleft}
 Here $f$ is a natural transformation with type signature $f:\forall X.\,F^{X}\rightarrow G^{X}$.
 So, we are allowed to apply the same code of $f$ to different types:
 $f$ has type $F^{B}\rightarrow G^{B}$ in the left-hand side of the
 law and $F^{L^{B}}\rightarrow G^{L^{B}}$ in the right-hand side.
+\par\end{flushleft}
 
 Another requirement for the function $f$ is that $f$ must map $F$\textsf{'}s
 applicative methods (\lstinline!wu! and \lstinline!zip!) to the
@@ -2892,8 +2909,8 @@ morphisms} (compare to monoid morphisms defined in Section~\ref{subsec:Equivalen
 and monad morphisms defined in Section~\ref{subsec:Monads-in-category-theory-monad-morphisms}).
 The laws of applicative morphisms are:\index{identity laws!of applicative morphisms}\index{composition law!of applicative morphisms}
 \begin{align}
-{\color{greenunder}\text{identity law of applicative morphism }f:}\quad & f^{:F^{\bbnum 1}\rightarrow G^{\bbnum 1}}(\text{wu}_{F})=\text{wu}_{G}\quad,\label{eq:identity-law-of-applicative-morphism}\\
-{\color{greenunder}\text{composition law of applicative morphism }f:}\quad & \text{zip}_{G}\big(f(p^{:F^{A}})\times f(q^{:F^{B}})\big)=f(\text{zip}_{F}(p\times q))\quad.\label{eq:composition-law-of-applicative-morphism}
+{\color{greenunder}\text{identity law }:}\quad & f^{:F^{\bbnum 1}\rightarrow G^{\bbnum 1}}(\text{wu}_{F})=\text{wu}_{G}\quad,\label{eq:identity-law-of-applicative-morphism}\\
+{\color{greenunder}\text{composition law}:}\quad & \text{zip}_{G}\big(f(p^{:F^{A}})\times f(q^{:F^{B}})\big)=f(\text{zip}_{F}(p\times q))\quad.\label{eq:composition-law-of-applicative-morphism}
 \end{align}
 The applicative naturality law is required to hold only when $f$
 is an applicative morphism.
@@ -2953,21 +2970,22 @@ is defined by:
 \]
 The \lstinline!zip! methods of the applicative functors $G$ and
 $H$ are:
-\[
-\text{zip}_{G}\triangleq\,\begin{array}{|c||cc|}
+\begin{align*}
+ & \text{zip}_{G}\triangleq\,\begin{array}{|c||cc|}
  & \bbnum 1 & A\times B\\
 \hline \bbnum 1\times\bbnum 1 & \_\rightarrow1 & \bbnum 0\\
 A\times\bbnum 1 & \_\rightarrow1 & \bbnum 0\\
 \bbnum 1\times B & \_\rightarrow1 & \bbnum 0\\
 A\times B & \bbnum 0 & \text{id}
-\end{array}\quad,\quad\quad\text{zip}_{H}\triangleq\,\begin{array}{|c||cc|}
+\end{array}\quad,\\
+ & \text{zip}_{H}\triangleq\,\,\begin{array}{|c||cc|}
  & \bbnum 1 & (A\times B)\times(A\times B)\\
 \hline \bbnum 1\times\bbnum 1 & \_\rightarrow1 & \bbnum 0\\
 (A\times A)\times\bbnum 1 & \_\rightarrow1 & \bbnum 0\\
 \bbnum 1\times(B\times B) & \_\rightarrow1 & \bbnum 0\\
 (A\times A)\times(B\times B) & \bbnum 0 & \text{zip}_{L}
 \end{array}\quad.
-\]
+\end{align*}
 The function $\text{zip}_{L}$ was shown in the solution to Example~\ref{subsec:Example-some-applicative-morphisms}(a). 
 
 The applicative morphism $g:G^{A}\rightarrow H^{A}$ is implemented
@@ -3003,8 +3021,8 @@ point-free style:\index{composition law!of applicative morphisms!in the point-fr
 \end{equation}
 The pair product ($g\boxtimes g$) can be written in matrix form like
 this:
-\[
-g\boxtimes g=\,\begin{array}{|c||cc|}
+\begin{align*}
+g\boxtimes g & =\,\begin{array}{|c||cc|}
  & \bbnum 1 & A\times A\\
 \hline \bbnum 1 & \text{id} & \bbnum 0\\
 A & \bbnum 0 & \Delta
@@ -3012,18 +3030,19 @@ A & \bbnum 0 & \Delta
  & \bbnum 1 & B\times B\\
 \hline \bbnum 1 & \text{id} & \bbnum 0\\
 B & \bbnum 0 & \Delta
-\end{array}\,=\,\begin{array}{|c||cccc|}
+\end{array}\\
+ & =\,\,\begin{array}{|c||cccc|}
  & \bbnum 1 & A\times A\times\bbnum 1 & \bbnum 1\times B\times B & A\times A\times B\times B\\
 \hline \bbnum 1\times\bbnum 1 & \text{id} & \bbnum 0 & \bbnum 0 & \bbnum 0\\
 A\times\bbnum 1 & \bbnum 0 & \Delta\boxtimes\text{id} & \bbnum 0 & \bbnum 0\\
 \bbnum 1\times B & \bbnum 0 & \bbnum 0 & \text{id}\boxtimes\Delta & \bbnum 0\\
 A\times B & \bbnum 0 & \bbnum 0 & \bbnum 0 & \Delta\boxtimes\Delta
 \end{array}\quad.
-\]
+\end{align*}
 The two sides of the composition law~(\ref{eq:composition-law-applicative-morphism-point-free})
 are then simplified to:
 \begin{align*}
- & (g\boxtimes g)\bef\text{zip}_{H}=\,\begin{array}{||cccc|}
+(g\boxtimes g)\bef\text{zip}_{H} & =\,\begin{array}{||cccc|}
 \text{id} & \bbnum 0 & \bbnum 0 & \bbnum 0\\
 \bbnum 0 & \Delta\boxtimes\text{id} & \bbnum 0 & \bbnum 0\\
 \bbnum 0 & \bbnum 0 & \text{id}\boxtimes\Delta & \bbnum 0\\
@@ -3033,13 +3052,14 @@ are then simplified to:
 \_\rightarrow1 & \bbnum 0\\
 \_\rightarrow1 & \bbnum 0\\
 \bbnum 0 & \text{zip}_{L}
-\end{array}\,=\,\begin{array}{||cc|}
+\end{array}\\
+ & =\,\,\begin{array}{||cc|}
 \_\rightarrow1 & \bbnum 0\\
 \_\rightarrow1 & \bbnum 0\\
 \_\rightarrow1 & \bbnum 0\\
 \bbnum 0 & (\Delta\boxtimes\Delta)\bef\text{zip}_{L}
 \end{array}\quad,\\
- & \text{zip}_{G}\bef g=\,\begin{array}{|c||cc|}
+\text{zip}_{G}\bef g & =\,\begin{array}{|c||cc|}
  & \bbnum 1 & A\times B\\
 \hline \bbnum 1\times\bbnum 1 & \_\rightarrow1 & \bbnum 0\\
 A\times\bbnum 1 & \_\rightarrow1 & \bbnum 0\\
@@ -3049,7 +3069,8 @@ A\times B & \bbnum 0 & \text{id}
  & \bbnum 1 & (A\times B)\times(A\times B)\\
 \hline \bbnum 1 & \text{id} & \bbnum 0\\
 A\times B & \bbnum 0 & \Delta
-\end{array}\,=\,\begin{array}{||cc|}
+\end{array}\\
+ & =\,\,\begin{array}{||cc|}
 \_\rightarrow1 & \bbnum 0\\
 \_\rightarrow1 & \bbnum 0\\
 \_\rightarrow1 & \bbnum 0\\
@@ -3102,7 +3123,8 @@ To verify the identity law:
 \]
 To verify the composition law:
 \begin{align*}
- & \text{zip}_{F}\big(\text{pu}_{F}(p^{:A})\times\text{pu}_{F}(q^{:B})\big)\overset{?}{=}\text{pu}_{F}(\text{zip}_{\text{Id}}(p\times q))=\text{pu}_{F}(p\times q)\\
+ & \text{zip}_{F}\big(\text{pu}_{F}(p^{:A})\times\text{pu}_{F}(q^{:B})\big)\overset{?}{=}\text{pu}_{F}(\text{zip}_{\text{Id}}(p\times q))\\
+ & =\text{pu}_{F}(p\times q)\\
 {\color{greenunder}\text{use Exercise~\ref{subsec:Exercise-zip-pure-pure}}:}\quad & =\text{zip}_{F}(\text{pu}_{F}(p)\times\text{pu}_{F}(q))\quad.
 \end{align*}
 $\square$
@@ -3202,13 +3224,17 @@ looks like a \lstinline!traverse! operation with respect to the functor
 $F\circ G$. By Statement~\ref{subsec:Statement-applicative-composition},
 the functor $F\circ G$ is applicative. So, we may apply a single
 \lstinline!traverse! operation using that functor and obtain:
-\[
-p\triangleright\text{trav}_{L}^{F\circ G,A,C}(f\bef g^{\uparrow F}):F^{G^{L^{C}}}\quad.
-\]
+\noindent \begin{center}
 $\xymatrix{\xyScaleY{1.5pc}\xyScaleX{3.4pc}L^{A}\ar[dr]\sb(0.35){\text{trav}_{L}^{F\circ G,A,C}(f\bef g^{\uparrow F})~~}\ar[r]\sp(0.5){\text{trav}_{L}^{F,A,B}(f)} & F^{L^{B}}\ar[d]\sp(0.4){\big(\text{trav}_{L}^{G,B,C}(g)\big)^{\uparrow F}}\\
  & F^{G^{L^{C}}}
 }
-$The \textbf{composition law}\index{composition law!of traverse@of \texttt{traverse}}
+$
+\[
+p\triangleright\text{trav}_{L}^{F\circ G,A,C}(f\bef g^{\uparrow F}):F^{G^{L^{C}}}\quad.
+\]
+\par\end{center}
+
+\noindent The \textbf{composition law}\index{composition law!of traverse@of \texttt{traverse}}
 of \lstinline!traverse! says that the two results should be equal:
 \begin{equation}
 \text{trav}_{L}^{F,A,B}(f)\bef\big(\text{trav}_{L}^{G,B,C}(g)\big)^{\uparrow F}=\text{trav}_{L}^{F\circ G,A,C}(f\bef g^{\uparrow F})\quad.\label{eq:composition-law-of-traverse}
@@ -3237,12 +3263,10 @@ effects do not commute. A suitable choice is to set both $F$ and
 $G$ to the \lstinline!State! monad.\footnote{The paper \texttt{\href{https://arxiv.org/abs/1202.2919}{https://arxiv.org/abs/1202.2919}}
 shows another example using the \lstinline!List! monad.} For simplicity, we set all type parameters to \lstinline!Int! and
 choose the functions $f$ and $g$ that add their arguments to the
-internal state. The complete code (using the \lstinline!Zippable!
+internal state. The complete law-violating code (using the \lstinline!Zippable!
 typeclass defined in Section~\ref{subsec:The-Zippable-and-Applicative-typeclass})
-is shown in Fig.~\ref{fig:Full-code-implementing-traverse-law-counterexample}.
+is shown below:
 
-\begin{figure}
-\begin{centering}
 \begin{lstlisting}[frame=single,fillcolor={\color{black}},framesep={0.2mm},framexleftmargin=2mm,framexrightmargin=2mm,framextopmargin=2mm,framexbottommargin=2mm]
 import io.chymyst.ch.implement // Automatic implementation of some methods.
 
@@ -3270,7 +3294,7 @@ implicit val ZippableS: Zippable[S] = new Zippable[S] {
   }
 }
 
-  // Define F[A] as the composition S[S[A]] and implement WuZip and Functor instances.
+  // Define F[A] as S[S[A]] and implement WuZip and Functor instances.
 final case class F[A](run: S[S[A]]) {
   // A runner method to help with testing.
   def eval(i: Int, j: Int): (A, Int, Int) = {
@@ -3309,16 +3333,11 @@ res0: ((Int, Int), Int, Int) = ((3, 5), 2, 5)
 scala> result2.eval(0,0)
 res1: ((Int, Int), Int, Int) = ((4, 6), 2, 6) 
 \end{lstlisting}
-\par\end{centering}
-\caption{A counterexample violating the composition law of \lstinline!traverse!.\label{fig:Full-code-implementing-traverse-law-counterexample}}
-\end{figure}
 
-We have shown that \emph{some} incorrect implementations of \lstinline!traverse!
-are excluded by the composition law. But it remains unknown whether
-the mentioned laws guarantee that any lawful \lstinline!traverse!
-function collects each $F$-effect exactly once. Perhaps another law
-of \lstinline!traverse! is required (see Problem~\ref{par:Problem-traverse-law}).{*}{*}{*}Mention
-the paper about the rewinding law.
+We have found that \emph{some} incorrect implementations of \lstinline!traverse!
+are prohibited by its laws. But this is not a proof that all lawful
+\lstinline!traverse! functions will collect each $F$-effect exactly
+once. We will revisit this question below in Section~\ref{subsec:Laws-of-traverse-and-zipWithIndex}.
 
 \subsection{Laws of \texttt{sequence}}
 
@@ -3328,7 +3347,7 @@ the laws of \lstinline!traverse! found previously.
 Begin with the naturality laws. Since the type signature of \lstinline!sequence!
 ($L^{F^{A}}\rightarrow F^{L^{A}}$) has only one type parameter, \lstinline!sequence!
 has only one naturality law\index{naturality law!of sequence@of \texttt{sequence}}:
-
+\begin{center}
 $\xymatrix{\xyScaleY{1.5pc}\xyScaleX{2.0pc}L^{F^{A}}\ar[d]\sb(0.45){\text{seq}_{L}^{F,A}}\ar[r]\sb(0.5){f^{\uparrow F\uparrow L}} & L^{F^{B}}\ar[d]\sp(0.45){\text{seq}_{L}^{F,B}}\\
 F^{L^{A}}\ar[r]\sp(0.5){f^{\uparrow L\uparrow F}} & F^{L^{B}}
 }
@@ -3336,6 +3355,8 @@ $
 \begin{equation}
 (f^{:A\rightarrow B})^{\uparrow F\uparrow L}\bef\text{seq}_{L}^{F,B}=\text{seq}_{L}^{F,A}\bef f^{\uparrow L\uparrow F}\quad.\label{eq:sequence-naturality-law}
 \end{equation}
+\par\end{center}
+
 It will be shown in Exercise~\ref{subsec:Exercise-traversables-laws-2}
 that this naturality law is equivalent to the two naturality laws
 of \lstinline!traverse!.
@@ -3350,16 +3371,18 @@ via \lstinline!sequence! and substitute into Eq.~(\ref{eq:traverse-applicative-n
 \end{align*}
 The function $g^{\uparrow L}$ can be omitted from both sides (see
 Exercise~\ref{subsec:Exercise-simplify-law-omit-lifted-function}
-for a similar property).
-
+for a similar property). Renaming $B$ to $A$, we write the applicative
+naturality law\index{applicative naturality law!of sequence@of \texttt{sequence}}
+of \lstinline!sequence!:
+\begin{center}
 $\xymatrix{\xyScaleY{1.5pc}\xyScaleX{2.0pc}L^{F^{A}}\ar[d]\sb(0.45){\text{seq}_{L}^{F,A}}\ar[r]\sb(0.5){(f^{A})^{\uparrow L}} & L^{G^{A}}\ar[d]\sp(0.45){\text{seq}_{L}^{G,A}}\\
 F^{L^{A}}\ar[r]\sp(0.5){f^{L^{A}}} & G^{L^{A}}
 }
-$Renaming $B$ to $A$, we rewrite the applicative naturality law\index{applicative naturality law!of sequence@of \texttt{sequence}}
-of \lstinline!sequence! as:
+$
 \[
 (f^{A})^{\uparrow L}\bef\text{seq}_{L}^{G,A}=\text{seq}_{L}^{F,A}\bef f^{L^{A}}\quad.
 \]
+\par\end{center}
 
 \noindent Here we have written the full type parameters in $f^{X}$
 and $\text{seq}_{L}^{F,A}$ for clarity.
@@ -3379,15 +3402,21 @@ is:
 The composition law~(\ref{eq:composition-law-of-traverse}) of \lstinline!traverse!
 leads to the following composition law of \lstinline!sequence!:
 \begin{align*}
-{\color{greenunder}\text{left-hand side}:}\quad & \text{trav}_{L}^{F,A,B}(f^{:A\rightarrow F^{B}})\bef\big(\text{trav}_{L}^{G,B,C}(g^{:B\rightarrow G^{C}})\big)^{\uparrow F}=f^{\uparrow L}\bef\text{seq}_{L}^{F,B}\bef\big(g^{\uparrow L}\bef\text{seq}_{L}^{G,C}\big)^{\uparrow F}\\
+{\color{greenunder}\text{left-hand side}:}\quad & \text{trav}_{L}^{F,A,B}(f^{:A\rightarrow F^{B}})\bef\big(\text{trav}_{L}^{G,B,C}(g^{:B\rightarrow G^{C}})\big)^{\uparrow F}\\
+ & \quad=f^{\uparrow L}\bef\text{seq}_{L}^{F,B}\bef\big(g^{\uparrow L}\bef\text{seq}_{L}^{G,C}\big)^{\uparrow F}\\
  & \quad=f^{\uparrow L}\bef\gunderline{\text{seq}_{L}^{F,B}\bef g^{\uparrow L\uparrow F}}\bef(\text{seq}_{L}^{G,C})^{\uparrow F}\\
 {\color{greenunder}\text{naturality law~(\ref{eq:sequence-naturality-law})}:}\quad & \quad=f^{\uparrow L}\bef g^{\uparrow F\uparrow L}\bef\text{seq}_{L}^{F,G^{C}}\bef(\text{seq}_{L}^{G,C})^{\uparrow F}\quad,\\
 {\color{greenunder}\text{right-hand side}:}\quad & \text{trav}_{L}^{F\circ G,A,C}(f\bef g^{\uparrow F})=(f\bef g^{\uparrow F})^{\uparrow L}\bef\text{seq}_{L}^{F\circ G,C}\quad.
 \end{align*}
+
+\begin{center}
 $\xymatrix{\xyScaleY{1.4pc}\xyScaleX{3.0pc}L^{F^{G^{A}}}\ar[r]\sp(0.55){\text{seq}_{L}^{F,G^{A}}}\ar[rd]\sb(0.4){\text{seq}_{L}^{F\circ G,A}} & F^{L^{G^{A}}}\ar[d]\sp(0.4){(\text{seq}_{L}^{G,A})^{\uparrow F}}\\
  & F^{G^{L^{A}}}
 }
-$Omitting the common function $(f\bef g^{\uparrow F})^{\uparrow L}$
+$
+\par\end{center}
+
+Omitting the common function $(f\bef g^{\uparrow F})^{\uparrow L}$
 and renaming $C$ to $A$, we obtain the \index{composition law!of sequence@of \texttt{sequence}}\textbf{composition
 law} of \lstinline!sequence!:
 \begin{equation}
@@ -3445,9 +3474,10 @@ Here $L^{A}\triangleq M^{A}\times N^{A}$, with some traversable functors
 $M$ and $N$. We assume that $\text{seq}_{M}$ and $\text{seq}_{N}$
 are already available and satisfy the laws, and define $\text{seq}_{L}$
 as:
-\[
-\text{seq}_{L}^{F,A}:M^{F^{A}}\times N^{F^{A}}\rightarrow F^{M^{A}\times N^{A}}\quad,\quad\quad\text{seq}_{L}^{F,A}\triangleq m^{:M^{F^{A}}}\times n^{:N^{F^{A}}}\rightarrow\text{zip}_{F}\big((m\triangleright\text{seq}_{M}^{F,A})\times(n\triangleright\text{seq}_{N}^{F,A})\big)\quad.
-\]
+\begin{align*}
+ & \text{seq}_{L}^{F,A}:M^{F^{A}}\times N^{F^{A}}\rightarrow F^{M^{A}\times N^{A}}\quad,\\
+ & \text{seq}_{L}^{F,A}\triangleq m^{:M^{F^{A}}}\times n^{:N^{F^{A}}}\rightarrow\text{zip}_{F}\big((m\triangleright\text{seq}_{M}^{F,A})\times(n\triangleright\text{seq}_{N}^{F,A})\big)\quad.
+\end{align*}
 In the point-free style, we can write the same code in a shorter formula:
 \[
 \text{seq}_{L}^{F,A}\triangleq(\text{seq}_{M}^{F,A}\boxtimes\text{seq}_{N}^{F,A})\bef\text{zip}_{F}\quad.
@@ -3463,9 +3493,11 @@ use the fact that $\text{zip}_{\text{Id}}=\text{id}$:
 To verify the composition law~(\ref{eq:composition-law-of-sequence}),
 begin with its left-hand side:
 \begin{align*}
-{\color{greenunder}\text{left-hand side}:}\quad & \text{seq}_{L}^{F,G^{A}}\bef(\text{seq}_{L}^{G,A})^{\uparrow F}=(\text{seq}_{M}^{F,G^{A}}\boxtimes\text{seq}_{N}^{F,G^{A}})\bef\gunderline{\text{zip}_{F}\bef(\text{seq}_{M}^{G,A}\boxtimes\text{seq}_{N}^{G,A})^{\uparrow F}}\bef\text{zip}_{G}^{\uparrow F}\\
-{\color{greenunder}\text{naturality law of }\text{zip}_{F}:}\quad & =\gunderline{(\text{seq}_{M}^{F,G^{A}}\boxtimes\text{seq}_{N}^{F,G^{A}})\bef\big((\text{seq}_{M}^{G,A})^{\uparrow F}\boxtimes(\text{seq}_{N}^{G,A})^{\uparrow F}\big)}\bef\text{zip}_{F}\bef\text{zip}_{G}^{\uparrow F}\\
-{\color{greenunder}\text{composition law~(\ref{eq:pair-product-composition-law})}:}\quad & =\big((\text{seq}_{M}^{F,G^{A}}\bef(\text{seq}_{M}^{G,A})^{\uparrow F})\boxtimes(\text{seq}_{N}^{F,G^{A}}\bef(\text{seq}_{N}^{G,A})^{\uparrow F})\big)\bef\text{zip}_{F}\bef\text{zip}_{G}^{\uparrow F}\quad.
+ & \text{seq}_{L}^{F,G^{A}}\bef(\text{seq}_{L}^{G,A})^{\uparrow F}=(\text{seq}_{M}^{F,G^{A}}\boxtimes\text{seq}_{N}^{F,G^{A}})\bef\gunderline{\text{zip}_{F}\bef(\text{seq}_{M}^{G,A}\boxtimes\text{seq}_{N}^{G,A})^{\uparrow F}}\bef\text{zip}_{G}^{\uparrow F}\\
+ & \quad{\color{greenunder}\text{naturality law of }\text{zip}_{F}:}\quad\\
+ & =\gunderline{(\text{seq}_{M}^{F,G^{A}}\boxtimes\text{seq}_{N}^{F,G^{A}})\bef\big((\text{seq}_{M}^{G,A})^{\uparrow F}\boxtimes(\text{seq}_{N}^{G,A})^{\uparrow F}\big)}\bef\text{zip}_{F}\bef\text{zip}_{G}^{\uparrow F}\\
+ & \quad{\color{greenunder}\text{composition law~(\ref{eq:pair-product-composition-law})}:}\quad\\
+ & =\big((\text{seq}_{M}^{F,G^{A}}\bef(\text{seq}_{M}^{G,A})^{\uparrow F})\boxtimes(\text{seq}_{N}^{F,G^{A}}\bef(\text{seq}_{N}^{G,A})^{\uparrow F})\big)\bef\text{zip}_{F}\bef\text{zip}_{G}^{\uparrow F}\quad.
 \end{align*}
 By assumption, $\text{seq}_{M}$ and $\text{seq}_{N}$ satisfy their
 composition laws. So, we may rewrite the last line as:
@@ -3492,7 +3524,7 @@ $M$ and $N$. We assume that $\text{seq}_{M}$ and $\text{seq}_{N}$
 are already available and satisfy the laws, and define $\text{seq}_{L}$
 as:
 \[
-\text{seq}_{L}:M^{F^{A}}+N^{F^{A}}\rightarrow F^{M^{A}+N^{A}}\quad,\quad\quad\text{seq}_{L}\triangleq\,\begin{array}{|c||c|}
+\text{seq}_{L}:M^{F^{A}}+N^{F^{A}}\rightarrow F^{M^{A}+N^{A}}\quad,\quad\text{seq}_{L}\triangleq\,\begin{array}{|c||c|}
  & F^{M^{A}+N^{A}}\\
 \hline M^{F^{A}} & \text{seq}_{M}^{F,A}\bef(m^{:M^{A}}\rightarrow m+\bbnum 0^{:N^{A}})^{\uparrow F}\\
 N^{F^{A}} & \text{seq}_{N}^{F,A}\bef(n^{:N^{A}}\rightarrow\bbnum 0^{:M^{A}}+n)^{\uparrow F}
@@ -3532,7 +3564,8 @@ To verify the identity law~(\ref{eq:identity-law-of-sequence}):
 \hline M^{\text{Id}^{A}} & \text{seq}_{M}^{\text{Id},A}\bef(m^{:M^{A}}\rightarrow m+\bbnum 0^{:N^{A}})^{\uparrow\text{Id}}\\
 N^{\text{Id}^{A}} & \text{seq}_{N}^{\text{Id},A}\bef(n^{:N^{A}}\rightarrow\bbnum 0^{:M^{A}}+n)^{\uparrow\text{Id}}
 \end{array}\\
-{\color{greenunder}\text{identity laws of }\text{seq}_{M}\text{ and }\text{seq}_{N}:}\quad & =\,\begin{array}{|c||c|}
+ & \quad{\color{greenunder}\text{identity laws of }\text{seq}_{M}\text{ and }\text{seq}_{N}:}\quad\\
+ & =\,\begin{array}{|c||c|}
  & M^{A}+N^{A}\\
 \hline M^{A} & m^{:M^{A}}\rightarrow m+\bbnum 0^{:N^{A}}\\
 N^{A} & n^{:N^{A}}\rightarrow\bbnum 0^{:M^{A}}+n
@@ -3546,7 +3579,8 @@ N^{A} & \bbnum 0 & n\rightarrow n
 To verify the composition law~(\ref{eq:composition-law-of-sequence}),
 write its two sides separately:
 \begin{align*}
-{\color{greenunder}\text{left-hand side}:}\quad & \text{seq}_{L}^{F,G^{A}}\bef(\text{seq}_{L}^{G,A})^{\uparrow F}=\,\begin{array}{||c|}
+{\color{greenunder}\text{left-hand side}:}\quad & \text{seq}_{L}^{F,G^{A}}\bef(\text{seq}_{L}^{G,A})^{\uparrow F}\\
+ & \quad=\,\begin{array}{||c|}
 \text{seq}_{M}^{F,G^{A}}\bef(m^{:M^{G^{A}}}\rightarrow m+\bbnum 0^{:N^{G^{A}}})^{\uparrow F}\bef(\text{seq}_{L}^{G,A})^{\uparrow F}\\
 \text{seq}_{N}^{F,G^{A}}\bef(n^{:N^{G^{A}}}\rightarrow\bbnum 0^{:M^{G^{A}}}+n)^{\uparrow F}\bef(\text{seq}_{L}^{G,A})^{\uparrow F}
 \end{array}\quad,\\
@@ -3558,7 +3592,8 @@ write its two sides separately:
 The left-hand side contains some function compositions lifted to $F$.
 Write them separately:
 \begin{align*}
- & (m^{:M^{G^{A}}}\rightarrow m+\bbnum 0^{:N^{G^{A}}})\bef\text{seq}_{L}^{G,A}=\,\begin{array}{|c||cc|}
+ & (m^{:M^{G^{A}}}\rightarrow m+\bbnum 0^{:N^{G^{A}}})\bef\text{seq}_{L}^{G,A}\\
+ & \quad=\,\begin{array}{|c||cc|}
  & M^{G^{A}} & N^{G^{A}}\\
 \hline M^{G^{A}} & \text{id} & \bbnum 0
 \end{array}\,\bef\,\begin{array}{|c||c|}
@@ -3567,7 +3602,8 @@ Write them separately:
 N^{G^{A}} & \text{seq}_{N}^{G,A}\bef(n^{:N^{A}}\rightarrow\bbnum 0^{:M^{A}}+n)^{\uparrow G}
 \end{array}\\
  & \quad=\text{seq}_{M}^{G,A}\bef(m^{:M^{A}}\rightarrow m+\bbnum 0^{:N^{A}})^{\uparrow G}\quad,\\
- & (n^{:N^{G^{A}}}\rightarrow\bbnum 0^{:M^{G^{A}}}+n)\bef\text{seq}_{L}^{G,A}=\,\begin{array}{|c||cc|}
+ & (n^{:N^{G^{A}}}\rightarrow\bbnum 0^{:M^{G^{A}}}+n)\bef\text{seq}_{L}^{G,A}\\
+ & \quad=\,\begin{array}{|c||cc|}
  & M^{G^{A}} & N^{G^{A}}\\
 \hline N^{G^{A}} & \bbnum 0 & \text{id}
 \end{array}\,\bef\,\begin{array}{|c||c|}
@@ -3636,7 +3672,8 @@ we use the assumed law~(\ref{eq:identity-law-of-bisequence}):
 To verify the composition law~(\ref{eq:composition-law-of-sequence}),
 write its two sides separately:
 \begin{align*}
- & \text{seq}_{L}^{F,G^{A}}\bef(\text{seq}_{L}^{G,A})^{\uparrow F}=\big(\overline{\text{seq}}_{L}^{F,G^{A}}\big)^{\uparrow S^{F^{G^{A}},\bullet}}\bef\text{seq2}_{S}^{F,G^{A},L^{G^{A}}}\bef\big(\overline{\text{seq}}_{L}^{G,A}\big)^{\uparrow S^{G^{A},\bullet}\uparrow F}\bef\big(\text{seq2}_{S}^{G,A,L^{A}}\big)^{\uparrow F}\quad,\\
+ & \text{seq}_{L}^{F,G^{A}}\bef(\text{seq}_{L}^{G,A})^{\uparrow F}\\
+ & \quad=\big(\overline{\text{seq}}_{L}^{F,G^{A}}\big)^{\uparrow S^{F^{G^{A}},\bullet}}\bef\text{seq2}_{S}^{F,G^{A},L^{G^{A}}}\bef\big(\overline{\text{seq}}_{L}^{G,A}\big)^{\uparrow S^{G^{A},\bullet}\uparrow F}\bef\big(\text{seq2}_{S}^{G,A,L^{A}}\big)^{\uparrow F}\quad,\\
  & \text{seq}_{L}^{F\circ G,A}=\big(\overline{\text{seq}}_{L}^{F\circ G,A}\big)^{\uparrow S^{F^{G^{A}},\bullet}}\bef\text{seq2}_{S}^{F\circ G,A,L^{A}}\quad.
 \end{align*}
 We use the naturality law of $\text{seq2}_{S}^{F,A,B}$ with respect
@@ -3649,8 +3686,10 @@ becomes:
 \begin{align*}
  & \text{seq}_{L}^{F,G^{A}}\bef(\text{seq}_{L}^{G,A})^{\uparrow F}\\
  & =\gunderline{\big(\overline{\text{seq}}_{L}^{F,G^{A}}\big)^{\uparrow S^{F^{G^{A}},\bullet}}\bef\big(\overline{\text{seq}}_{L}^{G,A}\big)^{\uparrow F\uparrow S^{F^{G^{A}},\bullet}}}\bef\text{seq2}_{S}^{F,G^{A},G^{L^{A}}}\bef\big(\text{seq2}_{S}^{G,A,L^{A}}\big)^{\uparrow F}\\
-{\color{greenunder}\text{composition law~(\ref{eq:composition-law-of-sequence})}:}\quad & =(\text{seq}_{L}^{F\circ G,A})^{\uparrow S^{F^{G^{A}},\bullet}}\bef\gunderline{\text{seq2}_{S}^{F,G^{A},G^{L^{A}}}\bef\big(\text{seq2}_{S}^{G,A,L^{A}}\big)^{\uparrow F}}\\
-{\color{greenunder}\text{composition law~(\ref{eq:composition-law-of-bisequence})}:}\quad & =(\text{seq}_{L}^{F\circ G,A})^{\uparrow S^{F^{G^{A}},\bullet}}\bef\gunderline{\text{seq2}_{S}^{F\circ G,A,L^{A}}}\quad.
+ & \quad{\color{greenunder}\text{composition law~(\ref{eq:composition-law-of-sequence})}:}\quad\\
+ & =(\text{seq}_{L}^{F\circ G,A})^{\uparrow S^{F^{G^{A}},\bullet}}\bef\gunderline{\text{seq2}_{S}^{F,G^{A},G^{L^{A}}}\bef\big(\text{seq2}_{S}^{G,A,L^{A}}\big)^{\uparrow F}}\\
+ & \quad{\color{greenunder}\text{composition law~(\ref{eq:composition-law-of-bisequence})}:}\quad\\
+ & =(\text{seq}_{L}^{F\circ G,A})^{\uparrow S^{F^{G^{A}},\bullet}}\bef\gunderline{\text{seq2}_{S}^{F\circ G,A,L^{A}}}\quad.
 \end{align*}
 The two sides of the law~(\ref{eq:composition-law-of-sequence})
 are now equal. $\square$
@@ -3693,9 +3732,9 @@ is impossible to implement via a fully parametric function.
 Bitraversable bifunctors are used in the recursive-type construction
 for traversable functors. The properties of bitraversable bifunctors
 are similar to the properties of traversable functors. We will now
-prove that all polynomial bifunctors are bitraversable. The proof
-verifies that each of the five type constructions of polynomial bifunctors
-will produce a bitraversable bifunctor satisfying the laws~(\ref{eq:identity-law-of-bisequence})\textendash (\ref{eq:composition-law-of-bisequence}).
+prove that all polynomial bifunctors are bitraversable. This verifies
+that each of the five type constructions of polynomial bifunctors
+produces a bitraversable bifunctor satisfying the laws~(\ref{eq:identity-law-of-bisequence})\textendash (\ref{eq:composition-law-of-bisequence}).
 
 \paragraph{Fixed type}
 
@@ -3731,9 +3770,10 @@ Here $S^{A,B}\triangleq M^{A,B}\times N^{A,B}$, with some bitraversable
 bifunctors $M$ and $N$. We assume that $\text{seq2}_{M}$ and $\text{seq2}_{N}$
 are already available and satisfy the laws, and define $\text{seq2}_{S}$
 as:
-\[
-\text{seq2}_{S}^{F,A,B}:M^{F^{A},F^{B}}\times N^{F^{A},F^{B}}\rightarrow F^{M^{A,B}\times N^{A,B}}\quad,\quad\quad\text{seq2}_{S}^{F,A,B}\triangleq(\text{seq2}_{M}^{F,A,B}\boxtimes\text{seq2}_{N}^{F,A,B})\bef\text{zip}_{F}\quad.
-\]
+\begin{align*}
+ & \text{seq2}_{S}^{F,A,B}:M^{F^{A},F^{B}}\times N^{F^{A},F^{B}}\rightarrow F^{M^{A,B}\times N^{A,B}}\quad,\\
+ & \text{seq2}_{S}^{F,A,B}\triangleq(\text{seq2}_{M}^{F,A,B}\boxtimes\text{seq2}_{N}^{F,A,B})\bef\text{zip}_{F}\quad.
+\end{align*}
 
 To verify the identity law~(\ref{eq:identity-law-of-bisequence}),
 use the fact that $\text{zip}_{\text{Id}}=\text{id}$:
@@ -3745,10 +3785,12 @@ use the fact that $\text{zip}_{\text{Id}}=\text{id}$:
 To verify the composition law~(\ref{eq:composition-law-of-bisequence}),
 begin with its left-hand side:
 \begin{align*}
-{\color{greenunder}\text{left-hand side}:}\quad & \text{seq2}_{S}^{F,G^{A},G^{B}}\bef(\text{seq2}_{S}^{G,A,B})^{\uparrow F}\\
+ & \text{seq2}_{S}^{F,G^{A},G^{B}}\bef(\text{seq2}_{S}^{G,A,B})^{\uparrow F}\\
  & =(\text{seq2}_{M}^{F,G^{A},G^{B}}\boxtimes\text{seq2}_{N}^{F,G^{A},G^{B}})\bef\gunderline{\text{zip}_{F}\bef(\text{seq2}_{M}^{G,A,B}\boxtimes\text{seq2}_{N}^{G,A,B})^{\uparrow F}}\bef\text{zip}_{G}^{\uparrow F}\\
-{\color{greenunder}\text{naturality of }\text{zip}_{F}:}\quad & =\gunderline{(\text{seq2}_{M}^{F,G^{A},G^{B}}\boxtimes\text{seq2}_{N}^{F,G^{A},G^{B}})\bef\big((\text{seq2}_{M}^{G,A,B})^{\uparrow F}\boxtimes(\text{seq2}_{N}^{G,A,B})^{\uparrow F}\big)}\bef\text{zip}_{F}\bef\text{zip}_{G}^{\uparrow F}\\
-{\color{greenunder}\text{the law~(\ref{eq:pair-product-composition-law})}:}\quad & =\big((\text{seq2}_{M}^{F,G^{A},G^{B}}\bef(\text{seq2}_{M}^{G,A,B})^{\uparrow F})\boxtimes(\text{seq2}_{N}^{F,G^{A},G^{B}}\bef(\text{seq2}_{N}^{G,A,B})^{\uparrow F})\big)\bef\text{zip}_{F}\bef\text{zip}_{G}^{\uparrow F}\quad.
+ & \quad{\color{greenunder}\text{naturality of }\text{zip}_{F}:}\quad\\
+ & =\gunderline{(\text{seq2}_{M}^{F,G^{A},G^{B}}\boxtimes\text{seq2}_{N}^{F,G^{A},G^{B}})\bef\big((\text{seq2}_{M}^{G,A,B})^{\uparrow F}\boxtimes(\text{seq2}_{N}^{G,A,B})^{\uparrow F}\big)}\bef\text{zip}_{F}\bef\text{zip}_{G}^{\uparrow F}\\
+ & \quad{\color{greenunder}\text{the law~(\ref{eq:pair-product-composition-law})}:}\quad\\
+ & =\big((\text{seq2}_{M}^{F,G^{A},G^{B}}\bef(\text{seq2}_{M}^{G,A,B})^{\uparrow F})\boxtimes(\text{seq2}_{N}^{F,G^{A},G^{B}}\bef(\text{seq2}_{N}^{G,A,B})^{\uparrow F})\big)\bef\text{zip}_{F}\bef\text{zip}_{G}^{\uparrow F}\quad.
 \end{align*}
 By assumption, $\text{seq2}_{M}$ and $\text{seq2}_{N}$ satisfy their
 composition laws. So, we may rewrite the last line as:
@@ -3768,13 +3810,14 @@ Here $S^{A,B}\triangleq M^{A,B}+N^{A,B}$, with some bitraversable
 bifunctors $M$ and $N$. We assume that $\text{seq2}_{M}$ and $\text{seq2}_{N}$
 are already available and satisfy the laws, and define $\text{seq2}_{S}$
 as:
-\[
-\text{seq2}_{S}:M^{F^{A},F^{B}}+N^{F^{A},F^{B}}\rightarrow F^{M^{A,B}+N^{A,B}}\quad,\quad\text{seq2}_{S}\triangleq\,\begin{array}{|c||c|}
+\begin{align*}
+ & \text{seq2}_{S}:M^{F^{A},F^{B}}+N^{F^{A},F^{B}}\rightarrow F^{M^{A,B}+N^{A,B}}\quad,\\
+ & \text{seq2}_{S}\triangleq\,\begin{array}{|c||c|}
  & F^{M^{A,B}+N^{A,B}}\\
 \hline M^{F^{A},F^{B}} & \text{seq2}_{M}^{F,A,B}\bef(m^{:M^{A,B}}\rightarrow m+\bbnum 0)^{\uparrow F}\\
 N^{F^{A},F^{B}} & \text{seq2}_{N}^{F,A,B}\bef(n^{:N^{A,B}}\rightarrow\bbnum 0+n)^{\uparrow F}
 \end{array}\quad.
-\]
+\end{align*}
 
 To verify the identity law~(\ref{eq:identity-law-of-bisequence}):
 \begin{align*}
@@ -3783,7 +3826,8 @@ To verify the identity law~(\ref{eq:identity-law-of-bisequence}):
 \hline M^{\text{Id}^{A},\text{Id}^{B}} & \text{seq2}_{M}^{\text{Id},A,B}\bef(m\rightarrow m+\bbnum 0)^{\uparrow\text{Id}}\\
 N^{\text{Id}^{A}} & \text{seq2}_{N}^{\text{Id},A,B}\bef(n\rightarrow\bbnum 0+n)^{\uparrow\text{Id}}
 \end{array}\\
-{\color{greenunder}\text{identity laws of }\text{seq2}_{M}\text{ and }\text{seq2}_{N}:}\quad & =\,\begin{array}{|c||c|}
+ & \quad{\color{greenunder}\text{identity laws of }\text{seq2}_{M}\text{ and }\text{seq2}_{N}:}\quad\\
+ & =\,\begin{array}{|c||c|}
  & M^{A,B}+N^{A,B}\\
 \hline M^{A,B} & m\rightarrow m+\bbnum 0\\
 N^{A,B} & n\rightarrow\bbnum 0+n
@@ -3797,7 +3841,8 @@ N^{A,B} & \bbnum 0 & n\rightarrow n
 To verify the composition law~(\ref{eq:composition-law-of-bisequence}),
 write its two sides separately:
 \begin{align*}
-{\color{greenunder}\text{left-hand side}:}\quad & \text{seq2}_{S}^{F,G^{A},G^{B}}\bef(\text{seq2}_{S}^{G,A,B})^{\uparrow F}=\,\begin{array}{||c|}
+{\color{greenunder}\text{left-hand side}:}\quad & \text{seq2}_{S}^{F,G^{A},G^{B}}\bef(\text{seq2}_{S}^{G,A,B})^{\uparrow F}\\
+ & \quad=\,\begin{array}{||c|}
 \text{seq2}_{M}^{F,G^{A},G^{B}}\bef(m\rightarrow m+\bbnum 0)^{\uparrow F}\bef(\text{seq2}_{S}^{G,A,B})^{\uparrow F}\\
 \text{seq2}_{N}^{F,G^{A},G^{B}}\bef(n\rightarrow\bbnum 0+n)^{\uparrow F}\bef(\text{seq2}_{S}^{G,A,B})^{\uparrow F}
 \end{array}\quad,\\
@@ -3809,7 +3854,8 @@ write its two sides separately:
 The left-hand side contains some function compositions lifted to $F$.
 Write them separately:
 \begin{align*}
- & (m\rightarrow m+\bbnum 0)\bef\text{seq2}_{S}^{G,A,B}=\,\begin{array}{|c||cc|}
+ & (m\rightarrow m+\bbnum 0)\bef\text{seq2}_{S}^{G,A,B}\\
+ & \quad=\,\begin{array}{|c||cc|}
  & M^{G^{A},G^{B}} & N^{G^{A},G^{B}}\\
 \hline M^{G^{A},G^{B}} & \text{id} & \bbnum 0
 \end{array}\,\bef\,\begin{array}{|c||c|}
@@ -3818,7 +3864,8 @@ Write them separately:
 N^{G^{A},G^{B}} & \text{seq2}_{N}^{G,A,B}\bef(n\rightarrow\bbnum 0+n)^{\uparrow G}
 \end{array}\\
  & \quad=\text{seq2}_{M}^{G,A,B}\bef(m^{:M^{A,B}}\rightarrow m+\bbnum 0^{:N^{A,B}})^{\uparrow G}\quad,\\
- & (n\rightarrow\bbnum 0+n)\bef\text{seq2}_{S}^{G,A,B}=\,\begin{array}{|c||cc|}
+ & (n\rightarrow\bbnum 0+n)\bef\text{seq2}_{S}^{G,A,B}\\
+ & \quad=\,\begin{array}{|c||cc|}
  & M^{G^{A},G^{B}} & N^{G^{A},G^{B}}\\
 \hline N^{G^{A},G^{B}} & \bbnum 0 & \text{id}
 \end{array}\,\bef\,\begin{array}{|c||c|}
@@ -3879,38 +3926,39 @@ except for having more type parameters in each function. For this
 reason, we omit those proofs. The conclusion will be that all polynomial
 $n$-functors are $n$-traversable for $n=1,2,3,...$
 
-Assume that a lawful $\text{seq3}_{T}$ is available and define $\text{seq2}_{S}$
+Assume that a lawful $\text{seq3}_{T}$ is available, and define $\text{seq2}_{S}$
 as:
-\[
-\text{seq2}_{S}^{F,A,B}:T^{F^{A},F^{B},S^{F^{A},F^{B}}}\rightarrow F^{T^{A,B,S^{A,B}}}\quad,\quad\quad\text{seq2}_{S}^{F,A,B}\triangleq\big(\overline{\text{seq2}}_{S}^{F,A,B}\big)^{\uparrow T^{F^{A},F^{B},\bullet}}\bef\text{seq3}_{T}^{F,A,B,S^{A,B}}\quad.
-\]
+\begin{align*}
+ & \text{seq2}_{S}^{F,A,B}:T^{F^{A},F^{B},S^{F^{A},F^{B}}}\rightarrow F^{T^{A,B,S^{A,B}}}\quad,\\
+ & \text{seq2}_{S}^{F,A,B}\triangleq\big(\overline{\text{seq2}}_{S}^{F,A,B}\big)^{\uparrow T^{F^{A},F^{B},\bullet}}\bef\text{seq3}_{T}^{F,A,B,S^{A,B}}\quad.
+\end{align*}
 The inductive assumption is that the recursively called $\overline{\text{seq2}}_{S}$
 already obeys the laws we are proving.
 
 To verify the identity law~(\ref{eq:identity-law-of-bisequence}),
 we use the assumed law~(\ref{eq:identity-law-of-trisequence}):
 \[
-\text{seq2}_{S}^{\text{Id},A,B}=\big(\overline{\text{seq2}}_{S}^{\text{Id},A,B}\big)^{\uparrow T^{\text{Id}^{A},\text{Id}^{B},\bullet}}\bef\text{seq3}_{T}^{\text{Id},A,B,S^{A,B}}=\text{id}^{\uparrow T^{A,B,\bullet}}\bef\text{id}=\text{id}\quad.
+\text{seq2}_{S}^{\text{Id},A,B}=\big(\overline{\text{seq2}}_{S}^{\text{Id},A,B}\big)^{\uparrow T^{\text{Id}^{A},\text{Id}^{B},\,\bullet}}\bef\text{seq3}_{T}^{\text{Id},A,B,S^{A,B}}=\text{id}^{\uparrow T^{A,B,\bullet}}\bef\text{id}=\text{id}\quad.
 \]
 
 To verify the composition law~(\ref{eq:composition-law-of-bisequence}):
 \begin{align*}
- & \text{seq2}_{S}^{F,G^{A},G^{B}}\bef(\text{seq2}_{S}^{G,A,B})^{\uparrow F}\\
- & \quad=\big(\overline{\text{seq2}}_{S}^{F,G^{A},G^{B}}\big)^{\uparrow T^{F^{G^{A}},F^{G^{B}},\bullet}}\bef\text{seq3}_{T}^{F,G^{A},G^{B},S^{G^{A},G^{B}}}\bef\big(\overline{\text{seq2}}_{S}^{G,A,B}\big)^{\uparrow T^{G^{A},G^{B},\bullet}\uparrow F}\bef\big(\text{seq3}_{T}^{G,A,B,S^{A,B}}\big)^{\uparrow F}\quad,\\
- & \text{seq2}_{S}^{F\circ G,A,B}=\big(\overline{\text{seq2}}_{S}^{F\circ G,A,B}\big)^{\uparrow T^{F^{G^{A}},F^{G^{B}},\bullet}}\bef\text{seq3}_{T}^{F\circ G,A,B,S^{A,B}}\quad.
+ & \text{seq2}_{S}^{F,G^{A},G^{B}}\bef(\text{seq2}_{S}^{G,A,B})^{\uparrow F}=\big(\overline{\text{seq2}}_{S}^{F,G^{A},G^{B}}\big)^{\uparrow T^{F^{G^{A}},F^{G^{B}},\,\bullet}}\bef\text{seq3}_{T}^{F,G^{A},G^{B},S^{G^{A},G^{B}}}\\
+ & \quad\quad\quad\bef\big(\overline{\text{seq2}}_{S}^{G,A,B}\big)^{\uparrow T^{G^{A},G^{B},\bullet}\uparrow F}\bef\big(\text{seq3}_{T}^{G,A,B,S^{A,B}}\big)^{\uparrow F}\quad,\\
+ & \text{seq2}_{S}^{F\circ G,A,B}=\big(\overline{\text{seq2}}_{S}^{F\circ G,A,B}\big)^{\uparrow T^{F^{G^{A}},F^{G^{B}},\,\bullet}}\bef\text{seq3}_{T}^{F\circ G,A,B,S^{A,B}}\quad.
 \end{align*}
 We use the naturality law of $\text{seq3}_{T}^{F,A,B,C}$ with respect
 to the parameter $C$:
 \[
-\text{seq3}_{T}^{F,A,B,C}\bef(f^{:C\rightarrow D})^{\uparrow T^{A,B,\bullet}\uparrow F}=f^{\uparrow F\uparrow T^{F^{A},F^{B},\bullet}}\bef\text{seq3}_{T}^{F,A,B,D}\quad.
+\text{seq3}_{T}^{F,A,B,C}\bef(f^{:C\rightarrow D})^{\uparrow T^{A,B,\bullet}\uparrow F}=f^{\uparrow F\uparrow T^{F^{A},F^{B},\,\bullet}}\bef\text{seq3}_{T}^{F,A,B,D}\quad.
 \]
 Then the left-hand side of the law~(\ref{eq:composition-law-of-bisequence})
 becomes:
 \begin{align*}
-\text{seq2}_{S}^{F,G^{A},G^{B}}\bef & (\text{seq2}_{S}^{G,A,B})^{\uparrow F}\\
- & =\gunderline{\big(\overline{\text{seq2}}_{S}^{F,G^{A},G^{B}}\big)^{\uparrow T^{F^{G^{A}},F^{G^{B}},\bullet}}\bef\big(\overline{\text{seq2}}_{S}^{G,A,B}\big)^{\uparrow F\uparrow T^{F^{G^{A}},F^{G^{B}},\bullet}}}\bef\text{seq3}_{T}^{F,G^{A},G^{B},G^{S^{A,B}}}\bef\big(\text{seq3}_{T}^{G,A,B,S^{A,B}}\big)^{\uparrow F}\\
-{\color{greenunder}\text{Eq.~(\ref{eq:identity-law-of-bisequence})}:}\quad & =(\text{seq2}_{S}^{F\circ G,A,B})^{\uparrow T^{F^{G^{A}},F^{G^{B}},\bullet}}\bef\gunderline{\text{seq3}_{T}^{F,G^{A},G^{B},G^{S^{A,B}}}\bef\big(\text{seq3}_{T}^{G,A,B,S^{A,B}}\big)^{\uparrow F}}\\
-{\color{greenunder}\text{Eq.~(\ref{eq:composition-law-of-trisequence})}:}\quad & =(\text{seq2}_{S}^{F\circ G,A,B})^{\uparrow T^{F^{G^{A}},F^{G^{B}},\bullet}}\bef\gunderline{\text{seq3}_{T}^{F\circ G,A,B,S^{A,B}}}\quad.
+\text{seq2}_{S}^{F,G^{A},G^{B}}\bef & (\text{seq2}_{S}^{G,A,B})^{\uparrow F}=\gunderline{\big(\overline{\text{seq2}}_{S}^{F,G^{A},G^{B}}\big)^{\uparrow T^{F^{G^{A}},F^{G^{B}},\,\bullet}}\bef\big(\overline{\text{seq2}}_{S}^{G,A,B}\big)^{\uparrow F\uparrow T^{F^{G^{A}},F^{G^{B}},\,\bullet}}}\\
+ & \quad\quad\quad\bef\text{seq3}_{T}^{F,G^{A},G^{B},G^{S^{A,B}}}\bef\big(\text{seq3}_{T}^{G,A,B,S^{A,B}}\big)^{\uparrow F}\\
+{\color{greenunder}\text{Eq.~(\ref{eq:identity-law-of-bisequence})}:}\quad & =(\text{seq2}_{S}^{F\circ G,A,B})^{\uparrow T^{F^{G^{A}},F^{G^{B}},\,\bullet}}\bef\gunderline{\text{seq3}_{T}^{F,G^{A},G^{B},G^{S^{A,B}}}\bef\big(\text{seq3}_{T}^{G,A,B,S^{A,B}}\big)^{\uparrow F}}\\
+{\color{greenunder}\text{Eq.~(\ref{eq:composition-law-of-trisequence})}:}\quad & =(\text{seq2}_{S}^{F\circ G,A,B})^{\uparrow T^{F^{G^{A}},F^{G^{B}},\,\bullet}}\bef\gunderline{\text{seq3}_{T}^{F\circ G,A,B,S^{A,B}}}\quad.
 \end{align*}
 The two sides of the law~(\ref{eq:identity-law-of-bisequence}) are
 now equal.
@@ -4049,8 +4097,7 @@ functors $M$ and $N$.
 
 \textbf{(b)} Show that the converse does not hold: if $\phi:M\leadsto N$
 is an applicative morphism between two monads then $\phi$ is \emph{not}
-necessarily a monad morphism. One example is where $M$ and $N$ are
-\lstinline!State! monads {*}{*}{*}???
+necessarily a monad morphism.
 
 \subsubsection{Exercise \label{subsec:Exercise-traversables-10-3}\ref{subsec:Exercise-traversables-10-3}}
 
@@ -4088,33 +4135,61 @@ monoid $M$ where the second equation does not hold.)
 \textbf{(c)} Prove that \lstinline!outMF! is \emph{not} a monoid
 morphism between $\text{MF}^{M}$ and $M$.
 
+\subsubsection{Exercise \label{subsec:Exercise-traversables-10-1-1-2}\ref{subsec:Exercise-traversables-10-1-1-2}}
+
+For any applicative functor $F$ with a known \lstinline!zip! method,
+define the \textsf{``}reversed\textsf{''} \lstinline!zip! method as:
+\[
+\text{zip}_{\text{rev}F}:F^{A}\times F^{B}\rightarrow F^{A\times B}\quad,\quad\quad\text{zip}_{\text{rev}F}\triangleq\text{swap}\bef\text{zip}_{F}\bef\text{swap}^{\uparrow F}\quad.
+\]
+
+\textbf{(a)} Show that $\text{zip}_{\text{rev}F}$ also provides a
+lawful applicative instance for $F$ (where $F$\textsf{'}s \lstinline!pure!
+method remains unchanged). Show that $\text{zip}_{\text{rev}F}=\text{zip}_{F}$
+whenever $F$ is commutative.
+
+\textbf{(b)} Show that the \textsf{``}applicative reversal\textsf{''} obeys an applicative
+naturality law: for any applicative functors $F$, $G$ and an applicative
+morphism $\phi:F^{A}\rightarrow G^{A}$, the following equation holds:
+\[
+(p^{:F^{A}}\times q^{:F^{B}})\triangleright\text{zip}_{\text{rev}F}\triangleright\phi=(\phi(p)\times\phi(q))\triangleright\text{zip}_{\text{rev}G}\quad.
+\]
+
+
 \section{Discussion and further developments}
 
-\subsection{Laws of \texttt{traverse} and properties of \texttt{zipWithIndex}\label{subsec:Laws-of-traverse-and-zipWithIndex}}
+\subsection{The missing laws of \texttt{traverse} and \texttt{zipWithIndex}\label{subsec:Laws-of-traverse-and-zipWithIndex}}
+
+The two laws of \lstinline!traverse! shown in this chapter do \emph{not}
+in fact guarantee that \lstinline!traverse! behaves as programmers
+expect. To see that, we generalize \lstinline!zipWithIndex! to arbitrary
+traversable functors and then try proving two intuitively reasonable
+properties of \lstinline!zipWithIndex! starting from the two laws
+of \lstinline!traverse!. We will find that we \emph{cannot} prove
+one of these properties without assuming some new laws of \lstinline!traverse!.
+However, another approach based on more advanced techniques makes
+it possible to prove all necessary properties. 
 
 Sections~\ref{subsec:Decorating-a-tree1}\textendash \ref{subsec:Decorating-a-tree-breadth-first-traversal}
-defined the method \lstinline!zipWithIndex! for different orders
-of tree traversal. In a similar way, we may define \lstinline!zipWithIndex!
+defined the method \lstinline!zipWithIndex! for certain choices of
+traversals over binary trees. How can we define \lstinline!zipWithIndex!
 (denoted $\text{zwi}_{L}$ for brevity) for any traversable functor
-$L$. In this section, we will prove some intuitively reasonable properties
-of \lstinline!zipWithIndex! by assuming only that the laws of \lstinline!traverse!
-hold. This will serve as an additional evidence that the laws of \lstinline!traverse!
-correspond to a programmer\textsf{'}s intuitions about code.
-
-To implement \lstinline!zipWithIndex! for $L$, we use $L$\textsf{'}s \lstinline!traverse!
-method ($\text{trav}_{L}^{F,A,B}$) and chose the applicative functor
-$F$ as the \lstinline!State! monad with internal state of type \lstinline!Int!:
+$L$? We use $L$\textsf{'}s \lstinline!traverse! method ($\text{trav}_{L}^{F,A,B}$)
+and chose the applicative functor $F$ as the \lstinline!State! monad
+with the internal state of type \lstinline!Int!:
 \[
 F^{A}\triangleq\text{State}^{\text{Int},A}\triangleq\text{Int}\rightarrow A\times\text{Int}\quad.
 \]
-The internal state represents a current value of the index. The code
+The internal state represents the current value of the index while
+we iterate over values of type $A$ stored within $L^{A}$. The code
 of \lstinline!zipWithIndex! applies \lstinline!traverse! to a function
 of type $A\rightarrow\text{State}^{S,A\times\text{Int}}$ that increments
 the index:
-\begin{equation}
-\text{zwi}_{L}^{A}:L^{A}\rightarrow L^{A\times\text{Int}}\quad,\quad\text{zwi}_{L}^{A}\triangleq\text{trav}_{L}^{F,A,A\times\text{Int}}(a^{:A}\rightarrow s^{:\text{Int}}\rightarrow(a\times s)\times(s+1))\bef\text{run}_{\text{State}}(0^{:\text{Int}})\quad,\label{eq:definition-of-zwi}
-\end{equation}
-Here $\text{run}_{\text{State}}(0^{:\text{Int}})$ is the \lstinline!State!
+\begin{align}
+ & \text{zwi}_{L}^{A}:L^{A}\rightarrow L^{A\times\text{Int}}\quad,\nonumber \\
+ & \text{zwi}_{L}^{A}\triangleq\text{trav}_{L}^{F,A,A\times\text{Int}}(a^{:A}\rightarrow s^{:\text{Int}}\rightarrow(a\times s)\times(s+1))\bef\text{run}_{\text{State}}(0^{:\text{Int}})\quad.\label{eq:definition-of-zwi}
+\end{align}
+Here, $\text{run}_{\text{State}}(0^{:\text{Int}})$ is the \lstinline!State!
 monad\textsf{'}s runner defined by Eq.~(\ref{eq:definition-of-runState})
 and applied to the zero integer value $0^{:\text{Int}}$:
 \[
@@ -4125,48 +4200,46 @@ What are a programmer\textsf{'}s intuitive expectations about \lstinline!zipWith
 when applied to arbitrary traversable functors $L$? First, \lstinline!zipWithIndex!
 applied to a value $p:L^{A}$ should produce a value of type $L^{A\times\text{Int}}$
 that preserves the structure of $p$ and just adds indices at places
-where some data of type $A$ is stored within $p$. Second, \lstinline!zipWithIndex!
+where data of type $A$ is stored within $p$. Second, \lstinline!zipWithIndex!
 should produce a \emph{different} index for every value of type $A$
-stored within $p$. Let us now formulate those intuitions as equations
-that rigorously express the expected properties of \lstinline!zipWithIndex!.
+stored within $p$. To express these properties rigorously, let us
+formulate them as equations.
 
-The first property is that the value $p:L^{A}$ must be restored if
-we remove the index values:
-
-\begin{wrapfigure}{l}{0.5\columnwidth}%
-\vspace{-1\baselineskip}
+The first property is that the value $p:L^{A}$ must be recovered
+if we drop the index values:
 \begin{lstlisting}
 p.zipWithIndex.map(_._1) == p
 \end{lstlisting}
-\vspace{-0.5\baselineskip}
-\end{wrapfigure}%
-
-~\vspace{-0.5\baselineskip}
 \[
-p\triangleright\text{zwi}_{L}\triangleright\pi_{1}^{\uparrow L}=p\quad.
+p\triangleright\text{zwi}_{L}\triangleright\pi_{1}^{\uparrow L}=p\quad,\quad\text{or equivalently}:\quad\text{zwi}_{L}\bef\pi_{1}^{\uparrow L}=\text{id}\quad.
 \]
 
-The second property means that each index can be mapped to a distinct
-value of type $A$ stored within $p$. Begin by computing a value
-$q\triangleq p\triangleright\text{zwi}_{L}\triangleright\pi_{2}^{\uparrow L}$
-of type $L^{\text{Int}}$. Then $q$ has the same structure as $p$
-but carries integer index values instead of values of type $A$. We
-expect that the original data ($p$) can be restored if we replace
-the index values in $q$ by the corresponding values of type $A$.
-In other words, there should exist a function $f:\text{Int}\rightarrow A$
-such that $p$ can be restored from $f$ and $q$ as $p=q\triangleright f^{\uparrow L}$.
-This also means that there should be an injective map from the type
-$L^{A}$ to the type $(\text{Int}\rightarrow A)\times L^{\text{Int}}$.
+The second property says that each distinct value of type $A$ stored
+within $p$ should get a different index. To express this property
+via an equation, begin by computing $\text{zwi}_{L}(p)$ and then
+discard the values of type $A$, leaving only the indices. The result
+is a value $q\triangleq p\triangleright\text{zwi}_{L}\triangleright\pi_{2}^{\uparrow L}$
+of type $L^{\text{Int}}$. We expect $q$ to have the same shape and
+structure as $p$ except that $q$ carries integer index values instead
+of values of type $A$. The original value ($p$) can be restored
+if we replace all index values in $q$ by the corresponding values
+of type $A$. So, for any given $p$ there should exist a function
+$f_{p}:\text{Int}\rightarrow A$ such that $p$ can be recovered from
+$f_{p}$ and $q$ as $p=q\triangleright f_{p}^{\uparrow L}$. In other
+words:
+\[
+\forall p^{:L^{A}}:\quad p=p\triangleright\text{zwi}_{L}\triangleright\pi_{2}^{\uparrow L}\triangleright f_{p}^{\uparrow L}\quad.
+\]
 
 We will now prove the first property of \lstinline!zipWithIndex!,
 assuming only that $L$ is a lawful traversable functor. In that proof,
-we will need a special subtype of the \lstinline!State! monad:
+we will use a special subtype of the \lstinline!State! monad.
 
 \subsubsection{Statement \label{subsec:Statement-constant-value-state-monad}\ref{subsec:Statement-constant-value-state-monad}}
 
-We define a \textsf{``}constant-function \lstinline!State! monad\textsf{''}, denoted
-by $\text{CFState}^{S,A}$, like this: Write the type of a \lstinline!State!
-monad equivalently as $\text{State}^{S,A}\triangleq S\rightarrow A\times S\cong(S\rightarrow A)\times(S\rightarrow S)$
+Assume that the type $S$ is not void and define a \textsf{``}constant-function
+\lstinline!State! monad\textsf{''}, which we denote by $\text{CFState}^{S,A}$,
+like this: Rewrite the type of a \lstinline!State! monad  as $\text{State}^{S,A}\triangleq S\rightarrow A\times S\cong(S\rightarrow A)\times(S\rightarrow S)$
 and consider values of that type, $p^{:S\rightarrow A}\times q^{:S\rightarrow S}$,
 such that $p^{:S\rightarrow A}$ is a\emph{ constant} function (independent
 of its argument). In other words, the wrapped value of type $A$ is
@@ -4179,33 +4252,28 @@ subset $\text{CFState}^{S,A}$ and write:
 This is a subtype of $\text{State}^{S,A}$ because there is a function
 \lstinline!fromCF! of type $\text{CFState}^{S,A}\rightarrow\text{State}^{S,A}$
 that is an identity function that merely reassigns types:
-\[
-\text{fromCF}:(\_^{:S}\rightarrow A)\times(S\rightarrow S)\rightarrow(S\rightarrow A)\times(S\rightarrow S)\quad,\quad\quad\text{fromCF}\triangleq p^{:\_\rightarrow A}\times q^{:S\rightarrow S}\rightarrow p^{:S\rightarrow A}\times q^{:S\rightarrow S}\quad.
-\]
+\begin{align*}
+ & \text{fromCF}:(\_^{:S}\rightarrow A)\times(S\rightarrow S)\rightarrow(S\rightarrow A)\times(S\rightarrow S)\quad,\\
+ & \text{fromCF}\triangleq p^{:\_\rightarrow A}\times q^{:S\rightarrow S}\rightarrow p^{:S\rightarrow A}\times q^{:S\rightarrow S}\quad.
+\end{align*}
 Assuming that $S$ is not a void type, we then have the following
 properties:
 
 \textbf{(a)} The type $\text{CFState}^{S,A}$ is a monad with the
-same implementation code as $\text{State}^{S,A}$.
+same implementation as $\text{State}^{S,A}$.
 
 \textbf{(b)} The function \lstinline!fromCF! is an injective monad
 morphism and applicative morphism.
 
-\textbf{(c)} The monad \lstinline!CFState! has a runner, $\text{run}_{\text{CFState}}:\text{CFState}^{S,A}\rightarrow A$,
-defined by:
+\textbf{(c)} Define a runner for the monad \lstinline!CFState! by:
 \[
-\text{run}_{\text{CFState}}\triangleq\text{fromCF}\bef\text{run}_{\text{State}}(s_{0})\quad,
+\text{run}_{\text{CFState}}:\text{CFState}^{S,A}\rightarrow A\quad,\quad\quad\text{run}_{\text{CFState}}\triangleq\text{fromCF}\bef\text{run}_{\text{State}}(s_{0})\quad,
 \]
-where $s_{0}^{:S}$ is a fixed value. The function $\text{run}_{\text{CFState}}$
-is the same for all choices of $s_{0}$ and is both a monad morphism
-and an applicative morphism. (Note that $\text{run}_{\text{State}}(s_{0})$
-is neither a monad morphism nor an applicative morphism of type $\text{State}^{S,A}\rightarrow A$.) 
-
-\textbf{(d)} The monad \lstinline!CFState! is equivalent to a \lstinline!Writer!
-monad. There exists a one-to-one (bijective) monad morphism $\text{CFState}^{S,A}\rightarrow\text{Writer}^{W,A}$
-where $\text{Writer}^{W,A}\triangleq A\times W$ and the type $W\triangleq S\rightarrow S$
-is a function composition monoid (denoted by $\text{MF}^{S}$ in the
-proof of Statement~\ref{subsec:Statement-foldleft-foldmap-equivalence}).
+where $s_{0}^{:S}$ is a fixed value. Then the function $\text{run}_{\text{CFState}}$
+is the same for all choices of $s_{0}$ and is an applicative morphism
+between $\text{CFState}^{S,A}$ and the identity functor. (Note that
+$\text{run}_{\text{State}}(s_{0})$ is neither a monad morphism nor
+an applicative morphism of type $\text{State}^{S,A}\rightarrow A$.)
 
 \subparagraph{Proof}
 
@@ -4215,7 +4283,8 @@ the equivalent type signature $\text{State}^{S,A}\cong(S\rightarrow A)\times(S\r
 \begin{align*}
  & \text{pu}_{\text{State}}:A\rightarrow(S\rightarrow A)\times(S\rightarrow S)\quad,\quad\quad\text{pu}_{\text{State}}=a^{:A}\rightarrow(\_^{:S}\rightarrow a)\times\text{id}^{:S\rightarrow S}\quad,\\
  & \text{ftn}_{\text{State}}:(S\rightarrow(S\rightarrow A)\times(S\rightarrow S))\times(S\rightarrow S)\rightarrow(S\rightarrow A)\times(S\rightarrow S)\quad,\\
- & \text{ftn}_{\text{State}}=p^{:S\rightarrow(S\rightarrow A)\times(S\rightarrow S)}\times q^{:S\rightarrow S}\rightarrow(s^{:S}\rightarrow s\triangleright q\triangleright(s\triangleright p\triangleright\pi_{1}))\times(s^{:S}\rightarrow s\triangleright q\triangleright(s\triangleright p\triangleright\pi_{2}))\quad.
+ & \text{ftn}_{\text{State}}=p^{:S\rightarrow(S\rightarrow A)\times(S\rightarrow S)}\times q^{:S\rightarrow S}\\
+ & \quad\quad\quad\quad\quad\rightarrow(s^{:S}\rightarrow s\triangleright q\triangleright(s\triangleright p\triangleright\pi_{1}))\times(s^{:S}\rightarrow s\triangleright q\triangleright(s\triangleright p\triangleright\pi_{2}))\quad.
 \end{align*}
 The code of $\text{pu}_{\text{State}}$ is already of type $A\rightarrow\text{CFState}^{S,A}$
 because $\text{pu}_{\text{State}}(a)$ returns a \lstinline!State!
@@ -4239,8 +4308,8 @@ hold for the code of $\text{pu}_{\text{State}}$ and $\text{ftn}_{\text{State}}$.
 
 \textbf{(b)} The code of the function \lstinline!fromCF! is an identity
 function that only reassigns types. This indicates that \lstinline!CFState!
-is a subtype of \lstinline!State! (in the sense of subtyping explained
-in Section~\ref{subsec:Covariance,-contravariance,-and-subtyping}).
+is a subtype of \lstinline!State! (in the sense of \textsf{``}subtyping\textsf{''}
+explained in Section~\ref{subsec:Covariance,-contravariance,-and-subtyping}).
 
 The code of $\text{pu}_{\text{CFState}}$ and $\text{ftn}_{\text{CFState}}$
 is the same as the code of $\text{pu}_{\text{State}}$ and $\text{ftn}_{\text{State}}$
@@ -4258,50 +4327,85 @@ it has a left inverse (denoted \lstinline!toCF!):
 Here $s_{0}$ is an arbitrary value of type $S$. That value exists
 because $S$ is not a void type.
 
-It remains to verify that $\text{fromCF}\bef\text{toCF}=\text{id}$.
-For any constant function $p\triangleq\_^{:S}\rightarrow a_{0}$ we
-will have $p(s_{0})=a_{0}$ and so we can write:
-\[
-\text{fromCF}\bef\text{toCF}=p^{:\_^{:S}\rightarrow A}\times q^{:S\rightarrow S}\rightarrow(\_^{:S}\rightarrow p(s_{0}))\times q=p\times q\rightarrow(\_\rightarrow a_{0})\times q=p\times q\rightarrow p\times q=\text{id}\quad.
-\]
-
-\textbf{(c)} The code {*}{*}{*}
-
-\textbf{(d)} A value of type $\text{CFState}^{S,A}=(\_^{:S}\rightarrow A)\times(S\rightarrow S)$
-is a pair of a constant function and a value of type $W$. When $S$
-is not void, the type of constant functions $(\_^{:S}\rightarrow A)$
-is equivalent to the type $A$: we can substitute an arbitrary value
-$s_{0}:S$ into a constant function and obtain the corresponding value
-of type $A$. So, we have the type equivalence $\text{CFState}^{S,A}\cong A\times(S\rightarrow S)\triangleq A\times W$.
-The isomorphism is given by a function \lstinline!inCF! defined by:
-\[
-\text{inCF}:\text{Writer}^{W,A}\rightarrow\text{CFState}^{S,A}\quad,\quad\quad\text{inCF}\triangleq a^{:A}\times w^{:S\rightarrow S}\rightarrow(\_^{:S}\rightarrow a)\times w\quad.
-\]
-
-It remains to verify that \lstinline!inCF! is a monad morphism. To
-verify the identity law:
+Now we will show that $\text{fromCF}\bef\text{toCF}=\text{id}$. For
+any constant function $p\triangleq\_^{:S}\rightarrow a_{0}$, we have
+$p(s_{0})=a_{0}$ and then:
 \begin{align*}
- & \text{pu}_{\text{Writer}}\bef\text{inCF}=(a^{:A}\rightarrow a\times\text{id})\bef(a\times w\rightarrow(\_\rightarrow a)\times w)\\
- & =a\rightarrow(\_\rightarrow a)\times\text{id}=\text{pu}_{\text{State}}=\text{pu}_{\text{CFState}}\quad.
+\text{fromCF}\bef\text{toCF} & =p^{:\_^{:S}\rightarrow A}\times q^{:S\rightarrow S}\rightarrow(\_^{:S}\rightarrow p(s_{0}))\times q\\
+ & =p\times q\rightarrow(\_\rightarrow a_{0})\times q=p\times q\rightarrow p\times q=\text{id}\quad.
 \end{align*}
+
+\textbf{(c)} To see that the code of $\text{fromCF}\bef\text{run}_{\text{State}}(s_{0})$
+does not depend on $s_{0}$, we first adapt the \lstinline!State!
+monad\textsf{'}s runner ($\text{run}_{\text{State}}$) to the type $(S\rightarrow A)\times(S\rightarrow S)$,
+which is equivalent to the type $\text{State}^{S,A}$:
+\[
+\text{run}_{\text{State}}(s_{0})=(p^{:S\rightarrow A}\times q^{:S\rightarrow S})\rightarrow\big(p(s_{0})\times q(s_{0})\big)\triangleright\pi_{1}=p^{:S\rightarrow A}\times q^{:S\rightarrow S}\rightarrow p(s_{0})\quad.
+\]
+Now we take any value $c$ of type $\text{CFState}^{S,A}$ and write:
+\begin{align*}
+ & c\triangleright\text{fromCF}\bef\text{run}_{\text{State}}(s_{0})=(p^{:\_^{:S}\rightarrow A}\times q^{:S\rightarrow S})\triangleright\text{fromCF}\triangleright\text{run}_{\text{State}}(s_{0})\\
+ & =(p\times q)\triangleright\text{run}_{\text{State}}(s_{0})=p(s_{0})\quad.
+\end{align*}
+The last value does not depend on $s_{0}$ because $p$ is a constant
+function. 
+
+To show that $\text{run}_{\text{CFState}}$ is an applicative morphism
+between the applicative functors $\text{CFState}^{S,A}$ and $\text{Id}$,
+first note that the \lstinline!pure! method of \lstinline!CFState!
+is the same as that of the \lstinline!State! monad. A \textsf{``}pure\textsf{''}
+value $\text{pu}_{\text{CFState}}(a^{:A})$ equals the function $s\rightarrow a\times s$.
+Applying $\text{run}_{\text{State}}(s_{0})$ to the function $s\rightarrow a\times s$
+will always return just the value $a$. This is the same as the identity
+functor\textsf{'}s \lstinline!pure! method (which is an identity function)
+applied to the value \lstinline!a!. So, $\text{run}_{\text{CFState}}$
+will map \lstinline!CFState!\textsf{'}s \lstinline!pure! into the identity
+functor\textsf{'}s \lstinline!pure!.
+
+It remains to show that $\text{run}_{\text{CFState}}$ maps \lstinline!CFState!\textsf{'}s
+\lstinline!zip! method into the identity functor\textsf{'}s \lstinline!zip!
+method (which is again an identity function, $a\times b\rightarrow a\times b$).
+The code of \lstinline!CFState!\textsf{'}s \lstinline!zip! is:
+\begin{align*}
+ & \text{zip}_{\text{CFState}}:(\_^{:S}\rightarrow A)\times(S\rightarrow S)\times(\_^{:S}\rightarrow B)\times(S\rightarrow S)\rightarrow(\_^{:S}\rightarrow A\times B)\times(S\rightarrow S)\quad,\\
+ & \text{zip}_{\text{CFState}}:p_{1}^{:\_^{:S}\rightarrow A}\times q_{1}^{:S\rightarrow S}\times p_{2}^{:\_^{:S}\rightarrow B}\times q_{2}^{:S\rightarrow S}\rightarrow(s^{:S}\rightarrow p_{1}(s)\times p_{2}(s))\times(q_{1}\bef q_{2})\quad.
+\end{align*}
+The function $s^{:S}\rightarrow p(s)\times q(s)$ is a constant function
+because $p$ and $q$ are.
+
+Applying $\text{zip}_{\text{CFState}}$ to arbitrary values:
+\begin{align*}
+ & c_{1}:\text{CFState}^{S,A}\quad,\quad\quad c_{1}=p_{1}^{:\_^{:S}\rightarrow A}\times q_{1}^{:S\rightarrow S}\quad,\\
+ & c_{2}:\text{CFState}^{S,B}\quad,\quad\quad c_{2}=p_{2}^{:\_^{:S}\rightarrow B}\times q_{2}^{:S\rightarrow S}\quad,
+\end{align*}
+ and then applying $\text{run}_{\text{CFState}}$, we get:
+\begin{align*}
+ & (p_{1}^{:\_^{:S}\rightarrow A}\times q_{1}^{:S\rightarrow S}\times p_{2}^{:\_^{:S}\rightarrow B}\times q_{2}^{:S\rightarrow S})\triangleright\text{zip}_{\text{CFState}}\triangleright\text{run}_{\text{CFState}}\\
+ & =(s^{:S}\rightarrow p_{1}(s)\times p_{2}(s))\times(q_{1}\bef q_{2})\triangleright\text{run}_{\text{CFState}}\\
+ & =p_{1}(s_{0})\times p_{2}(s_{0})\quad.
+\end{align*}
+Applying $\text{run}_{\text{CFState}}$ to the initial values, we
+find:
+\[
+(p_{1}^{:\_^{:S}\rightarrow A}\times q_{1}^{:S\rightarrow S})\triangleright\text{run}_{\text{CFState}}=p_{1}(s_{0})\quad,\quad\quad(p_{2}^{:\_^{:S}\rightarrow B}\times q_{2}^{:S\rightarrow S})\triangleright\text{run}_{\text{CFState}}=p_{2}(s_{0})\quad.
+\]
+So, the composition law of applicative morphisms holds:
+\[
+(c_{1}\times c_{2})\triangleright\text{zip}_{\text{CFState}}\triangleright\text{run}_{\text{CFState}}=(c_{1}\triangleright\text{run}_{\text{CFState}})\times(c_{2}\triangleright\text{run}_{\text{CFState}})\quad.
+\]
 $\square$
 
 We are now ready to prove the first property of \lstinline!zipWithIndex!.
 
 \subsubsection{Statement \label{subsec:Statement-properties-of-zipWithIndex}\ref{subsec:Statement-properties-of-zipWithIndex}}
 
-For any lawful traversable functor $L$, define the function \lstinline!zipWithIndex!
+For any traversable functor $L$, define \lstinline!zipWithIndex!
 (denoted for brevity by $\text{zwi}_{L}$) via Eq.~(\ref{eq:definition-of-zwi}).
-Then \lstinline!zipWithIndex! satisfies the equation: $\text{zwi}_{L}\bef\pi_{1}^{\uparrow L}=\text{id}^{:L^{A}\rightarrow L^{A}}$.
-
-\textbf{(b)} There exists a \textsf{``}tabulating\textsf{''} function (denoted by
-$\text{tab}_{L}^{A}$):
+Then \lstinline!zipWithIndex! satisfies the equation:
 \[
-\text{tab}_{L}^{A}:L^{A\times\text{Int}}\rightarrow(\text{Int}\rightarrow A)\times L^{\text{Int}}\quad,
+\text{zwi}_{L}\bef\pi_{1}^{\uparrow L}=\text{id}^{:L^{A}\rightarrow L^{A}}\quad.
 \]
-such that $\text{zwi}_{L}\bef\text{tab}_{L}\bef(f^{:\text{Int}\rightarrow A}\times q^{:L^{\text{Int}}}\rightarrow q\triangleright f^{\uparrow L})=\text{id}^{:L^{A}\rightarrow L^{A}}$.
-So, the function $\text{zwi}_{L}\bef\text{tab}_{L}$ is an injective
-map of type $L^{A}\rightarrow(\text{Int}\rightarrow A)\times L^{\text{Int}}$.
+
 
 \subparagraph{Proof}
 
@@ -4348,9 +4452,10 @@ applicative naturality law~(\ref{eq:traverse-applicative-naturality-law})
 with $B\triangleq A$, $F^{A}\triangleq\text{CFState}^{\text{Int},A}$,
 $G^{A}\triangleq\text{State}^{\text{Int},A}$, $f^{:F^{B}\rightarrow G^{B}}=$
 \lstinline!fromCF!, and $g^{:A\rightarrow F^{B}}=h$:
-\[
-\text{trav}_{L}^{G,A,B}(g\bef f)=\text{trav}_{L}^{F,A,B}(g)\bef f\quad\quad\text{or equivalently:}\quad\quad\text{trav}_{L}(h\bef\text{fromCF})=\text{trav}_{L}(h)\bef\text{fromCF}\quad.
-\]
+\begin{align*}
+ & \text{trav}_{L}^{G,A,B}(g\bef f)=\text{trav}_{L}^{F,A,B}(g)\bef f\\
+{\color{greenunder}\text{or equivalently}:}\quad & \text{trav}_{L}(h\bef\text{fromCF})=\text{trav}_{L}(h)\bef\text{fromCF}\quad.
+\end{align*}
 Statement~\ref{subsec:Statement-constant-value-state-monad}(c) gives
 the formula $\text{run}_{\text{CFState}}=\text{fromCF}\bef r$, so
 we write:
@@ -4370,12 +4475,120 @@ and compute:
 \end{align*}
  $\square$
 
-The second property of \lstinline!zipWithIndex! does \emph{not} seem
-to be provable using the laws of traverse; see Problem~\ref{par:Problem-traverse-law}(b).
-However, it appears to be natural to expect that \lstinline!zipWithIndex!
+The second property of \lstinline!zipWithIndex! says that \lstinline!zipWithIndex!
 assigns different indices to each value of type $A$ stored inside
-a data structure of type $L^{A}$. Perhaps another law of \lstinline!traverse!
-is needed? 
+a data structure of type $L^{A}$. This property does \emph{not} seem
+to be provable using the two laws of \lstinline!traverse!. One reason
+is that an \textsf{``}indexing\textsf{''} function $f_{p}:\text{Int}\rightarrow A$
+can be computed only by traversing the entire data structure $p$.
+In other words, $f$ is itself a result of a traversal operation.
+We want to prove a property of \lstinline!traverse! that combines
+$f$ with another traversal (\lstinline!zipWithIndex!) of the same
+initial data ($p$). But there are no laws of \lstinline!traverse!
+that involve composition of traversals of the same initial container.
+A new law of \lstinline!traverse! is necessary. 
+
+Such a law (involving inverse-order traversals) was first proposed
+in 2012.\footnote{See \texttt{\href{https://www.cs.ox.ac.uk/jeremy.gibbons/publications/backwards.pdf}{https://www.cs.ox.ac.uk/jeremy.gibbons/publications/backwards.pdf}}}
+One year later, R.~Bird\index{Richard Bird} et al.~showed that
+the second property of \lstinline!zipWithIndex! can be derived for
+arbitrary polynomial functors $L$ without assuming any new laws of
+\lstinline!traverse! by using techniques motivated by dependent type
+theory.\footnote{\label{fn:uitbaf}See \texttt{\href{https://www.cs.ox.ac.uk/jeremy.gibbons/publications/uitbaf.pdf}{https://www.cs.ox.ac.uk/jeremy.gibbons/publications/uitbaf.pdf}}}
+Those techniques are beyond the scope of this book, as the required
+theory is complicated but has limited practical use. Because all polynomial
+functors are traversable (and no other functors are), it is not as
+important to be able to characterize \lstinline!traverse! solely
+via laws. In practice, there is no uncertainty about how to implement
+a law-abiding \lstinline!traverse! correctly, for any given polynomial
+functor and any traversal order. 
+
+It will suffice for our purposes to use the following statement from
+Bird et al.:
+
+\subsubsection{Statement \label{subsec:Statement-Bird-representation-theorem-for-traversal}\ref{subsec:Statement-Bird-representation-theorem-for-traversal}}
+
+Given a traversable functor $L$ and a value $p:L^{A}$, there exists
+an integer $n\ge0$ and a function \lstinline!make[A]! with type
+signature:
+\[
+\text{make}:\forall A.\,\underbrace{A\times A\times...\times A}_{n\text{ times}}\rightarrow L^{A}\quad,
+\]
+such that $p=\text{make}^{A}(a_{1}\times...\times a_{n})$ with suitable
+values $a_{1}$, ..., $a_{n}$ of type $A$. The function \lstinline!make[A]!
+is natural in the type parameter \lstinline!A!:
+\[
+\text{for any }f^{:A\rightarrow B}:\quad(a_{1}\times...\times a_{n})\triangleright\text{make}^{A}\triangleright f^{\uparrow L}=(f(a_{1})\times...\times f(a_{n}))\triangleright\text{make}^{B}\quad.
+\]
+The \lstinline!traverse! method of $L$ is expressed via \lstinline!make!
+and the values $a_{1}$, ..., $a_{n}$ as: 
+\begin{align*}
+ & \quad{\color{greenunder}\text{for any }g^{:A\rightarrow F^{B}}:}\quad\\
+ & p\triangleright\text{trav}_{L}(g)=\big(\text{zip}_{L}(g(a_{1})\times\text{zip}_{L}(g(a_{2})\times...\times\text{zip}_{L}(g(a_{n-1})\times g(a_{n}))...)\big)\triangleright\text{restore}^{\uparrow F}\quad,\\
+ & \quad{\color{greenunder}\text{where we defined}:}\quad\\
+ & \text{restore}\triangleq b_{1}\times(b_{2}\times(...\times(b_{n-1}\times b_{n})...)\rightarrow\text{make}^{B}(b_{1}\times...\times b_{n})\quad.
+\end{align*}
+
+
+\subparagraph{Proof}
+
+This is proved by Bird et al.\footnote{See Footnote~\ref{fn:uitbaf} on page~\pageref{fn:uitbaf}.}~as
+the \textsf{``}representation theorem\textsf{''}. $\square$
+
+\subsubsection{Statement \label{subsec:Statement-polynomial-functors-Int-A}\ref{subsec:Statement-polynomial-functors-Int-A}}
+
+For any traversable functor $L$, any type $A$, and any value $p^{:L^{A}}$:
+
+\textbf{(a)} There is a function $t_{p}:\text{Int}\rightarrow A$
+such that \lstinline!zipWithIndex! satisfies:
+\[
+p=p\triangleright\text{zwi}_{L}\triangleright\pi_{2}^{\uparrow L}\triangleright t_{p}^{\uparrow L}\quad.
+\]
+
+\textbf{(b)} There exists an injective function of type $L^{A}\rightarrow(\text{Int}\rightarrow A)\times L^{\text{Int}}$.
+
+\subparagraph{Proof}
+
+\textbf{(a)} By Statement~\ref{subsec:Statement-Bird-representation-theorem-for-traversal},
+there exist $a_{1}$, ..., $a_{n}$ of type $A$ such that: 
+\[
+p=(a_{1}\times...\times a_{n})\triangleright\text{make}^{A}\quad.
+\]
+Then the definition of \lstinline!zipWithIndex! is evaluated to:
+\[
+p\triangleright\text{zwi}_{L}=\big((a_{1}\times1^{:\text{Int}})\times(a_{2}\times2^{:\text{Int}})\times...\times(a_{n}\times n^{:\text{Int}})\big)\triangleright\text{make}^{A\times\text{Int}}\quad.
+\]
+By the naturality law of \lstinline!make!, we get:
+\[
+p\triangleright\text{zwi}_{L}\triangleright\pi_{2}^{\uparrow L}=\big(1^{:\text{Int}}\times2^{:\text{Int}}\times...\times n^{:\text{Int}}\big)\triangleright\text{make}^{\text{Int}}\quad.
+\]
+Now we define $t_{p}$ as a (partial) function of type $\text{Int}\rightarrow A$
+such that 
+\[
+t_{p}(i)\triangleq a_{i}\quad,\quad i=1,2,...,n\quad.
+\]
+We again use the naturality law of \lstinline!make! and prove the
+required property:
+\begin{align*}
+ & p\triangleright\text{zwi}_{L}\triangleright\pi_{2}^{\uparrow L}\triangleright t_{p}^{\uparrow L}=\big(t_{p}(1)\times...\times t_{p}(n)\big)\triangleright\text{make}^{\text{Int}}\\
+ & \quad=(a_{1}\times...\times a_{n})\triangleright\text{make}^{A}=p\quad.
+\end{align*}
+
+\textbf{(b)} Note that $p\triangleright\text{zwi}_{L}\triangleright\pi_{2}^{\uparrow L}$
+is a value of type $L^{\text{Int}}$. We can combine that function
+with $t_{p}$ and define a \textsf{``}tabulating\textsf{''} function (denoted by $\text{tab}_{L}$):
+\begin{align*}
+ & \text{tab}_{L}^{A}:L^{A}\rightarrow(\text{Int}\rightarrow A)\times L^{\text{Int}}\quad,\\
+ & \text{tab}_{L}^{A}\triangleq p^{:L^{A}}\rightarrow t_{p}\times(p\triangleright\text{zwi}_{L}\triangleright\pi_{2}^{\uparrow L})\quad.
+\end{align*}
+Then the property of $\text{zwi}_{L}$ from \textbf{(a)} is rewritten
+as:
+\[
+\text{tab}_{L}\bef(f^{:\text{Int}\rightarrow A}\times q^{:L^{\text{Int}}}\rightarrow q\triangleright f^{\uparrow L})\overset{!}{=}\text{id}^{:L^{A}\rightarrow L^{A}}\quad.
+\]
+So, the function $\text{tab}_{L}$ is an injective function of type
+$L^{A}\rightarrow(\text{Int}\rightarrow A)\times L^{\text{Int}}$.
+$\square$ 
 
 \subsection{Traversable contrafunctors and profunctors are not useful}
 
@@ -4495,9 +4708,10 @@ L^{A}\triangleq S^{A,L^{P^{A}}}\quad.
 \]
 Then $L$ is a lawful traversable functor with the \lstinline!sequence!
 function defined as:
-\[
-\text{seq}_{L}^{F,A}:S^{F^{A},L^{P^{F^{A}}}}\rightarrow F^{S^{A,L^{P^{A}}}}\quad,\quad\quad\text{seq}_{L}^{F,A}\triangleq\big(\text{seq}_{P}^{F,A}\big)^{\uparrow L\uparrow S^{F^{A},\bullet}}\bef\big(\overline{\text{seq}}_{L}^{F,P^{A}}\big)^{\uparrow S^{F^{A},\bullet}}\bef\text{seq2}_{S}^{F,A,L^{P^{A}}}\quad.
-\]
+\begin{align*}
+ & \text{seq}_{L}^{F,A}:S^{F^{A},L^{P^{F^{A}}}}\rightarrow F^{S^{A,L^{P^{A}}}}\quad,\\
+ & \text{seq}_{L}^{F,A}\triangleq\big(\text{seq}_{P}^{F,A}\big)^{\uparrow L\uparrow S^{F^{A},\bullet}}\bef\big(\overline{\text{seq}}_{L}^{F,P^{A}}\big)^{\uparrow S^{F^{A},\bullet}}\bef\text{seq2}_{S}^{F,A,L^{P^{A}}}\quad.
+\end{align*}
 \[
 \xymatrix{\xyScaleY{1.4pc}\xyScaleX{6pc}S^{F^{A},L^{P^{F^{A}}}}\ar[r]\sp(0.5){\big(\text{seq}_{P}^{F,A}\big)^{\uparrow L\uparrow S^{F^{A},\bullet}}} & S^{F^{A},L^{F^{P^{A}}}}\ar[r]\sp(0.5){\big(\overline{\text{seq}}_{L}^{F,P^{A}}\big)^{\uparrow S^{F^{A},\bullet}}} & S^{F^{A},F^{L^{P^{A}}}}\ar[r]\sp(0.5){\text{seq2}_{S}^{F,A,L^{P^{A}}}} & F^{S^{A,L^{P^{A}}}}}
 \]
@@ -4512,12 +4726,13 @@ satisfy the laws. To verify the identity law~(\ref{eq:identity-law-of-sequence})
 \text{seq}_{L}^{\text{Id},A}=\big(\text{seq}_{P}^{\text{Id},A}\big)^{\uparrow L\uparrow S^{F^{A},\bullet}}\bef\big(\overline{\text{seq}}_{L}^{\text{Id},P^{A}}\big)^{\uparrow S^{F^{A},\bullet}}\bef\text{seq2}_{S}^{\text{Id},A,L^{P^{A}}}=\text{id}^{\uparrow L\uparrow S}\bef\text{id}^{\uparrow S}\bef\text{id}=\text{id}\quad.
 \]
 To verify the composition law~(\ref{eq:composition-law-of-sequence}),
-write its two sides, omitting some type parameters for brevity:
+write its two sides:
 \begin{align*}
- & \text{seq}_{L}^{F,G^{A}}\bef(\text{seq}_{L}^{G,A})^{\uparrow F}\\
- & \quad=\big(\text{seq}_{P}^{F,G^{A}}\big)^{\uparrow L\uparrow S}\bef\big(\overline{\text{seq}}_{L}^{F,P^{G^{A}}}\big)^{\uparrow S}\bef\text{seq2}_{S}^{F,G^{A},L^{P^{G^{A}}}}\bef\big((\text{seq}_{P}^{G,A})^{\uparrow L\uparrow S}\bef\big(\overline{\text{seq}}_{L}^{G,P^{A}}\big)^{\uparrow S}\bef\text{seq2}_{S}^{G,A,L^{P^{A}}}\big)^{\uparrow F}\quad,\\
+ & \text{seq}_{L}^{F,G^{A}}\bef(\text{seq}_{L}^{G,A})^{\uparrow F}=\big(\text{seq}_{P}^{F,G^{A}}\big)^{\uparrow L\uparrow S}\bef\big(\overline{\text{seq}}_{L}^{F,P^{G^{A}}}\big)^{\uparrow S}\bef\text{seq2}_{S}^{F,G^{A},L^{P^{G^{A}}}}\\
+ & \quad\quad\quad\quad\bef\big((\text{seq}_{P}^{G,A})^{\uparrow L\uparrow S}\bef\big(\overline{\text{seq}}_{L}^{G,P^{A}}\big)^{\uparrow S}\bef\text{seq2}_{S}^{G,A,L^{P^{A}}}\big)^{\uparrow F}\quad,\\
  & \text{seq}_{L}^{F\circ G,A}=\big(\text{seq}_{P}^{F\circ G,A}\big)^{\uparrow L\uparrow S}\bef\big(\overline{\text{seq}}_{L}^{F\circ G,P^{A}}\big)^{\uparrow S}\bef\text{seq2}_{S}^{F\circ G,A,L^{P^{A}}}\\
- & \quad=\big(\text{seq}_{P}^{F,G^{A}}\bef(\text{seq}_{P}^{G,A})^{\uparrow F}\big)^{\uparrow L\uparrow S}\bef\big(\overline{\text{seq}}_{L}^{F,G^{P^{A}}}\bef(\overline{\text{seq}}_{L}^{G,P^{A}})^{\uparrow F}\big)^{\uparrow S}\bef\text{seq2}_{S}^{F,G^{A},G^{L^{P^{A}}}}\bef\big(\text{seq2}_{S}^{G,A,L^{P^{A}}}\big)^{\uparrow F}\quad.
+ & \quad=\big(\text{seq}_{P}^{F,G^{A}}\bef(\text{seq}_{P}^{G,A})^{\uparrow F}\big)^{\uparrow L\uparrow S}\\
+ & \quad\quad\quad\quad\bef\big(\overline{\text{seq}}_{L}^{F,G^{P^{A}}}\bef(\overline{\text{seq}}_{L}^{G,P^{A}})^{\uparrow F}\big)^{\uparrow S}\bef\text{seq2}_{S}^{F,G^{A},G^{L^{P^{A}}}}\bef\big(\text{seq2}_{S}^{G,A,L^{P^{A}}}\big)^{\uparrow F}\quad.
 \end{align*}
 To get the last line, we used the assumed composition laws of $\text{seq}_{P}$,
 $\overline{\text{seq}}_{L}$, and $\text{seq2}_{S}$. 
@@ -4536,8 +4751,7 @@ of lifted functions:
 \begin{align*}
 {\color{greenunder}\text{left-hand side}:}\quad & \big(\overline{\text{seq}}_{L}^{F,P^{G^{A}}}\big)^{\uparrow S}\bef\gunderline{\text{seq2}_{S}^{F,G^{A},L^{P^{G^{A}}}}\bef\big((\text{seq}_{P}^{G,A})^{\uparrow L}\bef\overline{\text{seq}}_{L}^{G,P^{A}}\big)^{\uparrow S\uparrow F}}\\
 {\color{greenunder}\text{naturality law of }\text{seq2}_{S}:}\quad & =\gunderline{\big(\overline{\text{seq}}_{L}^{F,P^{G^{A}}}\big)^{\uparrow S}\bef\big((\text{seq}_{P}^{G,A})^{\uparrow L}\bef\overline{\text{seq}}_{L}^{G,P^{A}}\big)^{\uparrow F\uparrow S}}\bef\text{seq2}_{S}^{F,G^{A},G^{L^{P^{A}}}}\\
-{\color{greenunder}\text{composition under }^{\uparrow S}:}\quad & =\big(\gunderline{\overline{\text{seq}}_{L}^{F,P^{G^{A}}}\bef(\text{seq}_{P}^{G,A})^{\uparrow L\uparrow F}}\big)^{\uparrow S}\bef\big(\overline{\text{seq}}_{L}^{G,P^{A}}\big)^{\uparrow F\uparrow S}\bef\text{seq2}_{S}^{F,G^{A},G^{L^{P^{A}}}}\quad.\\
-{\color{greenunder}\text{naturality law of }\overline{\text{seq}}_{L}:}\quad & =\big(\overline{\text{seq}}_{L}^{F,P^{G^{A}}}\bef(\text{seq}_{P}^{G,A})^{\uparrow L\uparrow F}\big)^{\uparrow S}\bef\big(\overline{\text{seq}}_{L}^{G,P^{A}}\big)^{\uparrow F\uparrow S}\bef\text{seq2}_{S}^{F,G^{A},G^{L^{P^{A}}}}
+{\color{greenunder}\text{composition under }^{\uparrow S}:}\quad & =\big(\gunderline{\overline{\text{seq}}_{L}^{F,P^{G^{A}}}\bef(\text{seq}_{P}^{G,A})^{\uparrow L\uparrow F}}\big)^{\uparrow S}\bef\big(\overline{\text{seq}}_{L}^{G,P^{A}}\big)^{\uparrow F\uparrow S}\bef\text{seq2}_{S}^{F,G^{A},G^{L^{P^{A}}}}\quad.
 \end{align*}
 It remains to show that: 
 \[
@@ -4631,75 +4845,9 @@ by using $F$\textsf{'}s \lstinline!zip! method. The result will be a value
 of type $F^{A\times A\times...\times A}$, which we will then need
 to convert to the type $F^{N\times N\rightarrow A}$. The only way
 of performing these computations is by enumerating all possible values
-of type $N$.
-
-\begin{figure}
-\begin{centering}
-\begin{lstlisting}[frame=single,fillcolor={\color{black}},framesep={0.2mm},framexleftmargin=2mm,framexrightmargin=2mm,framextopmargin=2mm,framexbottommargin=2mm]
-type Finite[N] = List[N] // A list of all possible values of type N.
-
-object Finite { def apply[N: Finite]: Finite[N] = implicitly[Finite[N]] }
-
-sealed abstract class SqSize[N: Finite, A]
-
-final case class Matrix[N: Finite, A](byIndex: ((N, N)) => A) extends SqSize[N, A]
-
-final case class Next[N: Finite, A](next: SqSize[Option[N], A]) extends SqSize[N, A]
-
-type Sq[A] = SqSize[Unit, A]
-
-implicit val finiteUnit: Finite[Unit] = List(())
-
-implicit def finiteOptionN[N: Finite]: Finite[Option[N]] = None +: Finite[N].map(Some(_))
-
-// Access the matrix element at zero-based index (i, j).
-def access[N: Finite, A](s: SqSize[N, A], i: Int, j: Int): A = s match {
-  case Matrix(byIndex) => byIndex((Finite[N].apply(i), Finite[N].apply(j)))
-  case Next(next) => access[Option[N], A](next, i, j)
-}
-
-def size[N: Finite, A](s: SqSize[N, A]): Int = s match {      
-  case Matrix(_) => Finite[N].length
-  case Next(next) => size[Option[N], A](next)
-}
-
-def toSeqSeq[N: Finite, A](s: SqSize[N, A]): Seq[Seq[A]] = {
-  val length = size(s)
-  (0 until length).map(i => (0 until length).map(j => access(s, i, j)))
-} 
-
-// Test: visualize the matrix defined previously by converting it to nested lists.
-scala> toSeqSeq(matrix2x2)
-res1: List[List[Int]] = List(List(11, 12), List(21, 22))
-
-def sequenceList[F[_]: Applicative : Functor, A](l: List[F[A]]): F[List[A]] = l match {
-  case Nil          => Applicative[F].pure(Nil)
-  case head :: tail => (head zip sequenceList(tail)).map { case (x, y) => x +: y }
-}
-
-def sequence[N: Finite, F[_]: Applicative : Functor, A](sq: SqSize[N, F[A]]): F[SqSize[N, A]] =
-  sq match {
-    case Matrix(byIndex)   =>
-      val allValuesF: List[F[((N, N), A)]] = for {
-        i <- Finite[N]
-        j <- Finite[N]
-      } yield byIndex((i, j)).map(a => ((i, j), a))
-
-      val fList: F[List[((N, N), A)]] = sequenceList(allValuesF)
-      fList.map { values =>
-        val valuesMap: ((N, N)) => A = values.toMap.apply
-        Matrix[N, A](valuesMap)
-      }
-    case Next(next)        => sequence[Option[N], F, A](next).map(Next(_))
-  }
-\end{lstlisting}
-\par\end{centering}
-\caption{Implementing \lstinline!sequence! for square matrices.\label{fig:Full-code-implementing-traverse-for-square-matrix}}
-\end{figure}
-
-Note that the type \lstinline!Sq! sets the type parameter \lstinline!N!
-in \lstinline!SqSize[N, A]! as \lstinline!N = Unit!. This forces
-the type parameters \lstinline!N! in all of the \lstinline!Next()!
+of type $N$.Note that the type \lstinline!Sq! sets the type parameter
+\lstinline!N! in \lstinline!SqSize[N, A]! as \lstinline!N = Unit!.
+This forces the type parameters \lstinline!N! in all of the \lstinline!Next()!
 constructors to be \lstinline!Unit! wrapped in a number of \lstinline!Option!
 constructors. All values of a type of this form can be enumerated
 explicitly. However, the type \lstinline!SqSize[N, A]! does not ensure
@@ -4738,11 +4886,70 @@ scala> access(matrix2x2, 0, 1)
 res0: Int = 12
 \end{lstlisting}
 
-Figure~\ref{fig:Full-code-implementing-traverse-for-square-matrix}
-shows the complete code of \lstinline!sequence! for \lstinline!Sq!.
-For testing (Figure~\ref{fig:Full-code-implementing-traverse-for-square-matrix-tests}),
-we define a value \lstinline!matrix2x2List! that represents a square
-matrix of lists:
+Here is the complete code of \lstinline!sequence! for the type constructor
+\lstinline!Sq!:
+
+\begin{lstlisting}[frame=single,fillcolor={\color{black}},framesep={0.2mm},framexleftmargin=2mm,framexrightmargin=2mm,framextopmargin=2mm,framexbottommargin=2mm]
+type Finite[N] = List[N] // A list of all possible values of type N.
+
+object Finite { def apply[N: Finite]: Finite[N] = implicitly[Finite[N]] }
+
+sealed abstract class SqSize[N: Finite, A]
+
+final case class Matrix[N: Finite, A](byIndex: ((N, N)) => A) extends SqSize[N, A]
+
+final case class Next[N: Finite, A](next: SqSize[Option[N], A]) extends SqSize[N, A]
+
+type Sq[A] = SqSize[Unit, A]
+
+implicit val finiteUnit: Finite[Unit] = List(())
+
+implicit def finiteOptionN[N: Finite]: Finite[Option[N]] = None +: Finite[N].map(Some(_))
+
+// Access the matrix element at zero-based index (i, j).
+def access[N: Finite, A](s: SqSize[N, A], i: Int, j: Int): A = s match {
+  case Matrix(byIndex) => byIndex((Finite[N].apply(i), Finite[N].apply(j)))
+  case Next(next) => access[Option[N], A](next, i, j)
+}
+
+def size[N: Finite, A](s: SqSize[N, A]): Int = s match {      
+  case Matrix(_) => Finite[N].length
+  case Next(next) => size[Option[N], A](next)
+}
+
+def toSeqSeq[N: Finite, A](s: SqSize[N, A]): Seq[Seq[A]] = {
+  val length = size(s)
+  (0 until length).map(i => (0 until length).map(j => access(s, i, j)))
+} 
+
+// Test: visualize matrix2x2 by converting it to nested lists.
+scala> toSeqSeq(matrix2x2)
+res1: List[List[Int]] = List(List(11, 12), List(21, 22))
+
+def sequenceList[F[_]: Applicative : Functor, A](l: List[F[A]]): F[List[A]] = l match {
+  case Nil          => Applicative[F].pure(Nil)
+  case head :: tail => (head zip sequenceList(tail)).map { case (x, y) => x +: y }
+}
+
+def sequence[N: Finite, F[_]: Applicative : Functor, A](sq: SqSize[N, F[A]]): F[SqSize[N, A]] =
+  sq match {
+    case Matrix(byIndex)   =>
+      val allValuesF: List[F[((N, N), A)]] = for {
+        i <- Finite[N]
+        j <- Finite[N]
+      } yield byIndex((i, j)).map(a => ((i, j), a))
+
+      val fList: F[List[((N, N), A)]] = sequenceList(allValuesF)
+      fList.map { values =>
+        val valuesMap: ((N, N)) => A = values.toMap.apply
+        Matrix[N, A](valuesMap)
+      }
+    case Next(next)        => sequence[Option[N], F, A](next).map(Next(_))
+  }
+\end{lstlisting}
+
+To test this code, we define a value \lstinline!matrix2x2List! that
+represents a square matrix of lists:
 \[
 \text{matrix2x2List}:\text{Sq}^{\text{List}^{\text{Int}}}\quad,\quad\quad\text{matrix2x2List}\triangleq\left|\begin{array}{cc}
 \left[0,10,100\right] & \left[1,11,101\right]\\
@@ -4755,19 +4962,16 @@ $3$ square matrices:
 \text{seq}_{\text{Sq}}\,(\text{matrix2x2List})=\big[\left|\begin{array}{cc}
 0 & 1\\
 2 & 3
-\end{array}\right|,\left|\begin{array}{cc}
+\end{array}\right|,\,\left|\begin{array}{cc}
 10 & 11\\
 12 & 13
-\end{array}\right|,\left|\begin{array}{cc}
+\end{array}\right|,\,\left|\begin{array}{cc}
 100 & 101\\
 102 & 103
 \end{array}\right|\big]\quad.
 \]
 This represents a kind of transposition operation for tensors of dimension
-$2\times2\times3$.
-
-\begin{figure}
-\begin{centering}
+$2\times2\times3$. The test code is:
 \begin{lstlisting}[frame=single,fillcolor={\color{black}},framesep={0.2mm},framexleftmargin=2mm,framexrightmargin=2mm,framextopmargin=2mm,framexbottommargin=2mm]
 // Test: use List as an Applicative Functor.
 implicit val applicativeList: Applicative[List] = new Applicative[List] {
@@ -4794,9 +4998,6 @@ val list2x2Matrix: List[Sq[Int]] = sequence(matrix2x2List)
 scala> toSeqSeq(list2x2Matrix)
 res1: List[List[List[Int]]] = List(List(List(0, 1), List(2, 3)), List(List(10, 11), List(12, 13)), List(List(100, 101), List(102, 103))) 
 \end{lstlisting}
-\par\end{centering}
-\caption{Tests for the \lstinline!sequence! method implemented in Figure~\ref{fig:Full-code-implementing-traverse-for-square-matrix}.\label{fig:Full-code-implementing-traverse-for-square-matrix-tests}}
-\end{figure}
 
 The type \lstinline!Sq[A]! assures (at compile time) that all matrices
 have consistent shapes. However, it is hard to use because of complicated
@@ -4807,7 +5008,7 @@ the indices. When the dimensions of the matrices are known at compile
 time, one could use macros or other metaprogramming features to assure
 that all matrix operations are consistent, without resorting to complicated
 type constructors. Alternatively, one can use dependent types to constrain
-matrix dimensions at compile time.\footnote{See, for example, the \texttt{NDScala} library for Scala 3: \href{https://github.com/SciScala/NDScala}{https://github.com/SciScala/NDScala}}
+matrix dimensions at compile time.\footnote{See, for example, the \texttt{NDScala} library for Scala 3: \texttt{\href{https://github.com/SciScala/NDScala}{https://github.com/SciScala/NDScala}}}
 \begin{comment}
 this is chapter 9 of the functional programming tutorial traversable
 functors to motivate the interrupted introduction of these factors

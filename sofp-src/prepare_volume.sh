@@ -32,9 +32,6 @@ cd $dir
 
 tar jxf ../sofp-src.tar.bz2
 mv sofp-src/* .
-# Special handling for random-pages files.
-mkdir random-pages
-mv random-pages*png random-pages/
 
 cp ../sofp*.tex ../sofp.* .
 cp ../book_cover/* ./book_cover/
@@ -129,11 +126,12 @@ mv $name.tex sofp.tex
 # Disable PDF hyperlinks and remove covers.
 LC_ALL=C sed -i.bak -e 's|colorlinks=true|colorlinks=false|; s|\\input{sofp-cover-page}||; s|\\input{sofp-back-cover-page}||; ' sofp.tex
 echo "Starting to prepare volume $v"
-pdflatex --interaction=batchmode sofp
-makeindex sofp.idx
+(
+pdflatex --interaction=batchmode sofp  /dev/null
+makeindex sofp.idx 
 cp ../*.aux . # Enable references to other chapters.
 pdflatex --interaction=batchmode sofp
-
+) >& /dev/null
 mv sofp.pdf ../$name.pdf
 echo "Volume $v is prepared in $name.pdf"
 

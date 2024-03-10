@@ -452,9 +452,8 @@ given the code for a monad $L$. Nevertheless, monad transformers
 are known for every monad defined by fully parametric code. Transformers
 for some monads are obtained via functor composition; for other monads,
 transformers need to be defined in special ways. Table~\ref{tab:Known-monad-transformers}
-lists the types of some known monad transformers. 
-
-\begin{wraptable}{l}{0.59\columnwidth}%
+lists the types of some known monad transformers.
+\begin{table}
 \begin{centering}
 \begin{tabular}{|c|c|c|}
 \hline 
@@ -481,16 +480,17 @@ lists the types of some known monad transformers.
 \par\end{centering}
 \caption{\label{tab:Known-monad-transformers}Known monad transformers for
 some monads.}
-\end{wraptable}%
 
-\noindent Depending on the monad, the corresponding transformer is
-defined by composing inside the foreign monad (\lstinline!Either!,
-\lstinline!Writer!); by composing outside the foreign monad (\lstinline!Reader!,
-\lstinline!Sel!); by wrapping a recursive definition inside the foreign
-monad (\lstinline!List!); and by mixing the foreign monad in a special
-way with the base monad (\lstinline!Eval!, \lstinline!State!, \lstinline!Cont!). 
+\end{table}
 
-It is not easy to determine the type of a monad transformer.\footnote{The difficulty of that task is illustrated by the history of the \lstinline!ListT!
+Depending on the monad, the corresponding transformer is defined by
+composing inside the foreign monad (\lstinline!Either!, \lstinline!Writer!);
+by composing outside the foreign monad (\lstinline!Reader!, \lstinline!Sel!);
+by wrapping a recursive definition inside the foreign monad (\lstinline!List!);
+or by mixing the foreign monad in a special way with the base monad
+(\lstinline!Eval!, \lstinline!State!, \lstinline!Cont!). 
+
+It is not always easy to determine the type of a monad transformer.\footnote{The difficulty of that task is illustrated by the history of the \lstinline!ListT!
 transformer in the Haskell standard library. The transformer \lstinline!ListT!
 was implemented incorrectly in 2002; the code violated the monad laws.
 The faulty transformer remained in the library until 2007. See the
@@ -515,8 +515,8 @@ final case class ReaderT[M[_]: Monad : Functor, R, A](run: R => M[A]) {
   def map[B](f: A => B): ReaderT[M, R, B] = ReaderT(r => run(r).map(f))
   def flatMap[B](f: A => ReaderT[M, R, B]): ReaderT[M, R, B] = ReaderT {
     r => run(r)            // Type is M[A].
-           .flatMap(f)     // Type is M[ReaderT[M, R, B]].
-           .map(_.run(r))  // Type is M[B].
+           .map(f)     // Type is M[ReaderT[M, R, B]].
+           .flatMap(_.run(r))  // Type is M[B].
   }
 }
 def pure[M[_]: Monad, A](a: A): ReaderT[M, A] = ReaderT(_ => Monad[M].pure(a))
@@ -1829,11 +1829,11 @@ implicit def otherTMonadOps[OtherT[_[_], _], Q[_], S](implicit val qMonadOps: St
 
 To use the MTL-style monad stacks in practice, one needs a library
 (such as \texttt{cats-mtl}\footnote{See \texttt{\href{https://typelevel.org/blog/2018/10/06/intro-to-mtl.html}{https://typelevel.org/blog/2018/10/06/intro-to-mtl.html}}})
-that defines typeclasses with sufficiently many operations for each
-supported monad, so that any desired monadic program may be expressed
-through those operations without using explicit monad types. The library
-should also implement instances of those typeclasses for all supported
-monad stacks. 
+that defines typeclasses for monad operations. The library must support
+sufficiently many operations and monads, so that any desired monadic
+program may be expressed via those operations without using explicit
+monad types. The library must also implement instances of those typeclasses
+for all supported monad stacks. 
 
 While the MTL style does provide automatic liftings, some problems
 remain. 
@@ -1842,11 +1842,21 @@ The first problem is the lack of general principles for the choice
 of effectful operations. We have seen that the operations \lstinline!get!
 and \lstinline!set! are sufficient to express any \lstinline!State!-monadic
 programs. However, it may not be adequate to write code just with
-those two operations. As an example, look at \emph{updating}
+those two operations. As an example, look at \emph{updating} the state
+using a given function of type $S\rightarrow S$. In many cases, updating
+is the same as \lstinline!get!ting the current state value and immediately
+\lstinline!set!ting a new value. However, certain kinds of updates
+need special handling. Examples are: atomic updates in a concurrent
+program; updates wrapped in a database transaction; and updates that
+must be run on a designated CPU thread (e.g., the thread that drives
+the GUI events). Such special handling of updates cannot be implemented
+via monadic programs with just \lstinline!get! and \lstinline!set!.
+A new effectful operation (\lstinline!update!) must be provided to
+the programmer.
 
-\begin{wraptable}{l}{0.6\columnwidth}%
+\begin{table}
 \begin{centering}
-\begin{tabular}{|>{\centering}m{1.3cm}|>{\centering}m{7cm}|}
+\begin{tabular}{|>{\centering}m{1.6cm}|>{\centering}m{8.5cm}|}
 \hline 
 \textbf{\small{}Monad} & \textbf{\small{}Operations}\tabularnewline
 \hline 
@@ -1876,32 +1886,23 @@ those two operations. As an example, look at \emph{updating}
 \end{tabular}
 \par\end{centering}
 \caption{Known operations for some monads.\label{tab:effectful-operations-for-some-monads}}
-\end{wraptable}%
 
-\noindent the state using a given function of type $S\rightarrow S$.
-In many cases, updating is the same as \lstinline!get!ting the current
-state value and immediately \lstinline!set!ting a new value. However,
-certain kinds of updates need special handling. Examples are: atomic
-updates in a concurrent program; updates wrapped in a database transaction;
-and updates that must be run on a designated CPU thread (e.g., the
-thread that drives the GUI events). Such special handling of updates
-cannot be implemented via monadic programs with just \lstinline!get!
-and \lstinline!set!. A new effectful operation (\lstinline!update!)
-must be provided to the programmer.
+\end{table}
 
 Table~\ref{tab:effectful-operations-for-some-monads} shows a number
-of operations for some monads.\footnote{Operations were gathered from the \texttt{cats-mtl} documentation
-and the papers \textsf{``}\emph{Monad transformers and modular interpreters}\textsf{''}
-(see \texttt{\href{http://web.cecs.pdx.edu/~mpj/pubs/modinterp.html}{http://web.cecs.pdx.edu/$\sim$mpj/pubs/modinterp.html}})
-and \textsf{``}\emph{Modular monad transformers}\textsf{''} (see \texttt{\href{https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.219.5365}{https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.219.5365}}).} The choice of operations is heuristic and does not follow any principle
+of operations for some monads. Operations were gathered from the \texttt{cats-mtl}
+documentation as well as the papers \textsf{``}\emph{Monad transformers and
+modular interpreters}\textsf{''} \footnote{\texttt{\href{http://web.cecs.pdx.edu/~mpj/pubs/modinterp.html}{http://web.cecs.pdx.edu/$\sim$mpj/pubs/modinterp.html}}}
+and \textsf{``}\emph{Modular monad transformers}\textsf{''} \footnote{\texttt{\href{https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.219.5365}{https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.219.5365}}}.
+The choice of operations is heuristic and does not follow any principle
 or system. It is not easy to decide what operations will be necessary
 in practical tasks involving a given monad. (Do we need a \lstinline!filter!
 operation for the \lstinline!Either! monad? How can we decide?) 
 
 Different libraries choose different sets of supported operations.
-However, adding a new operation to a monad in an MTL-style library
-means updating all typeclasses related to that monad. Users who cannot
-modify the library code will be unable to add new operations.
+Adding a new operation to a monad in an MTL-style library means updating
+all typeclasses related to that monad. Users who cannot modify the
+library code will be unable to add new operations.
 
 The second problem is the lack of a general method for lifting effectful
 operations to arbitrary monad transformers.\footnote{Section~\ref{subsec:Monatron} shows a technique that can lift effectful
@@ -2582,7 +2583,7 @@ then $T_{L}$ will be also co-pointed.
 
 It is remarkable that all the laws of monad transformers can be derived
 from a single (but more abstract) definition: a monad transformer
-$T$ is \emph{just a pointed and optionally co-pointed endofunctor
+$T$ is \emph{just a pointed and (perhaps) co-pointed endofunctor
 in the category of monads}.\footnote{\textsf{``}\emph{What\textsf{'}s the big deal?}\textsf{''} as one\label{fn:Whats-the-big-deal-monad-transformers}
 would joke\index{jokes} similarly to the well-known monad joke in
 footnote~\ref{fn:A-monad-is-a-monoid-in-category-of-endofunctors-big-deal}
