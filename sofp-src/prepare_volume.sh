@@ -107,8 +107,12 @@ esac
   echo "Detected previous chapter $firstchapter, first page $firstpage, previous part number $firstpart"
 
   sed -i.bak -e 's|\(of Functional Programming\)|\1, '"$title1"'|; s|\(\\part{.*}\)|\\setcounter{page}{'$firstpage'}\\setcounter{part}{'$firstpart'}\\setcounter{chapter}{'$firstchapter'}\1|;' $name.tex
+
+  # Subtitle on cover page.
   sed -i.bak -e 's|% End of title.|\\vspace{0.2in}\\centerline{\\fontsize{20pt}{20pt}\\selectfont{'"$title2"'}}|' book_cover/sofp-cover-page-no-bg.tex
-  sed -i.bak -e 's|\(of Functional Programming\)|\1 - '"$title1"'|;' book_cover/sofp-spine.tex
+
+  # Title on spine.
+  sed -i.bak -e 's|\(of Functional Programming\)|\1, '"$title1"'|;' book_cover/sofp-spine.tex
 
   # Replace lulu.com hyperlink.
   sed -i.bak -e 's|{https://www.lulu.com/[^}]*}{\(Print on demand[^}]*\)}|{'"$url"'}{\1}|;' $name.tex
