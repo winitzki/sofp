@@ -208,6 +208,7 @@ bash spelling_check.sh &
 #draft_pages=`pdfPages "$draft".pdf`
 bash check-consistent-labels.sh
 bash check-lines_with_displaymath_in_new_paragraph.sh
+bash check-punctuation-before-code-blocks.sh
 
 if [ x"$1" == x-nolulu ]; then
 	# Create a pdf file without references to lulu.com and without lulu.com's ISBN.
