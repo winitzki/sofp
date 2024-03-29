@@ -2,7 +2,7 @@
 for a in sofp*tex; do 
   b=linenumbers-p-$a
   LC_ALL=C egrep -n  -B1 '^(\\begin{lstlisting}|\\\[$)' "$a" \
-   | LC_ALL=C egrep -v '^[0-9]+-.*[]):%},.~] *$' \
+   | LC_ALL=C egrep -v '^[0-9]+-.*[]?$):%},.~] *$' \
    | LC_ALL=C egrep '^[0-9]+-[^ ]' \
    | LC_ALL=C sed -e 's/^x\([0-9][0-9]*\)-.*$/\1/' \
    | LC_ALL=C sed -e 's/^\(.*\)$/"\1"/' > $b
