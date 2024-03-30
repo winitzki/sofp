@@ -10,8 +10,7 @@ cat sofp*.tex | \
    perl -e 'while(<>) { last if (/The purpose of this license/i); print; }; while (<>) { last if (/but changing it is not allowed/);}; while(<>) { print;};' | \
    tee tempfile | \
    hunspell -t -l -d en_US | \
-   sort | uniq | egrep -iv -f excluded_words > misspelled_words
+   sort | uniq | egrep -iv -f ../scripts/excluded_words > misspelled_words
 
 echo Found `wc -l misspelled_words`.
 rm -f tempfile
-

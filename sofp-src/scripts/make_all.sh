@@ -33,13 +33,7 @@ export GS_OPTIONS="-dEmbedAllFonts=true -dPDFSETTINGS=/printer"
 
 bash scripts/make_pdflatex_sources.sh
 
-# Preparing source files for the book cover.
-
-#for f in  sofp-back-cover-no-bg sofp-cover-parameters; do cp book_cover/$f.tex.src book_cover/$f.tex; done
-#
-#for f in sofp-cover-page-no-bg.tex sofp-cover-page.tex sofp-back-cover.tex sofp-back-cover-page.tex sofp-back-cover-no-bg.tex cover-background.jpg cover-background-2.jpg monads_evil_face.jpg; do cp book_cover/"$f" .; done
-
-# Prepare "$name-src.tar.bz2" with all sources.
+# Prepare "build/$name-src.tar.bz2" with all sources.
 assemble_sources &
 
 (
@@ -67,10 +61,6 @@ attach_sources_to_pdf $main_pdf $name.pdf &
 
 attach_sources_to_pdf pdf-10pt/$name.pdf $name-10pt.pdf &
 
-function archive_build_logs {
-  tar jcf "$name-logs.tar.bz2" pdf-*pt/$name*.{log,ilg,idx,toc} build/*.log
-  echo "Log files are prepared in $name-logs.tar.bz2"
-}
 
 archive_build_logs &
 

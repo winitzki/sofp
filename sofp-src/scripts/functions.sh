@@ -102,3 +102,8 @@ function create_main_pdf_file {
     bash ../scripts/run_pdflatex_with_index.sh "$name" >& ../build/build_main_pdf.log
   )
 }
+
+function archive_build_logs {
+  tar jcf build/"$name-logs.tar.bz2" pdf-*pt/$name*.{log,ilg,idx,toc} build/*.log
+  echo "Log files are prepared in build/$name-logs.tar.bz2"
+}
