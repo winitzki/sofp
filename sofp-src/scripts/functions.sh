@@ -90,7 +90,7 @@ function attach_sources_to_pdf {
 function create_main_pdf_file {
   local pt=$1 # Font size in points. Must be one of 10pt, 11pt, 12pt.
   local targetdir=pdf-$pt
-  echo "Creating the full PDF file at $pt..."
+  echo "Creating the full PDF file in $targetdir..."
   rm -rf $targetdir; mkdir $targetdir
   cp -r tex/* $targetdir/
   (

@@ -42,11 +42,22 @@ bash scripts/make_pdflatex_sources.sh
 # Prepare "$name-src.tar.bz2" with all sources.
 assemble_sources &
 
+(
+  (
+    cd tex/
+
+    bash ../scripts/spelling_check.sh
+    bash ../scripts/check-consistent-labels.sh
+    bash ../scripts/check-lines_with_displaymath_in_new_paragraph.sh
+    bash ../scripts/check-punctuation-before-code-blocks.sh
+  ) | tee build/checks.log
+) &
+
 create_main_pdf_file 12pt &
 
 create_main_pdf_file 10pt &
 
-# Wait until PDF builds are finished.
+# Wait until PDF builds, source tar, and checks are finished.
 wait
 
 
@@ -57,7 +68,7 @@ attach_sources_to_pdf $main_pdf $name.pdf &
 attach_sources_to_pdf pdf-10pt/$name.pdf $name-10pt.pdf &
 
 function archive_build_logs {
-  tar jcf "$name-logs.tar.bz2" pdf-*pt/$name-*.{log,ilg,idx,toc} build/*.log
+  tar jcf "$name-logs.tar.bz2" pdf-*pt/$name*.{log,ilg,idx,toc} build/*.log
   echo "Log files are prepared in $name-logs.tar.bz2"
 }
 
@@ -68,21 +79,9 @@ size=`kbSize $main_pdf`
 
 echo Result is $main_pdf, size $size bytes, with $total_pages pages.
 
-bash prepare_volume.sh 1 "$pdftk" &
-bash prepare_volume.sh 2 "$pdftk" &
-bash prepare_volume.sh 3 "$pdftk" &
-
-(
-  (
-    bash spelling_check.sh
-    bash check-consistent-labels.sh
-    bash check-lines_with_displaymath_in_new_paragraph.sh
-    bash check-punctuation-before-code-blocks.sh
-  ) | tee build/checks.log
-) &
-
-# Prepare the full 3-page book covers. Use $total_pages of the whole pdf file and not $draft_pages since the printed file has all unedited content as well.
-bash prepare_cover.sh "$name.pdf" "$pdftk" &
+bash scripts/prepare_volume.sh 1 "$pdftk" &
+bash scripts/prepare_volume.sh 2 "$pdftk" &
+bash scripts/prepare_volume.sh 3 "$pdftk" &
 
 
 # Wait for background jobs.
