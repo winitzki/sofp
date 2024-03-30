@@ -27,9 +27,15 @@ function add_color_to_equation_displays {
 
 echo "Copying LyX files to TeX source directory..."
 
-test -d tex || mkdir tex
-rm -rf tex/*.tex
-cp -r lyx/* tex/
+rm -rf tex
+
+cp -r lyx tex
+
+# Source file for the back cover blurb. This file will be modified.
+cp cover/sofp-back-cover-no-bg.tex.src tex/sofp-back-cover-no-bg.tex
+
+# Source files used by the main pdf.
+cp cover/cover-background.jpg cover/sofp-cover-for-main-pdf.tex cover/sofp-cover-page-no-bg.tex cover/sofp-back-cover-for-main-pdf.tex tex/
 
 cd tex/
 
@@ -47,19 +53,20 @@ echo "Exporting LyX files $name.lyx and its child documents into LaTeX..."
 
 echo "Post-processing LaTeX files..."
 
-(
-  add_source_hashes $name.tex # Compute source hashes from LyX files.
-  rm -f *.lyx # LyX files are no longer needed.
-) &
+add_source_hashes $name.tex & # Compute source hash from LyX files only. Add it to the root tex file.
 
-# Insert the number of examples and exercises. This replacement is for the root file and for the back cover.
-insert_examples_exercises_count $name $name.tex
+# Insert the number of examples and exercises.
+# This replacement is needed for the root file and for the back cover.
+insert_examples_exercises_count $name.tex
+insert_examples_exercises_count sofp-back-cover-no-bg.tex
 
-## Remove mathpazo. This was a mistake: should not remove it.
+## Remove mathpazo? This was a mistake: should not remove it.
 #LC_ALL=C sed -i.bak -e 's/^.*usepackage.*mathpazo.*$//' $name.tex
 
 # Replace ugly Palatino quote marks and apostrophes by sans-serif marks.
 LC_ALL=C sed -i.bak -e " s|'s|\\\\textsf{'}s|g; s|O'|O\\\\textsf{'}|g; s|s'|s\\\\textsf{'}|g; "' s|``|\\textsf{``}|g; s|“|\\textsf{``}|g; '" s|''|\\\\textsf{''}|g; s|”|\\\\textsf{''}|g;  s|\\\\textsf{'}'|\\\\textsf{''}|g; " $name-*.tex
+
+rm -rf *.bak &
 
 add_color_to_equation_displays
 

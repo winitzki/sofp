@@ -13,7 +13,9 @@
 # sofp-front-cover.tex
 #   sofp-cover-parameters.tex sofp-cover-page-no-bg.tex
 #
-# sofp-cover-page.tex  -- Why do we have this?
+# sofp-cover-for-main-pdf.tex
+#   cover-background.jpg sofp-cover-page-no-bg.tex
+# sofp-back-cover-for-main-pdf.tex
 #   cover-background.jpg sofp-back-cover-no-bg.tex
 
 

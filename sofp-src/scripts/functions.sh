@@ -1,4 +1,3 @@
-
 name="sofp"
 
 function git_commit_hash {
@@ -32,16 +31,6 @@ function make_pdf_with_index_via_ps2pdf {
         (ps2pdf -dPDFSETTINGS=/prepress -dEmbedAllFonts=true "$base.ps") 2>&1 >> $base.log
 }
 
-function make_pdf_with_index {
-	local base="$1" fast="$2"
-	if [ x"$fast" == x ]; then
-		pdflatex --interaction=batchmode "$base"
-		makeindex "$base.idx"
-	fi
-	pdflatex --interaction=batchmode "$base"
-}
-
-
 function add_source_hashes {
 	gitcommit=`git_commit_hash`
 	sourcehash=`source_hash`
@@ -61,9 +50,13 @@ function add_lulu {
 }
 
 function assemble_sources {
-	# Include graphics files referenced as images.
-	cp ../README.md README_build.md
-	tar jcvf "$name-src.tar.bz2" README*.md excluded_words $name*lyx $name*tex `grep -o 'includegraphics[^}]*}' $name*tex | sed -e 's,[^{]*{\([^}]*\)}.*,\1.*,' |while read f; do ls $f ; done` *.sh  >& /dev/null
+  rm -f tex/*.lyx tex/*.bak tex/sofp.source_hash # Copies of LyX files and other temporary files from tex/ should not be in sources.
+  test -d build || mkdir build
+	tar jcvf build/"$name-src.tar.bz2" \
+	 README*.md LICENSE *.sh scripts tex/chapter3-picture.pdf cover tex/*.tex lyx \
+	  >& /dev/null
+	size=$(kbSize build/"$name-src.tar.bz2")
+	echo "File build/$name-src.tar.bz2 created, size $size bytes."
 }
 
 function kbSize {
@@ -77,14 +70,35 @@ function pdfPages {
 }
 
 function insert_examples_exercises_count {
-	local base="$1" target="$2"
-	local exercises=`cat "$base"-*.tex | LC_ALL=C fgrep -c '\subsubsection{Exercise '`
-	local examples=`cat "$base"-*.tex | LC_ALL=C fgrep -c '\subsubsection{Example '`
-	local codesnippets=`cat "$base"-*.tex | LC_ALL=C fgrep -c '\begin{lstlisting}'`
-	local stmts=`cat "$base"-*.tex | LC_ALL=C fgrep -c '\subsubsection{Statement '`
-	local diagrams=`cat "$base"-*.tex | LC_ALL=C fgrep -c '\xymatrix{'`
+	local target="$1"
+	local exercises=`cat $name-*.tex | LC_ALL=C fgrep -c '\subsubsection{Exercise '`
+	local examples=`cat $name-*.tex | LC_ALL=C fgrep -c '\subsubsection{Example '`
+	local codesnippets=`cat $name-*.tex | LC_ALL=C fgrep -c '\begin{lstlisting}'`
+	local stmts=`cat $name-*.tex | LC_ALL=C fgrep -c '\subsubsection{Statement '`
+	local diagrams=`cat $name-*.tex | LC_ALL=C fgrep -c '\xymatrix{'`
 	local bdate=`date -R`
 	local osinfo=`uname -s`
 	local pdftex=`pdflatex --version | fgrep pdfTeX\ 3.14`
 	LC_ALL=C sed -i.bak -e "s|PDFTEXVERSION|$pdftex|g;  s|BUILDDATE|$bdate|g; s|BUILDOPERATINGSYSTEM|$osinfo|g; s,NUMBEROFEXAMPLES,$examples,g; s,NUMBEROFEXERCISES,$exercises,g; s,NUMBEROFDIAGRAMS,$diagrams,g; s,NUMBEROFSTATEMENTS,$stmts,g; s,NUMBEROFCODESNIPPETS,$codesnippets,g;" "$target"
+}
+
+function attach_sources_to_pdf {
+  local src=$1 target=$2
+  "$pdftk" "$src" attach_files build/"$name-src.tar.bz2" output "$target"
+}
+
+function create_main_pdf_file {
+  local pt=$1 # Font size in points. Must be one of 10pt, 11pt, 12pt.
+  local targetdir=pdf-$pt
+  echo "Creating the full PDF file at $pt..."
+  rm -rf $targetdir; mkdir $targetdir
+  cp -r tex/* $targetdir/
+  (
+    cd $targetdir
+    # Set font size.
+    LC_ALL=C sed -i.bak -e "s|fontsize=[0-9]*pt|fontsize=$pt|" $name.tex
+
+    # Output is $name.pdf, main file is $name.tex, and other .tex files are \include'd.
+    bash ../scripts/run_pdflatex_with_index.sh "$name" >& ../build/build_main_pdf.log
+  )
 }
