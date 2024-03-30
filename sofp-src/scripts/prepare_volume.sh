@@ -151,7 +151,7 @@ sed -i.bak -e "s|TOTALPAGES|$pages|" $dir/sofp-cover-parameters.tex
 
 (
   cd $dir/
-  bash ../scripts/sofp-make-cover.sh
+  bash ../scripts/sofp-make-cover.sh >& ../build/build-cover-$dir.log
 )
 
 mv $dir/sofp-3page-cover.pdf $name-3page-cover.pdf
