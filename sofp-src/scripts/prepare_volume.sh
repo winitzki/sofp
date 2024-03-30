@@ -128,7 +128,7 @@ esac
 mv $dir/$name.tex $dir/sofp.tex
 
 # Disable PDF hyperlinks and remove covers.
-LC_ALL=C sed -i.bak -e 's|colorlinks=true|colorlinks=false|; s|\\input{sofp-cover-page}||; s|\\input{sofp-back-cover-page}||; ' $dir/sofp.tex
+LC_ALL=C sed -i.bak -e 's|colorlinks=true|colorlinks=false|; s|\\input{sofp-cover-for-main-pdf}||; s|\\input{sofp-back-cover-for-main-pdf}||; ' $dir/sofp.tex
 echo "Starting to prepare volume $v"
 (
 
