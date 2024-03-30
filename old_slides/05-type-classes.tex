@@ -1,0 +1,771 @@
+\batchmode
+\makeatletter
+\def\input@path{{/Users/sergei.winitzki/Code/talks/ftt-fp/}}
+\makeatother
+\documentclass[english]{beamer}
+\usepackage[T1]{fontenc}
+\usepackage[latin9]{inputenc}
+\setcounter{secnumdepth}{3}
+\setcounter{tocdepth}{3}
+\usepackage{babel}
+\usepackage{amstext}
+\ifx\hypersetup\undefined
+  \AtBeginDocument{%
+    \hypersetup{unicode=true,pdfusetitle,
+ bookmarks=true,bookmarksnumbered=false,bookmarksopen=false,
+ breaklinks=false,pdfborder={0 0 1},backref=false,colorlinks=true}
+  }
+\else
+  \hypersetup{unicode=true,pdfusetitle,
+ bookmarks=true,bookmarksnumbered=false,bookmarksopen=false,
+ breaklinks=false,pdfborder={0 0 1},backref=false,colorlinks=true}
+\fi
+
+\makeatletter
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% LyX specific LaTeX commands.
+%% Because html converters don't know tabularnewline
+\providecommand{\tabularnewline}{\\}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Textclass specific LaTeX commands.
+ % this default might be overridden by plain title style
+ \newcommand\makebeamertitle{\frame{\maketitle}}%
+ % (ERT) argument for the TOC
+ \AtBeginDocument{%
+   \let\origtableofcontents=\tableofcontents
+   \def\tableofcontents{\@ifnextchar[{\origtableofcontents}{\gobbletableofcontents}}
+   \def\gobbletableofcontents#1{\origtableofcontents}
+ }
+ \newenvironment{lyxcode}
+   {\par\begin{list}{}{
+     \setlength{\rightmargin}{\leftmargin}
+     \setlength{\listparindent}{0pt}% needed for AMS classes
+     \raggedright
+     \setlength{\itemsep}{0pt}
+     \setlength{\parsep}{0pt}
+     \normalfont\ttfamily}%
+    \def\{{\char`\{}
+    \def\}{\char`\}}
+    \def\textasciitilde{\char`\~}
+    \item[]}
+   {\end{list}}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% User specified LaTeX commands.
+\usetheme[secheader]{Boadilla}
+\usecolortheme{seahorse}
+\title[Chapter 5: Type functions \& type classes]{Chapter 5: 
+Type-level functions and type classes}
+\author{Sergei Winitzki}
+\date{January 14, 2018}
+\institute[ABTB]{Academy by the Bay}
+\setbeamertemplate{headline}{} % disable headline at top
+\setbeamertemplate{navigation symbols}{} % disable navigation bar at bottom
+
+\makeatother
+
+\begin{document}
+\frame{\titlepage}
+\begin{frame}{Motivation for type classes I: Restricting type arguments}
+
+We would like a generic \texttt{\textcolor{blue}{\footnotesize{}sum}}
+implementation for \texttt{\textcolor{blue}{\footnotesize{}Seq{[}Int{]},
+Seq{[}Double{]}}}, etc.
+\begin{itemize}
+\item but we cannot generalize \texttt{\textcolor{blue}{\footnotesize{}sum}}
+to arbitrary types \texttt{\textcolor{blue}{\footnotesize{}T}} like
+this:
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}def~sum{[}T{]}(s:~Seq{[}T{]}):~T~=~???}{\footnotesize \par}
+\end{lyxcode}
+\item this can work only for \texttt{\textcolor{blue}{\footnotesize{}T}}
+that are ``summable'' in some sense
+\end{itemize}
+We would like to define \texttt{\textcolor{blue}{\footnotesize{}fmap}}
+for functors, using the available \texttt{\textcolor{blue}{\footnotesize{}map}}
+\ 
+\begin{itemize}
+\item but we cannot generalize \texttt{\textcolor{blue}{\footnotesize{}fmap}}
+to arbitrary type constructors \texttt{\textcolor{blue}{\footnotesize{}F{[}\_{]}}}:
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}def~fmap{[}F{[}\_{]},~A,~B{]}(f:~A~$\Rightarrow$~B):~F{[}A{]}~$\Rightarrow$~F{[}B{]}~=~???}{\footnotesize \par}
+\end{lyxcode}
+\item this can work only for type constructors \texttt{\textcolor{blue}{\footnotesize{}F{[}\_{]}}}
+that are functors
+\end{itemize}
+We would like to define functions whose type arguments, such as \texttt{\textcolor{blue}{\footnotesize{}T}}
+or \texttt{\textcolor{blue}{\footnotesize{}F{[}\_{]}}}, are required
+to belong to a \emph{certain subset} of possible types
+\begin{itemize}
+\item We could then use the known properties of these type arguments
+\item We would also like to add new supported types as needed
+\begin{itemize}
+\item This is similar to the concept of \emph{partial functions} \textendash{}
+applied to types
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Motivation for type classes II: Partial functions on types}
+
+\begin{itemize}
+\item Functions can be \textbf{total} or \textbf{partial}
+\begin{itemize}
+\item Total function: has a result for all argument values
+\item Partial function: has \emph{no result} for \emph{some} argument values
+\end{itemize}
+\item Also, functions can be, in principle, \{from/to\} \{values/types\}:
+\end{itemize}
+\begin{center}
+\begin{tabular}{|c|c|c|}
+\hline 
+function: &
+from value &
+from type\tabularnewline
+\hline 
+\hline 
+to value &
+\texttt{\textcolor{blue}{\footnotesize{}def f(x:\ Int):\ Int}} &
+\texttt{\textcolor{blue}{\footnotesize{}def point{[}A{]}: A $\Rightarrow$
+List{[}A{]}}}\tabularnewline
+\hline 
+to type &
+\emph{dependent type} &
+\texttt{\textcolor{blue}{\footnotesize{}type MyData{[}A{]} = Either{[}Int,
+A{]}}}\tabularnewline
+\hline 
+\end{tabular}
+\par\end{center}
+\begin{itemize}
+\item Evaluation: value-to-value \textendash{} run time, type-to-value \textendash{}
+compile time
+\begin{itemize}
+\item if we use type casts, type-to-value can become run-time (\emph{yuck!})
+\end{itemize}
+\end{itemize}
+\begin{center}
+\begin{tabular}{|c|c|c|}
+\hline 
+partial function: &
+ value-level (PVVF) &
+from type (PTVF)\tabularnewline
+\hline 
+\hline 
+example: &
+\texttt{\textcolor{blue}{\footnotesize{}\{ case Some(x) $\Rightarrow$
+x-1 \}}} &
+\texttt{\textcolor{blue}{\footnotesize{}implicitly{[}T{]}}}\tabularnewline
+\hline 
+when misapplied: &
+exception at run time &
+error at compile time\tabularnewline
+\hline 
+\end{tabular}
+\par\end{center}
+\begin{itemize}
+\item Type classes provide a systematic way of managing PTVFs
+\begin{itemize}
+\item we can apply a PTVF to type \texttt{\textcolor{blue}{\footnotesize{}T}}
+if \texttt{\textcolor{blue}{\footnotesize{}T}} ``belongs to a certain
+type class''
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Example of using value-level PFs: The caveats}
+
+\begin{itemize}
+\item Filter a \texttt{\textcolor{blue}{\footnotesize{}Seq{[}Either{[}Int,
+Boolean{]}{]}}}, then apply \texttt{\textcolor{blue}{\footnotesize{}map}}
+with a PF:
+\end{itemize}
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}val~s:~Seq{[}Int{]}~=~Seq(~Left(1),~Right(true),~Left(2)~)}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~.filter(\_.isLeft)~}\textrm{\textcolor{gray}{\footnotesize{}//~result~here~is~still~of~type~}}\textcolor{blue}{\footnotesize{}Seq{[}Either{[}...{]}{]}}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~.map~\{~case~Left(x)~$\Rightarrow$~x~\}~}\textrm{\textcolor{gray}{\footnotesize{}//~result~is~of~type~}}\textcolor{blue}{\footnotesize{}Seq{[}Int{]}}\textrm{\textcolor{gray}{\footnotesize{}~but~unsafe}}{\footnotesize \par}
+\end{lyxcode}
+\begin{itemize}
+\item ``We know'' it is okay to apply this PF here...
+\begin{itemize}
+\item but the types do not show this, \textendash{} compile-time checking
+doesn't help
+\item if refactored, the code may become wrong and break \emph{at run time}
+\end{itemize}
+\item The type-safe version uses \texttt{\textcolor{blue}{\footnotesize{}.collect}}
+instead of \texttt{\textcolor{blue}{\footnotesize{}.filter().map()}}:
+\end{itemize}
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}val~s:~Seq{[}Int{]}~=~Seq(~Left(1),~Right(true),~Left(2)~)}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~.collect~\{~case~Left(x)~$\Rightarrow$~x~\}}\textrm{\textcolor{gray}{\footnotesize{}~~//~result~is~safe,~of~type~}}\textcolor{blue}{\footnotesize{}Seq{[}Int{]}}{\footnotesize \par}
+\end{lyxcode}
+\begin{itemize}
+\item PFs are only safe in certain places, such as within \texttt{\textcolor{blue}{\footnotesize{}.collect()}}{\footnotesize \par}
+\begin{itemize}
+\item make functions total: either add code, or use \emph{more restrictive
+types}
+\item e.g.\ types such as ``non-empty list'', ``positive number'',
+\texttt{\textcolor{blue}{\footnotesize{}Some{[}T{]}}}, etc.
+\end{itemize}
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}def~f(xs:~NonEmptyList{[}Int{]})~=~\{}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~val~h~=~xs.head}\textrm{\textcolor{gray}{\footnotesize{}~~//~safe~and~checked~at~compile~time}}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}\}}{\footnotesize \par}
+\end{lyxcode}
+\item Can we restrict the \emph{type} \emph{parameter(s)} of a PTVF to a
+subset of types?
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Managing PTFs by hand I: Using GADTs}
+
+
+\framesubtitle{PTTFs: Partial Type-to-Type Functions}
+\begin{itemize}
+\item A type constructor that accepts only certain types as parameters:
+\end{itemize}
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}sealed~trait~MyTC{[}A{]}~}\textrm{\textcolor{gray}{\footnotesize{}//~``sealed''~GADT~\textendash{}~user~code~can't~add~cases}}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}final~case~class~Case1(d:~Double)~extends~MyTC{[}Int{]}}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}final~case~class~Case2()~extends~MyTC{[}String{]}}\textrm{\textcolor{gray}{\footnotesize{}~//~whatever}}{\footnotesize \par}
+\end{lyxcode}
+\begin{itemize}
+\item It looks like we have defined \texttt{\textcolor{blue}{\footnotesize{}MyTC{[}}}\textcolor{blue}{\footnotesize{}A}\texttt{\textcolor{blue}{\footnotesize{}{]}}}
+for any type \textcolor{blue}{\footnotesize{}A} ...
+\begin{itemize}
+\item actually, we can only ever create values of \texttt{\textcolor{blue}{\footnotesize{}MyTC{[}Int{]}}}
+or \texttt{\textcolor{blue}{\footnotesize{}MyTC{[}String{]}}}{\footnotesize \par}
+\item see example code
+\end{itemize}
+\item $\text{MyTC}^{A}$ is a PTTF because its values exist only for $A\in\left\{ \text{Int};\,\text{String}\right\} $
+\begin{itemize}
+\item The \textbf{type domain} $\left\{ \text{Int};\,\text{String}\right\} $
+is defined \emph{at compile time}
+\item Note: $\text{MyTC}^{A}$ cannot be a functor since it is not defined
+for all types $A$
+\end{itemize}
+\item When to use GADTs:
+\begin{itemize}
+\item for domain modeling (e.g.\ queries with a fixed set of result types)
+\item for DSLs that represent typed expressions
+\end{itemize}
+\item Alternatively, a PTTF can be a \texttt{\textcolor{blue}{\footnotesize{}trait}}
+with some implementation code
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Managing PTFs by hand II: Using OO method overriding}
+
+
+\framesubtitle{PTVFs: Partial Type-to-Value Functions \textendash{} the object-oriented
+way}
+\begin{itemize}
+\item A trait with \texttt{\textcolor{blue}{\footnotesize{}def}} methods
+that are overridden:
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}sealed~trait~HasPlus{[}A{]}~\{}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~def~plus(a1:~A,~a2:~A):~A}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}\}}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}final~case~class~CaseInt()~extends~HasPlus{[}Int{]}~\{}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~override~def~plus(a1:~Int,~a2:~Int):~Int~=~a1~+~a2}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}\}}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}final~case~class~CaseString()~extends~HasPlus{[}String{]}~\{}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~override~def~plus(a1:~String,~a2:~String):~String~=~a1~+~a2}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}\}}{\footnotesize \par}
+\end{lyxcode}
+\item \emph{Similar} to having defined \texttt{\textcolor{blue}{\footnotesize{}plus{[}A{]}}}
+for $A\in\left\{ \text{Int};\,\text{String}\right\} $
+\item Limitations:
+\begin{itemize}
+\item We can only call \texttt{\textcolor{blue}{\footnotesize{}plus() }}via
+a value of type \texttt{\textcolor{blue}{\footnotesize{}HasPlus{[}A{]}}}
+\ 
+\item All PTVFs must be declared up front in the trait
+\begin{itemize}
+\item Not extensible \textendash{} cannot add new PTVFs later
+\item Not compositional \textendash{} cannot use this in other PTVFs defined
+later
+\end{itemize}
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Managing PTFs by hand III: ``Type Evidence'' arguments}
+
+
+\framesubtitle{PTVFs: Partial Type-to-Value Functions \textendash{} the general
+case}
+
+To define a function \texttt{\textcolor{blue}{\footnotesize{}func{[}A{]}(...)}}
+only for certain types \texttt{\textcolor{blue}{\footnotesize{}A}}:
+\begin{enumerate}
+\item create a PTTF defined only for the relevant types \texttt{\textcolor{blue}{\footnotesize{}A}},
+e.g.\ \texttt{\textcolor{blue}{\footnotesize{}IsGood{[}A{]}}} \ 
+\item create some values of types \texttt{\textcolor{blue}{\footnotesize{}IsGood{[}A{]}}}
+for relevant types \texttt{\textcolor{blue}{\footnotesize{}A}} as
+needed
+\item add an \emph{extra argument} \texttt{\textcolor{blue}{\footnotesize{}ev:\ IsGood{[}A{]}}}
+(\textbf{type evidence}) to \texttt{\textcolor{blue}{\footnotesize{}func{[}A{]}(...)}}\ 
+\end{enumerate}
+What we gained:
+\begin{itemize}
+\item it is now impossible to call \texttt{\textcolor{blue}{\footnotesize{}func{[}A{]}}}
+with an unsupported type \texttt{\textcolor{blue}{\footnotesize{}A}}{\footnotesize \par}
+\begin{itemize}
+\item trying to do so will fail \emph{at compile time} \ \textendash{}
+TE values won't type-check
+\end{itemize}
+\item new supported types can be added in user code if \texttt{\textcolor{blue}{\footnotesize{}IsGood}}
+is not \texttt{\textcolor{blue}{\footnotesize{}sealed}}{\footnotesize \par}
+\end{itemize}
+The cost:
+\begin{itemize}
+\item all calls to \texttt{\textcolor{blue}{\footnotesize{}func{[}A{]}(args)}}
+will now become \texttt{\textcolor{blue}{\footnotesize{}func{[}A{]}(args,
+ev)}}{\footnotesize \par}
+\item one TE value \texttt{\textcolor{blue}{\footnotesize{}ev}} needs to
+be created for \emph{each} supported type \texttt{\textcolor{blue}{\footnotesize{}A}}\ 
+\item we now need to keep passing all these TE values around the code
+\end{itemize}
+Mitigate these issues in Scala by using \texttt{\textcolor{blue}{\footnotesize{}implicit}}
+values:
+\begin{itemize}
+\item TE arguments are explicit only at \texttt{\textcolor{blue}{\footnotesize{}func}}
+declaration site
+\item once defined as \texttt{\textcolor{blue}{\footnotesize{}implicit}},
+TE values are passed around invisibly
+\item new \texttt{\textcolor{blue}{\footnotesize{}implicit}} values can
+be built up automatically from previous ones
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Scala's mechanism of ``\texttt{implicit} values''}
+
+Implicit values are:
+\begin{itemize}
+\item declared as \texttt{\textcolor{blue}{\footnotesize{}implicit val x:\ SomeType
+= ...}}{\footnotesize \par}
+\begin{itemize}
+\item also have \texttt{\textcolor{blue}{\footnotesize{}implicit def f{[}T{]}(...)\ =
+...}} and \texttt{\textcolor{blue}{\footnotesize{}implicit class(...)}}{\footnotesize \par}
+\end{itemize}
+\item automatically passed into functions that declare extra arguments as
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}def~f(args...)(implicit~x:~SomeType)~=~...}{\footnotesize \par}
+\end{lyxcode}
+\item searched in local scope, imports, companion objects, parent classes
+\begin{itemize}
+\item having $\geq2$ \texttt{\textcolor{blue}{\footnotesize{}implicit}}
+values of the same type is a compile-time error!
+\end{itemize}
+\end{itemize}
+Special short syntax for declaring implicit TE arguments in a PTVF:
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}def~func{[}A:~TC1,~B:~TC2{]}(args...)~=~...}{\footnotesize \par}
+\end{lyxcode}
+\begin{itemize}
+\item This is entirely equivalent to this longer code:
+\end{itemize}
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}def~func{[}A,~B{]}(args...)(implicit~evA:~TC1{[}A{]},~evB:~TC2{[}B{]})=~...}{\footnotesize \par}
+\end{lyxcode}
+\begin{itemize}
+\item standard library has \texttt{\textcolor{blue}{\footnotesize{}def implicitly{[}A{]}(implicit
+x:\ A):\ A = x}}{\footnotesize \par}
+\end{itemize}
+We still need to:
+\begin{itemize}
+\item declare \texttt{\textcolor{blue}{\footnotesize{}MyTypeClass{[}A{]}}}
+as a PTTF elsewhere
+\item create TE values of various types and declare them as \texttt{\textcolor{blue}{\footnotesize{}implicit}}
+\ 
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Type classes I}
+
+
+\framesubtitle{The general definition}
+
+A \textbf{type class} is a set of PTVFs that all have the same type
+domain
+\begin{itemize}
+\item In terms of specific code to be written, a type class is:
+\begin{enumerate}
+\item a PTTF, e.g.\ \texttt{\textcolor{blue}{\footnotesize{}MyTypeClass{[}T{]}}}
+with some code that creates TE values, \emph{and}
+\item the desired PTVFs that use this PTTF to define their type domain
+\end{enumerate}
+\begin{itemize}
+\item for many important use cases, the PTVFs must also satisfy certain
+laws
+\end{itemize}
+\item A type \texttt{\textcolor{blue}{\footnotesize{}T}} ``\textbf{belongs
+to} the type class \texttt{\textcolor{blue}{\footnotesize{}MyTypeClass}}''
+if a TE value exists
+\begin{itemize}
+\item i.e.\ if \emph{some} value of type \texttt{\textcolor{blue}{\footnotesize{}MyTypeClass{[}T{]}}}
+can be found
+\end{itemize}
+\item A function \texttt{\textcolor{blue}{\footnotesize{}func{[}T{]}}} ``\textbf{requires}
+the type class \texttt{\textcolor{blue}{\footnotesize{}MyTypeClass}}
+for \texttt{\textcolor{blue}{\footnotesize{}T}}'' if one of \texttt{\textcolor{blue}{\footnotesize{}func}}'s
+arguments is a value of PTTF-constructed type \texttt{\textcolor{blue}{\footnotesize{}MyTypeClass{[}T{]}}}
+\ 
+\begin{itemize}
+\item that argument is the \textbf{type class instance} for the type parameter
+\texttt{\textcolor{blue}{\footnotesize{}T}}{\footnotesize \par}
+\item this \textbf{constrains} the type parameter \texttt{\textcolor{blue}{\footnotesize{}T}}
+to \textbf{belong to} the type class
+\item this is how we know that \texttt{\textcolor{blue}{\footnotesize{}func{[}T{]}}}
+is a PTVF
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Type classes II}
+
+
+\framesubtitle{Implementation in Scala}
+
+A type class is typically implemented as:
+\begin{enumerate}
+\item a trait with a type parameter, e.g.\ \texttt{\textcolor{blue}{\footnotesize{}trait
+MyTC{[}T{]}}}{\footnotesize \par}
+\item code that creates values of type \texttt{\textcolor{blue}{\footnotesize{}MyTC{[}T{]}}}
+for various \texttt{\textcolor{blue}{\footnotesize{}T}}{\footnotesize \par}
+\begin{itemize}
+\item these values are declared as \texttt{\textcolor{blue}{\footnotesize{}implicit}}
+and made available via imports or in the companion objects for the
+specific types \texttt{\textcolor{blue}{\footnotesize{}T}}{\footnotesize \par}
+\end{itemize}
+\item some functions with implicit argument(s) of type \texttt{\textcolor{blue}{\footnotesize{}MyTC{[}T{]}}}{\footnotesize \par}
+\begin{itemize}
+\item these functions are usually \texttt{\textcolor{blue}{\footnotesize{}def}}
+methods in a trait, but don't have to be
+\item laws for these functions may need to be enforced by property tests
+\end{itemize}
+\end{enumerate}
+A TE value should carry all information the PTVFs need about the type
+\texttt{\textcolor{blue}{\footnotesize{}T}}{\footnotesize \par}
+\begin{itemize}
+\item usually, the trait \texttt{\textcolor{blue}{\footnotesize{}MyTC{[}T{]}}}
+contains all the PTVFs as \texttt{\textcolor{blue}{\footnotesize{}def}}
+methods
+\item in simpler cases, TE can be a data type (not a trait with \texttt{\textcolor{blue}{\footnotesize{}def}}
+methods)
+\begin{itemize}
+\item a trait with \texttt{\textcolor{blue}{\footnotesize{}def}} methods
+is necessary for \emph{higher-order} type functions
+\end{itemize}
+\item additional PTVFs (with unchanged PTTF) can be added later
+\begin{itemize}
+\item no need to modify the code of \texttt{\textcolor{blue}{\footnotesize{}MyTC{[}T{]}}}
+if the type domain is unchanged
+\end{itemize}
+\item can combine with other PTTFs/PTVFs defined later
+\end{itemize}
+See example code
+\end{frame}
+
+\begin{frame}{Examples of type classes I}
+
+
+\framesubtitle{Some simple PTFs and their use cases}
+\begin{itemize}
+\item A type \texttt{\textcolor{blue}{\footnotesize{}T}} is a \textbf{semigroup}
+if it has an \emph{associative} binary operation
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}def~op{[}T{]}(x:~T,~y:~T):~T}{\footnotesize \par}
+\end{lyxcode}
+\begin{itemize}
+\item a bare-bones operation, no inverse \textendash{} just ``can combine'' 
+\end{itemize}
+\item A type \texttt{\textcolor{blue}{\footnotesize{}T}} is \textbf{pointed}
+if there exists a function \texttt{\textcolor{blue}{\footnotesize{}point{[}T{]}:\ T}}{\footnotesize \par}
+\begin{itemize}
+\item This is a special, somehow ``naturally'' selected value of that
+type
+\begin{itemize}
+\item Examples: \texttt{\textcolor{blue}{\footnotesize{}0:\ Int}}; \texttt{\textcolor{blue}{\footnotesize{}\textquotedbl{}\textquotedbl{}:\ String}};
+\texttt{\textcolor{blue}{\footnotesize{}identity{[}A{]}:\ A $\Rightarrow$
+A}}{\footnotesize \par}
+\end{itemize}
+\end{itemize}
+\item A type \texttt{\textcolor{blue}{\footnotesize{}T}} is a \textbf{monoid}
+if there exist functions
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}def~empty{[}T{]}:~T}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}def~combine{[}T{]}(x:~T,~y:~T):~T}{\footnotesize \par}
+\end{lyxcode}
+such that the usual algebraic laws hold:
+\begin{itemize}
+\item \texttt{\textcolor{blue}{\footnotesize{}combine}} is associative
+\item \texttt{\textcolor{black}{\footnotesize{}$\forall x:\text{combine}(\text{empty},x)=\text{combine}(x,\text{empty})=x$ }}{\footnotesize \par}
+\end{itemize}
+\item Monoids are an abstraction for any sort of data aggregation
+\end{itemize}
+See example code for implementing the \texttt{\textcolor{blue}{\footnotesize{}Monoid}}
+type class:
+\begin{itemize}
+\item by using a case class as a PTTF (instance from scratch)
+\item by assuming \texttt{\textcolor{blue}{\footnotesize{}Pointed}} and
+\texttt{\textcolor{blue}{\footnotesize{}Semigroup}} (``derived''
+instance)
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Examples of type classes II}
+
+
+\framesubtitle{Higher-order PTFs}
+\begin{itemize}
+\item A type constructor $F^{A}$ is a functor if it has a \texttt{\textcolor{blue}{\footnotesize{}map}}
+operation
+\begin{itemize}
+\item or, equivalently, \texttt{\textcolor{blue}{\footnotesize{}fmap}} 
+\item that satisfies the functor laws (identity law, composition law)
+\end{itemize}
+\item We would like to write a generic function that tests the functor laws
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}def~checkFunctorLaws{[}F{[}\_{]},~A,~B,~C{]}():~Assertion~=~???}{\footnotesize \par}
+\end{lyxcode}
+\item Need to get access to the function \texttt{\textcolor{blue}{\footnotesize{}map}}
+defined for the given \texttt{\textcolor{blue}{\footnotesize{}F}}{\footnotesize \par}
+\item We treat \texttt{\textcolor{blue}{\footnotesize{}map}} as a PTVF whose
+type domain is all functors \texttt{\textcolor{blue}{\footnotesize{}F}}:
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}def~map{[}F{[}\_{]},~A,~B{]}(fa:~F{[}A{]},~f:~A~$\Rightarrow$~B):~F{[}B{]}}{\footnotesize \par}
+\end{lyxcode}
+\item We constrain \texttt{\textcolor{blue}{\footnotesize{}F}} to belong
+to the \texttt{\textcolor{blue}{\footnotesize{}Functor}} type class
+\begin{itemize}
+\item by adding \texttt{\textcolor{blue}{\footnotesize{}implicit ev:\ Functor{[}F{]}}}
+as extra argument to \texttt{\textcolor{blue}{\footnotesize{}map}}{\footnotesize \par}
+\begin{itemize}
+\item note: \texttt{\textcolor{blue}{\footnotesize{}Functor}} is a \emph{higher-order}
+PTTF \textendash{} its type argument is \texttt{\textcolor{blue}{\footnotesize{}F{[}\_{]}}}{\footnotesize \par}
+\end{itemize}
+\end{itemize}
+\end{itemize}
+See test code for implementation and functor laws
+\end{frame}
+
+\begin{frame}{Overview: Types and kinds}
+
+Compare value-to-value functions (VVFs) vs.\ type-to-value functions:
+\begin{itemize}
+\item the \textbf{domain} of a VVF is the set of admissible argument \emph{values}
+\begin{itemize}
+\item a ``value domain'' (subset of values) is called a \textbf{type}
+\item the VVF is applied safely only to argument values of the right \textbf{type}
+\end{itemize}
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}def~f(x:~Option{[}Int{]})~=~...;~f(y);}{\footnotesize \par}
+\end{lyxcode}
+\item the \textbf{type domain} of a PTVF is the set of admissible argument
+\emph{types}
+\begin{itemize}
+\item a ``type domain'' (subset of types) is called a \textbf{kind}
+\item the PTVF is applied safely only to type arguments of the right \textbf{kind}
+\end{itemize}
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}def~f{[}T:~MyTypeClass{]}(args...)~=~...;~f{[}A{]}(args);}{\footnotesize \par}
+\end{lyxcode}
+\item In both cases, the function call's safety is guaranteed \emph{at compile
+time}
+\end{itemize}
+Kinds are the ``type system for types''
+\begin{itemize}
+\item a type class \texttt{\textcolor{blue}{\footnotesize{}MyTypeClass}}
+defines a new kind (as a subset of types)
+\begin{itemize}
+\item suggested \textbf{kind} notation:{\footnotesize{} $(*:\text{MyTypeClass})$}{\footnotesize \par}
+\end{itemize}
+\item another existing kind is the \textbf{type function} kind (notation:
+$*\rightarrow*$)
+\begin{itemize}
+\item in \texttt{\textcolor{blue}{\footnotesize{}F{[}T{]}}}, the \texttt{\textcolor{blue}{\footnotesize{}F}}
+and the \texttt{\textcolor{blue}{\footnotesize{}T}} are types of different
+\textbf{kinds} ($*\rightarrow*$ and $*$ resp.)
+\item define \texttt{\textcolor{blue}{\footnotesize{}type Ap{[}F{[}\_{]},
+T{]} = F{[}T{]}}}, then wrong kinds will fail in \texttt{\textcolor{blue}{\footnotesize{}Ap{[}A,
+B{]}}}{\footnotesize \par}
+\begin{itemize}
+\item suggested \textbf{kind} notation:{\footnotesize{} $\text{Ap}:(*\rightarrow*,\,*)\rightarrow*$
+}(``higher-kinded type'')
+\end{itemize}
+\item See test code
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Scala's ``implicit method'' syntax for PTVFs}
+
+Two sorts of available syntax for Scala functions:
+\begin{enumerate}
+\item as in ordinary math: \texttt{\textcolor{blue}{\footnotesize{}func(x,
+y)}} or \texttt{\textcolor{blue}{\footnotesize{}func(x, y)(z)}} etc.
+\item as ``method'': \texttt{\textcolor{blue}{\footnotesize{}x.func(y)}}
+or equivalently \texttt{\textcolor{blue}{\footnotesize{}x func y}}
+\ 
+\begin{itemize}
+\item this is similar to \texttt{\textcolor{blue}{\footnotesize{}func(x)(y)}}
+but is implemented differently
+\end{itemize}
+\end{enumerate}
+It is often convenient to use functions syntactically as methods:
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}def~+++{[}T:~HasPlusPlusPlus{]}(t:~T,~arg:~...)~=~...}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}val~t:~T~=~...}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}+++(t,~arg)~}\textrm{\textcolor{gray}{\footnotesize{}//~that's~how~we~have~to~call~this~function}}{\footnotesize \par}
+
+\textrm{\textcolor{gray}{\footnotesize{}//~but~instead~we~want~to~be~able~to~write~}}\textcolor{gray}{\footnotesize{}t~+++~arg}{\footnotesize \par}
+\end{lyxcode}
+Implementing the ``implicit method syntax'' for a PTVF \texttt{\textcolor{blue}{\footnotesize{}func}}:
+\begin{itemize}
+\item declare \texttt{\textcolor{blue}{\footnotesize{}func}} as a method
+on a new trait or class, say \texttt{\textcolor{blue}{\footnotesize{}MyTCSyntax{[}T{]}}}{\footnotesize \par}
+\item declare an \emph{implicit conversion }function from \texttt{\textcolor{blue}{\footnotesize{}T}}
+to \texttt{\textcolor{blue}{\footnotesize{}MyTCSyntax{[}T{]}}}{\footnotesize \par}
+\begin{itemize}
+\item to make the code shorter, use an \texttt{\textcolor{blue}{\footnotesize{}implicit
+class}}{\footnotesize \par}
+\item see example code
+\end{itemize}
+\end{itemize}
+What we gained:
+\begin{itemize}
+\item the PTVF appears as a method \emph{only} on values of the relevant
+types
+\item the new syntax is defined automatically on \emph{all} the relevant
+types \texttt{\textcolor{blue}{\footnotesize{}T}}{\footnotesize \par}
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Worked examples}
+
+\begin{enumerate}
+\item Define a PTVF \texttt{\textcolor{blue}{\footnotesize{}def bitsize{[}T{]}
+= ...}} such that \texttt{\textcolor{blue}{\footnotesize{}bitsize{[}Int{]}}}
+returns $32$ and \texttt{\textcolor{blue}{\footnotesize{}bitsize{[}Long{]}}}
+returns $64$; otherwise \texttt{\textcolor{blue}{\footnotesize{}bitsize{[}T{]}}}
+is undefined
+\item Define a monoid instance for the type $1+\left(\text{String}\Rightarrow\text{String}\right)$
+\item Assuming that $A$ and $B$ are monoids, define monoid instance for
+$A\times B$
+\item Show: If $A$ is a monoid and $B$ is a semigroup then $A+B$ is a
+monoid
+\item Define a functor instance for \texttt{\textcolor{blue}{\footnotesize{}type
+F{[}T{]} = Seq{[}Try{[}T{]}{]}}}{\footnotesize \par}
+\item Define a Cats' \texttt{\textcolor{blue}{\footnotesize{}Bifunctor}}
+instance for $Q^{X,Y}\equiv X+X\times Y$
+\item Define a \texttt{\textcolor{blue}{\footnotesize{}ContraFunctor}} type
+class having \texttt{\textcolor{blue}{\footnotesize{}contrafmap}}:
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}def~contrafmap{[}A,~B{]}(f:~B~$\Rightarrow$~A):~C{[}A{]}~$\Rightarrow$~C{[}B{]}}{\footnotesize \par}
+\end{lyxcode}
+Define a \texttt{\textcolor{blue}{\footnotesize{}ContraFunctor}} instance
+for type constructor $C^{A}\equiv A\Rightarrow\text{Int}$
+\item Define functor instance for recursive type $Q^{A}\equiv\left(\text{Int}\Rightarrow A\right)+\text{Int}+Q^{A}$
+\item {*} If $F^{A}$ and $G^{A}$ are functors, define functor instance
+for $F^{A}+G^{A}$
+\end{enumerate}
+\end{frame}
+
+\begin{frame}{Exercises}
+
+\begin{enumerate}
+\item Define a PTVF \texttt{\textcolor{blue}{\footnotesize{}def isLong{[}T{]}:\ Boolean}}
+that returns \texttt{\textcolor{blue}{\footnotesize{}true}} for \texttt{\textcolor{blue}{\footnotesize{}Long}}
+and \texttt{\textcolor{blue}{\footnotesize{}Double}}; returns \texttt{\textcolor{blue}{\footnotesize{}false}}
+for \texttt{\textcolor{blue}{\footnotesize{}Int}}, \texttt{\textcolor{blue}{\footnotesize{}Short}},
+and \texttt{\textcolor{blue}{\footnotesize{}Float}}; otherwise undefined
+\item Define a monoid instance for the type $\text{String}\times(1+\text{Int})$
+\item If $A$ is a monoid and $R$ any type, define monoid instance for
+$R\Rightarrow A$
+\item Show: If \texttt{\textcolor{blue}{\footnotesize{}S}} is a semigroup
+then \texttt{\textcolor{blue}{\footnotesize{}Option{[}S{]}}} is a
+monoid
+\item Define a functor instance for \texttt{\textcolor{blue}{\footnotesize{}type
+F{[}T{]} = Future{[}Seq{[}T{]}{]}}}{\footnotesize \par}
+\item Define a Cats' \texttt{\textcolor{blue}{\footnotesize{}Bifunctor}}
+instance for $B^{X,Y}\equiv\left(\text{Int}\Rightarrow X\right)+Y\times Y$
+\item Define a \texttt{\textcolor{blue}{\footnotesize{}ProFunctor}} type
+class having \texttt{\textcolor{blue}{\footnotesize{}dimap}}:
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}def~dimap{[}A,~B{]}(f:~A~$\Rightarrow$~B,~g:~B~$\Rightarrow$~A):~F{[}A{]}~$\Rightarrow$~F{[}B{]}}{\footnotesize \par}
+\end{lyxcode}
+Define a \texttt{\textcolor{blue}{\footnotesize{}ProFunctor}} instance
+for $P^{A}\equiv A\Rightarrow\left(\text{Int}\times A\right)$
+\item Define a functor instance for recursive type $Q^{A}\equiv\text{String}+A\times Q^{A}$
+\item {*} If $F^{A}$ and $G^{A}$ are functors, define functor instance
+for $F^{A}\times G^{A}$ 
+\item {*} Define a functor instance for $F^{A}\Rightarrow G^{A}$ where
+$F^{A}$ is a contrafunctor (use Cats' \texttt{\textcolor{blue}{\footnotesize{}Contravariant}}
+type class for $F^{A}$) and $G^{A}$ is a functor
+\end{enumerate}
+\end{frame}
+
+\begin{frame}{Further directions}
+
+\begin{itemize}
+\item What problems can we solve now?
+\begin{itemize}
+\item Define arbitrary PTTFs and use them to define type classes (PTVFs) 
+\item Define them together or separately, combine them at will
+\item Use the Cats library to define instances for standard type classes
+\item Derive type class instances automatically from previous ones
+\item Reason about higher-order type functions, types, and kinds as necessary
+\end{itemize}
+\item What problems cannot be solved with these tools?
+\begin{itemize}
+\item Automatically derive type class instances for polynomial data types
+\begin{itemize}
+\item see \href{https://github.com/underscoreio/shapeless-guide}{The guide to ``shapeless''},
+chapter 3
+\end{itemize}
+\item Derive a recursive type generically from an arbitrary type function
+\begin{itemize}
+\item Given a type function \texttt{\textcolor{blue}{\footnotesize{}F{[}\_{]}}},
+define a recursive type \texttt{\textcolor{blue}{\footnotesize{}R}}
+via \texttt{\textcolor{blue}{\footnotesize{}R = F{[}R{]}}}{\footnotesize \par}
+\item This \texttt{\textcolor{blue}{\footnotesize{}R}} will be a function
+of \texttt{\textcolor{blue}{\footnotesize{}F}}; denote that type function
+by \texttt{\textcolor{blue}{\footnotesize{}Y{[}F{[}\_{]}{]}}}{\footnotesize \par}
+\item This \texttt{\textcolor{blue}{\footnotesize{}Y}} must be defined by
+a type equation like this,
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}type~Y{[}F{[}\_{]}{]}~=~F{[}Y{[}F{]}{]}}\textrm{\textcolor{gray}{\footnotesize{}~//~does~not~compile~(``cyclic~type'')}}{\footnotesize \par}
+\end{lyxcode}
+\end{itemize}
+\item Automatically derive type class instances for such recursive types
+\begin{itemize}
+\item That requires type-level recursion (type-level fixpoints), see \href{https://github.com/slamdata/matryoshka}{matryoshka}
+\end{itemize}
+\end{itemize}
+\item This and other advanced topics are found in \href{https://apocalisp.wordpress.com/2010/06/08/type-level-programming-in-scala/}{this blog post from 2010}
+\end{itemize}
+\end{frame}
+
+\end{document}
+ze}
+\end{frame}
+
+\end{document}

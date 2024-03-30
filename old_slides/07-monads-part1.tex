@@ -1,0 +1,543 @@
+\batchmode
+\makeatletter
+\def\input@path{{/Users/sergei.winitzki/Code/talks/ftt-fp/}}
+\makeatother
+\documentclass[english]{beamer}
+\usepackage[T1]{fontenc}
+\usepackage[latin9]{inputenc}
+\setcounter{secnumdepth}{3}
+\setcounter{tocdepth}{3}
+\usepackage{babel}
+\usepackage{amstext}
+\ifx\hypersetup\undefined
+  \AtBeginDocument{%
+    \hypersetup{unicode=true,pdfusetitle,
+ bookmarks=true,bookmarksnumbered=false,bookmarksopen=false,
+ breaklinks=false,pdfborder={0 0 1},backref=false,colorlinks=true}
+  }
+\else
+  \hypersetup{unicode=true,pdfusetitle,
+ bookmarks=true,bookmarksnumbered=false,bookmarksopen=false,
+ breaklinks=false,pdfborder={0 0 1},backref=false,colorlinks=true}
+\fi
+
+\makeatletter
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Textclass specific LaTeX commands.
+ % this default might be overridden by plain title style
+ \newcommand\makebeamertitle{\frame{\maketitle}}%
+ % (ERT) argument for the TOC
+ \AtBeginDocument{%
+   \let\origtableofcontents=\tableofcontents
+   \def\tableofcontents{\@ifnextchar[{\origtableofcontents}{\gobbletableofcontents}}
+   \def\gobbletableofcontents#1{\origtableofcontents}
+ }
+ \newenvironment{lyxcode}
+   {\par\begin{list}{}{
+     \setlength{\rightmargin}{\leftmargin}
+     \setlength{\listparindent}{0pt}% needed for AMS classes
+     \raggedright
+     \setlength{\itemsep}{0pt}
+     \setlength{\parsep}{0pt}
+     \normalfont\ttfamily}%
+    \def\{{\char`\{}
+    \def\}{\char`\}}
+    \def\textasciitilde{\char`\~}
+    \item[]}
+   {\end{list}}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% User specified LaTeX commands.
+\usetheme[secheader]{Boadilla}
+\usecolortheme{seahorse}
+\title[Chapter 7: Functor-lifted computations II]{Chapter 7: Computations lifted to a functor context II. Monads and semimonads}
+\subtitle{Part 1: Intuitions, examples, use cases}
+\author{Sergei Winitzki}
+\date{2018-03-25}
+\institute[ABTB]{Academy by the Bay}
+\setbeamertemplate{headline}{} % disable headline at top
+\setbeamertemplate{navigation symbols}{} % disable navigation bar at bottom
+\usepackage[all]{xy}
+\usepackage[nocenter]{qtree}
+\makeatletter
+% Macros to assist LyX with XYpic when using scaling.
+\newcommand{\xyScaleX}[1]{%
+\makeatletter
+\xydef@\xymatrixcolsep@{#1}
+\makeatother
+} % end of \xyScaleX
+\makeatletter
+\newcommand{\xyScaleY}[1]{%
+\makeatletter
+\xydef@\xymatrixrowsep@{#1}
+\makeatother
+} % end of \xyScaleY
+
+\makeatother
+
+\begin{document}
+\frame{\titlepage}
+\begin{frame}{Computations within a functor context: Semimonads}
+
+
+\framesubtitle{Intuitions behind adding more ``generator arrows''}
+
+Example of nested iterations: {\footnotesize{}
+\[
+\sum_{i=1}^{n}\sum_{j=1}^{n}\sum_{k=1}^{n}f(i,j,k)
+\]
+}{\footnotesize \par}
+
+Using Scala's \texttt{\textcolor{blue}{\footnotesize{}for}}/\texttt{\textcolor{blue}{\footnotesize{}yield}}
+syntax (``functor block'')
+
+\texttt{\textcolor{blue}{\footnotesize{}}}%
+\begin{minipage}[t]{0.49\columnwidth}%
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}(for~\{~i~$\leftarrow$~1~to~n}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~~~j~$\leftarrow$~1~to~n}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~~~k~$\leftarrow$~1~to~n}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~\}~yield~f(i,~j,~k)}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}).sum}{\footnotesize \par}
+\end{lyxcode}
+%
+\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}}}%
+\begin{minipage}[t]{0.49\columnwidth}%
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}(1~to~n).flatMap~\{~i~$\Rightarrow$}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~~(1~to~n).flatMap~\{~j~$\Rightarrow$}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~~~~(1~to~n).map~\{~k~$\Rightarrow$}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~~~~~~f(i,~j,~k)}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~\}\}\}.sum}{\footnotesize \par}
+\end{lyxcode}
+%
+\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\medskip{}
+}}{\footnotesize \par}
+\begin{itemize}
+\item \texttt{\textcolor{blue}{\footnotesize{}map}} replaces the last left
+arrow, \texttt{\textcolor{blue}{\footnotesize{}flatMap}} replaces
+other left arrows
+\begin{itemize}
+\item When the functor is \emph{also} filterable, we can use ``\texttt{\textcolor{blue}{\footnotesize{}if}}''
+as well
+\end{itemize}
+\item Standard library defines \texttt{\textcolor{blue}{\footnotesize{}flatMap()}}
+as replacement of \texttt{\textcolor{blue}{\footnotesize{}map() $\circ$
+flatten}} 
+\begin{itemize}
+\item \texttt{\textcolor{blue}{\footnotesize{}(1 to n).map(j $\Rightarrow$
+...).flatten}} is \texttt{\textcolor{blue}{\footnotesize{}(1 to n).flatMap(j
+$\Rightarrow$ ...)}} 
+\end{itemize}
+\item Functors having \texttt{\textcolor{blue}{\footnotesize{}flatMap}}/\texttt{\textcolor{blue}{\footnotesize{}flatten}}
+are ``flattenable'' or \textbf{semimonads}
+\begin{itemize}
+\item Most of them also have method \texttt{\textcolor{blue}{\footnotesize{}pure:\ A
+$\Rightarrow$ F{[}A{]}}} and so are \textbf{monads}
+\begin{itemize}
+\item The method \texttt{\textcolor{blue}{\footnotesize{}pure}} is not relevant
+in the functor block
+\item We will not need \texttt{\textcolor{blue}{\footnotesize{}pure}} in
+this part of the tutorial; focus on semimonads
+\end{itemize}
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}{How \texttt{\textcolor{blue}{\footnotesize{}flatMap}} works with lists}
+
+\begin{itemize}
+\item consider \texttt{\textcolor{blue}{\footnotesize{}List(x1, x2, x3).flatMap(x
+$\Rightarrow$ f(x))}} 
+\item assume that 
+\end{itemize}
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}f:~X~$\Rightarrow$~List{[}Y{]}}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}f(x1)~=~List(y0,~y1)}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}f(x2)~=~List(y2)}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}f(x3)~=~List(y3,~y4,~y5,~y6)}{\footnotesize \par}
+\end{lyxcode}
+\begin{itemize}
+\item then the result is \texttt{\textcolor{blue}{\footnotesize{}List(y0,
+y1, y2, y3, y4, y5, y6)}} 
+\item if we first do \texttt{\textcolor{blue}{\footnotesize{}.map(f)}} then
+\texttt{\textcolor{blue}{\footnotesize{}flatten}}:
+\end{itemize}
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}List(x1,~x2,~x3).map(f).flatten~=}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~List(List(y0,~y1),~List(y2),~List(y3,~y4,~y5,~y6)).flatten~=}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~List(y0,~y1,~y2,~y3,~y4,~y5,~y6)}~
+\end{lyxcode}
+\end{frame}
+
+\begin{frame}{What is \texttt{\textcolor{blue}{\footnotesize{}flatMap}} doing with
+the data in a collection?}
+
+Consider this schematic code, using \texttt{\textcolor{blue}{\footnotesize{}Seq}}
+as the container type:\texttt{\textcolor{blue}{\footnotesize{} }}%
+\begin{minipage}[t]{0.49\columnwidth}%
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}val~result~=~for~\{}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~i~$\leftarrow$~1~to~m}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~j~$\leftarrow$~1~to~n}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~x~=~f(i,~j)}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~k~$\leftarrow$~1~to~p}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~y~=~g(i,~j,~k)}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}\}~yield~h(x,y)}{\footnotesize \par}
+\end{lyxcode}
+%
+\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}}}%
+\begin{minipage}[t]{0.49\columnwidth}%
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}val~result~=~\{}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~(1~to~m).flatMap~\{~i~$\Rightarrow$}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~~~(1~to~n).flatMap~\{~j~$\Rightarrow$}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~~~~~val~x~=~f(i,~j)}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~~~~~(1~to~p).map~\{~k~$\Rightarrow$}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~~~~~~~val~y~=~g(i,~j,~k)}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~~~~~~~h(x,y)~~\}~\}~\}~\}}{\footnotesize \par}
+\end{lyxcode}
+%
+\end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\medskip{}
+}}{\footnotesize \par}
+
+Computations are repeated for all $i$, for all $j$, etc., from each
+collection
+\begin{itemize}
+\item All ``generator lines'' must use the same container type
+\begin{itemize}
+\item Each generator line finally computes a container of \emph{that} type
+\item The total number of resulting data items is $\leq m*n*p$\texttt{\textcolor{blue}{\footnotesize{} }}{\footnotesize \par}
+\item All the resulting data items must fit within \emph{the same} container
+type!
+\item {\footnotesize{}The set of }\emph{\footnotesize{}container capacity
+counts}{\footnotesize{} must be closed under multiplication}{\footnotesize \par}
+\end{itemize}
+\item What container types have this property?
+\begin{itemize}
+\item \texttt{\textcolor{blue}{\footnotesize{}Seq,}} \texttt{\textcolor{blue}{\footnotesize{}NonEmptyList}}
+\textendash{} can hold \emph{any} number of elements $\geq$ min.\ count
+\item \texttt{\textcolor{blue}{\footnotesize{}Option}}, \texttt{\textcolor{blue}{\footnotesize{}Either}},
+\texttt{\textcolor{blue}{\footnotesize{}Try}}, \texttt{\textcolor{blue}{\footnotesize{}Future}}
+\textendash{} can hold $0$ or $1$ elements (``pass/fail'')
+\item ``Tree-like'' containers, e.g.\ can hold only $3$, $6$, $9$,
+$12$, ...\ elements
+\item ``Non-standard'' containers: $F^{A}\equiv\text{String}\Rightarrow A$;
+$F^{A}\equiv\left(A\Rightarrow\text{Int}\right)\Rightarrow\text{Int}$
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Worked examples I: List-like monads}
+
+
+\framesubtitle{\texttt{\footnotesize{}Seq}, \texttt{\footnotesize{}NonEmptyList},
+\texttt{\footnotesize{}Iterator}, \texttt{\footnotesize{}Stream}}
+
+Typical tasks for ``list-like'' monads:
+\begin{itemize}
+\item Create a list of all combinations or all permutations of a sequence
+\item Traverse a ``solution tree'' with DFS and filter out incorrect solutions
+\begin{itemize}
+\item Can use eager (\texttt{\textcolor{blue}{\footnotesize{}Seq}}) or lazy
+(\texttt{\textcolor{blue}{\footnotesize{}Iterator}}, \texttt{\textcolor{blue}{\footnotesize{}Stream}})
+evaluation strategies
+\item Usually, list-like containers have many additional methods
+\begin{itemize}
+\item append, prepend, concat, fill, fold, scan, etc.
+\end{itemize}
+\end{itemize}
+\end{itemize}
+Worked examples: see code
+\begin{enumerate}
+\item All permutations of \texttt{\textcolor{blue}{\footnotesize{}Seq(\textquotedbl{}a\textquotedbl{},
+\textquotedbl{}b\textquotedbl{}, \textquotedbl{}c\textquotedbl{})}} 
+\item All subsets of \texttt{\textcolor{blue}{\footnotesize{}Set(\textquotedbl{}a\textquotedbl{},
+\textquotedbl{}b\textquotedbl{}, \textquotedbl{}c\textquotedbl{})}} 
+\item All subsequences of length 3 out of a given sequence
+\item Generalize examples 1-3 to support arbitrary length $n$ instead of
+3
+\item All solutions of the ``8 queens'' problem
+\item Generalize example 5 to solve $n$-queens problem
+\item Transform Boolean formulas between CNF and DNF 
+\end{enumerate}
+\end{frame}
+
+\begin{frame}{Intuitions for pass/fail monads}
+
+
+\framesubtitle{\texttt{\footnotesize{}Option}, \texttt{\footnotesize{}Either}, \texttt{\footnotesize{}Try},
+\texttt{\footnotesize{}Future}}
+\begin{itemize}
+\item Container $F^{A}$ can hold $n=1$ or $n=0$ values of type $A$
+\item Such containers will have methods to create ``pass'' and ``fail''
+values
+\end{itemize}
+Schematic example of a functor block program using the \texttt{\textcolor{blue}{\footnotesize{}Try}}
+functor:
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}val~result:~Try{[}A{]}~=~for~\{~}\textrm{\textcolor{darkgray}{\footnotesize{}//~computations~in~the~}}\textcolor{darkgray}{\footnotesize{}Try}\textrm{\textcolor{darkgray}{\footnotesize{}~functor}}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~x~$\leftarrow$~Try(...)~}\textrm{\textcolor{darkgray}{\footnotesize{}//~first~computation;~may~fail}}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~y~=~f(x)~}\textrm{\textcolor{darkgray}{\footnotesize{}//~no~possibility~of~failure~in~this~line}}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~if~p(y)~}\textrm{\textcolor{darkgray}{\footnotesize{}//~the~entire~expression~will~fail~if~this~is~false}}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~z~$\leftarrow$~Try(g(x,~y))}\textrm{\textcolor{darkgray}{\footnotesize{}~//~may~fail~here}}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}~~r~$\leftarrow$~Try(...)}\textrm{\textcolor{darkgray}{\footnotesize{}~//~may~fail~here~as~well}}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}\}~yield~r~}\textrm{\textcolor{darkgray}{\footnotesize{}//~~}}\textcolor{darkgray}{\footnotesize{}r}\textrm{\textcolor{darkgray}{\footnotesize{}~is~of~type~}}\textcolor{darkgray}{\footnotesize{}A}\textrm{\textcolor{darkgray}{\footnotesize{},~so~}}\textcolor{darkgray}{\footnotesize{}result}\textrm{\textcolor{darkgray}{\footnotesize{}~is~of~type~}}\textcolor{darkgray}{\footnotesize{}Try{[}A{]}}{\footnotesize \par}
+\end{lyxcode}
+\begin{itemize}
+\item Computations may yield a result ($n=1$), or may fail ($n=0$)
+\item The functor block chains several such computations \emph{sequentially}
+\begin{itemize}
+\item Computations are sequential even if using the \texttt{\textcolor{blue}{\footnotesize{}Future}}
+functor!
+\item Once any computation fails, the entire functor block fails ($0*n=0$)
+\item Only if \emph{all} computations succeed, the functor block returns
+\emph{one} value
+\item Filtering can also make the entire functor block fail
+\end{itemize}
+\item ``Flat'' functor block replaces a chain of nested \texttt{\textcolor{blue}{\footnotesize{}if/else}}
+or \texttt{\textcolor{blue}{\footnotesize{}match/case}} 
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Worked examples II: Pass/fail monads}
+
+Type constructors:
+\begin{itemize}
+\item \texttt{\textcolor{blue}{\footnotesize{}Option{[}A{]}}} $\equiv1+A$
+\item \texttt{\textcolor{blue}{\footnotesize{}Either{[}Z, A{]}}} $\equiv Z+A$
+\item \texttt{\textcolor{blue}{\footnotesize{}Try{[}A{]}}} $\equiv$\texttt{\textcolor{blue}{\footnotesize{}
+Either{[}Throwable, A{]}}} 
+\end{itemize}
+Typical tasks for pass/fail monads:
+\begin{itemize}
+\item Perform a linear sequence of computations that may fail
+\item Avoid crashing on failure, instead return an \emph{error value}
+\end{itemize}
+Worked examples: see code
+\begin{enumerate}
+\item Read values of Java properties, checking that they all exist
+\item Obtain values from \texttt{\textcolor{blue}{\footnotesize{}Future}}
+computations in sequence
+\item Make arithmetic safe by returning error messages in \texttt{\textcolor{blue}{\footnotesize{}Either}} 
+\item Pass/fail chain: sequencing computations that may throw an exception
+\end{enumerate}
+\end{frame}
+
+\begin{frame}{Intuitions for tree-like monads}
+
+Examples of tree-like recursive type constructors:
+\begin{itemize}
+\item $F^{A}\equiv A+F^{A}\times F^{A}$ (binary tree)
+\item $F^{A}\equiv A+S^{F^{A}}$ ($S$-shaped tree, where $S$ is a functor)
+\item $F^{A}\equiv A\times A+F^{A}\times F^{A}$ (binary tree with binary
+leaves)
+\item $F^{A}\equiv S^{A}+S^{F^{A}}$ ($S$-shaped tree with $S$-shaped
+leaves)
+\end{itemize}
+Implementing \texttt{\textcolor{blue}{\footnotesize{}flatMap}} for
+these type constructors is recursive
+\begin{itemize}
+\item See example code
+\begin{itemize}
+\item Note: trees with $S$-shaped leaves are \emph{semi}-monads but not
+monads
+\end{itemize}
+\end{itemize}
+Example of a \emph{non-monadic} tree-like functor:
+\begin{itemize}
+\item $F^{A}\equiv A+A\times A+A\times A\times A\times A+...$ (powers of
+2)
+\item Recursive definition: $F^{A}=A+F^{A\times A}$
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Worked examples III: Tree-like monads}
+
+How \texttt{\textcolor{blue}{\footnotesize{}flatMap}} works for a
+binary tree: assume \texttt{\textcolor{blue}{\footnotesize{}f:\ A
+$\Rightarrow$ Tree{[}B{]}}} and
+
+\texttt{\textcolor{blue}{\footnotesize{}tree1}} =  \Tree[  [ $a_1$ ] [ [ $a_2$ ] [ $a_3$ ] ] ] 
+; $f(a_{1})=$ \Tree[  [ $b_0$ ] [ $b_1$ ] ] ; $f(a_{2})=b_{2}$;
+$f(a_{3})=$ \Tree[  [ $b_3$ ] [ $b_4$ ] ]  
+\begin{itemize}
+\item then \texttt{\textcolor{blue}{\footnotesize{}tree1.flatMap(f)}} = \Tree[  [ [ $b_0$ ] [ $b_1$ ] ] [ [ $b_2$ ] [ [ $b_3$ ] [ $b_4$ ] ] ] ]  
+\item grafting subtrees plays the role of ``flattening''
+\end{itemize}
+Typical tasks for tree-like monads:
+\begin{itemize}
+\item Traverse a tree, graft subtrees at leaves
+\item Substitute subexpressions in a syntax tree
+\end{itemize}
+Worked examples: see code
+\begin{enumerate}
+\item Implement a tree of \texttt{\textcolor{blue}{\footnotesize{}String}}
+properties with arbitrary branching
+\item Implement variable substitution for a simple arithmetic language
+\end{enumerate}
+\end{frame}
+
+\begin{frame}{Worked examples IV: Single-value monads}
+
+\begin{itemize}
+\item Pretend that container holds exactly $1$ value, together with a ``context''
+\item Usually, methods exist to insert a value and to work with the ``context''
+\end{itemize}
+Typical tasks for single-value monads:
+\begin{itemize}
+\item Managing extra information about computations along the way
+\item Chaining computations with a nonstandard evaluation strategy
+\end{itemize}
+Examples: see code
+\begin{enumerate}
+\item \texttt{\textcolor{blue}{\footnotesize{}Writer}}: Perform computations
+and log information about each step
+\begin{itemize}
+\item $\text{Writer}^{A}\equiv A\times W$ where $W$ is a monoid or a semigroup
+\end{itemize}
+\item \texttt{\textcolor{blue}{\footnotesize{}Reader}}: Read-only context,
+or dependency injection
+\begin{itemize}
+\item $\text{Reader}^{A}\equiv E\Rightarrow A$ where $E$ represents the
+``environment''
+\end{itemize}
+\item \texttt{\textcolor{blue}{\footnotesize{}Eval}}: Perform a sequence
+of lazy or memoized computations
+\begin{itemize}
+\item $\text{Eval}^{A}\equiv A+\left(1\Rightarrow A\right)$
+\end{itemize}
+\item \texttt{\textcolor{blue}{\footnotesize{}Cont}}: A chain of asynchronous
+operations
+\begin{itemize}
+\item $\text{Cont}^{A}\equiv\left(A\Rightarrow R\right)\Rightarrow R$ where
+$R$ is the fixed ``result'' type
+\end{itemize}
+\item \texttt{\textcolor{blue}{\footnotesize{}State}}: A sequence of steps
+that update state while returning results
+\begin{itemize}
+\item $\text{State}^{A}\equiv S\Rightarrow A\times S$ where $S$ is the
+fixed ``state'' value type
+\end{itemize}
+\end{enumerate}
+\end{frame}
+
+\begin{frame}{Deriving the types of single-value monads}
+e types of single-value monads}
+
+
+\framesubtitle{Motivation for the choice of the type constructors $\text{Writer}^{A}$,
+$\text{Reader}^{A}$, $\text{State}^{A}$, $\text{Cont}^{A}$}
+
+We want previous values to be transformed via \texttt{\textcolor{blue}{\footnotesize{}flatMap}}
+to next values
+\begin{itemize}
+\item \texttt{\textcolor{blue}{\footnotesize{}Writer}}: a computation $\left(A\Rightarrow B\right)$
+and some info ($W$) about it
+\begin{itemize}
+\item $x^{A}\Rightarrow f(x):B$ and $x^{A}\Rightarrow g(x):W$; the type
+is $\left(A\Rightarrow B\right)\times\left(A\Rightarrow W\right)$
+\item this function should have type $A\Rightarrow\text{Writer}^{B}$, hence
+$\text{Writer}^{B}\equiv B\times W$ 
+\begin{itemize}
+\item use the ``arithmetic'' Curry-Howard to transform types: $b^{a}w^{a}=(bw)^{a}$
+\end{itemize}
+\end{itemize}
+\item \texttt{\textcolor{blue}{\footnotesize{}Reader}}: Read-only context,
+or ``environment'' of type $E$
+\begin{itemize}
+\item $x^{A}\Rightarrow f(r,x):B$ where $r^{E}$ is fixed; the type is
+$A\times E\Rightarrow B$
+\item this function should have type $A\Rightarrow\text{Reader}^{B}$, hence
+$\text{Reader}^{B}\equiv E\Rightarrow B$
+\begin{itemize}
+\item we used the ``arithmetic'' Curry-Howard to transform $b^{ae}=(b^{e})^{a}$
+\end{itemize}
+\end{itemize}
+\item \texttt{\textcolor{blue}{\footnotesize{}Cont}}: A computation that
+registers an asynchronous callback
+\begin{itemize}
+\item $x^{A}\Rightarrow f(cb):1$ where $cb:B\Rightarrow1$ (usually, callbacks
+return \texttt{\textcolor{blue}{\footnotesize{}Unit}})
+\item the type is{\footnotesize{} $A\Rightarrow\left(B\Rightarrow1\right)\Rightarrow1$};
+this function should have type {\footnotesize{}$A\Rightarrow\text{Cont}^{B}$},
+hence{\footnotesize{} $\text{Cont}^{B}\equiv\left(B\Rightarrow1\right)\Rightarrow1$}{\footnotesize \par}
+\item generalize to {\footnotesize{}$\text{Cont}^{A}\equiv\left(A\Rightarrow R\right)\Rightarrow R$
+}where $R$ is a fixed ``result'' type
+\end{itemize}
+\item \texttt{\textcolor{blue}{\footnotesize{}State}}: A computation can
+update state ($S$) while producing a result
+\begin{itemize}
+\item $x^{A}\Rightarrow f(x,s)$ and $s^{S}:=g(x,s)$; the type is{\footnotesize{}
+$\left(A\times S\Rightarrow B\right)\times\left(A\times S\Rightarrow S\right)$}{\footnotesize \par}
+\item this will be $A\Rightarrow\text{State}^{B}$ if {\footnotesize{}$\text{State}^{B}\equiv\left(S\Rightarrow B\right)\times\left(S\Rightarrow S\right)\equiv S\Rightarrow B\times S$ }{\footnotesize \par}
+\begin{itemize}
+\item we used the ``arithmetic'' Curry-Howard: $b^{as}s^{as}=(b^{s}s^{s})^{a}=\left(\left(bs\right)^{s}\right)^{a}$
+\end{itemize}
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Exercises I}
+\begin{enumerate}
+\item For a given \texttt{\textcolor{blue}{\footnotesize{}Set{[}Int{]}}},
+compute all subsets $\left(w,x,y,z\right)$ of size 4 such that $w<x<y<z$
+and $w+z=x+y$
+\item Given 3 sequences $xs$, $ys$, $zs$ of type \texttt{\textcolor{blue}{\footnotesize{}Seq{[}Int{]}}},
+compute all $\left(x,y,z\right)$ such that $x\in xs$, $y\in ys$,
+$z\in zs$ and $x<y<z$ and $x+y+z<10$
+\item Solve the $n$-queens problem on an $3\times3\times3$ cube
+\item Write a tiny library for arithmetic using \texttt{\textcolor{blue}{\footnotesize{}Future}}'s;
+use it to compute $1+2+...+100$ via \texttt{\textcolor{blue}{\footnotesize{}for}}/\texttt{\textcolor{blue}{\footnotesize{}yield}}
+and verify the result. E.g.\ implement: 
+\begin{lyxcode}
+\textcolor{blue}{\footnotesize{}const:~Int~$\Rightarrow$~Future{[}Int{]}}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}add(x:~Int):~Int~$\Rightarrow$~Future{[}Int{]}}{\footnotesize \par}
+
+\textcolor{blue}{\footnotesize{}isEqual(x:~Int):~Int~$\Rightarrow$~Future{[}Boolean{]}~}{\footnotesize \par}
+\end{lyxcode}
+\item Read a file into a string and write it to another file using Java
+\texttt{\textcolor{blue}{\footnotesize{}Files}} and \texttt{\textcolor{blue}{\footnotesize{}Paths}}
+API\texttt{\textcolor{blue}{\footnotesize{}. }}Use \texttt{\textcolor{blue}{\footnotesize{}Try}}
+and \texttt{\textcolor{blue}{\footnotesize{}for}}/\texttt{\textcolor{blue}{\footnotesize{}yield}}
+to make this safe.
+\item Given a semigroup $W$, make a semimonad out of $F^{A}\equiv E\Rightarrow A\times W$ 
+\item Implement a semimonad instance for the (recursive) type constructor
+$F^{A}=A+A\times A+F^{A}+F^{A}\times F^{A}$
+\item Find the largest prime number below 1000 via a simple \href{https://en.wikipedia.org/wiki/Sieve_of_Eratosthenes}{Sieve of Eratosthenes};
+use the \texttt{\textcolor{blue}{\footnotesize{}State{[}S, Int{]}}}
+monad with \texttt{\textcolor{blue}{\footnotesize{}S = Array{[}Boolean{]}}} 
+\end{enumerate}
+\end{frame}
+
+\end{document}
