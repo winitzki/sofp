@@ -27,7 +27,7 @@ rm -rf build mdoc tex
 
 mkdir build mdoc
 
-echo "Info: Using pdftk from '$pdftk' and lyx from '$lyx', lyx directory $lyxdir"
+echo "Info: Using pdftk from '$pdftk' and lyx from '$lyx', lyx directory '$lyxdir'"
 
 export GS_OPTIONS="-dEmbedAllFonts=true -dPDFSETTINGS=/printer"
 

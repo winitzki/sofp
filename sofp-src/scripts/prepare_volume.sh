@@ -38,7 +38,7 @@ rm -rf $dir
 cp -r tex $dir
 
 cp cover/sofp-cover-parameters.tex.src $dir/sofp-cover-parameters.tex
-cp cover/*.{tex,jpg} $dir/
+cp cover/*.{tex,jpg,pdf} $dir/
 
 function remove_part1 {
     fgrep -v '\part{Introductory level}' | \

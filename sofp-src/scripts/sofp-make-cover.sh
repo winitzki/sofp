@@ -30,4 +30,4 @@ wait # Wait until all 3 cover pages are done.
 # sofp-3page-cover.tex
 #   sofp-spine.pdf sofp-back-cover.pdf sofp-front-cover.pdf cover-background-2.jpg
 pdflatex --interaction=batchmode sofp-3page-cover
-
+pdflatex --interaction=batchmode sofp-3page-cover

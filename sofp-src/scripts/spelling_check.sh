@@ -13,4 +13,5 @@ cat sofp*.tex | \
    sort | uniq | egrep -iv -f ../scripts/excluded_words > misspelled_words
 
 echo Found `wc -l misspelled_words`.
+cat misspelled_words
 rm -f tempfile
