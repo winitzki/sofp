@@ -6,7 +6,7 @@
 
 This is the official source repository for the new book _The Science of Functional Programming: A tutorial, with examples in Scala_.
 
-<img src="book-draft-cover.png" width="150px" alt="Book cover"/>
+<img src="cover/book-draft-cover.png" width="150px" alt="Book cover"/>
 
 The book is a tutorial exposition of the theoretical knowledge that functional programmers need. The material is developed from first principles and contains complete explanations, derivations, and proofs of almost all required results.
 
