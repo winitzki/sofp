@@ -75,25 +75,46 @@ of the function \lstinline!warn! is equivalent to:
 { val prefix = "WARN"; (message => s"$prefix: $message") }
 \end{lstlisting}
 Whenever a new function is created using \lstinline!logWith(prefix)!,
-the (immutable) value of \lstinline!prefix! is stored within the
-body of the newly created function. This is a general feature of nameless
-functions: the function\textsf{'}s body keeps copies of all the outer-scope
-values it uses. One sometimes says that the function\textsf{'}s body \textsf{``}closes
-over\textsf{''} those values; for this reason, nameless functions are also
-called \textsf{``}\textbf{\index{closure}closures}\textsf{''}. One could also  say
-that nameless functions \textsf{``}capture\textsf{''} values from outer scopes.
+the (immutable) reference to \lstinline!prefix! is stored within
+the body of the newly created function. This is a general feature
+of nameless functions: the function\textsf{'}s body captures references to
+all the outer-scope values it uses. One sometimes says that the function\textsf{'}s
+body \textsf{``}closes over\textsf{''} those values; for this reason, nameless functions
+are also called \textsf{``}\textbf{\index{closure}closures}\textsf{''}. 
 
-As another example of the capture of values, consider this code:
+However, nameless functions do not \emph{copy} values from outer scopes.
+Those values are captured by reference. This distinction is important
+in Scala as it supports mutable values (as well as classes that encapsulate
+mutable values).
+
+Here is an example of a function body capturing references to variables:
 \begin{lstlisting}
-val f: (Int => Int) = { // Parentheses around (Int => Int) are optional.
+var c: Int = 10  // Mutable variable!
+val f: Int => Int = {
   val p = 10
   val q = 20
-  x => p + q * x
+  x => p + q * x + c
 }
 \end{lstlisting}
-The body of the function \lstinline!f! is equivalent to \lstinline!{ x => 10 + 20 * x }!
-because the values \lstinline!p = 10! and \lstinline!q = 20! are
-captured. 
+The body of the function \lstinline!f! is equivalent to \lstinline!{ x => 10 + 20 * x + c }!.
+The values \lstinline!p = 10! and \lstinline!q = 20! are local constants
+captured in the function\textsf{'}s body. However, the value \lstinline!c!
+is captured by reference. If we change \lstinline!c!, the behavior
+of \lstinline!f! will also change:
+\begin{lstlisting}
+scala> f(10)
+res0: Int = 220
+
+scala> c = 1000
+c: Int = 1000
+
+scala> f(10)
+res1: Int = 1210 
+\end{lstlisting}
+A captured reference to a mutable external variable \lstinline!c!
+makes the function \lstinline!f! itself mutable, even though \lstinline!f!
+was defined as a \lstinline!val!. We will avoid such code in this
+book and instead use immutable values.
 
 \subsection{Curried and uncurried functions}
 
@@ -155,7 +176,7 @@ the types \lstinline!A!, \lstinline!B!, \lstinline!C! are the types
 of curried arguments, and \lstinline!D! is the final result type.
 It takes time to get used to reading this kind of syntax.
 
-In Scala, functions defined with multiple argument groups (enclosed
+In Scala, functions defined with multiple argument lists (enclosed
 in multiple pairs of parentheses) are curried functions. We have seen
 examples of curried functions before:
 \begin{lstlisting}
@@ -274,12 +295,11 @@ scala> r2(4)
 res3: Int = 16
 \end{lstlisting}
 (The type annotation \lstinline!Int => Int! is required in line 1.)
-This code creates a function \lstinline!r2! by partially applying
-\lstinline!f2! to the first argument but not to the second. Other
-than that, \lstinline!r2! is the same function as \lstinline!r1!
-defined above; i.e., \lstinline!r2! returns the same values for the
-same arguments as \lstinline!r1!. A more verbose syntax for a partial
-application is:
+This code creates a function \lstinline!r2! by applying \lstinline!f2!
+to the first argument but not to the second. Then \lstinline!r2!
+is the same function as \lstinline!r1! defined above; i.e., \lstinline!r2!
+returns the same values for the same arguments as \lstinline!r1!.
+A more verbose syntax for a partial application is:
 \begin{lstlisting}
 scala> val r3: Int => Int = { x => f2(20, x) }  // Same as r2 above.
 r3: Int => Int = <function1>
@@ -290,10 +310,11 @@ res4: Int = 16
 
 We can see that a curried function, such as \lstinline!f1!, is better
 adapted for partial application than \lstinline!f2!, because the
-syntax is shorter. However, the types of functions \lstinline!f1!
+syntax is shorter. However, the \emph{types} of functions \lstinline!f1!
 and \lstinline!f2! are\textbf{ equivalent}\index{type equivalence}:
-for any \lstinline!f1! we can reconstruct \lstinline!f2! and vice
-versa, without loss of information:
+for any \lstinline!f1! of type \lstinline!Int => Int => Int! we
+can reconstruct \lstinline!f2! of type \lstinline!(Int, Int) => Int!
+and vice versa, without loss of information:
 \begin{lstlisting}
 def f2new(x: Int, y: Int): Int = f1(x)(y)             // f2new is equal to f2
 def f1new: Int => Int => Int = { x => y => f2(x, y) } // f1new is equal to f1
@@ -303,7 +324,10 @@ results as \lstinline!f1!, and that the function \lstinline!f2new!
 computes the same results as \lstinline!f2!. The equivalence of the
 functions \lstinline!f1! and \lstinline!f2! is not \emph{equality}
  \textemdash{} these functions are \emph{different}; but each of them
-can be reconstructed from the other. 
+can be reconstructed from the other. The one-to-one correspondence
+between all functions of type \lstinline!Int => Int => Int! and all
+functions of type \lstinline!(Int, Int) => Int! is what we call the
+\textsf{``}equivalence of types\textsf{''}.
 
 More generally, a curried function has a type signature of the form
 \lstinline!A => B => C => ... => R => S!, where \lstinline!A!, \lstinline!B!,
@@ -432,10 +456,10 @@ def cos_sin_parametric[A](p: (A, A), distance: (A, A) => A, ratio: (A, A) => A):
 }
 \end{lstlisting}
 
-Typically, a fully parametric function has all its arguments typed
-with type parameters or with some combinations of type parameters,
-i.e., \textbf{type expressions}\index{type expression} such as \lstinline!(A, B)!
-or \lstinline!X => Either[X, Y]!.
+A fully parametric function has all its arguments typed with type
+parameters or with some combinations of type parameters, i.e., \textbf{type
+expressions}\index{type expression} such as \lstinline!(A, B)! or
+\lstinline!X => Either[X, Y]!.
 
 The \lstinline!swap! operation for pairs is already defined in the
 Scala library:
@@ -552,7 +576,7 @@ which are type expressions built up from type parameters. But fully
 parametric functions do not use values of specific types such as \lstinline!Int!
 or \lstinline!String!.
 
-Functions with type parameters are sometimes called \textsf{``}generic\index{generic functions}\textsf{''}.
+Functions with type parameters are often called \textsf{``}generic\index{generic functions}\textsf{''}.
 This book uses the term \textsf{``}\index{fully parametric!function}\textbf{fully
 parametric}\textsf{''} to designate a certain restricted kind of generic functions.
 
@@ -562,7 +586,7 @@ The operations of function composition, introduced in Section~\ref{subsec:Exampl
 have three important properties or \textsf{``}laws\textsf{''}:
 \begin{itemize}
 \item The two \textbf{identity laws}\index{identity laws!of function composition}:
-the composition of any function $f$ with the identity function (\lstinline!identity[A]!)
+the composition of any function $f$ with an identity function (\lstinline!identity[A]!)
 will give again the function $f$.
 \item The \textbf{associativity law}\index{associativity law!of function composition}:
 the consecutive composition of three functions $f$, $g$, $h$ does
@@ -580,8 +604,8 @@ with the function $f$ on the right is written as $\text{id}\bef f$.
 In both cases, the result must be equal to the function $f$. The
 resulting two laws are:
 \begin{align*}
-{\color{greenunder}\text{left identity law of composition}:}\quad & \text{id}\bef f=f\quad,\\
-{\color{greenunder}\text{right identity law of composition}:}\quad & f\bef\text{id}=f\quad.
+{\color{greenunder}\text{left identity law of function composition}:}\quad & \text{id}\bef f=f\quad,\\
+{\color{greenunder}\text{right identity law of function composition}:}\quad & f\bef\text{id}=f\quad.
 \end{align*}
 To prove that these laws hold, we need to show that the functions
 at both sides of the laws  give the same result when applied to an
@@ -631,7 +655,7 @@ The last step works since $x\rightarrow f(x)$ is a function that
 takes an argument $x$ and applies $f$ to that argument. This is
 the same function as $f$. We say that $x\rightarrow f(x)$ is an
 \textbf{expanded form}\index{expanded form of a function} of the
-same function $f$.
+function $f$.
 
 We turn to the right identity law, $f\bef\text{id}=f$. Write out
 the left-hand side:
@@ -817,7 +841,7 @@ Section~\ref{subsec:Laws-of-function-composition}. These calculations
 are \textbf{symbolic} in the sense that we are manipulating symbols
 (such as $x$, $f$, $g$, $h$) without substituting any specific
 values for these symbols but only using some general rules and properties.
-This is similar to symbolic calculations in mathematics, such as $\left(x-y\right)\left(x^{2}+xy+y^{2}\right)=x^{3}-y^{3}$.
+This is similar to symbolic calculations in mathematics, such as $\left(x-y\right)(x^{2}+xy+y^{2})=x^{3}-y^{3}$.
 In the next section, we will get more experience with symbolic calculations
 relevant to functional programming.
 
@@ -858,7 +882,7 @@ that substitution, we obtain the expression \lstinline!y => 20 - y!,
 which is again a nameless function. Applying that function to the
 remaining argument \lstinline!(4)! means substituting \lstinline!y = 4!
 into the body of \lstinline!y => 20 - y!. We get the expression \lstinline!20 - 4!,
-which equals \lstinline!16!. Check the result in Scala:
+which equals \lstinline!16!. Test in Scala:
 \begin{lstlisting}
 scala> ((x: Int) => (y: Int) => x - y)(20)(4)
 res1: Int = 16
@@ -867,10 +891,9 @@ res1: Int = 16
 Applying a curried function such as \lstinline!x => y => z => expr(x,y,z)!
 to three curried arguments \lstinline!10!, \lstinline!20!, and \lstinline!30!
 means substituting \lstinline!x = 10!, \lstinline!y = 20!, and \lstinline!z = 30!
-into the expression \lstinline!expr(x,y,z)!. In this way, we can
-easily apply a curried function to any number of curried arguments.
+into the expression \lstinline!expr(x,y,z)!. 
 
-This calculation is helped by the convention that \lstinline!f(g)(h)!
+This calculation is made easier by the convention that \lstinline!f(g)(h)!
 means first applying \lstinline!f! to \lstinline!g! and then applying
 the result to \lstinline!h!. In other words, function application
 groups to the \emph{left}: \lstinline!f(g)(h) = (f(g))(h)!. It would
@@ -886,8 +909,8 @@ functional languages follow these syntactic conventions.
 
 To make calculations shorter, we will write code in a mathematical
 notation rather than in the Scala syntax. Type annotations are written
-with a colon in the superscript, for example: $x^{:\text{Int}}\rightarrow x+10$
-instead of the Scala expression \lstinline!((x: Int) => x + 10)!.
+with a \emph{colon} in the superscript. For example, $x^{:\text{Int}}\rightarrow x+10$
+is the code notation corresponding to the Scala expression \lstinline!(x: Int) => x + 10!.
 
 The symbolic evaluation of the Scala code \lstinline!((x: Int) => (y: Int) => x - y)(20)(4)!
 can be written as:
@@ -960,7 +983,7 @@ res3: Int = 20
 scala> ((p: Int) => (z: Int) => z * p)(10)
 res4: Int => Int = <function1>
 
-scala> ((p:I nt) => (z: Int) => z * p)(10)(4)
+scala> ((p: Int) => (z: Int) => z * p)(10)(4)
 res5: Int = 40 
 \end{lstlisting}
 
@@ -972,10 +995,11 @@ as an argument:
 {\color{greenunder}\text{substitute }f=\left(g\rightarrow g(2)\right):}\quad & =p\rightarrow(g\rightarrow\gunderline g(2))\,(p)\nonumber \\
 {\color{greenunder}\text{substitute }g=p:}\quad & =p\rightarrow p(2)\quad.\label{eq:higher-order-functions-derivation1}
 \end{align}
-The result of this expression cannot be simplified any more. It is
-the function $p\rightarrow p(2)$ that applies \emph{its} argument
-$p$ to the value $2$. A possible value for $p$ is the function
-$x\rightarrow x+4$. So, let us apply the expression in Eq.~(\ref{eq:higher-order-functions-derivation0})
+The final result, $p\rightarrow p(2)$, cannot be simplified any more. 
+
+The function $p\rightarrow p(2)$ applies \emph{its} argument ($p$)
+to the value $2$. A possible value for $p$ is the function $x\rightarrow x+4$.
+Let us apply expression~(\ref{eq:higher-order-functions-derivation0})
 to $x\rightarrow x+4$:
 \begin{align*}
  & \gunderline{\left(f\rightarrow p\rightarrow f(p)\right)\left(g\rightarrow g(2)\right)}\left(x\rightarrow x+4\right)\\
@@ -1000,7 +1024,7 @@ and the type of the argument $p$ must be the same. We write $p^{:\text{Int}\righ
 Finally, we need to make sure that the types match in the function
 $f\rightarrow p\rightarrow f(p)$. Types match in $f(p)$ if the type
 of $f$\textsf{'}s argument is the same as the type of $p$, which is $\text{Int}\rightarrow\text{Int}$.
-So $f$\textsf{'}s type must be $\left(\text{Int}\rightarrow\text{Int}\right)\rightarrow A$
+So, $f$\textsf{'}s type must be $\left(\text{Int}\rightarrow\text{Int}\right)\rightarrow A$
 for some type $A$. Since in our example $f=\left(g\rightarrow g(2)\right)$,
 types match only if $g$ has type $\text{Int}\rightarrow\text{Int}$.
 But then $g(2)$ has type $\text{Int}$, and so we must have $A=\text{Int}$.
@@ -1260,7 +1284,7 @@ which is \lstinline!(Int => B) => B!, match the type of the argument
 of \lstinline!p[A]!, which is \lstinline!Int => A!, with some choice
 of \lstinline!A! and \lstinline!B!? A function type \lstinline!P => Q!
 matches \lstinline!X => Y! only if \lstinline!P = X! and \lstinline!Q = Y!.
-So \lstinline!(Int => B) => B! can match \lstinline!Int => A! only
+So, \lstinline!(Int => B) => B! can match \lstinline!Int => A! only
 if \lstinline!Int => B! matches \lstinline!Int! and if \lstinline!B = A!.
 But it is impossible for \lstinline!Int => B! to match \lstinline!Int!,
 no matter how we choose \lstinline!B!. 
@@ -1291,9 +1315,9 @@ and disjunctive types.
 \hline 
 {\small{}$f^{:A\rightarrow B}$} & {\small{}}\lstinline!f: A => B! & {\small{}a function of type }\lstinline!A => B!\tabularnewline
 \hline 
-{\small{}$x^{:\text{Int}}\rightarrow f(x)$} & {\small{}}\lstinline!{ x: Int => f(x) }! & {\small{}a nameless function with argument }\lstinline!x!\tabularnewline
+{\small{}$x^{:\text{Int}}\rightarrow x+1$} & {\small{}}\lstinline!(x: Int) => x + 1! & {\small{}a nameless function of type }\lstinline!Int => Int!\tabularnewline
 \hline 
-{\small{}$f^{A,B}\triangleq...$} & {\small{}}\lstinline!def f[A, B] = ...! & {\small{}define a function with type parameters}\tabularnewline
+{\small{}$f^{A,B}\triangleq...$} & {\small{}}\lstinline!def f[A, B] = ...! & {\small{}a function with type parameters}\tabularnewline
 \hline 
 {\small{}$\text{id}^{A}$, also $\text{id}^{:A\rightarrow A}$} & {\small{}}\lstinline!identity[A]! & {\small{}the standard \textsf{``}identity\textsf{''} function}\tabularnewline
 \hline 
@@ -1348,7 +1372,7 @@ values. It is safe to call \lstinline!get! here, because the stream
 is unbounded and, if the condition \lstinline!cond! never becomes
 \lstinline!true!, the program will run out of memory (since \lstinline!Stream.iterate!
 keeps all computed values in memory) or the user will run out of patience.
-So \lstinline!.find(cond)! can never return an empty \lstinline!Option!
+So, \lstinline!_.find(cond)! can never return an empty \lstinline!Option!
 value. Of course, it is not satisfactory that the program crashes
 when the sequence does not converge. Exercise~\ref{subsec:Exercise-hof-simple-8}
 will implement a safer version of this function by limiting the allowed
@@ -1359,7 +1383,7 @@ A tail-recursive implementation that works in constant memory is:
 @tailrec def converge[X](f: X => X, x0: X, cond: X => Boolean): X =
   if (cond(x0)) x0 else converge(f, f(x0), cond)
 \end{lstlisting}
-To test this code, compute an approximation to $\sqrt{q}$ by Newton\textsf{'}s
+To test this code, compute an approximation to $\sqrt{q}\,$ by Newton\textsf{'}s
 method\index{Newton\textsf{'}s method} with the iteration function $f(x)=\frac{1}{2}\left(x+\frac{q}{x}\right)$.
 We iterate $f(x)$ starting with $x_{0}=q/2$ until a given precision
 is obtained:
@@ -1370,7 +1394,7 @@ def approx_sqrt(q: Double, precision: Double): Double = {
       converge(iterate_sqrt, q / 2, cond)
 }
 \end{lstlisting}
-Newton\textsf{'}s method for $\sqrt{q}$ is guaranteed to converge when $q\geq0$.
+Newton\textsf{'}s method for $\sqrt{q}\,$ is guaranteed to converge when $q\geq0$.
 Test it:
 \begin{lstlisting}
 scala> approx_sqrt(25, 1.0e-8)
@@ -1386,7 +1410,7 @@ that takes an integer \lstinline!x! and returns a function that adds
 
 \subparagraph{Solution}
 
-Let us first write down the required type signature: the function
+Let us first write down the required type signature. The function
 must take an integer argument \lstinline!x: Int!, and the return
 value must be a function of type \lstinline!Int => Int!:
 \begin{lstlisting}
@@ -1527,7 +1551,7 @@ def q[A, B]: A => (A => B) => B = { f => g => g(f) }
 
 To match types in the expression \lstinline!q(q)!, we first assume
 arbitrary type parameters and write \lstinline!q[A, B](q[C, D])!.
-We need to introduce new type parameters $C$, $D$ because these
+We need to introduce new type parameters $C$, $D$ because those
 type parameters may need to be set differently from $A$, $B$ when
 we try to match the types in the expression \lstinline!q(q)!.
 
@@ -1584,14 +1608,17 @@ correctly.
 
 \subsubsection{Example \label{subsec:Example-not-typeable}\ref{subsec:Example-not-typeable}}
 
-For the following expressions, infer the most general types or determine
-that the expression is not well-typed using simple type parameters:
+For the following expressions, infer the most general types or show
+that the expression is not well-typed with simple types:
 
 \textbf{(a)} $f\rightarrow f(f)\quad.$
 
 \textbf{(b)} $f\rightarrow f(h\rightarrow h(f))\quad.$
 
 \textbf{(c)} $f\rightarrow g\rightarrow f(h\rightarrow h(g))\quad.$
+
+By \textsf{``}simple types\textsf{''} we mean that $f$, $g$, $h$ cannot have \emph{their
+own} type parameters.
 
 \subparagraph{Solution}
 
@@ -1603,6 +1630,11 @@ as $A\rightarrow B$, where $B$ is another arbitrary type. Now, types
 match only if $A$ and $A\rightarrow B$ is the same type. But there
 are no simple types $A$ and $B$ such that $A=A\rightarrow B$. So,
 the expression $f\rightarrow f(f)$ is not well-typed.
+
+This conclusion holds only because we do not allow the function $f$
+to have its own type parameters. Otherwise, the expression $f(f)$
+could be well-typed. See, for instance, Example~\ref{subsec:Example-hof-derive-types-3}
+showing that the expression \lstinline!twice(twice)! is well-typed.
 
 \textbf{(b)} Begin by assigning type parameters as $f^{:A}$ and $h^{:B}$,
 where $A$ and $B$ are unknown. To match types in $h(f)$, the type
@@ -1624,7 +1656,7 @@ A=(C\rightarrow D)\rightarrow E=((B\rightarrow D)\rightarrow D)\rightarrow E\qua
 \]
 There are no other restrictions. We have found the most general type:
 \[
-\big(f^{:((B\rightarrow D)\rightarrow D)\rightarrow E}\rightarrow g^{:B}\rightarrow f(h^{:B\rightarrow D}\rightarrow h(g))\big):((B\rightarrow D)\rightarrow D)\rightarrow E)\rightarrow B\rightarrow E\quad.
+\big(f^{:((B\rightarrow D)\rightarrow D)\rightarrow E}\rightarrow g^{:B}\rightarrow f(h^{:B\rightarrow D}\rightarrow h(g))\big):(((B\rightarrow D)\rightarrow D)\rightarrow E)\rightarrow B\rightarrow E\quad.
 \]
 The type parameters $B$, $D$, $E$ remain arbitrary. 
 
@@ -1702,7 +1734,7 @@ and rewrite the code:
 The type of this expression is $\left(\text{Int}\rightarrow D\right)\rightarrow D$
 with a type parameter $D$. Since the argument $y$ is an arbitrary
 function, we cannot simplify either $y(10)$ or $y\rightarrow y(10)$
-any further. We conclude that the final simplified form of Eq.~(\ref{eq:example-hof-curried-function-solved1})
+any further. So, the final simplified form of Eq.~(\ref{eq:example-hof-curried-function-solved1})
 is $y^{:\text{Int}\rightarrow D}\rightarrow y(10)$.
 
 To test this, we first define the function $f\rightarrow g\rightarrow g(f)$
@@ -1819,8 +1851,8 @@ res1: Option[Double] = Some(5.000000000053722)
 \subsubsection{Exercise \label{subsec:Exercise-hof-simple-7-1}\ref{subsec:Exercise-hof-simple-7-1}}
 
 Implement a fully parametric, information-preserving, curried function
-that recovers an error using a given function argument. The type signature
-and an example test:
+that recovers from an error using a given function argument. The type
+signature and an example test:
 \begin{lstlisting}
 def recover[E, A]: Option[Either[E, A]] => (E => A) => Option[A] = ???
 
@@ -1876,9 +1908,9 @@ scala> assert( f (10, 2) == 8 && g(2, 10) == 8 )
 
 \subsubsection{Exercise \label{subsec:Exercise-hof-simple-8-1}\ref{subsec:Exercise-hof-simple-8-1}}
 
-Write a function \lstinline!curry2! converting an uncurried function
-of type \texttt{}\lstinline!(A, A) => A! into an equivalent curried
-function of type \texttt{}\lstinline!A => A => A!.
+Write a function \lstinline!curry2! converting a function of type
+\texttt{}\lstinline!(A, A) => A! into an equivalent curried function
+of type \texttt{}\lstinline!A => A => A!.
 
 \subsubsection{Exercise \label{subsec:Exercise-hof-curried-1}\ref{subsec:Exercise-hof-curried-1}}
 
@@ -2078,20 +2110,19 @@ as $\left(\_\rightarrow y\rightarrow y\right)$, which is clearer.
 
 In mathematics, function applications are sometimes written without
 parentheses, for instance: $\cos x$ or $\log z$. Commonly used formulas
-such as $2\sin x\cos x$ imply parentheses as $2\cdot\sin\left(x\right)\cdot\cos\left(x\right)$.
+such as $2\sin x\cos x$ imply parentheses as $2\cdot(\sin\left(x\right))\cdot(\cos\left(x\right))$.
 This convention allows us to treat certain functions as \textsf{``}operators\textsf{''}
 that are written without parentheses, similar to the operators of
 summation, $\sum_{k}f(k)$, or differentiation, $\frac{d}{dx}f(x)$.
 
-Some programming languages (such as ML, OCaml, Haskell, and F\#) have
+Some programming languages (such as OCaml, Haskell, and F\#) have
 adopted this \textsf{``}operator syntax\index{operator syntax}\textsf{''}, making
-parentheses optional for function arguments. In those languages, \lstinline!f x!
-means the same as \lstinline!f(x)!.\footnote{The operator syntax has a long history in programming. It is used
-in Unix shell commands, for example \lstinline!cp file1 file2!. In
-LISP-like languages, function applications are enclosed in parentheses
-but the arguments are space-separated, for example \lstinline!(f 10 20)!.
-Operator syntax is also used in some programming languages such as
-Tcl, Groovy, and Coffeescript.} Parentheses are still used, for example, in expressions such as \lstinline!f(g x)!.
+parentheses optional for all function arguments. In those languages,
+\lstinline!f x! means the same as \lstinline!f(x)!.\footnote{The operator syntax has a long history in programming. It is used
+in Unix shell commands, for example \lstinline!cp file1 file2!, and
+also in the language \lstinline!Tcl!. In LISP-like languages, function
+applications are enclosed in parentheses but the arguments are space-separated,
+for example \lstinline!(f 10 20)!.} Parentheses are still used, for example, in expressions such as \lstinline!f(g x)!.
 For curried functions, function applications group to the left, so
 \lstinline!f x y z! means \lstinline!((f x) y) z!. Function applications
 group stronger than infix operations, so \lstinline!f x + y! means
@@ -2128,17 +2159,17 @@ One of the syntactic features of Scala is the ability to give a curried
 argument using the curly brace syntax. Compare the two definitions
 of the function \lstinline!summation! described in Section~\ref{subsec:Nameless-functions-in-mathematical-notation}:
 \begin{lstlisting}
-def summation1(a: Int, b: Int, g: Int => Int): Int = (a to b).map(g).sum
+def summation1(a: Int, b: Int, g: Int => Double): Double = (a to b).map(g).sum
 
-def summation2(a: Int, b: Int)(g: Int => Int): Int = (a to b).map(g).sum
+def summation2(a: Int, b: Int)(g: Int => Double): Double = (a to b).map(g).sum
 \end{lstlisting}
 These functions are applied to arguments like this:
 \begin{lstlisting}
 scala> summation1(1, 10, { x => x * x * x + 2 * x })
-res0: Int = 3135
+res0: Double = 3135.0
 
 scala> summation2(1, 10) { x => x * x * x + 2 * x }
-res1: Int = 3135
+res1: Double = 3135.0
 \end{lstlisting}
 The code that calls \lstinline!summation2! is easier to read because
 the curried argument is syntactically separated from the rest of the

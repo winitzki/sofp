@@ -50,10 +50,10 @@ function add_lulu {
 }
 
 function assemble_sources {
-  rm -f tex/*.lyx tex/*.bak tex/sofp.source_hash # Copies of LyX files and other temporary files from tex/ should not be in sources.
+  rm -f tex/*.lyx tex/*.bak tex/sofp.source_hash lyx/*~ lyx/\#* # Copies of LyX files and other temporary files from tex/ should not be in sources.
   test -d build || mkdir build
 	tar jcvf build/"$name-src.tar.bz2" \
-	 README*.md LICENSE *.sh scripts tex/chapter3-picture.pdf cover tex/*.tex lyx \
+	 README*.md LICENSE *.sh scripts tex/chapter3-picture.pdf cover tex/*.tex lyx/*.lyx \
 	  >& /dev/null
 	size=$(kbSize build/"$name-src.tar.bz2")
 	echo "File build/$name-src.tar.bz2 created, size $size bytes."

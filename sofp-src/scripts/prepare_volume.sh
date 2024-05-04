@@ -108,13 +108,14 @@ esac
 
   echo "Detected previous chapter $firstchapter, first page $firstpage, previous part number $firstpart"
 
-  sed -i.bak -e 's|\(of Functional Programming\)|\1, '"$title1"'|; s|\(\\part{.*}\)|\\setcounter{page}{'$firstpage'}\\setcounter{part}{'$firstpart'}\\setcounter{chapter}{'$firstchapter'}\1|;' $dir/$name.tex
+  # Title on front leaf. "Science of Functional Programming. Part I"
+  sed -i.bak -e 's|\(of Functional Programming\)|\1. '"$title1"'|; s|\(\\part{.*}\)|\\setcounter{page}{'$firstpage'}\\setcounter{part}{'$firstpart'}\\setcounter{chapter}{'$firstchapter'}\1|;' $dir/$name.tex
 
-  # Subtitle on cover page.
+  # Subtitle on cover page. "Part I: Introductory level"
   sed -i.bak -e 's|% End of title.|\\vspace{0.2in}\\centerline{\\fontsize{20pt}{20pt}\\selectfont{'"$title2"'}}|' $dir/sofp-cover-page-no-bg.tex
 
-  # Title on spine.
-  sed -i.bak -e 's|\(of Functional Programming\)|\1, '"$title1"'|;' $dir/sofp-spine.tex
+  # Title on spine. "Science of Functional Programming. Part I"
+  sed -i.bak -e 's|\(of Functional Programming\)|\1. '"$title1"'|;' $dir/sofp-spine.tex
 
   # Replace lulu.com hyperlink.
   sed -i.bak -e 's|{https://www.lulu.com/[^}]*}{\(Print on demand[^}]*\)}|{'"$url"'}{\1}|;' $dir/$name.tex
