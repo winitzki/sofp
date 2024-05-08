@@ -5770,8 +5770,8 @@ final case class ListT[M[_]: Monad : Functor, A](value: M[Option[(A, ListT[M,
 
 \begin_layout Plain Layout
 
-      case Some((head, tail)) => comb(f(head), tail).value       // Type
- is M[Option[(A, ListT)]].
+      case Some((head, tail)) => comb(f(head), tail).value   // The `.value`
+ has type M[Option[(A, ListT)]].
 \end_layout
 
 \begin_layout Plain Layout
@@ -5838,8 +5838,17 @@ status open
 
 \begin_layout Plain Layout
 
-def flift[M[_]: Monad, A]: M[A] => ListT[M, A] = ListT(a => m.flatMap(ListT.pure(a
-).value))
+def flift[M[_]: Monad, A]: M[A] => ListT[M, A] = { m =>
+\end_layout
+
+\begin_layout Plain Layout
+
+  ListT(m.map(a => Some((a, ListT(Monad[M].pure(None))))))
+\end_layout
+
+\begin_layout Plain Layout
+
+}
 \end_layout
 
 \begin_layout Plain Layout
@@ -5849,8 +5858,17 @@ def blift[M[_]: Monad, A]: List[A] => ListT[M, A] =
 
 \begin_layout Plain Layout
 
-  _.foldRight(Monad[M].pure(None)){ case (a, tail) => Monad[M].pure(Some((a,
- blift(tail)))) }
+  _.foldRight(Monad[M].pure(None)) {
+\end_layout
+
+\begin_layout Plain Layout
+
+    case (a, tail) => Monad[M].pure(Some((a, blift(tail))))
+\end_layout
+
+\begin_layout Plain Layout
+
+  }
 \end_layout
 
 \end_inset
@@ -5858,8 +5876,10 @@ def blift[M[_]: Monad, A]: List[A] => ListT[M, A] =
 
 \begin_inset Formula 
 \begin{align*}
-\text{foreign lift}:\quad & \text{flift}:M^{A}\rightarrow T_{\text{List}}^{M,A}\quad,\quad\quad m^{:M^{A}}\triangleright\text{flift}\triangleq m\triangleright(a\rightarrow\bbnum 0+a\times\text{pu}_{M}(1+\bbnum 0))^{\uparrow M}\quad,\\
-\text{base lift}:\quad & \text{blift}:\text{List}^{A}\rightarrow T_{\text{List}}^{M,A}\quad,\quad\quad\text{blift}\triangleq\,\begin{array}{|c||c|}
+\text{foreign lift}:\quad & \text{flift}:M^{A}\rightarrow T_{\text{List}}^{M,A}\quad,\\
+ & \text{flift}\triangleq(a\rightarrow\bbnum 0+a\times\text{pu}_{M}(1+\bbnum 0))^{\uparrow M}\quad,\\
+\text{base lift}:\quad & \text{blift}:\text{List}^{A}\rightarrow T_{\text{List}}^{M,A}\quad,\\
+ & \text{blift}\triangleq\,\begin{array}{|c||c|}
  & M^{\bbnum 1+A\times T_{\text{List}}^{M,A}}\\
 \hline \bbnum 1 & 1\rightarrow\text{pu}_{M}(1+\bbnum 0)\\
 A\times\text{List}^{A} & a\times t\rightarrow\text{pu}_{M}(\bbnum 0+a\times\overline{\text{blift}}\,(t))
@@ -6147,8 +6167,12 @@ status open
 
 \begin_layout Plain Layout
 
-def ascend(n: Int): ListT[Reader[Int, *], Int] = ListT(Lazy(k => Some((n,
- ascend(n + k)))))
+def ascend(n: Int): ListT[Reader[Int, *], Int] =
+\end_layout
+
+\begin_layout Plain Layout
+
+  ListT(Lazy(k => Some((n, ascend(n + k)))))
 \end_layout
 
 \end_inset
@@ -6165,11 +6189,12 @@ ascend(n)
 
 \end_inset
 
- gives a well-defined value representing the sequence 
+ gives a well-defined, finite value, but that value contains functions evaluatin
+g the infinite sequence 
 \begin_inset Formula $\left[n,n+k,n+2k,...\right]$
 \end_inset
 
-.
+ step by step.
  The parameter 
 \begin_inset Formula $k$
 \end_inset
@@ -6199,7 +6224,19 @@ runListT
 
 \end_inset
 
- will not terminate when applied to such a sequence.
+ will not terminate when applied to 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+ascend(n)
+\end_layout
+
+\end_inset
+
+.
  
 \end_layout
 
@@ -6221,8 +6258,8 @@ ListT
 \begin_inset Formula $M$
 \end_inset
 
- for an unbounded-length stream, the target should be a stream type (i.e.,
- an on-call or a lazy list) rather than an eagerly evaluated 
+ for an unbounded-length stream, the target should be an iterator type (i.e.,
+ an on-call list) rather than an eagerly evaluated 
 \begin_inset listings
 inline true
 status open
@@ -6262,7 +6299,7 @@ A
 
 \end_inset
 
- is a monoid type.
+ is a monoid.
  For monoid types 
 \begin_inset listings
 inline true
@@ -6279,7 +6316,7 @@ A
 \begin_inset Formula $\text{List}^{A}\rightarrow A$
 \end_inset
 
- as a standard 
+ via the standard 
 \begin_inset listings
 inline true
 status open
@@ -6325,7 +6362,7 @@ status open
 
 \begin_layout Plain Layout
 
-brun
+brunE
 \end_layout
 
 \end_inset
@@ -6373,7 +6410,7 @@ status open
 
 \begin_layout Plain Layout
 
-def brun[M[_]: Monad, A: Monoid](listT: ListT[M, A]): M[A] = listT.value.flatMap
+def brunE[M[_]: Monad, A: Monoid](listT: ListT[M, A]): M[A] = listT.value.flatMap
  {
 \end_layout
 
@@ -6384,8 +6421,8 @@ def brun[M[_]: Monad, A: Monoid](listT: ListT[M, A]): M[A] = listT.value.flatMap
 
 \begin_layout Plain Layout
 
-  case Some((head, tail))    => Monad[M].pure(head) |+| brun(tail) // Monoid
- M[A].
+  case Some((head, tail))    => Monad[M].pure(head) |+| brunE(tail) // Using
+ the Monoid instance for M[A].
 \end_layout
 
 \begin_layout Plain Layout
@@ -6451,14 +6488,14 @@ noprefix "false"
 
 \end_inset
 
- whether this special version of 
+ whether 
 \begin_inset listings
 inline true
 status open
 
 \begin_layout Plain Layout
 
-brun
+brunE
 \end_layout
 
 \end_inset
@@ -6702,11 +6739,12 @@ StateT
 
 \end_inset
 
- does not have a general base runner of the form 
+ does not have a general base runner that could be expressed in the form
+ 
 \begin_inset Formula $\text{brun}\,(\theta_{\text{State}})$
 \end_inset
 
-: we cannot convert an 
+, because the type signatures do not allow us to convert an 
 \emph on
 arbitrary
 \emph default
@@ -8196,7 +8234,7 @@ Monad
 \series bold
 \size small
 Monad 
-\begin_inset Formula $T_{L}^{M}$
+\begin_inset Formula $T_{L}^{M,A}$
 \end_inset
 
 
@@ -8212,7 +8250,7 @@ Monad
 \series bold
 \size small
 Monad 
-\begin_inset Formula $T_{M}^{L}$
+\begin_inset Formula $T_{M}^{L,A}$
 \end_inset
 
 
@@ -8284,7 +8322,7 @@ Either[E, A]
 \begin_layout Plain Layout
 
 \size small
-\begin_inset Formula $T_{L}^{M,A}=R\rightarrow E+A$
+\begin_inset Formula $R\rightarrow E+A$
 \end_inset
 
 
@@ -8298,7 +8336,7 @@ Either[E, A]
 \begin_layout Plain Layout
 
 \size small
-\begin_inset Formula $T_{M}^{L,A}=R\rightarrow E+A$
+\begin_inset Formula $R\rightarrow E+A$
 \end_inset
 
 
@@ -8369,7 +8407,7 @@ Writer[W, A]
 \begin_layout Plain Layout
 
 \size small
-\begin_inset Formula $T_{L}^{M,A}=R\rightarrow A\times W$
+\begin_inset Formula $R\rightarrow A\times W$
 \end_inset
 
 
@@ -8383,7 +8421,7 @@ Writer[W, A]
 \begin_layout Plain Layout
 
 \size small
-\begin_inset Formula $T_{M}^{L,A}=R\rightarrow A\times W$
+\begin_inset Formula $R\rightarrow A\times W$
 \end_inset
 
 
@@ -8454,7 +8492,7 @@ List[A]
 \begin_layout Plain Layout
 
 \size small
-\begin_inset Formula $T_{L}^{M,A}=R\rightarrow\text{List}^{A}$
+\begin_inset Formula $R\rightarrow\text{List}^{A}$
 \end_inset
 
 
@@ -8468,7 +8506,7 @@ List[A]
 \begin_layout Plain Layout
 
 \size small
-\begin_inset Formula $T_{M}^{L,A}\triangleq R\rightarrow\bbnum 1+A\times T_{M}^{L,A}$
+\begin_inset Formula $R\rightarrow\bbnum 1+A\times T_{M}^{L,A}$
 \end_inset
 
 
@@ -8539,7 +8577,7 @@ State[S, A]
 \begin_layout Plain Layout
 
 \size small
-\begin_inset Formula $T_{L}^{M,A}=R\rightarrow S\rightarrow A\times S$
+\begin_inset Formula $R\rightarrow S\rightarrow A\times S$
 \end_inset
 
 
@@ -8553,7 +8591,7 @@ State[S, A]
 \begin_layout Plain Layout
 
 \size small
-\begin_inset Formula $T_{M}^{L,A}=S\rightarrow R\rightarrow A\times S$
+\begin_inset Formula $S\rightarrow R\rightarrow A\times S$
 \end_inset
 
 
@@ -8624,7 +8662,7 @@ State[S, A]
 \begin_layout Plain Layout
 
 \size small
-\begin_inset Formula $T_{L}^{M,A}=S\rightarrow(E+A)\times S$
+\begin_inset Formula $S\rightarrow(E+A)\times S$
 \end_inset
 
 
@@ -8638,7 +8676,7 @@ State[S, A]
 \begin_layout Plain Layout
 
 \size small
-\begin_inset Formula $T_{M}^{L,A}=S\rightarrow E+A\times S$
+\begin_inset Formula $S\rightarrow E+A\times S$
 \end_inset
 
 
@@ -8709,7 +8747,7 @@ Cont[R, A]
 \begin_layout Plain Layout
 
 \size small
-\begin_inset Formula $T_{L}^{M,A}=\left(E+A\rightarrow R\right)\rightarrow R$
+\begin_inset Formula $\left(E+A\rightarrow R\right)\rightarrow R$
 \end_inset
 
 
@@ -8723,7 +8761,7 @@ Cont[R, A]
 \begin_layout Plain Layout
 
 \size small
-\begin_inset Formula $T_{M}^{L,A}=\left(A\rightarrow E+R\right)\rightarrow E+R$
+\begin_inset Formula $\left(A\rightarrow E+R\right)\rightarrow E+R$
 \end_inset
 
 
@@ -10260,9 +10298,9 @@ literal "false"
 \end_layout
 
 \begin_layout Standard
-Throughout this chapter, we will build transformers for every exponential-polyno
-mial monad considered in this book (although some transformers will only
- partially satisfy the required laws).
+Throughout this chapter, we will build transformers for every monad considered
+ in this book (although some transformers will only partially satisfy the
+ required laws).
 \end_layout
 
 \begin_layout Subsection
@@ -10613,12 +10651,12 @@ Any monad contained in a stack, such as
  relevant transformers, such as:
 \begin_inset Formula 
 \[
-\text{flift}_{K}^{P}:P\leadsto(K\varangle P)\quad,\quad\text{blift}_{L}^{P}:L\leadsto(L\varangle P)\quad,\quad\text{frun}_{M}^{P,Q}(f^{:P\leadsto Q}):M\varangle P\leadsto M\varangle Q\quad,\quad\text{etc.,}
+\text{flift}_{K}^{P}:P\leadsto(K\varangle P)\quad,\quad\text{blift}_{L}^{P}:L\leadsto(L\varangle P)\quad,\quad\text{frun}_{M}^{P,Q}(f^{:P\leadsto Q}):M\varangle P\leadsto M\varangle Q\quad,
 \]
 
 \end_inset
 
-for any monad 
+and so on, for any monad 
 \begin_inset Formula $P$
 \end_inset
 
@@ -10646,9 +10684,10 @@ for any monad
 
 : 
 \begin_inset Formula 
-\[
-\text{flift}_{K\varangle L}^{P}:P\leadsto K\varangle L\varangle P=\text{flift}_{L}^{P}\bef\text{flift}_{K}^{L\varangle P}\quad,\quad\text{blift}_{L\varangle M}^{P}:L\varangle M\leadsto L\varangle M\varangle P=\text{frun}_{L}^{M,M\varangle P}(\text{blift}_{M}^{P})\quad.
-\]
+\begin{align*}
+ & \text{flift}_{K\varangle L}^{P}:P\leadsto K\varangle L\varangle P=\text{flift}_{L}^{P}\bef\text{flift}_{K}^{L\varangle P}\quad,\\
+ & \text{blift}_{L\varangle M}^{P}:L\varangle M\leadsto L\varangle M\varangle P=\text{frun}_{L}^{M,M\varangle P}(\text{blift}_{M}^{P})\quad.
+\end{align*}
 
 \end_inset
 
@@ -12200,9 +12239,10 @@ set
 
  that work with the state value:
 \begin_inset Formula 
-\[
-\text{get}:\text{State}^{S,S}\quad,\quad\quad\text{get}\triangleq s^{:S}\rightarrow s\times s\quad,\quad\quad\text{set}:S\rightarrow\text{State}^{S,\bbnum 1}\quad,\quad\quad\text{set}\triangleq s^{:S}\rightarrow\_^{:S}\rightarrow1\times s\quad.
-\]
+\begin{align*}
+ & \text{get}:\text{State}^{S,S}\quad,\quad\quad\text{get}\triangleq s^{:S}\rightarrow s\times s\quad,\\
+ & \text{set}:S\rightarrow\text{State}^{S,\bbnum 1}\quad,\quad\quad\text{set}\triangleq s^{:S}\rightarrow\_^{:S}\rightarrow1\times s\quad.
+\end{align*}
 
 \end_inset
 
@@ -12676,7 +12716,7 @@ Either
 \end_layout
 
 \begin_layout Standard
-The second ingredient of the MTL-style programming involves 
+The second ingredient of the MTL-style programming is 
 \begin_inset Quotes eld
 \end_inset
 
@@ -12684,7 +12724,7 @@ lifting
 \begin_inset Quotes erd
 \end_inset
 
- the monad operations to arbitrary monad stacks.
+ the monadic operations to arbitrary monad stacks.
  For example, consider the 
 \begin_inset listings
 inline true
@@ -12697,7 +12737,7 @@ State
 
 \end_inset
 
- monad with the operations 
+ monad and its operations 
 \begin_inset Formula $\text{get}:\text{State}^{S,S}$
 \end_inset
 
@@ -14564,9 +14604,10 @@ Since the stack type is
 
  is:
 \begin_inset Formula 
-\[
-\text{clear}_{P}:\left(S\rightarrow W\times A\times S\right)\rightarrow S\rightarrow W\times A\times S\quad,\quad\quad\text{clear}_{P}\triangleq p^{:S\rightarrow W\times A\times S}\rightarrow p\bef(\text{clear}\boxtimes\text{id}^{S})\quad.
-\]
+\begin{align*}
+ & \text{clear}_{P}:\left(S\rightarrow W\times A\times S\right)\rightarrow S\rightarrow W\times A\times S\quad,\\
+ & \text{clear}_{P}\triangleq p^{:S\rightarrow W\times A\times S}\rightarrow p\bef(\text{clear}\boxtimes\text{id}^{S})\quad.
+\end{align*}
 
 \end_inset
 
@@ -14971,17 +15012,17 @@ status open
 
 \begin_layout Plain Layout
 
-           // Anywhere inside a for/yield:
+// Anywhere inside a for/yield:
 \end_layout
 
 \begin_layout Plain Layout
 
-  y <- Monad[L].pure(x).up // Assume x: A
+  y <- Monad[L].pure(x).up // x: A
 \end_layout
 
 \begin_layout Plain Layout
 
-  z <- f(y)                // f: A => T[B]
+  z <- f(y)        // f: A => T[B]
 \end_layout
 
 \end_inset
@@ -15139,7 +15180,7 @@ status open
 
 \begin_layout Plain Layout
 
-           // Anywhere inside a for/yield:
+// Anywhere inside a for/yield:
 \end_layout
 
 \begin_layout Plain Layout
@@ -15305,7 +15346,7 @@ status open
 
 \begin_layout Plain Layout
 
-            // Anywhere inside a for/yield:
+// Anywhere inside a for/yield:
 \end_layout
 
 \begin_layout Plain Layout
@@ -16061,8 +16102,10 @@ frun
 :
 \begin_inset Formula 
 \begin{align*}
- & \text{brun}:T_{\text{State}}^{M,A}\rightarrow M^{A}=(S\rightarrow M^{A\times S})\rightarrow M^{A}\quad\quad\text{vs.}\quad\theta_{\text{State}}:\left(S\rightarrow A\times S\right)\rightarrow A\quad,\\
- & \text{frun}:T_{\text{State}}^{M,A}\rightarrow\text{State}^{S,A}=(S\rightarrow M^{A\times S})\rightarrow S\rightarrow A\times S\quad\quad\text{vs.}\quad\theta_{M}^{\uparrow\text{State}}:(S\rightarrow M^{A}\times S)\rightarrow S\rightarrow A\times S\quad.
+ & \text{brun}:T_{\text{State}}^{M,A}\rightarrow M^{A}=(S\rightarrow M^{A\times S})\rightarrow M^{A}\\
+ & \quad\quad\text{vs.}\quad\theta_{\text{State}}:\left(S\rightarrow A\times S\right)\rightarrow A\quad,\\
+ & \text{frun}:T_{\text{State}}^{M,A}\rightarrow\text{State}^{S,A}=(S\rightarrow M^{A\times S})\rightarrow S\rightarrow A\times S\\
+ & \quad\quad\text{vs.}\quad\theta_{M}^{\uparrow\text{State}}:(S\rightarrow M^{A}\times S)\rightarrow S\rightarrow A\times S\quad.
 \end{align*}
 
 \end_inset
@@ -16150,7 +16193,8 @@ is no longer automatic and needs to be verified.
 \begin{align*}
 \text{left-hand side}:\quad & t\triangleright\text{frun}_{\text{State}}(\theta_{M})\bef\theta_{\text{State}}(i)=t\triangleright(t\rightarrow t\bef\theta_{M})\bef(t\rightarrow i\triangleright t\triangleright\pi_{1})\\
 \text{compute composition}:\quad & \quad=i\triangleright(t\bef\theta_{M})\triangleright\pi_{1}=i\triangleright t\bef\theta_{M}\bef\pi_{1}\quad,\\
-\text{left-hand side}:\quad & t\triangleright\text{brun}_{\text{State}}(i)\bef\theta_{M}=t\triangleright(t\rightarrow i\triangleright t\triangleright\pi_{1}^{\uparrow M})\triangleright\theta_{M}=i\triangleright t\bef\gunderline{\pi_{1}^{\uparrow M}\bef\theta_{M}}\\
+\text{left-hand side}:\quad & t\triangleright\text{brun}_{\text{State}}(i)\bef\theta_{M}=t\triangleright(t\rightarrow i\triangleright t\triangleright\pi_{1}^{\uparrow M})\triangleright\theta_{M}\\
+ & \quad=i\triangleright t\bef\gunderline{\pi_{1}^{\uparrow M}\bef\theta_{M}}\\
 \text{naturality law of }\theta_{M}:\quad & \quad=i\triangleright t\bef\theta_{M}\bef\pi_{1}\quad.
 \end{align*}
 
@@ -16899,9 +16943,10 @@ purity
 
  law:
 \begin_inset Formula 
-\[
-m\triangleright\text{flift}_{L}\triangleright\text{frun}_{L}(\theta_{M})=m\triangleright\theta_{M}\triangleright\text{pu}_{L}\quad,\quad\text{or equivalently:}\quad\quad\text{flift}_{L}\bef\text{frun}_{L}(\theta_{M})=\theta_{M}\bef\text{pu}_{L}\quad.
-\]
+\begin{align*}
+ & m\triangleright\text{flift}_{L}\triangleright\text{frun}_{L}(\theta_{M})=m\triangleright\theta_{M}\triangleright\text{pu}_{L}\quad,\\
+\text{or equivalently}:\quad & \text{flift}_{L}\bef\text{frun}_{L}(\theta_{M})=\theta_{M}\bef\text{pu}_{L}\quad.
+\end{align*}
 
 \end_inset
 
