@@ -19,7 +19,7 @@ an intuition for the behavior of \lstinline!flatMap!.
 How can we translate into code a computation that contains nested
 iterations, such as:
 \begin{equation}
-\sum_{i=1}^{n}\sum_{j=1}^{n}\sum_{k=1}^{n}\frac{1}{1+i+j+k}=\,?\label{eq:semimonads-numerical-example-1}
+\sum_{i=1}^{n}\sum_{j=1}^{i}\sum_{k=1}^{j}\frac{1}{1+i+j+k}=\,?\label{eq:semimonads-numerical-example-1}
 \end{equation}
 Recall that a \textsf{``}flat\textsf{''} (non-nested) iteration is translated into
 the \lstinline!map! method applied to a sequence:
@@ -43,40 +43,52 @@ symbol, but the code separates those two steps: first, a sequence
 is computed as \lstinline!(1 to n).map { i => 1.0 / (1 + i) }!, holding
 the values $\frac{1}{1+i}$ for $i=1,...,n$, and only then the \lstinline!sum!
 function is applied to the sequence. This separation is useful because
-it gives us full flexibility to transform or aggregate the sequence.
+it gives programmers full flexibility to transform or to aggregate
+the sequence.
 
 So, we will treat nested iterations in a similar way: first, compute
 a sequence of values that result from nested iterations, and then
 apply transformations or aggregations to that sequence.
 
 If we use nested \lstinline!map! operations, we will obtain a nested
-data structure, e.g., a vector of vectors:
+data structure, e.g., a vector of vectors. As an example, consider
+this computation:
+\[
+\sum_{i=1}^{4}\sum_{j=1}^{i}i*j\quad.
+\]
+Begin to implement this computation via this code:
 \begin{lstlisting}
-scala> (1 to 5).map(i => (1 to i).map(j => i * j))
-res0: IndexedSeq[IndexedSeq[Int]] = Vector(Vector(1), Vector(2, 4), Vector(3, 6, 9), Vector(4, 8, 12, 16), Vector(5, 10, 15, 20, 25))
+scala> (1 to 4).map(i => (1 to i).map(j => i * j))
+res0: IndexedSeq[IndexedSeq[Int]] = Vector(Vector(1), Vector(2, 4), Vector(3, 6, 9), Vector(4, 8, 12, 16))
 \end{lstlisting}
-We need to \textsf{``}flatten\textsf{''} this nested structure into a simple, non-nested
-sequence. The standard method for that is \lstinline!flatten!, and
-its combination with \lstinline!map! can be replaced by \lstinline!flatMap!:
+To compute the sum, we need to accumulate all the values from all
+the nested lists. So, we need to \textsf{``}flatten\textsf{''} this nested structure
+into a simple, non-nested sequence. The standard method for that is
+\lstinline!flatten!, and its combination with \lstinline!map! can
+be replaced by \lstinline!flatMap!:
 \begin{lstlisting}
 scala> (1 to 4).map(i => (1 to i).map(j => i * j)).flatten
 res1: IndexedSeq[Int] = Vector(1, 2, 4, 3, 6, 9, 4, 8, 12, 16)
 
 scala> (1 to 4).flatMap(i => (1 to i).map(j => i * j)) // Same result as above.
 res2: IndexedSeq[Int] = Vector(1, 2, 4, 3, 6, 9, 4, 8, 12, 16)
+
+scala> (1 to 4).flatMap(i => (1 to i).map(j => i * j)).sum
+res3: Int = 65
 \end{lstlisting}
+
 To represent more nesting, we use more \lstinline!flatMap! operations.
 For example, to implement Eq.~(\ref{eq:semimonads-numerical-example-1}):
 \begin{lstlisting}
 def example(n: Int): Double = (1 to n).flatMap { i =>
-  (1 to n).flatMap { j =>
-    (1 to n).map { k => 
+  (1 to i).flatMap { j =>
+    (1 to j).map { k => 
       1.0 / (1.0 + i + j + k) }
   }
 }.sum
 
 scala> example(10)
-res3: Double = 63.20950497687006
+res4: Double = 14.250481740989049
 \end{lstlisting}
 These examples show that converting nested iterations into a simple
 iteration means replacing all \lstinline!map! functions by \lstinline!flatMap!
@@ -93,8 +105,8 @@ line by line:
 \texttt{\textcolor{blue}{\footnotesize{}}}
 \begin{lstlisting}
 (for { i <- 1 to n
-    j <- 1 to n
-    k <- 1 to n
+    j <- 1 to i
+    k <- 1 to j
   } yield 1.0 / (1.0 + i + j + k)
 ).sum
 \end{lstlisting}
@@ -104,8 +116,8 @@ line by line:
 \texttt{\textcolor{blue}{\footnotesize{}}}
 \begin{lstlisting}
 (1 to n).flatMap { i =>
-   (1 to n).flatMap { j =>
-     (1 to n).map { k =>
+   (1 to i).flatMap { j =>
+     (1 to j).map { k =>
        1.0 / (1.0 + i + j + k)
   }}}.sum
 \end{lstlisting}
@@ -138,13 +150,13 @@ a set $T$ of numbers obtained by adding some $x$ from $P$, some
 $y$ from $Q$, and some $z$ from $R$ such that $f(x,y,z)=0$. A
 direct implementation of this formula is the code shown at left. Here,
 \lstinline!p!, \lstinline!q!, \lstinline!r! are given collections
-(say, arrays) and the result \lstinline!t! is again an array. Just
-like the mathematical formula\textsf{'}s result is a collection of some $x+y+z$
-values, the functor block\textsf{'}s result is a collection of values computed
-after the \lstinline!yield! keyword.
+(say, arrays) and the result \lstinline!t! is again an array. The
+mathematical formula gives a collection of some $x+y+z$ values. The
+functor block\textsf{'}s result is a collection of values computed after the
+\lstinline!yield! keyword.
 
 To develop more intuition about using functor blocks with multiple
-left arrows, look at this code:
+left arrows, look at this sample code:
 
 \noindent \texttt{\textcolor{blue}{\footnotesize{}}}%
 \begin{minipage}[c]{0.475\columnwidth}%
@@ -183,7 +195,7 @@ sequence.
 
 If this intuition is correct, we should be able to refactor the code
 by cutting the calculation at any place and continuing in another
-functor block, without changing the result value:
+functor block:
 
 \noindent \texttt{\textcolor{blue}{\footnotesize{}}}%
 \begin{minipage}[c]{0.475\columnwidth}%
@@ -225,15 +237,15 @@ cause confusion:
 \item Each \textsf{``}source line\textsf{''} computes an intermediate collection of the
 same type, so all values to the right of \lstinline!<-! must use
 \emph{the same} type constructor (or its subtypes).
-\item The entire functor block\textsf{'}s result is again a collection using the
-same type constructor. The result is \emph{not} the expression under
-\lstinline!yield!; instead, it is a collection of those expressions.
+\item The entire functor block\textsf{'}s result is again a collection that uses
+the same type constructor. The result is \emph{not} the expression
+under \lstinline!yield!; instead, it is a collection of those expressions.
 \end{itemize}
 So far, we have been using sequences as the main type constructor.
 However, functor blocks with several left arrows will work with any
 other type constructor that has \lstinline!map! and \lstinline!flatMap!
 methods. In the next sections, we will see how to use functor blocks
-with different type constructors. 
+with different type constructors.
 
 Functors having \lstinline!flatMap! methods are called \textbf{semi-monads}
 in\index{semi-monads} this book.\footnote{There is no single accepted name. The libraries \texttt{scalaz} and
@@ -248,7 +260,7 @@ method; it works just as well with semi-monads.
 
 If a functor has a \lstinline!withFilter! method, Scala\textsf{'}s functor
 block will also support the \lstinline!if! operation (see Section~\ref{sec:Practical-uses-of-filterable-functors}).
-So, the full functionality of functor blocks can be used with \emph{filterable
+So, the full functionality of functor blocks is available for \emph{filterable
 semi-monads}.
 
 \subsection{List-like monads}
@@ -386,8 +398,8 @@ we start with \lstinline!x == "a"!, which gives \lstinline!xsWithoutX == Seq("b"
 Iterating over \lstinline!permutations(xsWithoutX)!, we obtain the
 permutations \lstinline!"bc"! and \lstinline!"cb"!. These permutations
 need to be concatenated with \lstinline!x == "a"!, yielding \lstinline!"abc"!
-and \lstinline!"acb"!, which is the correct part of the final answer.
-So, we write a nested iteration and concatenate the results:
+and \lstinline!"acb"!, which is part of a correct answer. So, we
+write a nested iteration and concatenate the results:
 \begin{lstlisting}
 def permutations(xs: Seq[String]): Seq[String] = for {
   x <- xs
@@ -4851,7 +4863,7 @@ law and get unequal results:
 Had the code not exchanged the order of $w_{1}$ and $w_{2}$, the
 law would have held.
 
-\subsection{From semi-monads to monads: Motivating the identity laws}
+\subsection{From semi-monads to monads: The identity laws}
 
 Semi-monads are heuristically viewed as values with a special \textsf{``}computational
 effect\textsf{''}. Semi-monad-valued computations can be composed using the
@@ -7134,9 +7146,9 @@ possible functions with the type of \lstinline!ftr!. But the imposed
 naturality law~(\ref{eq:ftr-left-naturality-law}) constrains the
 code of \lstinline!ftr! so much that all possible functions \lstinline!ftr!
 satisfying Eq.~(\ref{eq:ftr-left-naturality-law}) are in a $1$-to-$1$
-correspondence with all possible functions \lstinline!tr!. The equivalence
-between \lstinline!tr! and \lstinline!ftr! does not hold without
-the naturality law~(\ref{eq:ftr-left-naturality-law}). 
+correspondence with all possible functions \lstinline!tr!. Without
+the naturality law~(\ref{eq:ftr-left-naturality-law}), the equivalence
+between \lstinline!tr! and \lstinline!ftr! does \emph{not} hold. 
 
 \subsection{Monads, effects, and runners}
 
@@ -7693,9 +7705,31 @@ to $M^{A}$.
 \subsubsection{Exercise \label{subsec:Exercise-fmap-is-not-monadic-morphism-1}\ref{subsec:Exercise-fmap-is-not-monadic-morphism-1}}
 
 Show that \lstinline!List!\textsf{'}s \lstinline!headOption! method viewed
-as a function of type $\forall A.\:\text{List}^{A}\rightarrow\bbnum 1+A$
+as a function of type $\forall A.\,\text{List}^{A}\rightarrow\bbnum 1+A$
 is a natural transformation but \emph{not} a monad morphism between
 the monads \lstinline!List! and \lstinline!Option!.
+
+\subsubsection{Exercise \label{subsec:Exercise-reasoning-1-4-1}\ref{subsec:Exercise-reasoning-1-4-1}}
+
+Assume given functors $F$, $G$, $K$, $L$ and a natural transformation
+$\phi:F^{A}\rightarrow G^{A}$.
+
+\textbf{(a)} Prove that $\phi^{\uparrow K}:K^{F^{A}}\rightarrow K^{G^{A}}$
+is also a natural transformation.
+
+\textbf{(b)} Given another natural transformation $\psi:K^{A}\rightarrow L^{A}$,
+prove that the pair product of $\phi$ and $\psi$, that is, $\phi\boxtimes\psi:F^{A}\times K^{A}\rightarrow G^{A}\times L^{A}$,
+as well as the pair co-product $\phi\boxplus\psi:F^{A}+K^{A}\rightarrow G^{A}+L^{A}$,
+are also natural transformations. The \textbf{pair co-product}\index{pair co-product of functions|textit}
+of two functions $\phi$ and $\psi$ is defined by:
+\[
+(\phi\boxplus\psi):F^{A}+K^{A}\rightarrow G^{A}+L^{A}\quad,\quad\quad\phi\boxplus\psi\triangleq\,\begin{array}{|c||cc|}
+ & G^{A} & L^{A}\\
+\hline F^{A} & \phi & \bbnum 0\\
+K^{A} & \bbnum 0 & \psi
+\end{array}\quad.
+\]
+
 
 \subsection{Constructions of polynomial monads\label{subsec:Constructions-of-polynomial-monads}}
 
@@ -7711,11 +7745,11 @@ $L^{A}\triangleq F^{A}\times G^{A}$.
 \item Given a polynomial monad $F^{A}$, create the monad $L^{A}\triangleq F^{Z+W\times A}$
 (see Section~\ref{sec:transformers-linear-monads}).
 \end{enumerate}
-It is an open question (see Problem~\ref{par:Problem-monads}) that
+It is an open question (see Problem~\ref{par:Problem-monads}) whether
 these are the only constructions available for polynomial monads.
-If the conjecture is true, we can create an algorithm that recognizes
-whether a given polynomial functor can be made into a monad by suitable
-definitions of \lstinline!flatten! and \lstinline!pure!. 
+If that is true, one could create an algorithm that recognizes whether
+a given polynomial functor can be made into a monad by suitable definitions
+of \lstinline!flatten! and \lstinline!pure!. 
 
 As an example, consider the fact that the polynomial functor $F^{A}\triangleq\bbnum 1+A\times A$
 cannot be made into a monad (Exercise~\ref{subsec:Exercise-1-monads-6}).
