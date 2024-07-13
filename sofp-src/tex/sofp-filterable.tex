@@ -20,16 +20,15 @@ The Scala standard library defines the \lstinline!filter! method
 on sequences, sets, and other data structures. An example of using
 \lstinline!filter! is the following calculation:
 \[
-\sum_{x\in\mathbb{Z};\,0\leq x\leq100;\,\cos x>0}\sqrt{\cos\left(x\right)}\approx38.71\quad.
+\sum_{x\in\mathbb{Z};\,0\leq x\leq100;\,\cos x>0}\sqrt{\cos x}\approx38.71\quad.
 \]
 \begin{lstlisting}
 scala> (0 to 100).map(x => math.cos(x)).filter(_ > 0).map(math.sqrt).sum
 res0: Double = 38.71218949848382
 \end{lstlisting}
-The role of \lstinline!filter! in this computation is to select only
-the positive values of $\cos\left(x\right)$. It is safe to apply
-the square root function to positive values, so the code will work
-correctly.
+The role of \lstinline!filter! in this computation is to remove all
+non-positive values of $\cos x$. It is safe to apply the square root
+function to positive values.
 
 The code above is a chain of methods, but the same code can be written
 using Scala\textsf{'}s \lstinline!for!/\lstinline!yield! syntax, which is
@@ -99,7 +98,7 @@ the filtering operation is called \textbf{filterable}.
 The main focus of this chapter is to explore filterable functors in
 detail. Programmers would intuitively expect the filtering operation
 to have certain properties. We will now examine the expected properties
-and translate them into mathematical laws for the function \lstinline!withFilter!.
+and translate them into mathematical laws for the function \lstinline!filter!.
 
 \subsection{Examples and intuitions for the filtering operation}
 
@@ -122,7 +121,7 @@ from $2$ to $1$ after filtering with the condition \lstinline!_ > 100!.
 The \lstinline!Option! functor can wrap at most one value, so filtering
 with a predicate returning \lstinline!false! will return an empty
 \lstinline!Option! value (i.e., \lstinline!None!). In all cases,
-the resulting collection will not contain values that fail the filtering
+the resulting data structure will not store values that fail the filtering
 predicate.
 
 Note that \lstinline!Option[T]! is written in the type notation as
@@ -166,8 +165,8 @@ and implement it as a case class having methods \lstinline!map! and
 \lstinline!withFilter!:
 \begin{lstlisting}
 final case class Orders[A](tue: Option[A], fri: Option[A]) {
-  def map[B](f: A => B): Orders[B] = Orders(tue.map(f), fri.map(f))                  // Functor.
-  def withFilter(p: A => Boolean): Orders[A] = Orders(tue.filter(p), fri.filter(p))  // Filterable.
+  def map[B](f: A => B): Orders[B] = Orders(tue.map(f), fri.map(f))
+  def withFilter(p: A => Boolean): Orders[A] = Orders(tue.filter(p), fri.filter(p))
 }
 
 scala> Orders(Some(500), Some(2000)).withFilter(_ < 1000) // Approved if the amount is below $1000.
@@ -178,14 +177,14 @@ With this definition, we will be able to use \lstinline!Orders! as
 a \textsf{``}source\textsf{''} of data in functor blocks:
 \begin{lstlisting}
 scala> for {
-  x <- Orders(Some(500), Some(2000))  // "Source" of type Orders[Int].
+  x <- Orders(Some(500), Some(2000))  // "Source" has type Orders[Int].
   y = x - 200     // Apply discount of $200 to each order.
-  if y < 500      // Orders are approved if the amount is below $500 after discount.
+  if y < 500      // Orders are approved if amount < 500 after discount.
 } yield y * 1.10  // Add 10% tax. Result is of type Orders[Double].
 res1: Orders[Double] = Orders(Some(330.0), None)
 \end{lstlisting}
 
-Suppose we are considering an additional business rule, such as:
+Suppose we are considering additional business rules, such as:
 
 \textbf{(a)} Both orders must be approved, or else no orders can be
 placed that week. 
@@ -211,26 +210,23 @@ functor \lstinline!List!:\textcolor{darkgray}{\footnotesize{}}
 val result = for {  // Some computations in the context of the `List` functor.
   x <- List(...) // For each x in the given list...
   y = f(x)       // ... compute y
-  if p1(y)       // ... impose condition p1: discard all y for which p1(y) == false
+  if p1(y)       // ... impose condition p1; continue only if p1(y) == true
   if p2(y)       // ... same for condition p2 
   z = g(x, y)    // ... compute z
-  if q(x, y, z)  // ... impose another condition
-} yield          // For all x in the given list, such that all the conditions hold,
-  k(x, y, z)     // compute the values k, put them into a list, and return as the list `result`.
+  if q(x, y, z)  // ... impose another condition q(x, y, z)
+} yield          // For those x for which all the conditions hold,
+  k(x, y, z)     // compute the list of values k as the `result`.
 \end{lstlisting}
 {\footnotesize\par}
 
 There are several properties that one intuitively expects such programs
-to have. One property is that computing \lstinline!y = f(x)! in line
-$3$ and then checking a condition for \lstinline!y!, such as \textsf{``}\lstinline!if p1(y)!\textsf{''}
-in line $4$, should be the same as checking the condition \lstinline!p1(f(x))!
-and then computing \lstinline!y = f(x)!: since the code says that
-\lstinline!y = f(x)!, we expect the conditions \lstinline!p1(y)!
-and \lstinline!p1(f(x))! to be equivalent.
-
-Translating this equivalence into code, we obtain the requirement
-that the following two expressions (\lstinline!result1! and \lstinline!result2!)
-should be equal:
+to have. For example, the code says \lstinline!y = f(x)! in line
+$3$. Then we expect that checking a condition for \lstinline!y!,
+such as \textsf{``}\lstinline!if p1(y)!\textsf{''} in line $4$, should be the same
+as checking the condition \textsf{``}\lstinline!if p1(f(x))!\textsf{''}. Translating
+this equivalence into code, we obtain the requirement that the following
+two expressions (\lstinline!result1! and \lstinline!result2!) should
+be equal:
 
 \vspace{0.3\baselineskip}
 
@@ -268,11 +264,11 @@ one after another. We expect that the first filtering operation keeps
 only values that satisfy the condition \lstinline!p1!, and the second
 filtering operation is applied to the results of the first one, additionally
 imposing the condition \lstinline!p2!. So, we expect that applying
-these two filtering operations is equivalent to filtering by the condition
-\textsf{``}\lstinline!if p1(y) && p2(y)!\textsf{''}.
+these two filtering operations is equivalent to filtering by the single
+condition \textsf{``}\lstinline!if p1(y) && p2(y)!\textsf{''}.
 
-We can translate this expectation into the requirement that \lstinline!result1!
-and \lstinline!result2! should be equal:
+We translate this expectation into the requirement that the following
+values \lstinline!result1! and \lstinline!result2! should be equal:
 
 \vspace{0.3\baselineskip}
 
@@ -366,8 +362,8 @@ val result1 = xs.filter(p).map(f)
 \begin{lstlisting}
 val result2 = for {
   x <- xs
-  if p(x)
-  y = if_p(p)(f)(x)
+  if p(x)  // def fp = if_p(p)(f)
+  y = fp(x)
  } yield y
  // Rewritten via method chains:
 val result2 = xs.filter(p).map(fp)
@@ -512,8 +508,8 @@ violates the filtering laws. This does not mean that business rule
 that order approval according to rule \textbf{(b)} is not a filtering
 operation. For instance, applying two order approvals one after another
 will not give the intuitively expected results. Nevertheless, this
-may be acceptable in applications where only one order approval is
-ever applied.
+may be acceptable in applications where one order approval is never
+applied after another.
 
 Violations of the filtering laws by business rule \textbf{(b)} also
 does not mean that the functor \lstinline!Orders! is not filterable.
@@ -551,8 +547,8 @@ implicit val wrongFilterableOption = new Filterable[Option] {
 }
 \end{lstlisting}
 This code discards information and violates the identity law: the
-result of filtering with an identically \lstinline!true! predicate
-is not the identity function of type \lstinline!Option[A] => Option[A]!.
+filtering with an identically \lstinline!true! predicate is \emph{not}
+the identity function of type \lstinline!Option[A] => Option[A]!.
 
 Finally, one could violate the naturality law by defining \lstinline!filter!
 in a special way when the type parameter $A$ is set to, say, \lstinline!Int!.
@@ -560,8 +556,8 @@ To obey the naturality law, the \lstinline!filter! function must
 be fully parametric and may not use hard-coded values of specific
 types or make decisions based on specific types.
 
-Note that the \lstinline!Boolean! type is equivalent to $\bbnum 2\cong\bbnum 1+\bbnum 1$;
-in other words, this type can be expressed via the basic type constructions
+Note that the \lstinline!Boolean! type is equivalent to $\bbnum 2\cong\bbnum 1+\bbnum 1$.
+In other words, that type can be expressed via the basic type constructions
 (disjunction and the \lstinline!Unit! type) without using any externally
 defined values. For this reason, it is allowed to use the \lstinline!Boolean!
 type in fully parametric functions.
@@ -570,7 +566,7 @@ type in fully parametric functions.
 
 \subsubsection{Example \label{subsec:filt-solved-example-1}\ref{subsec:filt-solved-example-1}}
 
-A cluster has $2$ servers; each server needs to have valid credentials,
+A cluster has two servers; each server needs to have valid credentials,
 which expire periodically. If credentials expire for one server, it
 may copy valid credentials from the other server. If no server has
 valid credentials, the cluster is down. Is this setup described by
@@ -590,8 +586,8 @@ def filter[A](p: A => Boolean): F[A] => F[A] = {
     case Some((a1, a2))   => ???
 }
 \end{lstlisting}
-In line~4, we need to compute a value of type $F^{A}$ using the
-given values \lstinline!a1! and \lstinline!a2!. We need to check
+In line~4, we need to compute a value of type \lstinline!F[A]! using
+the given values \lstinline!a1! and \lstinline!a2!. We need to check
 whether the predicate \lstinline!p! holds for \lstinline!a1! and
 \lstinline!a2!. What if \lstinline!p(a1) == false! but \lstinline!p(a2) == true!?
 We need to remove \lstinline!a1! from the result, or else the filtering
@@ -600,14 +596,15 @@ does not allow us to keep just one of the values of type $A$; it
 requires two such values or none. So, we may return \lstinline!Some((a2, a2))!
 or \lstinline!None!. 
 
-Looking at the business requirements, we see that \lstinline!p(a1) == false!
-means the first server\textsf{'}s credentials expired. In that case, if \lstinline!p(a2) == true!,
-the first server copies the second server\textsf{'}s valid credentials, \lstinline!a2!.
+We may describe the validity of credentials by a predicate \lstinline!p: A => Boolean!.
+If \lstinline!p(a1) == false! then the first server\textsf{'}s credentials
+expired. In that case, if \lstinline!p(a2) == true!, the first server
+will copy the second server\textsf{'}s valid credentials (\lstinline!a2!).
 So, we must return \lstinline!Some((a2, a2))!. Other cases are handled
 similarly. The full code is:
 \begin{lstlisting}
 def filter[A](p: A => Boolean): F[A] => F[A] = {
-    case None             => None                    // Cluster is down, no valid credentials.
+    case None             => None  // No credentials to validate.
     case Some((a1, a2))   => (p(a1), p(a2)) match {
         case (true, true)     => Some((a1, a2))  // Both credentials are still valid.
         case (true, false)    => Some((a1, a1))  // Server 2 copies credentials from server 1.
@@ -643,7 +640,7 @@ fmap(f) andThen filter(p) == {
 The code for the right-hand side of the law, $\text{filt}_{F}(f\bef p)\bef f^{\uparrow F}$,
 is:
 \begin{lstlisting}
-filter(f andThen p) = {
+filter(f andThen p) == {
     case None            => None
     case Some((a1, a2))  => (p(f(a1)), p(f(a2))) match {
         case (true, true)     => Some((a1, a2))
@@ -651,7 +648,7 @@ filter(f andThen p) = {
         case (false, true)    => Some((a2, a2))
         case (false, false)   => None
     }
-} andThen fmap(f) = {
+} andThen fmap(f) == {
     case None            => None
     case Some((a1, a2))  => (p(f(a1)), p(f(a2))) match {
         case (true, true)     => Some((f(a1), f(a2)))
@@ -746,10 +743,10 @@ or both of them when the filtering predicate \lstinline!p! returns
 So, we have proved that all filtering laws hold for the \lstinline!filter!
 function shown above. If the program\textsf{'}s requirements change, the \lstinline!filter!
 function will need to be changed. For instance, suppose the first
-server is now the only source of credentials. The second server may
-copy the first server\textsf{'}s credentials if needed, but the cluster will
-go down whenever the first server\textsf{'}s credentials expire. This corresponds
-to the code:
+server becomes the only source of valid credentials. The second server
+may copy the first server\textsf{'}s credentials if needed, but the cluster
+will go down whenever the first server\textsf{'}s credentials expire. This
+corresponds to the code:
 
 \begin{lstlisting}
 def filter[A](p: A => Boolean): F[A] => F[A] = {
@@ -761,7 +758,7 @@ def filter[A](p: A => Boolean): F[A] => F[A] = {
     }
 }
 \end{lstlisting}
-Alternatively, we may have a requirement that credentials \emph{cannot}
+Alternatively, we may get a new requirement that credentials \emph{cannot}
 be copied between servers:
 \begin{lstlisting}
 def filter[A](p: A => Boolean): F[A] => F[A] = {
@@ -856,6 +853,7 @@ type:
 \begin{lstlisting}
 final case class Server[A](requests: Seq[A])
 \end{lstlisting}
+Suppose a predicate \lstinline!p: A => Boolean! checks the authentication.
 The filtering operation truncates the sequence when the predicate
 \lstinline!p! first returns \lstinline!false!:\index{filterable!defined via takeWhile@defined via \texttt{takeWhile}}
 \begin{lstlisting}
@@ -866,15 +864,15 @@ general constructions of filterable functors (see page~\pageref{proof-that-takeW
 below). Intuitively, we expect laws to hold because the \lstinline!filter!
 function always removes values that fail the predicate \lstinline!p!.
 The filtering function also removes other values that may or may not
-fail the predicate, but the filtering laws allow removing \emph{more}
-values.
+fail the predicate, but the filtering laws do not forbid removing
+\emph{more} values than strictly necessary.
 
 \subsubsection{Example \label{subsec:filt-solved-example-4}\ref{subsec:filt-solved-example-4}}
 
 If possible, implement a \lstinline!Filterable! typeclass instance
 for:
 
-\textbf{(a)} The functor $F^{T}$ defined by the Scala code:
+\textbf{(a)} The functor $F$ defined by the Scala code:
 \begin{lstlisting}
 final case class F[T](x: Option[T], yy: Option[(T, T)])
 \end{lstlisting}
@@ -962,7 +960,7 @@ do not pass the filter. If none of the two values of type $A$ within
 $\text{Int}\times Z\times A\times A$ pass the filter, we will need
 to remove both of them and to return a value of type $Z$. Luckily,
 we have a value of type $Z$ within $\text{Int}\times Z\times A\times A$.
-So, we can implement \lstinline!filter! e.g., like this:
+So, we may implement \lstinline!filter! like this:
 \begin{lstlisting}
 type F[A] = Either[Z, (Int, Z, A, A)]  // The type `Z` must be already defined.
 def filter[A](p: A => Boolean): F[A] => F[A] = {
@@ -1034,7 +1032,7 @@ final case class Q[A, Z](id: Long, user1: Option[(A, Z)], user2: Option[(A, Z)])
 \end{lstlisting}
 {\footnotesize\par}
 
-\textbf{(b)} The functor $R^{A}$ defined by the Scala code:
+\textbf{(b)} The functor $R$ defined by the Scala code:
 \begin{lstlisting}
 final case class R[A](x: Int, y: Int, z: A, data: List[A])
 \end{lstlisting}
@@ -1045,8 +1043,7 @@ final case class R[A](x: Int, y: Int, z: A, data: List[A])
 \textbf{(d)} The functor \lstinline!MyTree[A] = Option[Tree2[A]]!,
 where \lstinline!Tree2! was defined in Section~\ref{subsec:Binary-trees}.
 
-\textbf{(e)} The functor $\text{Tree22}^{A}$ defined recursively
-as: 
+\textbf{(e)} The functor $\text{Tree22}$ defined recursively as:
 \[
 \text{Tree22}^{A}\triangleq\bbnum 1+A\times A\times\text{Tree22}^{A}\times\text{Tree22}^{A}\quad.
 \]
@@ -1054,9 +1051,9 @@ as:
 
 \subsubsection{Exercise \label{subsec:filt-exercise-4-2}\ref{subsec:filt-exercise-4-2}}
 
-Is the simplest perfect-shaped tree $R^{A}$ defined by $R^{A}\triangleq A+R^{A\times A}$
+Is the perfect-shaped tree $R$ defined by $R^{A}\triangleq A+R^{A\times A}$
 filterable? Implement a \lstinline!filter! function for a perfect-shaped\index{perfect-shaped tree}
-tree $R^{A}$ defined by:
+tree $R$ defined by:
 
 \textbf{(a)} $R^{A}\triangleq\bbnum 1+A+R^{A\times A}\quad.\quad$
 \textbf{(b)} $R^{A}\triangleq A+R^{(\bbnum 1+A)\times(\bbnum 1+A)}\quad.$
@@ -1157,7 +1154,7 @@ def deflate[F[_]: Filterable : Functor, A]: F[Option[A]] => F[A] =
     _.filter(_.nonEmpty).map(_.get)
 \end{lstlisting}
 \begin{align}
- & \text{deflate}:\xymatrix{\xyScaleX{4.5pc}F^{\bbnum 1+A}\ar[r]\sp(0.5){\text{filt}_{F}(\text{nonEmpty)}} & F^{\bbnum 1+A}\ar[r]\sp(0.5){\text{get}^{\uparrow F}} & F^{A}}
+ & \text{deflate}:\xymatrix{\xyScaleX{7.0pc}F^{\bbnum 1+A}\ar[r]\sp(0.5){\text{filt}_{F}(\text{nonEmpty)}} & F^{\bbnum 1+A}\ar[r]\sp(0.5){\text{get}^{\uparrow F}} & F^{A}}
 \nonumber \\
  & \text{deflate}^{:F^{\bbnum 1+A}\rightarrow F^{A}}=\text{filt}_{F}(\text{nonEmpty})\bef\text{get}^{\uparrow F}\quad.\label{eq:def-deflate-via-filter}
 \end{align}
@@ -1249,11 +1246,12 @@ can be implemented:
 \text{deflate}_{F}:\bbnum 1+A+\left(\bbnum 1+A\right)\times\left(\bbnum 1+A\right)\times\text{String}\rightarrow A+A\times A\times\text{String}\quad.
 \]
 An immediate problem is that we need to map all disjunctive cases,
-including $\bbnum 1+0+0$, into a value of type $F^{A}$, which contains
-values of type $A$ in every disjunctive case. So, implementing \lstinline!deflate!
-requires us to produce a value of type $A$ from scratch, $\forall A.\,\bbnum 1\rightarrow A$,
-which is impossible in a fully parametric function. Since \lstinline!deflate!
-is not implementable, the functor $F$ is not filterable. $\square$
+including $1+\bbnum 0+\bbnum 0$, into a value of type $F^{A}$, which
+contains values of type $A$ in every disjunctive case. So, implementing
+\lstinline!deflate! requires us to produce a value of type $A$ from
+a unit value, which is impossible in a fully parametric function.
+Since \lstinline!deflate! is not implementable, the functor $F$
+is not filterable. $\square$
 
 These examples show that \lstinline!deflate! is easier to implement
 and to reason about than \lstinline!filter!.
@@ -1288,9 +1286,9 @@ for any predicate $p^{:A\rightarrow\bbnum 2}$:
 {\color{greenunder}\text{naturality law of }\text{filt}_{F}:}\quad & =\text{filt}_{F}(\psi_{p}\bef\text{nonEmpty})\bef\gunderline{\psi_{p}^{\uparrow F}\bef\text{get}^{\uparrow F}}\nonumber \\
 {\color{greenunder}\text{composition law of }F:}\quad & =\text{filt}_{F}(\psi_{p}\bef\text{nonEmpty})\bef\big(\psi_{p}\bef\text{get}\big)^{\uparrow F}\quad.\label{eq:filter-prime-derivation-1}
 \end{align}
-To proceed with the calculation, we need to simplify the two expressions
+To proceed with the calculation, we need to simplify the expressions
 $\psi_{p}\bef\text{get}$ and $\psi_{p}\bef\text{nonEmpty}$. Begin
-with writing the code for the standard methods \lstinline!nonEmpty!
+by writing the code for the standard methods \lstinline!nonEmpty!
 and \lstinline!get!, using the equivalent type \lstinline!Option[Unit]!
 (i.e., $\bbnum 1+\bbnum 1$) instead of \lstinline!Boolean! (i.e.,
 $\bbnum 2$):
@@ -1319,7 +1317,7 @@ A & \text{id}
 These methods are fully parametric since their code uses only the
 eight standard code constructions (see Section~\ref{subsec:Short-notation-for-eight-code-constructions}).
 The function $\psi$ is also fully parametric because we can implement
-using the type \lstinline!Option[Unit]!:
+it using the type \lstinline!Option[Unit]!:
 \begin{lstlisting}[mathescape=true]
 //Use Option[Unit] instead of Boolean, as Option[Unit] $\color{dkgreen}\cong$ Boolean
 def psi[A](p: A => Option[Unit]): A => Option[A] = x => p(x).map(_ => x)
@@ -1407,16 +1405,16 @@ is equal to \lstinline!deflate!:
 \begin{equation}
 \text{deflate}^{\prime}=\text{filt}_{F}(\text{nonEmpty})\bef\text{get}^{\uparrow F}=\psi_{\text{nonEmpty}}^{\uparrow F}\bef\text{deflate}\bef\text{get}^{\uparrow F}\overset{?}{=}\text{deflate}\quad.\label{eq:deflate-prime-derivation-2}
 \end{equation}
-The derivation is stuck here: we cannot simplify the last expression
-unless we can somehow switch the order of function compositions so
-that $\psi_{\text{nonEmpty}}^{\uparrow F}$ and $\text{get}^{\uparrow F}$
-are placed together and the functor composition law of $F$ can be
-applied. To achieve that, we need a law that switches the order of
-lifted function compositions around \lstinline!deflate!. The naturality
-law~(\ref{eq:naturality-law-of-filter}) of \lstinline!filter! has
-that form, so we can try deriving a similar naturality law for \lstinline!deflate!.
-To switch the order of composition of \lstinline!deflate! with a
-lifted function, the law must have the form:
+The derivation is stuck here: we cannot prove the last equality unless
+we somehow switch the order of function compositions, so that $\psi_{\text{nonEmpty}}^{\uparrow F}$
+and $\text{get}^{\uparrow F}$ are placed together and the functor
+composition law of $F$ can be applied. To achieve that, we need a
+law that switches the order of lifted function compositions around
+\lstinline!deflate!. The naturality law~(\ref{eq:naturality-law-of-filter})
+of \lstinline!filter! has that form, so we can try deriving a similar
+naturality law for \lstinline!deflate!. To switch the order of composition
+of \lstinline!deflate! with a lifted function, the law must have
+the form:
 \[
 \text{deflate}\bef f^{\uparrow F}=(\text{???})^{\uparrow F}\bef\text{deflate}\quad,
 \]
@@ -1559,8 +1557,8 @@ holds for \lstinline!deflate!.
 
 \subsubsection{Statement \label{subsec:Statement-partial-functionlaw-deflate-to-filter}\ref{subsec:Statement-partial-functionlaw-deflate-to-filter}}
 
-The partial function law always holds for the \lstinline!filter!
-function defined via \lstinline!deflate!.
+The partial function law always holds for a \lstinline!filter! function
+defined via \lstinline!deflate!.
 
 \subparagraph{Proof}
 
@@ -1581,7 +1579,8 @@ law~(\ref{eq:naturality-law-of-deflate}):
 {\color{greenunder}\text{right-hand side}:}\quad & \psi_{p}^{\uparrow F}\bef\gunderline{\text{deflate}\bef f_{|p}^{\uparrow F}}=\gunderline{\psi_{p}^{\uparrow F}\bef f_{|p}^{\uparrow\text{Opt}\uparrow F}}\bef\text{deflate}=\big(\psi_{p}\bef f_{|p}^{\uparrow\text{Opt}}\big)^{\uparrow F}\bef\text{deflate}\quad.
 \end{align*}
 It remains to show that $\psi_{p}\bef f_{|p}^{\uparrow\text{Opt}}=\psi_{p}\bef f^{\uparrow\text{Opt}}$.
-Apply the function $\psi_{p}\bef f^{\uparrow\text{Opt}}$ to an $x^{:A}$:
+Apply the function $\psi_{p}\bef f^{\uparrow\text{Opt}}$ to an arbitrary
+value $x^{:A}$:
 
 \begin{lstlisting}
 psi(p)(x).map(f) == (p(x) match {
@@ -1644,10 +1643,10 @@ if \lstinline!deflate! is defined by Eq.~(\ref{eq:def-deflate-via-filter}):
 \end{align*}
 The two sides will be equal if we prove that $f^{\uparrow\text{Opt}}\bef\text{nonEmpty}=\text{nonEmpty}$
 and that $f^{\uparrow\text{Opt}}\bef\text{get}=\text{get}\bef f$,
-which can be viewed as the two naturality laws specific to these functions.
-Use the definitions~(\ref{eq:def-of-get-option}) and~(\ref{eq:def-of-nonempty-option})
-of \lstinline!get! and \lstinline!nonEmpty!, set the type parameters
-as needed to match the types, and compute:
+which can be viewed as the naturality laws specific to the functions
+\lstinline!nonEmpty! and \lstinline!get!. Use the definitions~(\ref{eq:def-of-nonempty-option})
+and~(\ref{eq:def-of-get-option}) of \lstinline!nonEmpty! and \lstinline!get!,
+set the type parameters as needed to match the types, and compute:
 \begin{align*}
  & f^{\uparrow\text{Opt}}\bef\text{nonEmpty}=\,\begin{array}{|c||cc|}
  & \bbnum 1 & B\\
@@ -1700,14 +1699,14 @@ also true:
 \subsubsection{Statement \label{subsec:Statement-naturality-for-deflate-entails-naturality-for-filter}\ref{subsec:Statement-naturality-for-deflate-entails-naturality-for-filter}}
 
 If the naturality law~(\ref{eq:naturality-law-of-deflate}) holds
-for \lstinline!deflate! and the function \lstinline!filter! is defined
-via \lstinline!deflate! by Eq.~(\ref{eq:def-filter-through-deflate})
+for \lstinline!deflate! and if \lstinline!filter! is defined via
+\lstinline!deflate! by Eq.~(\ref{eq:def-filter-through-deflate})
 then the naturality law~(\ref{eq:naturality-law-of-filter}) holds
 for \lstinline!filter!.
 
 \subparagraph{Proof}
 
-Begin by writing the two sides of the naturality law~(\ref{eq:naturality-law-of-filter}):
+Begin by writing the two sides of the law~(\ref{eq:naturality-law-of-filter}):
 \begin{align*}
  & \quad{\color{greenunder}\text{left-hand side of Eq.~(\ref{eq:naturality-law-of-filter})}:}\quad\\
  & f^{\uparrow F}\bef\gunderline{\text{filt}\,(p)}=\gunderline{f^{\uparrow F}\bef\psi_{p}^{\uparrow F}}\bef\text{deflate}=(f\bef\psi_{p})^{\uparrow F}\bef\text{deflate}\quad.\\
@@ -1730,7 +1729,7 @@ of type $A\rightarrow\bbnum 1+\bbnum 1\cong A\rightarrow\text{Opt}^{\bbnum 1}$:
 x^{:A}\triangleright\psi_{p}\triangleq x^{:A}\triangleright p^{:A\rightarrow\text{Opt}^{\bbnum 1}}\bef(1\rightarrow x)^{\uparrow\text{Opt}}\quad.\label{eq:def-of-psi}
 \end{equation}
 Using this definition of $\psi_{p}$, we can derive Eq.~(\ref{eq:naturality-law-of-psi})
-by applying both sides to an $x^{:A}$:
+by applying both sides to an arbitrary value $x^{:A}$:
 \begin{align*}
 {\color{greenunder}\text{left-hand side}:}\quad & x\triangleright f\bef\psi_{p}=x\triangleright f\triangleright\psi_{p}\\
 {\color{greenunder}\text{use Eq.~(\ref{eq:def-of-psi})}:}\quad & \quad=x\triangleright f\triangleright p\bef(1\rightarrow x\triangleright f)^{\uparrow\text{Opt}}\\
@@ -2015,7 +2014,7 @@ psi(p) == x => Some(x).filter(p1).map { y => Some(y).filter(p2) }.flatten
        == psi(p1) andThen (_.flatMap(psi(p2)))     // Use the standard methods (flatten and flatMap) for Option.
 \end{lstlisting}
 Denote this combination of the functions $\psi_{p_{1}}$ and $\psi_{p_{2}}$
-by the symbol $\diamond_{_{\text{Opt}}}$, so that we may write:
+by the symbol $\diamond_{_{\text{Opt}}}$:
 \[
 \psi_{p}=\psi_{p_{1}}\diamond_{_{\text{Opt}}}\psi_{p_{2}}\triangleq x^{:A}\rightarrow x\triangleright\psi_{p_{1}}\triangleright\text{flm}_{\text{Opt}}(\psi_{p_{2}})=\psi_{p_{1}}\bef(y\rightarrow y\triangleright\text{flm}_{\text{Opt}}(\psi_{p_{2}}))\quad.
 \]
@@ -2125,9 +2124,10 @@ We use this definition to compute $f\diamond_{_{\text{Opt}}}g$:
 {\color{greenunder}\text{compute composition (see below)}:}\quad & =h\bef g\quad.
 \end{align*}
 The result of composing \lstinline!pure! and \lstinline!flatMap!
-for \lstinline!Option! is not obvious, but it turns out that $\text{pu}_{\text{Opt}}$
-followed by $\text{flm}_{\text{Opt}}(g)$ is equal to just $g$. To
-verify that, let us first use the syntax of Scala:
+for \lstinline!Option! is perhaps not obvious, but it turns out that
+$\text{pu}_{\text{Opt}}$ followed by $\text{flm}_{\text{Opt}}(g)$
+is equal to just $g$. To verify that, let us first use the syntax
+of Scala:
 \begin{lstlisting}
 pure(x) == Some(x)             // By definition of `pure` for `Option`.
 p.flatMap(g) == p match {      // By definition of `flatMap` for `Option`.
@@ -2278,7 +2278,8 @@ to use the \lstinline!liftOpt! function and its two laws~(\ref{eq:combined-natur
 There are three constructions that work solely by manipulating type
 parameters: the identity functor $\text{Id}^{A}\triangleq A$, the
 constant functor $\text{Const}^{Z,A}\triangleq Z$ (where $Z$ is
-a fixed type), and the functor composition, $F^{A}\triangleq G^{H^{A}}$.
+a fixed type), and the functor composition, $F^{A}\triangleq G^{H^{A}}$
+(or $F\triangleq G\circ H$).
 
 The identity functor is \emph{not} filterable because \lstinline!deflate!
 of type $\bbnum 1+A\rightarrow A$ cannot be implemented.
@@ -2290,20 +2291,20 @@ functor is filterable because we can define $\text{liftOpt}\,(\_)\triangleq\text
 laws usually hold for an identity function. To verify the laws, note
 that the lifting to the $\text{Const}$ functor is also an identity
 function: $f^{\uparrow\text{Const}}=\text{id}^{:Z\rightarrow Z}$
-for any $f^{:A\rightarrow B}$.
+for any $f^{:A\rightarrow B}$. We write:
 \begin{align*}
 {\color{greenunder}\text{verify law~(\ref{eq:combined-naturality-identity-law-of-liftOpt})}:}\quad & \text{liftOpt}_{\text{Const}}(f\bef\text{pu}_{\text{Opt}})=\text{id}=f^{\uparrow\text{Const}}\quad,\\
 {\color{greenunder}\text{verify law~(\ref{eq:composition-law-of-liftOpt})}:}\quad & \text{liftOpt}_{\text{Const}}(f)\bef\text{liftOpt}_{\text{Const}}(g)=\text{id}\bef\text{id}=\text{id}\\
  & =\text{liftOpt}_{\text{Const}}(f\diamond_{_{\text{Opt}}}g)\quad.
 \end{align*}
 
-The functor composition $F^{A}\triangleq G^{H^{A}}$ requires only
+The functor composition $F^{A}\triangleq G^{H^{A}}$ requires \emph{only}
 $H$ to be a filterable functor:
 
 \subsubsection{Statement \label{subsec:Statement-filterable-composition-functors}\ref{subsec:Statement-filterable-composition-functors}}
 
-The functor $F^{A}\triangleq G^{H^{A}}$ is filterable when $H^{A}$
-is filterable and $G^{A}$ is \emph{any} functor.
+The functor $F^{A}\triangleq G^{H^{A}}$ is filterable when $H$ is
+filterable and $G$ is \emph{any} functor.
 
 \subparagraph{Proof}
 
@@ -2335,9 +2336,8 @@ To verify the composition law of $\text{liftOpt}_{F}$, compute:
 \paragraph{Products}
 
 To show that the product of two filterable functors is filterable,
-we will use a definition of $\text{liftOpt}_{G^{\bullet}\times H^{\bullet}}$
-and a proof quite similar to what we did for the product of functors
-(Statement~\ref{subsec:functor-Statement-functor-product}).\index{functor product}
+we will use a definition of $\text{liftOpt}_{G\times H}$ and a proof
+quite similar to what we did for the product of functors (Statement~\ref{subsec:functor-Statement-functor-product}).\index{functor product}
 
 \subsubsection{Statement \label{subsec:Statement-filterable-functor-product}\ref{subsec:Statement-filterable-functor-product}}
 
@@ -2419,7 +2419,7 @@ def liftOpt_F[A, B](f: A => Option[B]): Either[G[A], H[A]] => Either[G[B], H[B]]
 H^{A} & \bbnum 0 & \text{liftOpt}_{H}(f)
 \end{array}\quad.
 \]
-Lifting to the functor $F^{A}$ is defined as in Statement~\ref{subsec:functor-Statement-functor-coproduct}:
+Lifting to the functor $F$ is defined as in Statement~\ref{subsec:functor-Statement-functor-coproduct}:
 \[
 f^{\uparrow F}\triangleq\begin{array}{|c||cc|}
  & G^{A} & H^{A}\\
@@ -2759,10 +2759,10 @@ instead of $G^{A}\rightarrow G^{B}$). Assuming that $\text{liftOpt}_{G}$
 is available, we can now complete the implementation of $\text{liftOpt}_{F}$:
 \begin{align}
  & \text{liftOpt}_{F}(f^{:A\rightarrow\bbnum 1+B})\triangleq p^{:G^{A}\rightarrow H^{A}}\rightarrow g^{:G^{B}}\rightarrow\gunderline{\text{liftOpt}_{H}(f)\big(p(\text{\text{liftOpt}}_{G}(f)(g))\big)}\nonumber \\
- & \quad\triangleright\text{-notation}:\quad\nonumber \\
- & =p^{:G^{A}\rightarrow H^{A}}\rightarrow\gunderline{g^{:G^{B}}\rightarrow g\,\triangleright}\,\text{\text{liftOpt}}_{G}(f)\triangleright p\triangleright\text{liftOpt}_{H}(f)\\
- & \quad\text{omit }(g\rightarrow g\,\triangleright):\quad\label{eq:def-of-liftopt-function-type}\\
- & =p\rightarrow\text{\text{liftOpt}}_{G}(f)\bef p\bef\text{liftOpt}_{H}(f)\quad.
+ & \quad\quad\triangleright\text{-notation}:\quad\nonumber \\
+ & =p^{:G^{A}\rightarrow H^{A}}\rightarrow\gunderline{g^{:G^{B}}\rightarrow g\,\triangleright}\,\text{\text{liftOpt}}_{G}(f)\triangleright p\triangleright\text{liftOpt}_{H}(f)\nonumber \\
+ & \quad\quad\text{omit }(g\rightarrow g\,\triangleright):\quad\nonumber \\
+ & =p\rightarrow\text{\text{liftOpt}}_{G}(f)\bef p\bef\text{liftOpt}_{H}(f)\quad.\label{eq:def-of-liftopt-function-type}
 \end{align}
 Note that the last line is similar to Eq.~(\ref{eq:f-functor-exponential-def-of-fmap})
 but with \lstinline!liftOpt! instead of \lstinline!map!:
@@ -2770,7 +2770,7 @@ but with \lstinline!liftOpt! instead of \lstinline!map!:
 (f^{:A\rightarrow B})^{\uparrow F}=p^{:G^{A}\rightarrow H^{A}}\rightarrow f^{\downarrow G}\bef p\bef f^{\uparrow F}=p\rightarrow\text{cmap}_{G}(f)\bef p\bef\text{fmap}_{F}(f)\quad.
 \]
 
-The laws for filterable contrafunctors are exactly such that $F^{A}\triangleq G^{A}\rightarrow H^{A}$
+The laws for filterable contrafunctors ensure that $F^{A}\triangleq G^{A}\rightarrow H^{A}$
 obeys filtering laws when $H$ is a filterable functor and $G$ is
 a filterable contrafunctor:
 
@@ -2784,14 +2784,14 @@ is filterable.
 
 \subparagraph{Proof}
 
-We will arrive at the required laws for $G$ by trying to prove the
-laws for $F$.
+We will find the required laws for $G$ by trying to prove the laws
+for $F$.
 
 Because $F$ contains a function type, it is convenient to apply both
 sides of the laws to an arbitrary value $p^{:G^{A}\rightarrow H^{A}}$.
 Consider the naturality-identity law of $F$:
 \begin{align*}
-{\color{greenunder}\text{expect to equal }p\triangleright f^{\uparrow F}=f^{\downarrow G}\bef p\bef f^{\uparrow H}:}\quad & p\triangleright\text{liftOpt}_{F}(f\bef\text{pu}_{\text{Opt}})\\
+{\color{greenunder}\text{expect to equal }f^{\downarrow G}\bef p\bef f^{\uparrow H}:}\quad & p\triangleright\text{liftOpt}_{F}(f\bef\text{pu}_{\text{Opt}})\\
 {\color{greenunder}\text{definition~(\ref{eq:def-of-liftopt-function-type}) of }\text{liftOpt}_{F}:}\quad & =\text{\text{liftOpt}}_{G}(f\bef\text{pu}_{\text{Opt}})\bef p\bef\gunderline{\text{liftOpt}_{H}(f\bef\text{pu}_{\text{Opt}})}\\
 {\color{greenunder}\text{naturality-identity law of }\text{liftOpt}_{H}:}\quad & =\text{\text{liftOpt}}_{G}(f\bef\text{pu}_{\text{Opt}})\bef p\bef\gunderline{f^{\uparrow H}}\quad.
 \end{align*}
@@ -2809,7 +2809,7 @@ is:
  & p\triangleright\text{liftOpt}_{F}(f)\bef\text{liftOpt}_{F}(g)=\gunderline{p\triangleright\text{liftOpt}_{F}(f)}\triangleright\text{liftOpt}_{F}(g)\\
  & \quad{\color{greenunder}\text{definition~(\ref{eq:def-of-liftopt-function-type}) of }\text{liftOpt}_{F}:}\quad\\
  & =\big(\text{\text{liftOpt}}_{G}(f)\bef p\bef\text{liftOpt}_{H}(f)\big)\,\gunderline{\triangleright\,\text{liftOpt}_{F}(g)}\\
- & \quad{\color{greenunder}\text{definition~(\ref{eq:def-of-liftopt-function-type})}:}\quad\\
+ & \quad{\color{greenunder}\text{again definition~(\ref{eq:def-of-liftopt-function-type})}:}\quad\\
  & =\text{\text{liftOpt}}_{G}(g)\bef\big(\text{\text{liftOpt}}_{G}(f)\bef p\bef\gunderline{\text{liftOpt}_{H}(f)\big)\bef\text{liftOpt}_{H}(g)}\\
  & \quad{\color{greenunder}\text{composition law~(\ref{eq:composition-law-of-liftOpt}) of }\text{liftOpt}_{H}:}\quad\\
  & =\text{\text{liftOpt}}_{G}(g)\bef\text{\text{liftOpt}}_{G}(f)\bef p\bef\text{liftOpt}_{H}(f\diamond_{_{\text{Opt}}}g)\quad.
@@ -2846,7 +2846,7 @@ by:
 \[
 F^{A}\triangleq G^{A}+A\times F^{A}
 \]
-is filterable. With $G^{A}\triangleq\bbnum 1$, this construction
+is filterable. When $G^{A}\triangleq\bbnum 1$, this construction
 reproduces the standard filtering operation of \lstinline!List!.
 
 \subparagraph{Proof}
@@ -2854,14 +2854,14 @@ reproduces the standard filtering operation of \lstinline!List!.
 We first need to implement the type constructor $F$ and the function
 $\text{liftOpt}_{F}$:
 \begin{lstlisting}
-sealed trait F[A]                               // Assume that the functor G was defined previously.
+sealed trait F[A]         // Assume that the functor G was defined previously.
 final case class FG[A](g: G[A]) extends F[A]
 final case class FAF[A](a: A, rf: F[A]) extends F[A]
-                                         // Assume that liftOpt_G is available and define liftOpt_F:
+                   // Assume that liftOpt_G is available and define liftOpt_F:
 def liftOpt_F[A, B](f: A => Option[B]): F[A] => F[B] = {
    case FG(g)       => FG(liftOpt_G(f)(g))
-   case FAF(a, rf)  => f(a) match {                      // Does `a` pass the filtering predicate?
-      case None        => liftOpt_F(f)(rf)              // No. Drop `a` and filter `rf` recursively.
+   case FAF(a, rf)  => f(a) match {  // Does `a` pass the filtering predicate?
+      case None        => liftOpt_F(f)(rf)             // No. Drop `a` and filter `rf` recursively.
       case Some(b)     => FAF[B](b, liftOpt_F(f)(rf))  // Yes. Keep `b` and filter `rf` recursively.
    }
 }
@@ -2936,7 +2936,7 @@ apply its left-hand side to $\bbnum 0+a\times r$:
 {\color{greenunder}\text{use Eq.~(\ref{eq:expression-liftOpt-derivation2})}:}\quad & =f(a)\triangleright\,\begin{array}{||c|}
 1\rightarrow r\triangleright\overline{\text{liftOpt}_{F}}(f)\\
 b^{:B}\rightarrow\bbnum 0+\left(b\times r\right)\triangleright\overline{\text{liftOpt}_{F}}(f)
-\end{array}\,\,\gunderline{\triangleright\,\text{liftOpt}_{F}(g)}
+\end{array}\,\,\,\gunderline{\triangleright\,\text{liftOpt}_{F}(g)}
 \end{align*}
 \begin{align}
  & \quad\text{apply }\text{liftOpt}_{F}(g):\quad\nonumber \\
@@ -2952,7 +2952,7 @@ b^{:B}\rightarrow g(b)\triangleright\,\begin{array}{||c|}
 c^{:C}\rightarrow\bbnum 0+\left(c\times r\right)\triangleright\overline{\text{liftOpt}_{F}}(f)\bef\overline{\text{liftOpt}_{F}}(g)
 \end{array}
 \end{array}\nonumber \\
- & \quad{\color{greenunder}\text{inductive assumption}:}\quad\\
+ & \quad\text{inductive assumption}:\quad\nonumber \\
  & =a\triangleright f\bef\,\,\begin{array}{||c|}
 1\rightarrow r\triangleright\overline{\text{liftOpt}_{F}}(f\diamond_{_{\text{Opt}}}g)\\
 b^{:B}\rightarrow g(b)\triangleright\,\begin{array}{||c|}
@@ -3044,7 +3044,7 @@ scheme. Then the filtering logic is different from that used in Statement~\ref{s
 \subsubsection{Statement \label{subsec:Statement-filterable-recursive-type-1}\ref{subsec:Statement-filterable-recursive-type-1}}
 
 If $S^{A,R}$ is a bifunctor that is filterable with respect to $A$,
-the recursive functor $F^{A}$ defined by the type equation $F^{A}\triangleq S^{A,F^{A}}$
+the recursive functor $F$ defined by the type equation $F^{A}\triangleq S^{A,F^{A}}$
 is filterable.
 
 \subparagraph{Proof}
@@ -3107,17 +3107,17 @@ make this intuition precise.
 A simple contrafunctor is $C^{A}\triangleq A\rightarrow Z$, where
 $Z$ is a constant type. This is a general form of an \textsf{``}extractor\textsf{''}
 \textemdash{} for example, a function that extracts logging information
-of type $Z$ from data of an arbitrary type $A$. It is sometimes
-necessary to exclude particular kinds of information (e.g., private
-personal data) from logging. We can implement this by providing a
-predicate of type \lstinline!A => Boolean! that decides, depending
-on the given value $x^{:A}$, whether $x$ should be passed to the
-extractor. That predicate will be attached to a given extractor $c^{:C^{A}}$
-by the \lstinline!filter! operation:
+of type $Z$ from data of various types $A$. It is sometimes necessary
+to exclude particular kinds of information (e.g., private personal
+data) from logging. We can implement this by providing a predicate
+of type \lstinline!A => Boolean! that decides, depending on the given
+value $x^{:A}$, whether $x$ should be passed to the extractor. That
+predicate will be attached to a given extractor $c^{:C^{A}}$ by the
+\lstinline!filter! operation:
 \begin{lstlisting}
 def filter[A](p: A => Boolean): C[A] => C[A]
-val extractor: C[Payload] = ???           // Original code for extracting metadata from payloads.
-val noPrivateData: Payload => Boolean = ???  // Returns true only if payload has no private data.
+val extractor: C[Payload] = ???  // Code that extracts metadata from payloads.
+val noPrivateData: Payload => Boolean = ??? // Returns true only if payload has no private data.
 val filtered: C[Payload] = filter(noPrivateData)(extractor)     // Will not extract private data.
 \end{lstlisting}
 How could filtering work when the predicate returns \lstinline!false!?
@@ -3159,11 +3159,11 @@ return \lstinline!None!. So, the code of $d$ must be:
 val d: A => Option[Z] = { a => if (p(a)) c(a) else None }
 \end{lstlisting}
 The transformation from \lstinline!c! to \lstinline!d! is a filtering
-operation for the contrafunctor $C^{A}$, implemented as:
+operation for the contrafunctor $C$, implemented as:
 \begin{lstlisting}
 def filter[A](p: A => Boolean)(c: A => Option[Z]): A => Option[Z] = { a => 
   if (p(a)) c(a) else None
-}                        // Equivalent code is { a => Some(a).filter(p).flatMap(c) }
+}     // Equivalent code is { a => Some(a).filter(p).flatMap(c) }
 \end{lstlisting}
 \[
 \text{filt}_{C}(p^{:A\rightarrow\bbnum 2})\triangleq c^{:A\rightarrow\bbnum 1+Z}\rightarrow\text{pu}_{\text{Opt}}\bef\text{filt}_{\text{Opt}}(p)\bef\text{flm}_{\text{Opt}}(c)=c\rightarrow\psi_{p}\bef\text{flm}_{\text{Opt}}(c)\quad.
@@ -3714,7 +3714,7 @@ can be implemented as a lawful \lstinline!filter! function.
 \subsubsection{Example \label{subsec:Example-filterable-laws-1}\ref{subsec:Example-filterable-laws-1}}
 
 Show that the functor $F^{A}\triangleq G^{A}\rightarrow A$ is not
-filterable (for any contrafunctor $G^{A}$).
+filterable (for any contrafunctor $G$).
 
 \subparagraph{Solution}
 
@@ -3724,7 +3724,7 @@ writing out its full type signature:
 \text{deflate}_{F}:(G^{\bbnum 1+A}\rightarrow\bbnum 1+A)\rightarrow G^{A}\rightarrow A\quad,\quad\text{deflate}_{F}=p^{:G^{\bbnum 1+A}\rightarrow\bbnum 1+A}\rightarrow g^{:G^{A}}\rightarrow\text{???}^{:A}\quad.
 \]
 We cannot extract a value of type $A$ from $g^{:G^{A}}$ since the
-contrafunctor $G^{A}$ does not wrap any values of $A$. So, the only
+contrafunctor $G$ does not wrap any values of $A$. So, the only
 hope of filling the typed hole $\text{???}^{:A}$ is to apply the
 function $p$ to an argument of type $G^{\bbnum 1+A}$. Even if we
 are able to map $G^{A}\rightarrow G^{\bbnum 1+A}$ (e.g., if $G$
@@ -3764,9 +3764,9 @@ second construction applies if we write $G^{A}$ in the form $G^{A}=\bbnum 1+A\ti
 where $K^{A}\triangleq\bbnum 1+\text{Int}+A$. Since $K^{A}$ is the
 co-product of the \lstinline!Option! functor and a constant functor
 (the fixed type \lstinline!Int!), $K$ is filterable by Statement~\ref{subsec:Statement-filterable-coproduct}.
-So, $G^{A}$ is filterable.
+So, $G$ is filterable.
 
-Similarly, we find that $H^{A}$ is filterable by Statement~\ref{subsec:Statement-filterable-coproduct-1}
+Similarly, we find that $H$ is filterable by Statement~\ref{subsec:Statement-filterable-coproduct-1}
 if we write $H^{A}=\bbnum 1+A\times(\bbnum 1+A\times\text{String})$,
 where the functor $\bbnum 1+A\times\text{String}$ is filterable by
 the same construction.
@@ -3904,9 +3904,9 @@ inflate(deflate(Some(None))) == None  // Would have been Some(None) if the funct
 Assume that a given functor $H^{A}\triangleq\bbnum 1+K^{A}$ is filterable
 (but $K$ is not necessarily filterable). The functor $H$ is a \textsf{``}data
 wrapper\textsf{''} with a fixed empty value, $1+\bbnum 0^{:K^{A}}$. Show
-that an empty wrapper remains empty after any filtering: the function
-$\text{filt}_{H}$ satisfies, for any $p^{:A\rightarrow\bbnum 2}$,
-the equation:
+that an empty wrapper must remain empty after any filtering. In other
+words, for any $p^{:A\rightarrow\bbnum 2}$ the function $\text{filt}_{H}$
+satisfies the equation:
 \begin{equation}
 (1+\bbnum 0^{:K^{A}})\triangleright\text{filt}_{H}(p)=1+\bbnum 0^{:K^{A}}\quad.\label{eq:empty-filter-remains-empty-via-filt}
 \end{equation}
@@ -4112,7 +4112,7 @@ value).
 
 \subparagraph{Solution}
 
-Try to implement the function $\text{inflate}_{C}:C^{A}\rightarrow C^{\bbnum 1+A}$
+Try implementing the function $\text{inflate}_{C}:C^{A}\rightarrow C^{\bbnum 1+A}$
 and write:
 \[
 \text{inflate}_{C}:(A\rightarrow Z)\rightarrow\bbnum 1+A\rightarrow Z\quad,\quad\quad\text{inflate}_{C}=c^{:A\rightarrow Z}\rightarrow p^{:\bbnum 1+A}\rightarrow\text{???}^{:Z}\quad.
@@ -4228,10 +4228,10 @@ is not void).
 
 \subsubsection{Exercise \label{subsec:Exercise-filterable-laws-8-2}\ref{subsec:Exercise-filterable-laws-8-2}}
 
-Show that a \emph{polynomial} functor $F$ is filterable (in some
-way) if and only if the type $F^{\bbnum 1}\rightarrow F^{\bbnum 0}$
-is not void. Find an example of a non-filterable polynomial functor
-$F$ that violates the condition $F^{\bbnum 1}\rightarrow F^{\bbnum 0}\not\cong\bbnum 0$.
+Give an example of a non-filterable polynomial functor $F$ for which
+$F^{\bbnum 1}\rightarrow F^{\bbnum 0}\cong\bbnum 0$. Show that a
+polynomial functor $F$ is filterable (in some way) if and only if
+the type $F^{\bbnum 1}\rightarrow F^{\bbnum 0}$ is not void. 
 
 \section{Further developments}
 
@@ -4405,11 +4405,12 @@ f^{\uparrow F}\bef t^{B}(c^{:C^{B}})=\text{???}^{:F^{A}\rightarrow G^{B}}\quad.
 \]
 It is clear that we must choose an arbitrary value $c$ of type $C^{B}$
 (rather than $C^{A}$) for all types to match. It remains to fill
-the typed hole, which must be of the form $t(...)\bef f^{\uparrow G}$,
+the right-hand side, which must be of the form $t(...)\bef f^{\uparrow G}$.
+We write:
 \[
 f^{\uparrow F}\bef t^{B}(c^{:C^{B}})=t^{A}(\text{???}^{:C^{A}})\bef f^{\uparrow G}\quad.
 \]
-The argument of $t$ of type $C^{A}$ is obtained by applying $f^{\downarrow C}$
+The value $\text{???}^{:C^{A}}$ is obtained by applying $f^{\downarrow C}$
 to $c$. So, the law is:
 \begin{equation}
 f^{\uparrow F}\bef t(c)=t(c\triangleright f^{\downarrow C})\bef f^{\uparrow G}\quad.\label{eq:naturality-law-general-parameterized-transformation}
@@ -4468,7 +4469,7 @@ the type signature:
 \[
 \text{lift}_{G,F}^{A,B}:(A\rightarrow G^{B})\rightarrow F^{A}\rightarrow F^{B}\quad.
 \]
-We can view this as a generalized \textsf{``}lifting\textsf{''} of functions with
+We can view this as a generalized \textsf{``}lifting\textsf{''} from functions of
 type $A\rightarrow G^{B}$ (called \index{Kleisli!functions}\textbf{Kleisli
 functions}) to functions of type $F^{A}\rightarrow F^{B}$. We will
 look at properties of generalized liftings in the next subsection.
@@ -4508,8 +4509,8 @@ given in Appendix~\ref{app:Proofs-of-naturality-parametricity}.} So, we do \emph
 whose code is known to be fully parametric. This saves a significant
 amount of work, since every method of every typeclass will have one
 naturality law per type parameter. Until now, we have been systematically
-deriving and checking all naturality laws; but we will not check those
-laws in the rest of the book.
+deriving and checking all naturality laws; but we will not keep checking
+those laws in the rest of the book.
 
 Even if naturality laws hold automatically, it is important to be
 able to recognize their form and to use them in derivations where
@@ -4542,15 +4543,15 @@ and is most convenient for proofs of general type constructions.
 
 If we put the naturality laws aside, \lstinline!liftOpt! has the
 laws of identity~(\ref{eq:identity-law-of-liftOpt}) and composition~(\ref{eq:composition-law-of-liftOpt}).
-It is notable how these two laws are similar to the functor laws~(\ref{eq:f-identity-law-functor-fmap})\textendash (\ref{eq:f-composition-law-functor-fmap}):
+It is notable that those two laws are similar to the functor laws~(\ref{eq:f-identity-law-functor-fmap})\textendash (\ref{eq:f-composition-law-functor-fmap}):
 \begin{align*}
 \text{liftOpt}_{F}(\text{pu}_{F})=\text{id}\quad, & \quad\text{liftOpt}_{F}(f^{:A\rightarrow\bbnum 1+B})\bef\text{liftOpt}_{F}(g^{:B\rightarrow\bbnum 1+C})=\text{liftOpt}_{F}(f\diamond_{_{\text{Opt}}}g)\quad.\\
 \text{fmap}_{F}(\text{id})=\text{id}\quad, & \quad\text{fmap}_{F}(f^{:A\rightarrow B})\bef\text{fmap}_{F}(g^{:B\rightarrow C})=\text{fmap}_{F}(f\bef g)\quad.
 \end{align*}
-The only difference between these laws is in replacing $\text{id}^{:A\rightarrow A}$
+The only difference between those sets of laws is in replacing $\text{id}^{:A\rightarrow A}$
 by $\text{pu}_{F}^{:A\rightarrow F^{A}}$ and the function composition
 $f\bef g$ by the Kleisli composition $f\diamond_{_{\text{Opt}}}g$.
-We will now focus on the analogy between these laws, which goes far
+We will now focus on the analogy between those laws, which goes far
 beyond the superficial similarity of form.
 
 Kleisli functions $f^{:A\rightarrow\bbnum 1+B}$ and $g^{:B\rightarrow\bbnum 1+C}$
@@ -4583,6 +4584,7 @@ derived previously in this chapter:
 {\color{greenunder}\text{use Eq.~(\ref{eq:associativity-law-of-flatMap-for-Option})}:}\quad & \quad=f\bef\text{flm}_{\text{Opt}}(g\diamond_{_{\text{Opt}}}h)=f\diamond_{_{\text{Opt}}}\big(g\diamond_{_{\text{Opt}}}h\big)\quad.
 \end{align*}
 This calculation motivates the name \textsf{``}associativity law\textsf{''} for Eq.~(\ref{eq:associativity-law-of-flatMap-for-Option}).
+$\square$
 
 The function \lstinline!liftOpt! can be viewed as a \textsf{``}generalized
 lifting\textsf{''} from Kleisli functions $A\rightarrow\bbnum 1+B$ to functions
@@ -4603,7 +4605,7 @@ co-product and functor composition constructions.
 The similarity between those proofs means, in a mathematician\textsf{'}s view,
 that we have been proving essentially the same statement twice but
 did not use an appropriate level of abstraction to see that. While
-programmers may accept the work of writing these proofs twice, a mathematician
+programmers may accept the work of writing those proofs twice, a mathematician
 would prefer to define a \textsf{``}generalized lifting\textsf{''} that replaces $\text{Opt}$
 by a functor $M$:
 \begin{align*}
@@ -4618,8 +4620,8 @@ and composition:
 \end{align*}
 Now the two sets of proofs can be replaced by a single set of proofs
 formulated for an \textsf{``}$M$\textbf{-filterable}\textsf{''}\index{$M$-filterable functor}
-functor $F$, where $M$ could be later set to the identity functor
-or the $\text{Opt}$ functor.
+functor $F$, where $M$ could be later set either to the identity
+functor or to the \lstinline!Option! functor.
 
 Not all functors $M$ support the Kleisli composition $\diamond_{_{M}}$
 with the required laws. We will study such functors $M$, known as
@@ -4788,15 +4790,15 @@ $f^{:A\rightarrow\bbnum 1+B}$ of the $\text{Opt}$-Kleisli category
 is mapped to the morphism $\text{liftOpt}_{F}(f):F^{A}\rightarrow F^{B}$
 of the $F$-lifted category.
 
-Write the laws of identity and composition for the (categorical) functor
+Write the laws of identity and composition for that categorical functor
 using the definitions of the identity morphisms and the composition
 operation in each category:
 \begin{align*}
 {\color{greenunder}\text{for the Opt-Kleisli category}:}\quad & \text{pu}_{\text{Opt}}^{:A\rightarrow\bbnum 1+A}\quad\text{and}\quad f\diamond_{_{\text{Opt}}}g\quad,\\
 {\color{greenunder}\text{for the }F\text{-lifted category}:}\quad & \text{id}^{:F^{A}\rightarrow F^{A}}\quad\text{and}\quad f\bef g\quad.
 \end{align*}
-Now we require that the first category\textsf{'}s identity morphism is mapped
-to the second category\textsf{'}s identity morphism, and that a composition
+The functor laws require that the first category\textsf{'}s identity morphism
+is mapped to the second category\textsf{'}s identity morphism, and that a composition
 of any two morphisms (as defined in the first category) is mapped
 to a composition as defined in the second category:
 \begin{align*}
@@ -4818,7 +4820,7 @@ where \lstinline!filter! has an additional \textsf{``}empty-value\textsf{''} law
 of \lstinline!filter! and did not assume more laws than necessary.
 In contrast, the two laws of the categorical functor are general and
 appear time and again in different areas of mathematics. This gives
-us confidence that these laws are correctly chosen and will be useful
+us confidence that those laws are correctly chosen and will be useful
 in a wide range of contexts. Proving that the four laws of \lstinline!filter!
 from Section~\ref{subsec:Motivation-for-and-derivation-of-laws-of-filtering}
 are equivalent to the two laws of a categorical functor gives assurance
@@ -4858,7 +4860,7 @@ book.
 To summarize, using the category theory\textsf{'}s notion of functor brings
 the following advantages:
 \begin{itemize}
-\item We are assured that we found a correct set of laws of a typeclass.
+\item We are assured that we have found a correct set of laws of a typeclass.
 We can derive the formulation of those laws without guessing, by starting
 from the standard laws of categories and functors.
 \item We may find some promising directions for obtaining more general type
@@ -4892,7 +4894,7 @@ CT does not help in writing correct code for that typeclass instance.
 two given type constructors, or how to implement one if it exists
 and how to verify the suitable naturality laws.
 \end{itemize}
-Performing these tasks requires certain symbolic derivation techniques
+Performing those tasks requires certain symbolic derivation techniques
 adapted to \emph{applied} (that is, practically relevant) functional
 programming. Developing such techniques and selecting the necessary
 theoretical material is one of the main themes of this book.
