@@ -11,7 +11,7 @@ function add_color {
 	local texsrc="$1"
 	# Insert color comments into displayed equation arrays. Also, in some places the green color was inserted; replace by `greenunder`.
 	# Example of inserted color: {\color{greenunder}\text{outer-interchange law for }M:}\quad &
-	LC_ALL=C sed -i.bak -e 's|\\color{green}|\\color{greenunder}|; s|^\(.*\\text{[^}]*}.*:\)\( *\\quad \& \)|{\\color{greenunder}\1}\2|; s|\(\& *\\quad\)\(.*\\text{[^}]*}.*: *\)\(\\quad\\\\\)$|\1{\\color{greenunder}\2}\3|' "$texsrc"
+	LC_ALL=C sed -i.bak -e 's|\\color{green}|\\color{greenunder}|; s|^\(.*\\text{[^}]*}.*:\)\( *\\quad \& \)|{\\color{greenunder}\1}\2|; s|\(\& *\\quad\)\(.*\\text{[^}]*}.*: *\)\(\\quad\(\\nonumber \)*\\\\\)$|\1{\\color{greenunder}\2}\3|' "$texsrc"
 	# Insert color background into all displayed equations. This is disabled because it does not always produce visually good results.
 	if false; then
 	LC_ALL=C sed -i.bak -E -e ' s!\\begin\{(align.?|equation)\}!\\begin{empheq}[box=\\mymathbgbox]{\1}!; s!\\end\{(align.?|equation)\}!\\end{empheq}!; ' "$texsrc"
