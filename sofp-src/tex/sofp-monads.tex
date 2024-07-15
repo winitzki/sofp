@@ -19,7 +19,7 @@ an intuition for the behavior of \lstinline!flatMap!.
 How can we translate into code a computation that contains nested
 iterations, such as:
 \begin{equation}
-\sum_{i=1}^{n}\sum_{j=1}^{n}\sum_{k=1}^{n}\frac{1}{1+i+j+k}=\,?\label{eq:semimonads-numerical-example-1}
+\sum_{i=1}^{n}\sum_{j=1}^{i}\sum_{k=1}^{j}\frac{1}{1+i+j+k}=\,?\label{eq:semimonads-numerical-example-1}
 \end{equation}
 Recall that a \textsf{``}flat\textsf{''} (non-nested) iteration is translated into
 the \lstinline!map! method applied to a sequence:
@@ -43,40 +43,52 @@ symbol, but the code separates those two steps: first, a sequence
 is computed as \lstinline!(1 to n).map { i => 1.0 / (1 + i) }!, holding
 the values $\frac{1}{1+i}$ for $i=1,...,n$, and only then the \lstinline!sum!
 function is applied to the sequence. This separation is useful because
-it gives us full flexibility to transform or aggregate the sequence.
+it gives programmers full flexibility to transform or to aggregate
+the sequence.
 
 So, we will treat nested iterations in a similar way: first, compute
 a sequence of values that result from nested iterations, and then
 apply transformations or aggregations to that sequence.
 
 If we use nested \lstinline!map! operations, we will obtain a nested
-data structure, e.g., a vector of vectors:
+data structure, e.g., a vector of vectors. As an example, consider
+this computation:
+\[
+\sum_{i=1}^{4}\sum_{j=1}^{i}i*j\quad.
+\]
+Begin to implement this computation via this code:
 \begin{lstlisting}
-scala> (1 to 5).map(i => (1 to i).map(j => i * j))
-res0: IndexedSeq[IndexedSeq[Int]] = Vector(Vector(1), Vector(2, 4), Vector(3, 6, 9), Vector(4, 8, 12, 16), Vector(5, 10, 15, 20, 25))
+scala> (1 to 4).map(i => (1 to i).map(j => i * j))
+res0: IndexedSeq[IndexedSeq[Int]] = Vector(Vector(1), Vector(2, 4), Vector(3, 6, 9), Vector(4, 8, 12, 16))
 \end{lstlisting}
-We need to \textsf{``}flatten\textsf{''} this nested structure into a simple, non-nested
-sequence. The standard method for that is \lstinline!flatten!, and
-its combination with \lstinline!map! can be replaced by \lstinline!flatMap!:
+To compute the sum, we need to accumulate all the values from all
+the nested lists. So, we need to \textsf{``}flatten\textsf{''} this nested structure
+into a simple, non-nested sequence. The standard method for that is
+\lstinline!flatten!, and its combination with \lstinline!map! can
+be replaced by \lstinline!flatMap!:
 \begin{lstlisting}
 scala> (1 to 4).map(i => (1 to i).map(j => i * j)).flatten
 res1: IndexedSeq[Int] = Vector(1, 2, 4, 3, 6, 9, 4, 8, 12, 16)
 
 scala> (1 to 4).flatMap(i => (1 to i).map(j => i * j)) // Same result as above.
 res2: IndexedSeq[Int] = Vector(1, 2, 4, 3, 6, 9, 4, 8, 12, 16)
+
+scala> (1 to 4).flatMap(i => (1 to i).map(j => i * j)).sum
+res3: Int = 65
 \end{lstlisting}
+
 To represent more nesting, we use more \lstinline!flatMap! operations.
 For example, to implement Eq.~(\ref{eq:semimonads-numerical-example-1}):
 \begin{lstlisting}
 def example(n: Int): Double = (1 to n).flatMap { i =>
-  (1 to n).flatMap { j =>
-    (1 to n).map { k => 
-      1.0 / (1.0 + i + j + k) }
+  (1 to i).flatMap { j =>
+    (1 to j).map { k => 
+      1.0 / (1 + i + j + k) }
   }
 }.sum
 
 scala> example(10)
-res3: Double = 63.20950497687006
+res4: Double = 14.250481740989049
 \end{lstlisting}
 These examples show that converting nested iterations into a simple
 iteration means replacing all \lstinline!map! functions by \lstinline!flatMap!
@@ -93,9 +105,9 @@ line by line:
 \texttt{\textcolor{blue}{\footnotesize{}}}
 \begin{lstlisting}
 (for { i <- 1 to n
-    j <- 1 to n
-    k <- 1 to n
-  } yield 1.0 / (1.0 + i + j + k)
+       j <- 1 to i
+       k <- 1 to j
+     } yield 1.0 / (1 + i + j + k)
 ).sum
 \end{lstlisting}
 %
@@ -104,9 +116,9 @@ line by line:
 \texttt{\textcolor{blue}{\footnotesize{}}}
 \begin{lstlisting}
 (1 to n).flatMap { i =>
-   (1 to n).flatMap { j =>
-     (1 to n).map { k =>
-       1.0 / (1.0 + i + j + k)
+   (1 to i).flatMap { j =>
+     (1 to j).map { k =>
+       1.0 / (1 + i + j + k)
   }}}.sum
 \end{lstlisting}
 %
@@ -133,18 +145,16 @@ val t = for {
 \[
 T=\left\{ \left.x+y+z~\right|~x\in P,\,y\in Q,\,z\in R,\,f(x,y,z)=0\,\right\} \quad.
 \]
-Here, $P$, $Q$, $R$ are given sets of numbers, and the result is
+Here $P$, $Q$, $R$ are given sets of numbers, and the result is
 a set $T$ of numbers obtained by adding some $x$ from $P$, some
-$y$ from $Q$, and some $z$ from $R$ such that $f(x,y,z)=0$. A
-direct implementation of this formula is the code shown at left. Here,
-\lstinline!p!, \lstinline!q!, \lstinline!r! are given collections
-(say, arrays) and the result \lstinline!t! is again an array. Just
-like the mathematical formula\textsf{'}s result is a collection of some $x+y+z$
-values, the functor block\textsf{'}s result is a collection of values computed
-after the \lstinline!yield! keyword.
+$y$ from $Q$, and some $z$ from $R$ such that $f(x,y,z)=0$. An
+implementation of this formula is the code shown above where \lstinline!p!,
+\lstinline!q!, \lstinline!r! are given collections (say, arrays)
+and the result \lstinline!t! is again an array that collects some
+$x+y+z$ values.
 
 To develop more intuition about using functor blocks with multiple
-left arrows, look at this code:
+left arrows, look at this sample code:
 
 \noindent \texttt{\textcolor{blue}{\footnotesize{}}}%
 \begin{minipage}[c]{0.475\columnwidth}%
@@ -177,13 +187,12 @@ val result = {
 \vspace{0.2\baselineskip}
 One can imagine that each line (which we can read as \textsf{``}for all $i$
 in $\left[1,...,m\right]$\textsf{''}, \textsf{``}for all $j$ in $\left[1,...,n\right]$\textsf{''},
-etc.) will produce an intermediate sequence of the same type. Each
-next line continues the calculation from the previous intermediate
-sequence. 
+etc.) produces an intermediate sequence of the same type. Each next
+line continues the calculation from the previous intermediate sequence. 
 
 If this intuition is correct, we should be able to refactor the code
 by cutting the calculation at any place and continuing in another
-functor block, without changing the result value:
+functor block:
 
 \noindent \texttt{\textcolor{blue}{\footnotesize{}}}%
 \begin{minipage}[c]{0.475\columnwidth}%
@@ -192,7 +201,7 @@ functor block, without changing the result value:
 val result = for {
   i <- 1 to m
   j <- 1 to n
-// We will cut the block here, making i and j  available for further computations.
+// Cut the functor block here, making i and j  available for further computations.
   x = f(i, j)
   k <- 1 to p
   y = g(i, j, k)
@@ -225,15 +234,16 @@ cause confusion:
 \item Each \textsf{``}source line\textsf{''} computes an intermediate collection of the
 same type, so all values to the right of \lstinline!<-! must use
 \emph{the same} type constructor (or its subtypes).
-\item The entire functor block\textsf{'}s result is again a collection using the
-same type constructor. The result is \emph{not} the expression under
-\lstinline!yield!; instead, it is a collection of those expressions.
+\item The entire functor block\textsf{'}s result is again a collection that uses
+the same type constructor. The result is \emph{not} the expression
+under \lstinline!yield!; instead, the result is a collection of those
+expressions.
 \end{itemize}
-So far, we have been using sequences as the main type constructor.
-However, functor blocks with several left arrows will work with any
-other type constructor that has \lstinline!map! and \lstinline!flatMap!
+So far, we have been using sequences as the collection type. However,
+functor blocks with several left arrows will also work with any other
+type constructor that has \lstinline!map! and \lstinline!flatMap!
 methods. In the next sections, we will see how to use functor blocks
-with different type constructors. 
+with different type constructors.
 
 Functors having \lstinline!flatMap! methods are called \textbf{semi-monads}
 in\index{semi-monads} this book.\footnote{There is no single accepted name. The libraries \texttt{scalaz} and
@@ -243,12 +253,12 @@ in\index{semi-monads} this book.\footnote{There is no single accepted name. The 
 Semi-monads with a \lstinline!pure! method (and obeying the appropriate
 laws) are called \textbf{monads}.\index{monads} This chapter will
 study semi-monads and monads in detail. For now, we note that the
-functor block syntax does not require functors to have a \lstinline!pure!
-method; it works just as well with semi-monads.
+functor block syntax does not require a \lstinline!pure! method;
+it works just as well with semi-monads.
 
 If a functor has a \lstinline!withFilter! method, Scala\textsf{'}s functor
 block will also support the \lstinline!if! operation (see Section~\ref{sec:Practical-uses-of-filterable-functors}).
-So, the full functionality of functor blocks can be used with \emph{filterable
+So, the full functionality of functor blocks is available for \emph{filterable
 semi-monads}.
 
 \subsection{List-like monads}
@@ -386,8 +396,8 @@ we start with \lstinline!x == "a"!, which gives \lstinline!xsWithoutX == Seq("b"
 Iterating over \lstinline!permutations(xsWithoutX)!, we obtain the
 permutations \lstinline!"bc"! and \lstinline!"cb"!. These permutations
 need to be concatenated with \lstinline!x == "a"!, yielding \lstinline!"abc"!
-and \lstinline!"acb"!, which is the correct part of the final answer.
-So, we write a nested iteration and concatenate the results:
+and \lstinline!"acb"!, which is part of a correct answer. So, we
+write a nested iteration and concatenate the results:
 \begin{lstlisting}
 def permutations(xs: Seq[String]): Seq[String] = for {
   x <- xs
@@ -404,11 +414,12 @@ value \lstinline!xsWithoutX! becomes empty. A nested iteration with
 an empty list always makes the final result also an empty list. To
 fix this, add a base case:
 \begin{lstlisting}
-def permutations(xs: Seq[String]): Seq[String] = if (xs.length == 1) xs else for {
-  x <- xs
-  xsWithoutX = xs.filter(_ != x)
-  rest <- permutations(xsWithoutX)
-} yield x + rest
+def permutations(xs: Seq[String]): Seq[String] = if (xs.length == 1) xs else
+  for {
+        x <- xs
+        xsWithoutX = xs.filter(_ != x)
+        rest <- permutations(xsWithoutX)
+      } yield x + rest
 
 scala> permutations(Seq("a", "b", "c", "d"))
 res1: Seq[String] = List(abcd, abdc, acbd, acdb, adbc, adcb, bacd, badc, bcad, bcda, bdac, bdca, cabd, cadb, cbad, cbda, cdab, cdba, dabc, dacb, dbac, dbca, dcab, dcba) 
@@ -479,11 +490,11 @@ Find all solutions of the \textsf{``}$8$ queens\textsf{''} problem.\index{8@8 qu
 
 \subparagraph{Solution}
 
-The $8$ queens must be placed on an $8\times8$ chess board so that
-no queen threatens any other queen. To make our work easier, we note
-that each queen must be placed in a different row. So, it is sufficient
-to find the column index for each queen. A solution is a sequence
-of $8$ indices.
+The $8$ queens must be placed on an $8\times8$ chess board in such
+a way  that no queen threatens any other queen. To make our work easier,
+we note that each queen must be placed in a different row. So, it
+is sufficient to find the column index for each queen. A solution
+is a sequence of $8$ indices.
 
 Begin by iterating over all possible combinations of column indices:
 \begin{lstlisting}
@@ -625,7 +636,7 @@ convert formulas from CNF to DNF and back.
 
 We begin by designing a data type to represent CNFs. Let the type
 parameter $A$ stand for the elementary expressions that we denoted
-by \lstinline!a!, \lstinline!b!, \lstinline*!c*, etc., i.e., Boolean
+by \lstinline!a!, \lstinline!b!, \lstinline*!c*, ..., i.e., Boolean
 formulas that contain no conjunctions or no disjunctions. Then we
 may represent a conjunction as a \lstinline!Set[A]!, and a disjunction
 of conjunctions as a \lstinline!Set[Set[A]]!. For instance, \lstinline!(a || b) && (c || d || e)!
@@ -775,7 +786,7 @@ With this function, we may define more practically useful transformations
 \begin{lstlisting}
 def dnf2cnf[A](dnf: DNF[A]): CNF[A] = simplifyCNF(toCNF(dnf))
 def cnf2dnf[A](cnf: CNF[A]): DNF[A] = DNF(dnf2cnf(DNF(cnf.s)).s)
-                                                     // Verify that dnf2cnf and cnf2dnf are inverses:
+  // Verify that dnf2cnf and cnf2dnf are inverses:
 scala> (dnf2cnf(cnf2dnf(cnf1)) == cnf1, cnf2dnf(dnf2cnf(dnf1)) == dnf1)
 res4: (Boolean, Boolean) = (true,true)
 \end{lstlisting}
@@ -882,7 +893,7 @@ def vectorMatrixProduct[N: Numeric](vector: Seq[N], matrix: Seq[Seq[N]]): Seq[N]
     pairs.sum
   }
 
-scala> vectorMatrixProduct(Seq(3,4,5), matrix_T)
+scala> vectorMatrixProduct(Seq(3, 4, 5), matrix_T)
 res1: Seq[Int] = Vector(26, 260)
 \end{lstlisting}
 
@@ -972,8 +983,8 @@ res1: Option[Int] = None
 What would a \emph{nested} \textsf{``}iteration\textsf{''} over several \lstinline!Option!
 values do? When all of the \lstinline!Option! values are non-empty,
 the \textsf{``}iteration\textsf{''} will perform some computations using the wrapped
-values. However, if even one of the \lstinline!Option! values happens
-to be empty, the computed result will be an empty value:
+values. However, if even just one of the \lstinline!Option! values
+happens to be empty, the computed result will be empty:
 \begin{lstlisting}
 scala> for {
          x <- Some(123)
@@ -1021,7 +1032,7 @@ was shown in Example~\ref{subsec:disj-Example-resultA} (Chapter~\ref{chap:Disjun
 where a \textsf{``}safe integer\textsf{''} computation continues only as long as every
 result is a success; the chain of operations stops at the first failure.
 The code of Example~\ref{subsec:disj-Example-resultA} introduced
-custom data type with hand-coded methods such as \lstinline!add!,
+a custom data type with hand-coded methods such as \lstinline!add!,
 \lstinline!mul!, and \lstinline!div!. We can now implement equivalent
 functionality using functor blocks and a standard type \lstinline!Either[String, Int]!:
 \begin{lstlisting}
@@ -1037,8 +1048,8 @@ scala> val result: Result = for {   // Compute sqrt(1000 / initial - 100) + 10
 } yield z + 10
 result: Result = Left("error: sqrt(-50)")
 \end{lstlisting}
-The concise and readable code of \lstinline!val result! replaces
-more verbose implementations such as:
+This concise and readable code replaces verbose implementations such
+as:
 \begin{lstlisting}
 val result: Result = previous match {
   case Left(error)   => Left(error)
@@ -1054,7 +1065,7 @@ monads are used. These tasks perform a linear sequence of computations
 that may fail; the first failure is then returned as a value.
 
 \subsubsection{Example \label{subsec:Example-:chain-with-option}\ref{subsec:Example-:chain-with-option}:
-chaining computations with \texttt{Option}\index{examples (with code)}}
+chaining with \texttt{Option}\index{examples (with code)}}
 
 Some clients have placed some orders with some companies. The information
 is made available via Java system properties, for example:
@@ -1103,7 +1114,7 @@ since the absence of a property is not an error situation. Now we
 consider a task where we need to keep track of error information.
 
 \subsubsection{Example \label{subsec:Example-:chain-with-option-1}\ref{subsec:Example-:chain-with-option-1}:
-chaining computations with \texttt{Try}}
+chaining with \texttt{Try}}
 
 Three given functions $f$, $g$, $h$ all have Scala type \lstinline!Int => Int!
 but may throw exceptions. Given an integer $x$, compute $f(g(h(x)))$
@@ -1141,13 +1152,13 @@ effect: the encapsulated computation \lstinline!x! is scheduled to
 be run in parallel on another CPU thread. For this reason, \lstinline!Future!\textsf{'}s
 methods (such as \lstinline!map! and \lstinline!flatMap!) require
 an implicit \lstinline!ExecutionContext! argument, which provides
-access to a JVM thread pool where computations will be scheduled.
+access to a JVM thread pool where parallel computations will be scheduled.
 
 As soon as a \lstinline!Future! value is created, its computation
 is scheduled immediately. So, several \lstinline!Future! values may
 run their computations in parallel. Nevertheless, computations chained
 via \lstinline!flatMap! (or in a functor block) will run sequentially
-if new values need to wait for previous values:
+if new \lstinline!Future! values depend on previous results:
 \begin{lstlisting}
 import scala.concurrent.ExecutionContext.Implicits.global
 def longComputation(x: Double): Future[Double] = Future { ... } // A long computation.
@@ -1167,11 +1178,10 @@ computation cannot run the three \lstinline!longComputation(...)!
 calls in parallel, since each call depends on the result of the previous
 one.
 
-Another possibility is that each \lstinline!longComputation(...)!
-is independent of the results of the other computations. Then the
-three \lstinline!Future! values may be created up front, and the
-functor block code represents three \textsf{``}long computations\textsf{''} running
-in parallel:
+What if each \lstinline!longComputation(...)! were independent of
+the results of the other computations? Then the three \lstinline!Future!
+values may be created up front, and the functor block code will represent
+three \textsf{``}long computations\textsf{''} running in parallel:
 \begin{lstlisting}
 val long1 = longComputation(10.0)
 val long2 = longComputation(50.0)
@@ -1195,25 +1205,25 @@ defined by the type equation:
 \text{BT}^{A}\triangleq A+\text{BT}^{A}\times\text{BT}^{A}.
 \]
 
-To show that $\text{BT}^{A}$ is a functor, Statement~\ref{subsec:functor-Statement-functor-composition-1}
+To show that $\text{BT}$ is a functor, Statement~\ref{subsec:functor-Statement-functor-composition-1}
 replaces the right-hand side $A+\text{BT}^{A}\times\text{BT}^{A}$
 by an arbitrary \textsf{``}recursion scheme\textsf{''}\index{recursion scheme} $S^{A,\text{BT}^{A}}$
-and then shows that the recursive type constructor $L^{\bullet}$
-defined by $L^{A}\triangleq S^{A,L^{A}}$ is a functor. (The type
-$\text{BT}^{A}$ is obtained with $S^{A,R}\triangleq A+R\times R$.)
-As we will see, the type constructor $L^{A}$ will be a semi-monad
-or a monad with certain choices of $S^{\bullet,\bullet}$.
+and then shows that the recursive type constructor $L$ defined by
+$L^{A}\triangleq S^{A,L^{A}}$ is a functor. (The type constructor
+$\text{BT}$ is obtained with $S^{A,R}\triangleq A+R\times R$.) As
+we will see, the type constructor $L$ will be a semi-monad or a monad
+with certain choices of $S$.
 
-For lists, nested iteration goes over inner lists contained in an
-outer list. How does nested iteration work for a tree-shaped collection?
-An iteration over a tree enumerates the values at the \emph{leaves}
-of a tree. So, a tree analog of nested iteration implies that each
-leaf of an outer tree contains an inner tree. A \lstinline!flatMap!
-function must concatenate all nested trees into a single \textsf{``}flattened\textsf{''}
-tree. 
+For lists, nested iteration goes over inner lists stored in an outer
+list. How does nested iteration work for a tree-shaped collection?
+An iteration over a value of type $\text{BT}^{A}$ enumerates the
+values of type $A$ stored at the \emph{leaves} of a tree. So, a \textsf{``}nested
+tree\textsf{''} means that each leaf of an outer tree contains an inner tree.
+To convert a nested tree into a single \textsf{``}flattened\textsf{''} tree, we just
+need to graft a subtree in place of a leaf. 
 
 Let us implement the \lstinline!flatMap! method for the binary tree
-$BT^{\bullet}$ in that way. It is convenient to define an equivalent
+$\text{BT}$ in that way. It is convenient to define an equivalent
 curried function (denoted by \textsf{``}$\text{flm}$\textsf{''}) with type signature:
 \[
 \text{flm}^{A,B}:(A\rightarrow\text{BT}^{B})\rightarrow\text{BT}^{A}\rightarrow\text{BT}^{B}\quad.
@@ -1238,24 +1248,23 @@ The same implementation is written in the code notation as:
 \]
 
 To visualize how the \lstinline!flatMap! method operates on binary
-trees,  let us compute \lstinline!tree1.flatMap(f)!, where we take
-\lstinline!tree1 = !{\scriptsize{} \Tree[  [ $a_1$ ] [ [ $a_2$ ] [ $a_3$ ] ] ] }
+trees,  let us compute \lstinline!flm(f)(tree1)!, where \lstinline!tree1 = !{\scriptsize{} \Tree[  [ $a_1$ ] [ [ $a_2$ ] [ $a_3$ ] ] ] }
 and a function $f:A\rightarrow\text{BT}^{B}$ that has $f(a_{1})=${\scriptsize{} \Tree[  [ $b_0$ ] [ $b_1$ ] ] },
 $f(a_{2})=b_{2}$, and $f(a_{3})=${\scriptsize{} \Tree[  [ $b_3$ ] [ $b_4$ ] ]\relax}.
 (Here $a_{i}$ for $i=1,2,3$ are some values of type $A$ and $b_{i}$
 for $i=0,...,4$ are some values of type $B$.) Evaluating the code
-of \lstinline!flatMap!, we find \lstinline!tree1.flatMap(f)! ={\scriptsize{} \Tree[  [ [ $b_0$ ] [ $b_1$ ] ] [ [ $b_2$ ] [ [ $b_3$ ] [ $b_4$ ] ] ] ]\relax}. 
+of \lstinline!flm!, we find \lstinline!flm(f)(tree1)! ={\scriptsize{} \Tree[  [ [ $b_0$ ] [ $b_1$ ] ] [ [ $b_2$ ] [ [ $b_3$ ] [ $b_4$ ] ] ] ]\relax}. 
 
 So, we see that \lstinline!flatMap! works by grafting a subtree into
 every \lstinline!Leaf! of a given tree: A leaf is replaced by a new
-tree in line~6 in the code of \lstinline!flatMap!. That code can
-be generalized to the recursive type $\text{PT}^{A}$ (representing
+tree in line~6 in the code of \lstinline!flm!. That code can be
+generalized to a recursive type constructor $\text{PT}$ (representing
 a \textsf{``}tree with $P$-shaped branches\textsf{''}) defined by:
 \[
 \text{PT}^{A}\triangleq A+P^{\text{PT}^{A}}\quad,
 \]
-for any given functor $P$. The disjunctive part $A+\bbnum 0$ is
-replaced by a new tree:
+where $P$ is any given functor. The disjunctive part $A+\bbnum 0\,$
+is replaced by a new tree:
 \begin{lstlisting}
 sealed abstract class PT[P[_] : Functor, A]    // Need an `abstract class` due to implicits.
 final case class Leaf[P[_] : Functor, A](x: A)             extends PT[P, A]
@@ -1263,7 +1272,7 @@ final case class Branch[P[_] : Functor, A](p: P[PT[P, A]]) extends PT[P, A]
 
 def flm[P[_]: Functor, A, B](f: A => PT[P, B]): PT[P, A] => PT[P, B] = {
   case Leaf(x)      => f(x)     // Here f(x) has type PT, which could be a Leaf or a Branch.
-  case Branch(p)    => Branch(p.map(t => flm(f)(t))  // Conceptually, Branch(p.map(flm(f))). 
+  case Branch(p)    => Branch(p.map(t => flm(f)(t))  // Equivalently, this is Branch(p.map(flm(f))). 
 }
 \end{lstlisting}
 The same function is written in the code notation as:
@@ -1277,8 +1286,8 @@ P^{\text{PT}^{A}} & \big(\overline{\text{flm}}\,(f)\big)^{\uparrow P}
 
 We can also implement \lstinline!flatMap! for more general type constructors
 $L$ defined by $L^{A}\triangleq P^{A}+P^{L^{A}}$ for some functor
-$P$. Such $L^{A}$ can be visualized as trees with $P$-shaped branches
-and $P$-shaped leaves.
+$P$. Values of type $L^{A}$ can be visualized as trees with $P$-shaped
+branches and $P$-shaped leaves.
 \begin{lstlisting}
 sealed abstract class PLPT[P[_] : Functor, A]
 final case class Leaf[P[_] : Functor, A](px: P[A]) extends PLPT[P, A]
@@ -1309,7 +1318,7 @@ The following examples show some use cases for tree-like monads.
 
 Implement the \lstinline!flatMap! operation for a tree of configuration
 properties of the form:
-\begin{lstlisting}
+\begin{lstlisting}[language=bash]
 url: http://server:8000
 users:
   user:
@@ -1326,8 +1335,7 @@ Write a function to convert trees into strings in this format.
 The code for this data structure must support any number of simple
 properties or branches with \lstinline!String! labels. A suitable
 structure is a tree with $P$-shaped leaves and $P$-shaped branches,
-where the functor $P$ is defined as $P^{A}\triangleq\text{List}^{\text{String}\times A}$.
-Implement the tree type:
+where we define $P^{A}\triangleq\text{List}^{\text{String}\times A}$:
 \begin{lstlisting}
 sealed trait PropTree[A]  // Introduce the type parameter A for the values of properties.
 final case class Simple[A](props: List[(String, A)])                  extends PropTree[A]
@@ -1423,7 +1431,8 @@ and the branches of the tree.
 
 The code of the \lstinline!map! method is:
 \begin{lstlisting}
-def map[B](f: A => B): Term[B] = this match {  // This code must be within `trait Term[A]`.
+// This code must be within `trait Term[A]`.
+def map[B](f: A => B): Term[B] = this match {
   case Const(value)   => Const(value)
   case Var(name)      => Var(f(name))
   case Plus(t1, t2)   => Plus(t1 map f, t2 map f)
@@ -1433,7 +1442,8 @@ def map[B](f: A => B): Term[B] = this match {  // This code must be within `trai
 The code of \lstinline!flatMap! replaces variables by new trees,
 leaving everything else unchanged:
 \begin{lstlisting}
-def flatMap[B](f: A => Term[B]): Term[B] = this match {  // This code must be within `trait Term[A]`.
+// This code must be within `trait Term[A]`.
+def flatMap[B](f: A => Term[B]): Term[B] = this match {
   case Const(value)   => Const(value)
   case Var(name)      => f(name)
   case Plus(t1, t2)   => Plus(t1 flatMap f, t2 flatMap f)
@@ -1486,23 +1496,23 @@ binary tree. (One can prove that $P^{A}$ does not have a monad implementation.)
 \index{monads!Reader monad@\texttt{Reader} monad}This chapter started
 with the list-like monads whose \lstinline!flatMap! method is motivated
 by the requirements of nested iteration. We then looked at tree-like
-monads, which generalize nested list iterations to tree grafting.
-It turns out that the \lstinline!flatMap! method can be generalized
-to many other type constructors that are useful for various programming
-tasks not limited to nested iteration.
+monads whose \lstinline!flatMap! methods work via tree grafting.
+It turns out that the \lstinline!flatMap! method can be supported
+by many other type constructors useful for various programming tasks
+not necessarily related to nested iteration.
 
-A general (semi)monad type constructor $L^{A}$ no longer represents
-a collection of data items of type $A$. Instead, we regard $L^{A}$
-informally as a value of type $A$ wrapped in a special \textsf{``}computational
-effect\textsf{''}. We view \textsf{``}computations with an $L$-effect\textsf{''} as functions
-of type $A\rightarrow L^{B}$ (as in \lstinline!flatMap!\textsf{'}s argument
-type). In this view, different monads \textemdash{} such as list-like,
-pass/fail, or tree-like \textemdash{} implement different kinds of
-effects. An ordinary function of type $A\rightarrow B$ is a computation
-with a \textsf{``}trivial effect\textsf{''}.
+A general (semi)monad type constructor $L$ no longer represents a
+collection of data items. Instead, we regard $L^{A}$ informally as
+a value of type $A$ wrapped in a special \textsf{``}computational effect\textsf{''}.
+We view \textsf{``}computations with an $L$-effect\textsf{''} as functions of type
+$A\rightarrow L^{B}$ (as in \lstinline!flatMap!\textsf{'}s argument type).
+In this view, different monads \textemdash{} such as list-like, pass/fail,
+or tree-like \textemdash{} implement different kinds of effects. An
+ordinary function of type $A\rightarrow B$ is a computation with
+a \textsf{``}trivial effect\textsf{''}.
 
 In this sense, monadic effects are \emph{not} side effects.\index{side effect}
-Functions of type $A\rightarrow L^{B}$ can be referentially transparent\index{referential transparency}
+Functions of type $A\rightarrow L^{B}$ are referentially transparent\index{referential transparency}
 and behave as values.\index{value-like behavior} Informally, an \textsf{``}$L$-effect\textsf{''}
 describes the information computed by a function of type $A\rightarrow L^{B}$
 in addition to a value of type $B$. To make the vague idea of \textsf{``}effect\textsf{''}
@@ -1519,17 +1529,18 @@ type $Z$. A function consuming (\textsf{``}reading\textsf{''}) that additional d
 will have type $A\times Z\rightarrow B$ instead of $A\rightarrow B$.
 It remains to rewrite the type $A\times Z\rightarrow B$ in the form
 $A\rightarrow L^{B}$ with a suitable choice of a type constructor
-$L^{\bullet}$. By currying, we obtain an equivalent type:
+$L$. By currying, we obtain an equivalent type:
 \[
 (A\times Z\rightarrow B)\cong(A\rightarrow Z\rightarrow B)\quad,
 \]
 which has the form $A\rightarrow L^{B}$ if we define $L^{A}\triangleq Z\rightarrow A$.
 This type constructor is called the \lstinline!Reader! monad\index{monads!Reader monad@\texttt{Reader} monad}
 and is denoted by $\text{Read}^{Z,A}\triangleq Z\rightarrow A$. The
-Scala definition is \lstinline!type Reader[Z, A] = Z => A!.
+Scala definition is: \lstinline!type Reader[Z, A] = Z => A!.
 
 Fully parametric implementations of \lstinline!map! and \lstinline!flatMap!
-directly follow from their type signatures:
+for \lstinline!Reader! can be derived unambiguously from their type
+signatures:
 \begin{lstlisting}[mathescape=true]
 def map[A, B](r: Z => A)(f: A => B): (Z => B) = r andThen f  // Example $\color{dkgreen} \ref{subsec:ch-solvedExample-5}$.
 def flatMap[A, B](r: Z => A)(f: A => Z => B): (Z => B) = { z => f(r(z))(z) } // Exercise $\color{dkgreen} \ref{subsec:ch-Exercise-5}$(c).
@@ -1592,7 +1603,8 @@ def listFiles(runSh: RunSh, dir: String): String = runSh(s"find $dir -type f", "
 def filterFiles(runSh: RunSh, files: String, patterns: String): String =
   runSh(s"grep -f $patterns", files)._2
 def lineCounts(runSh: RunSh, files: String): Array[Int] = files.split("\n")   // Array of file names.
-  .map { file => runSh("wc -l $file", "")._2.replaceAll("^ +", "").split(" ")(0).toInt }
+  .map { file =>
+    runSh("wc -l $file", "")._2.replaceAll("^ +", "").split(" ")(0).toInt }
 \end{lstlisting}
 This code assumes that file names do not contain the newline character
 \lstinline!"\n"!. Use this code only as an illustration of a use
@@ -1624,11 +1636,14 @@ into functions of type \lstinline!A => Reader[RunSh, B]! with suitable
 choices of type parameters \lstinline!A!, \lstinline!B!:
 \begin{lstlisting}
 type Reader[Z, A] = Z => A
-def listFilesR(dir: String): Reader[RunSh, String] = runSh => runSh(s"find $dir -type f", "")._2
-def filterFilesR(patterns: String): String => Reader[RunSh, String] = files => runSh =>
-  runSh(s"grep -f $patterns", files)._2
+def listFilesR(dir: String): Reader[RunSh, String] = runSh =>
+  runSh(s"find $dir -type f", "")._2
+def filterFilesR(patterns: String): String => Reader[RunSh, String] = files =>
+  runSh =>
+    runSh(s"grep -f $patterns", files)._2
 def lineCountsR(files: String): Reader[RunSh, Array[Int]] = runSh => files.split("\n")
-  .map { file => runSh("wc -l $file", "")._2.replaceAll("^ +", "").split(" ")(0).toInt }
+  .map { file =>
+    runSh("wc -l $file", "")._2.replaceAll("^ +", "").split(" ")(0).toInt }
 \end{lstlisting}
  This allows us to express \lstinline!getLineCount! as a combination
 of the three \textsf{``}procedures\textsf{''} by using the \lstinline!Reader! monad\textsf{'}s
@@ -1759,27 +1774,28 @@ and a semigroup operation \lstinline!|+|! by:
 \begin{lstlisting}
 final case class Logs(begin: LocalDateTime, end: LocalDateTime, message: String) {
   def |+|(other: Logs): Logs = Logs(begin, other.end, message + "\n" + other.message)
-}      // For simplicity, we assume that timestamps will be monotonically increasing.
+}      // We assume that timestamps will be monotonically increasing.
 \end{lstlisting}
 The type \lstinline!Logs! is not a monoid because its binary operation
 discards some of the input data, so we cannot define an \textsf{``}empty\textsf{''}
 value satisfying the identity laws (see Eq.~(\ref{eq:identity-laws-of-monoid})
 in Example~\ref{subsec:tc-Example-Monoids}).
 
-We can now use the semi-monad \lstinline!Writer[A, Logs]!. Here are
-some example computations:
+We can now use the semi-monad \lstinline!Writer[A, Logs]!. Here is
+some example code where we simulate long-running computations via
+\lstinline!Thread.sleep!:
 \begin{lstlisting}
 type Logged[A] = Writer[A, Logs]
-def log[A](message: String)(x: A): Logged[A] = {        // Define this function for convenience.
+def log[A](message: String)(x: A): Logged[A] = {  // A helper function.
   val timestamp = LocalDateTime.now
   new Logged(x, Logs(timestamp, timestamp, message))
 }
-def compute[A](x: => A): A = { Thread.sleep(100L); x }           // Simulate a long computation.
+def compute[A](x: => A): A = { Thread.sleep(100L); x }
 
 scala> val result: Logged[Double] = for {
-  x <- log("begin with 3")(compute(3))              // The initial source type is `Logged[Int]`.
+  x <- log("begin with 3")(compute(3))             // The initial source type is `Logged[Int]`.
   y <- log("add 1")(compute(x + 1))
-  z <- log("multiply by 2.0")(compute(y * 2.0))  // The type of result becomes `Logged[Double]`.
+  z <- log("multiply by 2.0")(compute(y * 2.0)) // The type of result becomes `Logged[Double]`.
 } yield z       // The computation takes between 300ms and 400 ms.
 res0: Logged[Double] = Writer(8.0,Logs(2020-02-15T22:02:42.313,2020-02-15T22:02:42.484,begin with 3
 add 1
@@ -1793,17 +1809,16 @@ and \lstinline!W!.
 
 \subsection{The \texttt{State} monad\label{subsec:The-State-monad}}
 
-Heuristically, the \lstinline!Reader! monad $\text{Read}^{S,A}$
-is able to \textsf{``}read\textsf{''} values of type $S$, while the \lstinline!Writer!
-monad $\text{Writer}^{A,S}$ may \textsf{``}write\textsf{''} values of type $S$,
-in addition to computing the result of type $A$. The \lstinline!State!
-monad, denoted by $\text{State}^{S,A}$, combines the functionality
-of \lstinline!Reader! and \lstinline!Writer! in a special way: an
-extra value of type $S$ is updated and automatically passed from
-one computation to the next. 
+Heuristically, the effect of $\text{Reader}^{S,A}$ is to be able
+to \textsf{``}read\textsf{''} values of type $S$, while the effect of $\text{Writer}^{A,S}$
+is to be able to \textsf{``}write\textsf{''} values of type $S$, in addition to computing
+the result of type $A$. The \lstinline!State! monad, denoted by
+$\text{State}^{S,A}$, combines the functionality of \lstinline!Reader!
+and \lstinline!Writer! in a special way: an extra value of type $S$
+is updated and automatically passed from one computation to the next. 
 
 To derive the required type constructor, consider a computation of
-type $A\rightarrow B$ that additionally needs to read and to write
+type $A\rightarrow B$ that additionally needs to read and to update
 a value of type $S$. Since the total input is a pair of $A$ and
 $S$, and the total output is a pair of $B$ and $S$, this kind of
 computation is represented by a function of type $A\times S\rightarrow B\times S$.
@@ -1823,56 +1838,53 @@ was derived in Example~\ref{subsec:ch-solvedExample-9}(c). The code
 passes the updated state value to the next computation:
 \begin{lstlisting}
 type State[S, A] = S => (A, S)
-def flatMap[S, A, B](prev: State[S, A])(f: A => State[S, B]): State[S, B] = { s =>
-  val (a, newState) = prev(s)   // Compute result of type `A`, updating the state.
-  f(a)(newState)                // Pass the updated state to the next computation.
+def flatMap[S, A, B](p: State[S, A])(f: A => State[S, B]): State[S, B] = { s =>
+  val (a, newState) = p(s) // Compute result of type `A` and the new state.
+  f(a)(newState)    // Pass the new state to the next computation.
 }
 \end{lstlisting}
 
-An example of using the \lstinline!State! monad is when implementing
-a random number generator. A simple generator is the \textbf{Lehmer\textsf{'}s
+An example of using the \lstinline!State! monad is for implementing
+pseudo-random number generators. A simple such generator is the \textbf{Lehmer\textsf{'}s
 algorithm}\index{Lehmer\textsf{'}s algorithm},\footnote{See \texttt{\href{https://en.wikipedia.org/wiki/Lehmer_random_number_generator}{https://en.wikipedia.org/wiki/Lehmer\_random\_number\_generator}}}
 which generates integer sequences $x_{n}$ defined by:
 \[
 x_{n+1}\triangleq\left(48271*x_{n}\right)\%\,(2^{31}-1)\quad,\quad\quad1\leq x_{n}\leq2^{31}-2\quad,\quad\quad n=0,1,2,...
 \]
 The \textsf{``}updating\textsf{''} function for this sequence, $x_{n+1}=\text{lehmer}\,(x_{n})$,
-can be implemented as:
+can be written as:
 \begin{lstlisting}
 def lehmer(x: Long): Long = (x * 48271L) % ((1L << 31) - 1L)
 \end{lstlisting}
-In many applications, one needs uniformly distributed floating-point
-numbers in the interval $\left[0,1\right]$. To produce such numbers,
-let us define a helper function:
-\begin{lstlisting}
-def uniform(x: Long): Double = (x - 1L).toDouble / ((1L << 31) - 3L)  // Enforce the interval [0, 1].
-\end{lstlisting}
-
-To use the uniform generator, we need to provide an initial value
-$x_{0}$ (the \textsf{``}seed\textsf{''}) and then call the function \lstinline!lehmer!
+ To use the random number generator, we need to provide an initial
+value $x_{0}$ (the \textsf{``}seed\textsf{''}) and then call the function \lstinline!lehmer!
 repeatedly on successive values. The code would look like this:
 \begin{lstlisting}
 val s0 = 123456789L  // A "seed" value.
 val s1 = lehmer(s0)
-val r1 = uniform(s1)
-... // Use pseudo-random value r1.
+... // Use pseudo-random value s1.
 val s2 = lehmer(s1)
-val r2 = uniform(s2)
-... // Use pseudo-random value r2.
+... // Use pseudo-random value s2.
 val s3 = lehmer(s2)       // And so on.
 \end{lstlisting}
-We need to keep track of the generator\textsf{'}s state values \lstinline!s1!,
-\lstinline!s2!, ..., that are not directly needed for other computations.
-This \textsf{``}book\nobreakdash-keeping\textsf{''} is error-prone since we might
-reuse a previous generator state by mistake. The \lstinline!State!
-monad keeps track of the updated state values automatically and correctly.
-This comes at a cost: we need to convert all computations into \lstinline!State!-typed
-monadic programs.
+We need to keep track of the generator\textsf{'}s successive state values \lstinline!s1!,
+\lstinline!s2!, etc., and never reuse older values. This \textsf{``}book\nobreakdash-keeping\textsf{''}
+is error-prone since we might by mistake reuse a previous generator
+state. The \lstinline!State! monad keeps track of the updated state
+values automatically and correctly. This comes at a cost: we need
+to convert all computations into \lstinline!State!-typed monadic
+programs.
 
-As a simple example, consider the task of generating uniformly distributed
-floating-point numbers in the interval $\left[0,1\right]$. We need
-to maintain the generator state while computing the result. The floating-point
-generator is implemented as a monadic value of type \lstinline!State[Long, Double]!:
+As an example, consider the task of generating uniformly distributed
+floating-point numbers in the interval $\left[0,1\right]$. To produce
+such numbers, define a helper function:
+\begin{lstlisting}
+def uniform(x: Long): Double = (x - 1L).toDouble / ((1L << 31) - 3L)  // Enforce the interval [0, 1].
+\end{lstlisting}
+
+We need to maintain the generator state while computing the result.
+The floating-point generator is implemented as a monadic value of
+type \lstinline!State[Long, Double]!:
 \begin{lstlisting}
 val rngUniform: State[Long, Double] = { oldState =>
   val result = uniform(oldState)
@@ -1919,7 +1931,7 @@ special strategies of evaluation.
 The first of these monads is called \lstinline!Eval!, and its task
 is to encapsulate lazy and eager evaluations into a single type. A
 value of type \lstinline!Eval[A]! can be eager (available now) or
-lazy (available later). Values of these sub-types can be combined
+lazy (available later). Values of these sub-types should be combined
 with correct logic: for instance, a combination of eager and lazy
 values automatically becomes lazy.
 
@@ -1992,9 +2004,8 @@ def result(callback: Int => Unit): Unit = mult4(10)(r => add3(r)(callback))
 \end{lstlisting}
 To make the pattern more clear, replace the constant \lstinline!10!
 by a function \lstinline!pure! with a callback argument:
-\begin{lstlisting}
-def pure(x: Int)(callback: Int => Unit): Unit =
-  callback(x)
+\begin{lstlisting}[numbers=left]
+def pure(x: Int)(callback: Int => Unit): Unit = callback(x)
 
 def result(callback: Int => Unit): Unit =
   pure(10) { x =>
@@ -2010,9 +2021,9 @@ the calculation calls a function (a \textsf{``}continuation\textsf{''}) passed t
 it as the last curried argument. The final result of the calculation
 is not returned by the function \lstinline!result! but is available
 only as the bound variable \lstinline!z! in a deeply nested function
-scope where \lstinline!callback(z)! is run. If we need to extend
-this program with some more calculation steps, we would have to add
-extra code within the deepest-nested scope of \lstinline!result!,
+scope where \lstinline!callback(z)! is run (line 7 above). If we
+need to extend this program with some more calculation steps, we would
+have to add extra code within the deepest-nested scope of \lstinline!result!,
 or we could pass a \lstinline!callback! argument that contains further
 steps.
 
@@ -2061,7 +2072,7 @@ where we need to define $L^{A}\triangleq\left(A\rightarrow\bbnum 1\right)\righta
 It is sometimes helpful if the callback returns a more informative
 value than \lstinline!Unit!. For instance, that value could show
 error information or give access to processes that were scheduled
-concurrently. So, we generalize the type constructor $L^{A}$ to $\left(A\rightarrow R\right)\rightarrow R$,
+concurrently. So, we generalize the type constructor $L$ to $\left(A\rightarrow R\right)\rightarrow R$,
 where $R$ is a fixed \textsf{``}result\textsf{''} type. This type constructor is
 called the \textbf{continuation monad}\index{monads!continuation monad (Cont)@continuation monad (\texttt{Cont})}
 and is denoted by $\text{Cont}^{R,A}\triangleq\left(A\rightarrow R\right)\rightarrow R$.
@@ -2123,10 +2134,10 @@ monad.
 \subsubsection{Example \label{subsec:Example-continuation-monad-computation-cost}\ref{subsec:Example-continuation-monad-computation-cost}\index{examples (with code)}}
 
 Suppose that each arithmetic operation, such as \lstinline!add3!
-or \lstinline!mult4!, has a certain cost, which is a value of a monoid
-type $W$. Use the monad \lstinline!Cont[W, A]! to implement computations
-with a cost. The total cost must add up automatically when computations
-are chained using \lstinline!flatMap!.
+or \lstinline!mult4!, has a certain cost represented by a value of
+a monoid type $W$. Use the monad \lstinline!Cont[W, A]! to implement
+computations with a cost. The total cost must add up automatically
+when computations are chained using \lstinline!flatMap!.
 
 \subparagraph{Solution}
 
@@ -2164,7 +2175,8 @@ and \lstinline!mult4!, it is inconvenient to hard-code the cost each
 time. Instead, we can easily implement a function that adds a given
 cost to any given monadic operation:
 \begin{lstlisting}
-def addCost[A](c: Cont[W, A], cost: W): Cont[W, A] = { callback => c(callback) |+| cost }
+def addCost[A](c: Cont[W, A], cost: W): Cont[W, A] = { callback =>
+  c(callback) |+| cost }
 \end{lstlisting}
 
 
@@ -2292,7 +2304,7 @@ $z\in zs$ and $x<y<z$ and $x+y+z<10$.
 
 \subsubsection{Exercise \label{subsec:Exercise-monads-p1-2}\ref{subsec:Exercise-monads-p1-2}}
 
-Solve the $n$-queens problem on an $3\times3\times3$ cube.
+Solve the $n$-queens problem on a $3\times3\times3$ cube.
 
 \subsubsection{Exercise \label{subsec:Exercise-monads-p1-4}\ref{subsec:Exercise-monads-p1-4}}
 
@@ -2327,7 +2339,7 @@ functor $F^{A}\triangleq A+A\times A+F^{A}+F^{A}\times F^{A}$.
 
 Find the largest prime number below $1000$ via a simple sieve of
 Eratosthenes.\footnote{See \texttt{\href{https://en.wikipedia.org/wiki/Sieve_of_Eratosthenes}{https://en.wikipedia.org/wiki/Sieve\_of\_Eratosthenes}}}
-Use the \lstinline!State[S, Int]! monad with \lstinline!S = Array[Boolean]!.
+Use the monad type \lstinline!State[S, A]! with \lstinline!S = Array[Boolean]!.
 
 \begin{comment}
 in this part of the tutorial I will talk about Mona\textsf{'}s and semi Mona\textsf{'}s
@@ -4110,12 +4122,12 @@ This chapter introduced semi-monads to encode nested iteration as
 functor block programs with multiple source lines. What properties
 do we intuitively expect such programs to have?
 
-When functor blocks describe iterations over data collections, a source
-line \lstinline!x <- c! means that the value of \lstinline!x! iterates
+In a functor block that iterates over data collections, a source line
+\lstinline!x <- c! means that the value of \lstinline!x! iterates
 over items in the collection \lstinline!c!. An assignment line \lstinline!y = f(x)!
 means that we define a local variable \lstinline!y! to equal the
-expression \lstinline!f(x)!. We expect to get the same result by
-iterating over a collection \lstinline!c! whose values \lstinline!x!
+expression \lstinline!f(x)!. We expect to get the same result if
+\lstinline!y! iterates over a collection whose values \lstinline!x!
 were replaced by \lstinline!f(x)!, i.e., by iterating over \lstinline!c.map(f)!.
 It means that the following two code fragments should always give
 the same results:
@@ -4222,9 +4234,9 @@ We obtained three general requirements for the \lstinline!flatMap!
 method. Let us now formulate these requirements as equations (or \textsf{``}laws\textsf{''}).
 
 For brevity, we will denote the \lstinline!flatMap! method for a
-semi-monad \lstinline!S[_]! by \textsf{``}$\text{flm}$\textsf{''}. We will write
-$\text{flm}_{S}$ when we want to indicate explicitly the type constructor
-($S$) being used. The type signature is:
+semi-monad \lstinline!S! by \textsf{``}$\text{flm}$\textsf{''}. We will write $\text{flm}_{S}$
+when we want to indicate explicitly the type constructor ($S$) being
+used. The type signature is:
 \begin{lstlisting}
 def flm[A, B](f: A => S[B]): S[A] => S[B] 
 \end{lstlisting}
@@ -4244,17 +4256,17 @@ In the code notation, we write this law using the point-free style\index{point-f
 by omitting the argument \lstinline!c!:
 
 \begin{equation}
-\text{flm}\,(f^{:A\rightarrow B}\bef g^{:B\rightarrow S^{C}})=f^{\uparrow S}\bef\text{flm}\,(g)\quad.\label{eq:left-naturality-law-flatMap}
+\text{flm}^{A,C}(f^{:A\rightarrow B}\bef g^{:B\rightarrow S^{C}})=f^{\uparrow S}\bef\text{flm}^{B,C}(g)\quad.\label{eq:left-naturality-law-flatMap}
 \end{equation}
 
 \noindent This equation holds for arbitrary $f^{:A\rightarrow B}$
 and $g^{:B\rightarrow S^{C}}$. This is a \textsf{``}\textbf{left naturality}
 law\textsf{''}\index{naturality law!of flatMap@of \texttt{flatMap}} of \lstinline!flatMap!
 since it exchanges the order of lifted functions to the \emph{left}
-of \lstinline!flatMap!. More precisely, we may call this equation
-the naturality law of \lstinline!flatMap[A, B]! \textsf{``}with respect to
-\lstinline!A!\textsf{''} since $f^{\uparrow S}$ acts on the type parameter
-\lstinline!A!.
+of \lstinline!flatMap!. We also call this equation the naturality
+law of \lstinline!flatMap[A, C]! \textsf{``}with respect to \lstinline!A!\textsf{''}
+since the law operates on the type parameter \lstinline!A! while
+\lstinline!C! is unchanged.
 
 The second law holds for arbitrary $f^{:A\rightarrow S^{B}}$ and
 $g^{:B\rightarrow C}$:
@@ -4268,11 +4280,11 @@ S^{A}\ar[ru]\sp(0.5){\text{flm}\,(f^{:A\rightarrow S^{B}})~~~}\ar[rr]\sb(0.5){\t
 \]
 
 \begin{equation}
-\text{flm}\,(f^{:A\rightarrow S^{B}}\bef g^{\uparrow S})=\text{flm}\,(f)\bef g^{\uparrow S}\quad.\label{eq:right-naturality-law-flatMap}
+\text{flm}^{A,C}(f^{:A\rightarrow S^{B}}\bef g^{\uparrow S})=\text{flm}^{A,B}(f)\bef g^{\uparrow S}\quad.\label{eq:right-naturality-law-flatMap}
 \end{equation}
 
-\noindent This is a \index{naturality law!of flatMap@of \texttt{flatMap}}\textbf{right
-naturality} law or \textsf{``}naturality with respect to \lstinline!B!\textsf{''}
+\noindent This is the \index{naturality law!of flatMap@of \texttt{flatMap}}\textbf{right
+naturality} law or the \textsf{``}naturality law with respect to \lstinline!B!\textsf{''}
 of \lstinline!flatMap[A, B]!. It manipulates a lifted function $g^{\uparrow S}$
 to the right of \lstinline!flatMap!, acting on the type parameter
 \lstinline!B!.
@@ -4287,7 +4299,7 @@ S^{A}\ar[ru]\sp(0.5){\text{flm}\,(f^{:A\rightarrow S^{B}})~~\ }\ar[rr]\sb(0.5){\
 }
 \]
 \begin{equation}
-\text{flm}\,\big(f^{:A\rightarrow S^{B}}\bef\text{flm}\,(g^{:B\rightarrow S^{C}})\big)=\text{flm}\left(f\right)\bef\text{flm}\left(g\right)\quad.\label{eq:associativity-law-flatMap}
+\text{flm}^{A,C}\big(f^{:A\rightarrow S^{B}}\bef\text{flm}^{B,C}(g^{:B\rightarrow S^{C}})\big)=\text{flm}^{A,B}(f)\bef\text{flm}^{B,C}(g)\quad.\label{eq:associativity-law-flatMap}
 \end{equation}
 This equation is called the \textbf{associativity law}\index{associativity law!of flatMap@of \texttt{flatMap}}
 of \lstinline!flatMap!, for reasons we will explain later.
@@ -4302,22 +4314,22 @@ method obeys the laws.
 At this point, the three laws of semi-monads may appear complicated
 and hard to understand and to verify. In the next subsections, we
 will derive a shorter and clearer formulation of those laws. For now,
-let us define a \lstinline!Semi-monad! typeclass\index{typeclass!Semi-monad@\texttt{Semi-monad}}
+let us define a \lstinline!Semimonad! typeclass\index{typeclass!Semi-monad@\texttt{Semi-monad}}
 and test the laws using the \lstinline!scalacheck! library:\index{scalacheck library@\texttt{scalacheck} library}\index{verifying laws with scalacheck@verifying laws with \texttt{scalacheck}}
 \begin{lstlisting}
-abstract class Semi-monad[F[_]: Functor] {
+abstract class Semimonad[F[_]: Functor] {
   def flatMap[A, B](fa: F[A])(f: A => F[B]): F[B]
 }
-implicit class Semi-monadOps[F[_]: Semi-monad, A](fa: F[A]) { // Define flatMap as an extension method.
-  def flatMap[B](f: A => F[B]): F[B] = implicitly[Semi-monad[F]].flatMap(fa)(f)
+implicit class SemimonadOps[F[_]: Semimonad, A](fa: F[A]) { // Define flatMap as an extension method.
+  def flatMap[B](f: A => F[B]): F[B] = implicitly[Semimonad[F]].flatMap(fa)(f)
 }
-def checkSemi-monadLaws[F[_], A, B, C]()(implicit ff: Semi-monad[F],   // Use the `Arbitrary` typeclass
-   fa: Arbitrary[F[A]], ab: Arbitrary[A => F[B]], bc: Arbitrary[B => F[C]]) = { // from `scalacheck`.
-    forAll { (f: A => F[B], g: B => F[C], fa: F[A]) =>               // Associativity law of flatMap.
+def checkSemimonadLaws[F[_], A, B, C]()(implicit ff: Semimonad[F],   // Use the `Arbitrary` typeclass from `scalacheck`:
+   fa: Arbitrary[F[A]], ab: Arbitrary[A => F[B]], bc: Arbitrary[B => F[C]]) = {
+    forAll { (f: A => F[B], g: B => F[C], fa: F[A]) =>  // Associativity law of flatMap.
       fa.flatMap(x => f(x).flatMap(g)) shouldEqual fa.flatMap(f).flatMap(g)
     }
-} // Assuming that a Semi-monad instance was defined for Seq[_], check the laws with specific A, B, C.
-checkSemi-monadLaws[Seq, Int, String, Double]()
+} // Assuming that a Semimonad instance was defined for Seq, check the laws
+checkSemimonadLaws[Seq, Int, String, Double]()    // with specific A, B, C.
 \end{lstlisting}
 
 
@@ -4325,12 +4337,12 @@ checkSemi-monadLaws[Seq, Int, String, Double]()
 
 In Section~\ref{subsec:Simplifying-the-filtering-laws-deflate} we
 simplified the laws of the \lstinline!filter! operation by passing
-to a simpler \lstinline!deflate! function. We then showed that these
-two functions are equivalent if certain laws are assumed to hold for
-\lstinline!filter!. We will now derive a similar relationship between
-the methods \lstinline!flatMap! and \lstinline!flatten!. We will
-see that \lstinline!flatten! has fewer laws, and that its laws are
-simpler to verify.
+to a simpler \lstinline!deflate! function. We then showed that \lstinline!filter!
+and \lstinline!deflate! are equivalent if certain laws are assumed
+to hold for \lstinline!filter!. We will now derive a similar relationship
+between the methods \lstinline!flatMap! and \lstinline!flatten!.
+We will see that \lstinline!flatten! (denoted by \textsf{``}$\text{ftn}$\textsf{''})
+has fewer laws, and that its laws are simpler to verify.
 
 By definition, \lstinline!flatMap! is expressed as a composition
 of \lstinline!map! and \lstinline!flatten!:
@@ -4372,8 +4384,8 @@ The type equivalence needs to be verified in two directions:
 \textbf{(1)} Start with an arbitrary function $p:S^{S^{A}}\rightarrow S^{A}$
 and define $q(f)\triangleq f^{\uparrow S}\bef p$ (as we would define
 \lstinline!flatMap! via \lstinline!flatten!). Then define a new
-function $p^{\prime}\triangleq q\left(\text{id}\right)$. Prove that
-$p^{\prime}=p$:
+function $p^{\prime}\triangleq q\left(\text{id}\right)$. To verify
+that $p^{\prime}=p$, write:
 \[
 p^{\prime}=q\left(\text{id}\right)=\gunderline{\text{id}^{\uparrow S}}\bef p=\text{id}\bef p=p\quad.
 \]
@@ -4387,8 +4399,8 @@ will automatically hold for $q$:
 \textbf{(2)} Start with an arbitrary function $q:\forall(A,B).\,(A\rightarrow S^{B})\rightarrow S^{A}\rightarrow S^{B}$
 that satisfies Eq.~(\ref{eq:left-naturality-law-flatMap}) and define
 $p\triangleq q\left(\text{id}\right)$. Then define a new function
-$q^{\prime}(f)\triangleq f^{\uparrow S}\bef\text{ftn}$. Prove that
-$q^{\prime}(f)=q(f)$ for any $f^{:A\rightarrow S^{B}}$:
+$q^{\prime}(f)\triangleq f^{\uparrow S}\bef p$. To verify that $q^{\prime}(f)=q(f)$
+for any $f^{:A\rightarrow S^{B}}$:
 \begin{align*}
 {\color{greenunder}\text{expect to equal }q(f):}\quad & q^{\prime}(f)=f^{\uparrow S}\bef p=f^{\uparrow S}\bef q\left(\text{id}\right)\\
 {\color{greenunder}\text{left naturality law of }q:}\quad & =q(f\bef\text{id})=q(f)\quad.
@@ -4400,12 +4412,13 @@ $q^{\prime}(f)=q(f)$ for any $f^{:A\rightarrow S^{B}}$:
 If a \lstinline!flatMap! function satisfies the three laws~(\ref{eq:left-naturality-law-flatMap})\textendash (\ref{eq:associativity-law-flatMap}),
 the corresponding \lstinline!flatten! function\index{naturality law!of flatten@of \lstinline!flatten!}
 defined as $\text{ftn}\triangleq\text{flm}\left(\text{id}\right)$
-satisfies its \emph{two} laws, with an arbitrary $f^{:A\rightarrow B}$:
+satisfies the following \emph{two} laws (for an arbitrary $f^{:A\rightarrow B}$):
 \begin{align}
-{\color{greenunder}\text{naturality law of }\text{ftn}:}\quad & f^{\uparrow S\uparrow S}\bef\text{ftn}=\text{ftn}\bef f^{\uparrow S}\quad,\label{eq:naturality-law-of-flatten}\\
-{\color{greenunder}\text{associativity law of }\text{ftn}:}\quad & \text{ftn}^{\uparrow S}\bef\text{ftn}=\text{ftn}\bef\text{ftn}\quad.\label{eq:associativity-law-of-flatten}
+{\color{greenunder}\text{naturality law of \texttt{flatten}}:}\quad & f^{\uparrow S\uparrow S}\bef\text{ftn}=\text{ftn}\bef f^{\uparrow S}\quad,\label{eq:naturality-law-of-flatten}\\
+{\color{greenunder}\text{associativity law of \texttt{flatten}}:}\quad & \text{ftn}^{\uparrow S}\bef\text{ftn}=\text{ftn}\bef\text{ftn}\quad.\label{eq:associativity-law-of-flatten}
 \end{align}
-The following type diagrams illustrate these laws:
+The following type diagrams show the type parameters used in these
+laws:
 
 \vspace{-1.5\baselineskip}
 \begin{minipage}[t]{0.45\columnwidth}%
@@ -4502,12 +4515,13 @@ for some standard monads.
 
 The standard Scala types \lstinline!Either! and \lstinline!Try!
 are examples of the monad $F^{A}\triangleq Z+A$, where $Z$ is a
-fixed type. Show that this monad satisfies the associativity law.
+fixed type. Show that this monad satisfies the associativity law,
+assuming a fully parametric implementation.
 
 \subparagraph{Solution}
 
-The type signature of \lstinline!flatten! is $\text{ftn}:Z+\left(Z+A\right)\rightarrow Z+A$,
-and its code is:
+The type signature of \lstinline!flatten! is $Z+\left(Z+A\right)\rightarrow Z+A$;
+the code is:
 \begin{lstlisting}
 def flatten[A]: Either[Z, Either[Z, A]] => Either[Z, A] = {
   case Left(z)           => Left(z)
@@ -4523,17 +4537,15 @@ Z & \text{id} & \bbnum 0\\
 A & \bbnum 0 & \text{id}
 \end{array}\quad.
 \]
+Both sides of the associativity law are fully parametric functions
+with the type signature $Z+Z+Z+A\rightarrow Z+A$. This type signature
+has \emph{only one} fully parametric implementation: since it is not
+possible to produce values of unknown types $A$ and $Z$ from scratch,
+an implementation of $Z+Z+Z+A\rightarrow Z+A$ must return $Z+\bbnum 0$
+when the input contains a value of type $Z$; otherwise it must return
+$\bbnum 0+A$. So, both sides of the law must have the same code. 
 
-Since \lstinline!flatten! is fully parametric, both sides of the
-associativity law are fully parametric functions with the type signature
-$Z+Z+Z+A\rightarrow Z+A$. This type signature has \emph{only one}
-fully parametric implementation: since it is not possible to produce
-values of unknown types $A$ and $Z$ from scratch, an implementation
-of $Z+Z+Z+A\rightarrow Z+A$ must return $Z+\bbnum 0$ when the input
-contains a value of type $Z$; otherwise it must return $\bbnum 0+A$.
-So, both sides of the law must have the same code. 
-
-To make this argument rigorous, we may use the Curry-Howard correspondence
+To make this argument rigorous, we could use the Curry-Howard correspondence
 and the LJT algorithm (see Section~\ref{app:The-LJT-algorithm}).
 Instead, let us verify the associativity law by an explicit derivation.
 First, we need to lift \lstinline!flatten! to the functor $F$. The
@@ -4551,8 +4563,8 @@ Z & \bbnum 0 & \text{id} & \bbnum 0\\
 A & \bbnum 0 & \bbnum 0 & \text{id}
 \end{array}\quad.
 \]
-For comparison, the Scala code for $\text{ftn}^{\uparrow F}$ (had
-we needed to write it) would look like this:
+For comparison, the Scala code for $\text{ftn}^{\uparrow F}$ looks
+like this:
 \begin{lstlisting}
 def fmapFlatten[A]: Either[Z, Either[Z, Either[Z, A]]] => Either[Z, Either[Z, A]] = {
   case Left(z)                  => Left(z)
@@ -4660,16 +4672,16 @@ p\triangleright\text{ftn}^{\uparrow\text{List}}=\left[\left[x_{11},x_{12},...,x_
 Flattening that result gives a list of all values $x_{ij}$, $y_{ij}$,
 ..., in the order they appear in $p$:
 \[
-p\triangleright\text{ftn}^{\uparrow\text{List}}\triangleright\text{ftn}=\left[x_{11},x_{12},...,x_{21},x_{22},...,y_{11},y_{12},...,y_{21},y_{22},...,...\right]\quad.
+p\triangleright\text{ftn}^{\uparrow\text{List}}\triangleright\text{ftn}^{A}=\left[x_{11},x_{12},...,x_{21},x_{22},...,y_{11},y_{12},...,y_{21},y_{22},...,...\right]\quad.
 \]
-Applying $\text{ftn}^{\text{List}^{A}}$ to $p$ will flatten the
-outer lists:
+Applying $\text{ftn}^{\text{List}^{A}}$ to $p$ will first flatten
+the outer lists:
 \[
 p\triangleright\text{ftn}^{\text{List}^{A}}=\left[\left[x_{11},x_{12},...\right],\left[x_{21},x_{22},...\right],...,\left[y_{11},y_{12},...\right],\left[y_{21},y_{22},...\right],...\right]\quad.
 \]
-Flattening that value results in: 
+Flattening that value again will give: 
 \[
-p\triangleright\text{ftn}^{\text{List}^{A}}\triangleright\text{ftn}=\left[x_{11},x_{12},...,x_{21},x_{22},...,y_{11},y_{12},...,y_{21},y_{22},...,...\right]\quad.
+p\triangleright\text{ftn}^{\text{List}^{A}}\triangleright\text{ftn}^{A}=\left[x_{11},x_{12},...,x_{21},x_{22},...,y_{11},y_{12},...,y_{21},y_{22},...,...\right]\quad.
 \]
 This is exactly the same as the result of $p\triangleright\text{ftn}^{\uparrow\text{List}}\triangleright\text{ftn}$:
 namely, the list of all values in the order they appear in $p$.
@@ -4756,7 +4768,7 @@ Substitute these possibilities into the matrix expression for $\text{ftn}^{\text
  & =\gunderline{\left(1+\bbnum 0\right)\pplus}\big(t\triangleright\overline{\text{ftn}^{\text{List}^{A}}}\bef\text{ftn}^{A}\big)\\
 {\color{greenunder}\text{concatenate with empty list}:}\quad & =t\triangleright\overline{\text{ftn}^{\text{List}^{A}}}\triangleright\text{ftn}^{A}\quad.
 \end{align*}
-Substituting this value $h$ into $\text{ftn}^{\uparrow\text{List}}\bef\text{ftn}^{A}$,
+Substituting the same value $h$ into $\text{ftn}^{\uparrow\text{List}}\bef\text{ftn}^{A}$,
 we get:
 \[
 \left(\bbnum 0+\left(1+\bbnum 0\right)\times t\right)\triangleright\text{ftn}^{\uparrow\text{List}}\bef\text{ftn}^{A}=t\triangleright\overline{\text{ftn}^{\overline{\uparrow\text{List}}}}\triangleright\overline{\text{ftn}}\quad.
@@ -4767,14 +4779,14 @@ t\triangleright\overline{\text{ftn}^{\text{List}^{A}}}\triangleright\text{ftn}^{
 \]
 This holds by the inductive assumption.
 
-It remains to examine the second possibility, $h=\bbnum 0+g\times k$:
+It remains to examine the second possibility ($h=\bbnum 0+g\times k$):
 \begin{align*}
 {\color{greenunder}\text{with }h=\bbnum 0+g\times k:}\quad & \left(\bbnum 0+\left(\bbnum 0+g\times k\right)\times t\right)\triangleright\text{ftn}^{\text{List}^{A}}\bef\text{ftn}^{A}\\
  & =\big(\left(\bbnum 0+g\times k\right)\pplus\big(t\triangleright\overline{\text{ftn}^{\text{List}^{A}}}\big)\big)\triangleright\text{ftn}^{A}\\
 {\color{greenunder}\text{code of }\pplus:}\quad & =\big(\bbnum 0+g\times\big(k\pplus\big(t\triangleright\overline{\text{ftn}^{\text{List}^{A}}}\big)\big)\big)\triangleright\text{ftn}^{A}\\
 {\color{greenunder}\text{code of }\text{ftn}^{A}:}\quad & =g\pplus\big(k\pplus\big(t\triangleright\overline{\text{ftn}^{\text{List}^{A}}}\big)\big)\triangleright\overline{\text{ftn}}\\
 {\color{greenunder}\text{Exercise~\ref{subsec:Exercise-flatten-concat-distributive-law}}:}\quad & =\gunderline{g\pplus\big(k\triangleright\overline{\text{ftn}}\big)}\pplus\big(t\triangleright\overline{\text{ftn}^{\text{List}^{A}}}\triangleright\overline{\text{ftn}}\big)\\
- & =\left(\bbnum 0+g\times k\right)\triangleright\overline{\text{ftn}}\pplus\big(\gunderline{t\triangleright\overline{\text{ftn}^{\text{List}^{A}}}\triangleright\overline{\text{ftn}}}\big)\\
+ & =\left(\bbnum 0+g\times k\right)\triangleright\overline{\text{ftn}}\,\pplus\big(\gunderline{t\triangleright\overline{\text{ftn}^{\text{List}^{A}}}\triangleright\overline{\text{ftn}}}\big)\\
 {\color{greenunder}\text{inductive assumption}:}\quad & =\text{ftn}\,(h)\pplus\big(t\triangleright\overline{\text{ftn}^{\uparrow\text{List}}}\triangleright\overline{\text{ftn}}\big)\quad.
 \end{align*}
 This is the same as the result of substituting $\bbnum 0+h\times t$
@@ -4817,8 +4829,7 @@ so:
 \[
 \text{ftn}^{\uparrow F}=\left(\left(a\times w_{1}\right)\times w_{2}\right)\times w_{3}\rightarrow\left(\left(\left(a\times w_{1}\right)\times w_{2}\right)\triangleright\text{ftn}\right)\times w_{3}=\left(a\times\left(w_{1}\oplus w_{2}\right)\right)\times w_{3}\quad.
 \]
-To verify the associativity law, it is convenient to substitute a
-value $\left(\left(a\times w_{1}\right)\times w_{2}\right)\times w_{3}$
+To verify the associativity law, substitute a value $\left(\left(a\times w_{1}\right)\times w_{2}\right)\times w_{3}$
 of type $F^{F^{F^{A}}}$ into both sides of the law:
 \begin{align*}
  & \left(\left(\left(a\times w_{1}\right)\times w_{2}\right)\times w_{3}\right)\triangleright\text{ftn}^{\uparrow F}\triangleright\text{ftn}=\left(\left(a\times\left(w_{1}\oplus w_{2}\right)\right)\times w_{3}\right)\triangleright\text{ftn}\\
@@ -4826,8 +4837,8 @@ of type $F^{F^{F^{A}}}$ into both sides of the law:
  & \left(\left(\left(a\times w_{1}\right)\times w_{2}\right)\times w_{3}\right)\triangleright\text{ftn}^{F^{A}}\triangleright\text{ftn}=\left(\left(a\times w_{1}\right)\times\left(w_{2}\oplus w_{3}\right)\right)\triangleright\text{ftn}\\
  & \quad=a\times\left(w_{1}\oplus\left(w_{2}\oplus w_{3}\right)\right)\quad.
 \end{align*}
-The operation $\oplus$ is associative since $W$ is a semigroup.
-So, both sides of the law are equal.
+The operation $\oplus$ is associative because, by assumption, $W$
+is a lawful semigroup. So, both sides of the law are equal.
 
 \subsubsection{Example \label{subsec:Example-flatten-verify-for-monad-4}\ref{subsec:Example-flatten-verify-for-monad-4}}
 
@@ -4851,16 +4862,16 @@ law and get unequal results:
 Had the code not exchanged the order of $w_{1}$ and $w_{2}$, the
 law would have held.
 
-\subsection{From semi-monads to monads: Motivating the identity laws}
+\subsection{From semi-monads to monads: The identity laws}
 
 Semi-monads are heuristically viewed as values with a special \textsf{``}computational
 effect\textsf{''}. Semi-monad-valued computations can be composed using the
-\lstinline!flatMap! method, which will \textsf{``}merge\textsf{''} the effects associatively.
-It is generally useful to be able to create values with an \textsf{``}empty
-effect\textsf{''}, such that merging the empty effect leaves other effects
-unchanged. A monad $M$ is a semi-monad that has a method for creating
-values with \textsf{``}empty effect\textsf{''}. That method is called \lstinline!pure!
-(notation $\text{pu}_{M}$):
+\lstinline!flatMap! method, which will \textsf{``}merge\textsf{''} the effects. It
+is generally useful to be able to create values with an \textsf{``}empty effect\textsf{''},
+such that merging the empty effect leaves other effects unchanged.
+A monad $M$ is a semi-monad that has a method for creating values
+with \textsf{``}empty effect\textsf{''}. That method is called \lstinline!pure! (notation
+$\text{pu}_{M}$):
 
 \begin{wrapfigure}{l}{0.475\columnwidth}%
 \vspace{-0.4\baselineskip}
@@ -4877,12 +4888,12 @@ def pure[A](a: A): M[A]
 
 To get intuition about the properties of a vaguely defined \textsf{``}empty
 effect\textsf{''}, again consider nested iteration over arrays. The \textsf{``}empty
-effect\textsf{''} is an array containing \emph{one} element, because an iteration
-of such an array goes over a single value, which is equivalent to
-no iteration. In a functor block, this intuition says that a source
-line with an \textsf{``}empty effect\textsf{''}, \lstinline!y <- pure(x)!, should
-be equivalent to just \lstinline!y = x!. This line must occur either
-before or after another source line. So, we need to examine two situations:
+effect\textsf{''} is an array containing \emph{one} element. An iteration
+over such an array will just need to process that single value. In
+a functor block, this intuition says that a source line with an \textsf{``}empty
+effect\textsf{''}, \lstinline!y <- pure(x)!, should be equivalent to just
+\lstinline!y = x! with no iteration. This line may occur either before
+or after another source line. So, we need to examine two situations:
 first, when an empty effect comes before another source line:
 
 \noindent \texttt{\textcolor{blue}{\footnotesize{}}}%
@@ -4892,8 +4903,8 @@ first, when an empty effect comes before another source line:
 result1 = for {
     ... // Some code, then:
     y <- pure(x) // Empty effect, x:A
-    z <- p(y)    // p: A => M[B]
-   // Same as z <- pure(x).flatMap(p)
+    z <- g(y)    // g: A => M[B]
+   // Same as z <- pure(x).flatMap(g)
 \end{lstlisting}
 %
 \end{minipage}\texttt{\textcolor{blue}{\footnotesize{}\hspace*{\fill}}}%
@@ -4903,8 +4914,8 @@ result1 = for {
 result2 = for {
     ... // Some code, then:
     y = x       // x: A
-    z <- p(y)   // p: A => M[B]
-    // Same as z <- p(x)
+    z <- g(y)   // g: A => M[B]
+    // Same as z <- g(x)
 \end{lstlisting}
 %
 \end{minipage}{\footnotesize\par}
@@ -4948,7 +4959,7 @@ result2 = for {
 Then the equality of \lstinline!result1! and \lstinline!result2!
 gives the law:
 \begin{lstlisting}
-g.flatMap(pure) == g
+p.flatMap(pure) == p
 \end{lstlisting}
 \begin{align}
 {\color{greenunder}\text{right identity law of }M:}\quad & \text{flm}_{M}(\text{pu}_{M})=\text{id}^{:M^{A}\rightarrow M^{A}}\quad.\label{eq:monad-right-identity-law-for-flatMap}
@@ -4965,8 +4976,8 @@ def checkMonadIdentityLaws[F[_], A, B]()(implicit mf: Monad[F], sf: Semi-monad[F
     forAll { (x: A, g: A => F[B]) =>               
       mf.pure(x).flatMap(g) shouldEqual g(x)   // Left identity law.
     }
-    forAll { (fa: F[A]) =>               
-      fa.flatMap(mf.pure[A]) shouldEqual fa   // Right identity law.
+    forAll { (p: F[A]) =>               
+      p.flatMap(mf.pure[A]) shouldEqual p     // Right identity law.
     }
 }
 \end{lstlisting}
@@ -4976,8 +4987,8 @@ typeclass (Sections~\ref{subsec:Pointed-functors-motivation-equivalence}\textend
 So, we could say that a monad is a pointed semi-monad whose \lstinline!pure!
 method obeys the two identity laws~(\ref{eq:monad-left-identity-law-for-flatMap})\textendash (\ref{eq:monad-right-identity-law-for-flatMap}).
 Although the \lstinline!pure! method can be replaced by a simpler
-\textsf{``}wrapped unit\textsf{''} value ($\text{wu}_{M}$), derivations turn out
-to be easier when using \lstinline!pure!.
+\textsf{``}wrapped unit\textsf{''} value ($\text{wu}_{M}$), derivations are easier
+when using \lstinline!pure!.
 
 The \lstinline!Pointed! typeclass requires the \lstinline!pure!
 method to satisfy the naturality law~(\ref{eq:naturality-law-of-pure}).
@@ -4991,9 +5002,9 @@ but not a monoid (see Exercise~\ref{subsec:Exercise-semimonad-not-monad}).
 
 \subsection{The monad identity laws in terms of \texttt{pure} and \texttt{flatten}}
 
-Since the laws of semi-monads are simpler when formulated via the
-\lstinline!flatten! method, let us convert the identity laws to that
-form. We use the code for \lstinline!flatMap! in terms of \lstinline!flatten!:
+The laws of semi-monads are simpler when formulated via \lstinline!flatten!,
+so let us convert the identity laws to that form. We use the code
+for \lstinline!flatMap! in terms of \lstinline!flatten!:
 \[
 \text{flm}_{M}(f^{:A\rightarrow M^{B}})=f^{\uparrow M}\bef\text{ftn}_{M}\quad.
 \]
@@ -5016,9 +5027,9 @@ and get:
 \vspace{-0.5\baselineskip}
 
 \noindent This is the \textbf{left identity law} of \lstinline!flatten!.
-Conversely, if Eq.~(\ref{eq:left-identity-law-for-flatten}) holds,
-we can compose both sides with an arbitrary function $f^{:A\rightarrow M^{B}}$
-and recover the left identity law of \lstinline!flatMap! (Exercise~\ref{subsec:Exercise-1-monads-2}).
+If Eq.~(\ref{eq:left-identity-law-for-flatten}) holds, we can compose
+both sides with an arbitrary function $f^{:A\rightarrow M^{B}}$ and
+recover the left identity law of \lstinline!flatMap! (Exercise~\ref{subsec:Exercise-1-monads-2}).
 
 The \index{identity laws!of pure and flatten@of \texttt{pure} and \texttt{flatten}}\textbf{right
 identity law} of \lstinline!flatten! is written as:
@@ -5031,8 +5042,7 @@ M^{A}\ar[ru]\sp(0.5){(\text{pu}^{A})^{\uparrow M}\quad}\ar[rr]\sb(0.5){\text{id}
  & \text{flm}_{M}(\text{pu}_{M})=\text{pu}_{M}^{\uparrow M}\bef\text{ftn}_{M}\overset{!}{=}\text{id}\quad.\label{eq:right-identity-law-for-flatten}
 \end{align}
 
-In the next section, we will see reasons why these laws have their
-names.
+In the next section, we will give reasons for the names of these laws.
 
 \subsection{Monad laws in terms of Kleisli functions}
 
@@ -5042,14 +5052,14 @@ monad. We first encountered Kleisli functions in Section~\ref{subsec:Motivation-
 when deriving the laws of filterable functors using the \lstinline!liftOpt!
 method. At that point, $M$ was the simple \lstinline!Option! monad.
 We found that functions of type $A\rightarrow\bbnum 1+B$ can be composed
-using the Kleisli composition denoted by $\diamond_{_{\text{Opt}}}$
+using the Kleisli composition operator denoted by $\diamond_{_{\text{Opt}}}$
 (see page~\pageref{kleisli-composition}). Later, Section~\ref{subsec:Generalizing-the-laws-of-liftings-kleisli-functions}
 stated the general properties of Kleisli composition. We will now
 show that the Kleisli composition gives a useful way of formulating
-the laws of a monad.
+the monad laws.
 
 The Kleisli composition\index{Kleisli composition} operation for
-a monad $M$, denoted $\diamond_{_{M}}$, is a function with type
+a monad $M$, denoted by $\diamond_{_{M}}$, is a function with type
 signature:
 \[
 \diamond_{_{M}}:(A\rightarrow M^{B})\rightarrow(B\rightarrow M^{C})\rightarrow A\rightarrow M^{C}\quad.
@@ -5087,34 +5097,36 @@ assuming that the monad laws hold for $M$.
 \subsubsection{Statement \label{subsec:Statement-identity-laws-for-kleisli}\ref{subsec:Statement-identity-laws-for-kleisli}}
 
 For a lawful monad $M$, the Kleisli composition $\diamond_{_{M}}$
-satisfies the identity laws:
+satisfies the identity laws: for any $f^{:A\rightarrow M^{B}}$,
 \begin{align}
-{\color{greenunder}\text{left identity law of }\diamond_{_{M}}:}\quad & \text{pu}_{M}\diamond_{_{M}}f=f\quad,\quad\forall f^{:A\rightarrow M^{B}}\quad,\label{eq:kleisli-left-identity-law}\\
-{\color{greenunder}\text{right identity law of }\diamond_{_{M}}:}\quad & f\diamond_{_{M}}\text{pu}_{M}=f\quad,\quad\forall f^{:A\rightarrow M^{B}}\quad.\label{eq:kleisli-right-identity-law}
+{\color{greenunder}\text{left identity law of }\diamond_{_{M}}:}\quad & \text{pu}_{M}\diamond_{_{M}}f=f\quad,\label{eq:kleisli-left-identity-law}\\
+{\color{greenunder}\text{right identity law of }\diamond_{_{M}}:}\quad & f\diamond_{_{M}}\text{pu}_{M}=f\quad.\label{eq:kleisli-right-identity-law}
 \end{align}
 
 
 \subparagraph{Proof}
 
 We may assume that Eqs.~(\ref{eq:monad-left-identity-law-for-flatMap})\textendash (\ref{eq:monad-right-identity-law-for-flatMap})
-hold. Using the definition~(\ref{eq:def-of-kleisli-composition-for-monad-via-flatMap}),
-we find:
+hold. Using definition~(\ref{eq:def-of-kleisli-composition-for-monad-via-flatMap}),
+we directly verify the identity laws:
 \begin{align*}
-{\color{greenunder}\text{left identity law of }\diamond_{_{M}},\text{ should equal }f:}\quad & \text{pu}_{M}\diamond_{_{M}}f=\gunderline{\text{pu}_{M}\bef\text{flm}_{M}}(f)\\
+{\color{greenunder}\text{left identity law of }\diamond_{_{M}}:}\quad & \text{pu}_{M}\diamond_{_{M}}f=\gunderline{\text{pu}_{M}\bef\text{flm}_{M}}(f)\\
 {\color{greenunder}\text{use Eq.~(\ref{eq:monad-left-identity-law-for-flatMap})}:}\quad & \quad=f\quad,\\
-{\color{greenunder}\text{right identity law of }\diamond_{_{M}},\text{ should equal }f:}\quad & f\diamond_{_{M}}\text{pu}_{M}=f\bef\gunderline{\text{flm}_{M}(\text{pu}_{M})}\\
+{\color{greenunder}\text{right identity law of }\diamond_{_{M}}:}\quad & f\diamond_{_{M}}\text{pu}_{M}=f\bef\gunderline{\text{flm}_{M}(\text{pu}_{M})}\\
 {\color{greenunder}\text{use Eq.~(\ref{eq:monad-right-identity-law-for-flatMap})}:}\quad & \quad=f\bef\text{id}=f\quad.
 \end{align*}
+$\square$
 
 The following statement and the identity law~(\ref{eq:monad-right-identity-law-for-flatMap})
 show that \lstinline!flatMap! can be viewed as a \textsf{``}lifting\textsf{''}:
 \[
-\text{flm}_{M}:(A\rightarrow M^{B})\rightarrow(M^{A}\rightarrow M^{B})\quad,
+\text{flm}_{M}:(A\rightarrow M^{B})\rightarrow(M^{A}\rightarrow M^{B})\quad.
 \]
-from Kleisli functions $A\rightarrow M^{B}$ to $M$-lifted functions
-$M^{A}\rightarrow M^{B}$, except that Kleisli functions must be composed
-using $\diamond_{_{M}}$, while $\text{pu}_{M}$ plays the role of
-the Kleisli-identity function.
+It transforms Kleisli functions $A\rightarrow M^{B}$ into $M$-lifted
+functions $M^{A}\rightarrow M^{B}$. Keep in mind that that Kleisli
+functions must be composed using $\diamond_{_{M}}$, and that the
+function $\text{pu}_{M}$ plays the role of the identity functions
+among the Kleisli functions.
 
 \subsubsection{Statement \label{subsec:Statement-flatMap-lifting-composition-law-for-kleisli}\ref{subsec:Statement-flatMap-lifting-composition-law-for-kleisli}}
 
@@ -5168,7 +5180,7 @@ We find that the properties of the operation $\diamond_{_{M}}$ are
 similar to the identity and associativity properties of the function
 composition $f\bef g$ except for using $\text{pu}_{M}$ instead of
 the identity function.\footnote{It means that Kleisli functions satisfy the properties of morphisms
-of a category; see Section~\ref{subsec:Motivation-for-using-category-theory}.}
+in a category; see Section~\ref{subsec:Motivation-for-using-category-theory}.}
 
 Since the Kleisli composition describes the chaining of consecutive
 lines in functor blocks, its associativity means that multiple lines
@@ -5180,7 +5192,8 @@ x => for {
   t <- h(z)
 } yield t
 \end{lstlisting}
-corresponds to this Kleisli composition:
+corresponds to this Kleisli composition $f\diamond_{_{_{M}}}g\diamond_{_{_{M}}}h$,
+or more verbosely:
 \[
 (x\rightarrow f(x))\diamond_{_{_{M}}}(y\rightarrow g(y))\diamond_{_{_{M}}}(z\rightarrow h(z))\quad.
 \]
@@ -5189,9 +5202,9 @@ specify whether lines 2 and 3 are chained before appending line 4,
 or lines 3 and 4 are chained before prepending line 2.
 
 We will now prove that the Kleisli composition with its laws is equivalent
-to \lstinline!flatMap! with \emph{its} laws. In other words, we may
-equally well use the Kleisli composition when formulating the requirements
-for a functor $M$ to be a monad.
+to \lstinline!flatMap! with \emph{its} laws. One may equally well
+use the Kleisli composition instead of \lstinline!flatMap! when formulating
+the requirements for a functor $M$ to be a monad.
 
 \subsubsection{Statement \label{subsec:Statement-equivalence-kleisli-composition-and-flatMap}\ref{subsec:Statement-equivalence-kleisli-composition-and-flatMap}}
 
@@ -5205,8 +5218,7 @@ and the following additional law hold for $\diamond_{_{M}}$:
 \begin{align}
 {\color{greenunder}\text{left naturality of }\diamond_{_{M}}:}\quad & (f^{:A\rightarrow B}\bef g^{:B\rightarrow M^{C}}\big)\diamond_{_{M}}h^{:C\rightarrow M^{D}}=f\bef\big(g\diamond_{_{M}}h\big)\quad.\label{eq:left-naturality-of-kleisli-composition}
 \end{align}
-Note that this law makes parentheses unnecessary in the expression
-$f\bef g\diamond_{_{M}}h$.\index{Kleisli composition!with function composition}
+This law makes parentheses unnecessary in the expression $f\bef g\diamond_{_{M}}h$.\index{Kleisli composition!with function composition}
 
 \subparagraph{Proof}
 
@@ -5227,7 +5239,7 @@ $g^{:B\rightarrow M^{C}}$:
 
 When $\diamond_{_{M}}$ is defined via $\text{flm}_{M}$, the left
 naturality law~(\ref{eq:left-naturality-of-kleisli-composition})
-will hold because \textsf{``}$\bef$\textsf{''} is associative,
+will hold because \textsf{``}$\bef$\textsf{''} is associative:
 \begin{align*}
  & (f\bef g)\diamond_{_{M}}h=(f\bef g)\bef\text{flm}_{M}(h)=f\bef(g\bef\text{flm}_{M}(h))=f\bef(g\diamond_{_{M}}h)\quad.
 \end{align*}
@@ -5239,6 +5251,7 @@ Calculate using an arbitrary function $f^{:A\rightarrow M^{B}}$:
 \begin{align*}
 {\color{greenunder}\text{use Eq.~(\ref{eq:express-kleisli-composition-via-flatMap-and-back})}:}\quad & \text{flm}_{M}^{\prime}(f)=\text{id}^{M^{A}}\diamond_{_{M}}f=\gunderline{\text{id}}\bef\text{flm}_{M}(f)=\text{flm}_{M}(f)\quad.
 \end{align*}
+$\square$
 
 We have already derived the laws of Kleisli composition from the laws
 of \lstinline!flatMap!. We will now derive the converse statement.
@@ -5261,18 +5274,17 @@ To derive the identity laws of \lstinline!flatMap!:
 
 To derive the associativity law~(\ref{eq:associativity-law-flatMap})
 of \lstinline!flatMap!, substitute the definition of $\text{flm}_{M}$
-into both sides:
+into both sides of that law:
 \begin{align*}
 {\color{greenunder}\text{left-hand side}:}\quad & \text{flm}_{M}(f\bef\text{flm}_{M}(g))=\text{id}\diamond_{_{M}}(\gunderline{f\bef\text{id}}\diamond_{_{M}}g)=\text{id}\diamond_{_{M}}(f\diamond_{_{M}}g)\\
 {\color{greenunder}\text{associativity law~(\ref{eq:kleisli-associativity-law})}:}\quad & \quad=(\text{id}\diamond_{_{M}}f)\diamond_{_{M}}g\quad,\\
 {\color{greenunder}\text{right-hand side}:}\quad & \text{flm}_{M}(f)\bef\text{flm}_{M}(g)=(\text{id}\diamond_{_{M}}f)\,\gunderline{\bef(\text{id}}\diamond_{_{M}}g)\\
 {\color{greenunder}\text{left naturality~(\ref{eq:left-naturality-of-kleisli-composition})}:}\quad & \quad=(\text{id}\diamond_{_{M}}f)\,\gunderline{\bef\text{id}}\diamond_{_{M}}g=(\text{id}\diamond_{_{M}}f)\diamond_{_{M}}g\quad.
 \end{align*}
-Both sides of the law are now equal.
+Both sides of the law are now equal. $\square$
 
 The two naturality laws of \lstinline!flatMap! are equivalent to
-the three naturality laws of $\diamond_{_{M}}$, but we omit those
-derivations. 
+the three naturality laws of $\diamond_{_{M}}$. We omit those derivations. 
 
 \subsection{Verifying the monad laws using Kleisli functions}
 
@@ -5284,8 +5296,8 @@ the associativity law~(\ref{eq:kleisli-associativity-law}) has four
 type parameters, while the corresponding law~(\ref{eq:associativity-law-of-flatten})
 for \lstinline!flatten! has only one. For certain monads, however,
 a trick called \index{flipped@\textsf{``}flipped Kleisli\textsf{''} technique|textit}\textbf{flipped
-Kleisli} makes direct proofs of laws much shorter. That trick applies
-to monads of a function type, such as the continuation and the state
+Kleisli} makes direct proofs of laws shorter. That trick applies to
+monads of a function type, such as the continuation and the state
 monads.
 
 \subsubsection{Statement \label{subsec:Statement-continuation-monad-is-lawful}\ref{subsec:Statement-continuation-monad-is-lawful}}
@@ -5304,7 +5316,7 @@ This function type has two curried arguments. The first step of the
 flipped Kleisli technique is to change the types of the Kleisli functions
 by flipping their two curried arguments. We obtain:
 \[
-\left(B\rightarrow R\right)\rightarrow A\rightarrow R\quad.
+A\rightarrow\text{Cont}^{R,B}\cong\left(B\rightarrow R\right)\rightarrow A\rightarrow R\quad.
 \]
 This type looks like a function of the form $K^{B}\rightarrow K^{A}$,
 where we temporarily defined $K^{A}\triangleq A\rightarrow R$. The
@@ -5386,7 +5398,7 @@ and the operation $\tilde{\diamond}_{_{\text{State}}}$ is just the
 ordinary composition of those functions. Since we already know that
 the laws of identity and associativity hold for ordinary functions
 (Section~\ref{subsec:Laws-of-function-composition}), the proof is
-finished.
+finished. $\square$
 
 For comparison, look at the type signatures of \lstinline!flatten!
 for the state and continuation monads:
@@ -5395,8 +5407,8 @@ for the state and continuation monads:
 \text{ftn}_{\text{Cont}^{R,\bullet}} & :\left(\left(\left(\left(A\rightarrow R\right)\rightarrow R\right)\rightarrow R\right)\rightarrow R\right)\rightarrow\left(A\rightarrow R\right)\rightarrow R\quad.
 \end{align*}
 These type signatures are complicated and confusing to read. Direct
-proofs of the monad laws for these functions are much longer than
-the proofs of Statements~\ref{subsec:Statement-state-monad-is-lawful}\textendash \ref{subsec:Statement-continuation-monad-is-lawful}. 
+proofs of the monad laws for these functions are more complicated
+than the proofs shown in Statements~\ref{subsec:Statement-state-monad-is-lawful}\textendash \ref{subsec:Statement-continuation-monad-is-lawful}. 
 
 When a monad $M$ has a function type, the Kleisli function $A\rightarrow M^{B}$
 has two curried arguments. Flipping or uncurrying those arguments
@@ -5417,8 +5429,8 @@ the constant functor ($\text{Const}^{Z,A}\triangleq Z$), the identity
 functor ($\text{Id}^{A}\triangleq A$), and the functor composition
 ($L^{A}\triangleq F^{G^{A}}$).
 
-A constant functor $F^{A}\triangleq Z$ is a lawful semi-monad because
-we can implement:
+A constant functor $F^{A}\triangleq Z$ is a lawful semi-monad with
+$\text{ftn}_{F}$ defined by:
 \[
 \text{ftn}_{F}=\text{id}^{:Z\rightarrow Z}\quad.
 \]
@@ -5455,8 +5467,8 @@ not even a semi-monad.
 \subsubsection{Statement \label{subsec:Statement-not-semimonad-1+r-a}\ref{subsec:Statement-not-semimonad-1+r-a}}
 
 The functor $L^{A}\triangleq Z+\left(R\rightarrow A\right)$, where
-$R$ and $Z$ are fixed but arbitrary types, cannot have a \lstinline!flatten!
-method.
+$R$ and $Z$ are fixed but arbitrary types, cannot have a fully parametric
+\lstinline!flatten! method.
 
 \subparagraph{Proof}
 
@@ -5474,13 +5486,13 @@ and we do not have any known values of type $R$ available.
 
 \paragraph{Products}
 
-The product construction works for semi-monads as well as for monads.
+The product construction works for semi-monads and for monads.
 
 \subsubsection{Statement \label{subsec:Statement-monad-semimonad-product}\ref{subsec:Statement-monad-semimonad-product}}
 
-Given two semi-monads $F^{A}$ and $G^{A}$, the functor $L^{A}\triangleq F^{A}\times G^{A}$
-is a semi-monad. If both $F^{A}$ and $G^{A}$ are monads then $L^{A}$
-is also a monad.
+Given two semi-monads $F$ and $G$, the functor $L^{A}\triangleq F^{A}\times G^{A}$
+is a semi-monad. If both $F$ and $G$ are monads then $L$ is also
+a monad.
 
 \subparagraph{Proof}
 
@@ -5524,7 +5536,7 @@ is that they obey their associativity laws; e.g.,
 \text{ftn}_{F}^{\uparrow F}\bef\text{ftn}_{F}=\text{ftn}_{F}\bef\text{ftn}_{F}\quad.
 \]
 In order to use this law, we need to move the two functions $\text{ftn}_{F}$
-next to each other in the expressions 
+next to each other in the expressions:
 \[
 \big(\text{ftn}_{L}^{\uparrow F}\bef\pi_{1}^{\uparrow F}\bef\text{ftn}_{F}\big)\quad\text{ and }\quad\big(\pi_{1}^{\uparrow F}\bef\text{ftn}_{F}\bef\pi_{1}^{\uparrow F}\bef\text{ftn}_{F}\big)\quad,
 \]
@@ -5542,13 +5554,12 @@ Both expressions are now the same. An analogous derivation shows that:
 \]
 So, both sides of the associativity law are equal.
 
-Now we assume that $F$ and $G$ are monads with given \lstinline!pure!
+Now we assume that $F$ and $G$ are lawful monads with given \lstinline!pure!
 methods $\text{pu}_{F}$ and $\text{pu}_{G}$. We define:
 \[
 \text{pu}_{L}\triangleq a^{:A}\rightarrow\text{pu}_{F}(a)\times\text{pu}_{G}(a)=\Delta\bef(\text{pu}_{F}\boxtimes\text{pu}_{G})\quad.
 \]
-Assuming that identity laws hold for $F$ and $G$, we can now verify
-the identity laws for $L$:
+To verify the identity laws for $L$:
 \begin{align*}
 {\color{greenunder}\text{left identity law of }L:}\quad & \text{pu}_{L}\bef\text{ftn}_{L}=\Delta\bef(\text{pu}_{F}\boxtimes\text{pu}_{G})\bef\big((\pi_{1}^{\uparrow F}\bef\text{ftn}_{F})\boxtimes(\pi_{2}^{\uparrow G}\bef\text{ftn}_{G})\big)\\
 {\color{greenunder}\text{use Eq.~(\ref{eq:pair-product-composition-law})}:}\quad & \quad=\Delta\bef\big((\gunderline{\text{pu}_{F}\bef\pi_{1}^{\uparrow F}}\bef\text{ftn}_{F})\boxtimes(\gunderline{\text{pu}_{G}\bef\pi_{2}^{\uparrow G}}\bef\text{ftn}_{G})\big)\\
@@ -5562,19 +5573,18 @@ the identity laws for $L$:
  & \quad=\big(\big(\Delta\bef\gunderline{(\text{pu}_{F}\boxtimes\text{pu}_{G})\big)^{\uparrow F}\bef\pi_{1}^{\uparrow F}}\bef\text{ftn}_{F}\big)\boxtimes\big(\big(\Delta\bef\gunderline{(\text{pu}_{F}\boxtimes\text{pu}_{G})\big)^{\uparrow G}\bef\pi_{2}^{\uparrow G}}\bef\text{ftn}_{G}\big)\\
  & \quad{\color{greenunder}\quad\text{projection laws~(\ref{eq:pair-product-left-projection-law}) and~(\ref{eq:pair-product-right-projection-law})}:}\quad\\
  & \quad=\big((\gunderline{\Delta\bef\pi_{1}}\bef\text{pu}_{F})^{\uparrow F}\bef\text{ftn}_{F}\big)\boxtimes\big(\big(\gunderline{\Delta\bef\pi_{2}}\bef\text{pu}_{G}\big)^{\uparrow G}\bef\text{ftn}_{G}\big)\\
-\quad & \quad\quad\text{identity laws~(\ref{eq:pair-identity-law-left})}:\\
+\quad & \quad{\color{greenunder}\quad\text{identity laws~(\ref{eq:pair-identity-law-left})}:}\quad\\
  & \quad=\big(\gunderline{\text{pu}_{F}^{\uparrow F}\bef\text{ftn}_{F}}\big)\boxtimes\big(\gunderline{\text{pu}_{G}^{\uparrow G}\bef\text{ftn}_{G}}\big)=\text{id}\boxtimes\text{id}=\text{id}\quad.
 \end{align*}
 Let us build some intuition about how the product of two monads works
 in practice. A simple example is the product of two identity monads,
 $L^{A}\triangleq A\times A$. This type constructor is a monad whose
-\lstinline!flatten! function is defined by
+\lstinline!flatten! function is defined by:
 \begin{lstlisting}
 type Pair[A] = (A, A)
 def flatten[A]: Pair[Pair[A]] => Pair[A] = { case ((a, b), (c, d)) => (a, d) }
 \end{lstlisting}
-A sample calculation shows that \textsf{``}nested iterations\textsf{''} apply functions
-element by element:
+A \textsf{``}nested iteration\textsf{''} performs an element-by-element function application:
 \begin{lstlisting}
 final case class P[A](x: A, y: A) {
   def map[B](f: A => B): P[B] = P(f(x), f(y))
@@ -5670,8 +5680,8 @@ def flatten1_L[A]: ((A, F[A]), F[(A, F[A])]) => (A, F[A]) = _._1
 The other possibility is to transform $F^{A\times F^{A}}$ to $F^{A}$
 within the functor $F$:
 \begin{lstlisting}
-def flatten2_L[A]: ((A, F[A]), F[(A, F[A])]) => (A, F[A]) = { case (afa, fafa) =>
-  (afa._1, fafa.map(_._1))
+def flatten2_L[A]: ((A, F[A]), F[(A, F[A])]) => (A, F[A]) = {
+  case (afa, fafa)   => (afa._1, fafa.map(_._1))
 }
 \end{lstlisting}
 In the code notation, these alternative implementations may be written
@@ -5717,31 +5727,29 @@ monoids, semigroups, monads, and semi-monads.
 \paragraph{Co-products}
 
 As a rule, the co-product of two monads ($F^{A}+G^{A}$) is not a
-monad. For simple examples, see Exercise~\ref{subsec:Exercise-1-monads-6}
-for $\bbnum 1+F^{A}$ (where $F^{A}\triangleq A\times A$) and Exercise~\ref{subsec:Exercise-1-monads-4}
-for $M^{A}+M^{A}$ with an arbitrary monad $M$. An exception to that
-rule is a co-product with the \emph{identity} monad:
+monad. Examples are $\bbnum 1+A\times A$ (Exercise~\ref{subsec:Exercise-1-monads-6})
+and $M^{A}+M^{A}$ with an arbitrary monad $M$ (Exercise~\ref{subsec:Exercise-1-monads-4}).
+An exception to that rule is a co-product with the \emph{identity}
+monad:
 
 \subsubsection{Statement \label{subsec:Statement-co-product-with-identity-monad}\ref{subsec:Statement-co-product-with-identity-monad}}
 
-If $F$ is any monad, the functor $L^{A}\triangleq A+F^{A}$ is a
-monad. (The functor $L$ is called the \textbf{free pointed}\index{free pointed monad}\index{monads!free pointed}\index{free pointed functor}
+If $F$ is a monad, the functor $L^{A}\triangleq A+F^{A}$ is also
+a monad. (The functor $L$ is called the \textbf{free pointed}\index{free pointed monad}\index{monads!free pointed}\index{free pointed functor}
 \textbf{functor on} $F$, for reasons explained in Chapter~\ref{chap:Free-type-constructions}.)
 
 \subparagraph{Proof}
 
 We need to define the monad methods for $L$, for which we may use
 the \lstinline!pure! and \lstinline!flatten! methods of $F$. Begin
-with the \lstinline!flatten! method, which needs to have the type
-signature:
+with the \lstinline!flatten! method of $F$:
 \[
-\text{ftn}_{L}:L^{L^{A}}\rightarrow L^{A}=A+F^{A}+F^{A+F^{A}}\rightarrow A+F^{A}\quad.
+\text{ftn}_{L}:L^{L^{A}}\rightarrow L^{A}\quad,\quad\quad\text{or equivalently}:\quad\text{ftn}_{L}:A+F^{A}+F^{A+F^{A}}\rightarrow A+F^{A}\quad.
 \]
-Since we know nothing about the specific monad $F$, we cannot extract
+We know nothing about the specific monad $F$, so we cannot extract
 a value of type $A$ out of $F^{A}$. However, we can use $F$\textsf{'}s \lstinline!pure!
-method to create a value of type $F^{A}$ out of $A$. This allows
-us to convert $A+F^{A}$ into $F^{A}$ using the function we will
-denote $\gamma$:
+method for implementing a function we will denote by $\gamma$ that
+converts $A+F^{A}$ into $F^{A}$:
 \begin{lstlisting}
 type L[A] = Either[A, F[A]]
 def gamma[A]: L[A] => F[A] = {
@@ -5750,21 +5758,20 @@ def gamma[A]: L[A] => F[A] = {
 }
 \end{lstlisting}
 \[
-\gamma^{A}\triangleq\,\begin{array}{|c||c|}
+\gamma^{A}:L^{A}\rightarrow F^{A}\quad,\quad\quad\gamma^{A}\triangleq\,\begin{array}{|c||c|}
  & F^{A}\\
 \hline A & \text{pu}_{F}\\
 F^{A} & \text{id}
 \end{array}\quad.
 \]
 Lifting this function to $F$, we can convert $F^{A+F^{A}}$ into
-$F^{F^{A}}$ and finally into $F^{A}$ via $F$\textsf{'}s \lstinline!flatten!
-method:
+$F^{F^{A}}$ and finally into $F^{A}$:
 \begin{lstlisting}
 def flatten_L[A]: L[L[A]] => L[A] = {
   case Left(Left(a))   => Left(a)
   case Left(Right(fa)) => Right(fa)
   case Right(g)        => Right(g.map(gamma).flatten)
-}  // The last line equals `Right(g.flatMap(gamma))`.
+}  // The last expression is equal to `Right(g.flatMap(gamma))`.
 \end{lstlisting}
 \[
 \text{ftn}_{L}\triangleq\,\begin{array}{|c||cc|}
@@ -5775,13 +5782,13 @@ F^{L^{A}} & \bbnum 0 & \gamma^{\uparrow F}\bef\text{ftn}_{F}
 \end{array}\quad.
 \]
 
-Is there another implementation for $\text{ftn}_{L}$? We could have
+Is there another implementation of $\text{ftn}_{L}$? We could have
 replaced $A$ by $F^{A}$ using $\text{pu}_{F}$. However, that code
 would never return a result of type $A+\bbnum 0$, which makes it
-impossible to satisfy identity laws such as $\text{pu}_{F}\bef\text{ftn}_{F}=\text{id}$.
+impossible to satisfy the identity law $\text{pu}_{F}\bef\text{ftn}_{F}=\text{id}$.
 
 The \lstinline!pure! method for $L$ could be defined in two ways:
-$\text{pu}_{L}\triangleq a^{:A}\rightarrow a+\bbnum 0$ or $\text{pu}_{L}\triangleq a\rightarrow\bbnum 0+\text{pu}_{F}(a)$.
+$\text{pu}_{L}\triangleq a^{:A}\rightarrow a+\bbnum 0$ or $\text{pu}_{L}\triangleq a^{:A}\rightarrow\bbnum 0+\text{pu}_{F}(a)$.
 It turns out that only the first definition satisfies the monad $L$\textsf{'}s
 identity laws (Exercise~\ref{subsec:Exercise-1-monads-12}).
 
@@ -5948,7 +5955,7 @@ It remains to show the equality of the functions under $\big(...\big)^{\uparrow 
 \begin{equation}
 \text{ftn}_{L}\bef\gamma\overset{?}{=}\gunderline{\gamma\bef\gamma^{\uparrow F}}\bef\text{ftn}_{F}=\gamma^{\uparrow L}\bef\gamma\bef\text{ftn}_{F}\quad,\label{eq:monad-construction-a+f-a-derivation1}
 \end{equation}
-where in the last step we used the naturality law of $\gamma^{:L^{^{A}}\rightarrow F^{A}}$,
+where in the last step we used the naturality law of $\gamma^{:L^{A}\rightarrow F^{A}}$,
 which is a natural transformation:
 \[
 \gamma\bef f^{\uparrow F}=f^{\uparrow L}\bef\gamma\quad,\quad\text{for all }f^{:A\rightarrow B}\quad.
@@ -6038,7 +6045,7 @@ To verify the laws, it is convenient to substitute an arbitrary $z^{:Z}$
 and define $\tilde{\diamond}_{_{L}}$ and $\tilde{\text{pu}}_{L}$
 by:
 \[
-z\triangleright(f\tilde{\diamond}_{_{L}}g)\triangleq(z\triangleright f)\diamond_{_{F}}(z\triangleright g)\quad,\quad\quad z\triangleright\tilde{\text{pu}}_{L}\triangleq\text{pu}_{F}\quad.
+z\triangleright(f\,\tilde{\diamond}_{_{L}}g)\triangleq(z\triangleright f)\diamond_{_{F}}(z\triangleright g)\quad,\quad\quad z\triangleright\tilde{\text{pu}}_{L}\triangleq\text{pu}_{F}\quad.
 \]
 For the left-hand side of the associativity law, we write:
 \[
@@ -6062,7 +6069,7 @@ It remains to convert the flipped Kleisli methods $\tilde{\diamond}_{_{L}}$
 and $\tilde{\text{pu}}_{L}$ to the code of $L$\textsf{'}s \lstinline!flatMap!
 and \lstinline!pure!:
 \begin{lstlisting}
-type L[A] = Z => F[A]           // The type Z and a semi-monad F must be already defined.
+type L[A] = Z => F[A]           // A type Z and a semi-monad F must be already defined.
 def flatMap_L[A, B](la: L[A])(f: A => L[B]): L[B] = { z => la(z).flatMap(a => f(a)(z)) }
 def pure_L[A](a: A): L[A] = { _ => implicitly[Monad[F]].pure(a) }
 \end{lstlisting}
@@ -6070,7 +6077,7 @@ def pure_L[A](a: A): L[A] = { _ => implicitly[Monad[F]].pure(a) }
 
 \subsubsection{Statement \label{subsec:Statement-monad-construction-2}\ref{subsec:Statement-monad-construction-2}}
 
-For any contrafunctor $H^{A}$, the functor $L^{A}\triangleq H^{A}\rightarrow A$
+For any contrafunctor $H$, the functor $L^{A}\triangleq H^{A}\rightarrow A$
 is a monad.
 
 \subparagraph{Proof}
@@ -6082,7 +6089,7 @@ $\tilde{\diamond}_{_{L}}$ of an $f^{:H^{B}\rightarrow A\rightarrow B}$
 and a $g^{:H^{C}\rightarrow B\rightarrow C}$ must have type $H^{C}\rightarrow A\rightarrow C$.
 To infer this function\textsf{'}s code, begin with a typed hole:
 \[
-f^{:H^{B}\rightarrow A\rightarrow B}\tilde{\diamond}_{_{L}}g^{:H^{C}\rightarrow B\rightarrow C}=k^{:H^{C}}\rightarrow\text{???}^{:A\rightarrow C}\quad.
+f^{:H^{B}\rightarrow A\rightarrow B}\,\tilde{\diamond}_{_{L}}g^{:H^{C}\rightarrow B\rightarrow C}=k^{:H^{C}}\rightarrow\text{???}^{:A\rightarrow C}\quad.
 \]
 Looking at the available data, we notice that a value of type $A\rightarrow C$
 will be found if we apply $f$ and $g$ to some arguments and then
@@ -6104,7 +6111,7 @@ $g(k)$. So, we write:
 Putting the entire code together and substituting an arbitrary value
 $k^{:H^{C}}$, we get:
 \begin{equation}
-k^{:H^{C}}\triangleright\big(f^{:H^{B}\rightarrow A\rightarrow B}\tilde{\diamond}_{_{L}}g^{:H^{C}\rightarrow B\rightarrow C}\big)\triangleq f\big(k\triangleright(g(k))^{\downarrow H}\big)\bef g(k)\quad.\label{eq:def-of-Kleisli-for-exp-construction-h-a-a}
+k^{:H^{C}}\triangleright\big(f^{:H^{B}\rightarrow A\rightarrow B}\,\tilde{\diamond}_{_{L}}g^{:H^{C}\rightarrow B\rightarrow C}\big)\triangleq f\big(k\triangleright(g(k))^{\downarrow H}\big)\bef g(k)\quad.\label{eq:def-of-Kleisli-for-exp-construction-h-a-a}
 \end{equation}
 
 The flipped \lstinline!pure! method ($\tilde{\text{pu}}_{L}$) is
@@ -6178,9 +6185,9 @@ contrafunctors are $G$-filterable: \textbf{(a)} $H^{A}\triangleq Z$,
 
 In each case, we need to define the function $\text{lift}_{G,H}$
 and verify its laws. If $G$ is only a semi-monad, we will derive
-the composition law of $\text{lift}_{G,H}$ assuming only the associativity
+the composition law of $\text{lift}_{G,H}$ from the associativity
 law of $G$ (but not assuming any identity laws). For a full monad
-$G$, we will derive the identity law of $\text{lift}_{G,H}$ by using
+$G$, we will derive the identity law of $\text{lift}_{G,H}$ from
 the identity laws of $G$. 
 
 \textbf{(a)} Since $H^{A}\triangleq Z$ is a constant contrafunctor,
@@ -6679,10 +6686,12 @@ and $Q$ are fixed types that are different and not related by subtyping.
 \subsubsection{Exercise \label{subsec:Exercise-1-monads-7-not-a-monad}\ref{subsec:Exercise-1-monads-7-not-a-monad}}
 
 Consider the functor $D^{A}\triangleq\bbnum 1+A\times A$ (in Scala,
-\lstinline!type D[A] = Option[(A, A)]!). Implement the \lstinline!flatten!
-and \lstinline!pure! methods for $D$ in at least two different ways.
-Show that some of the monad laws fail to hold for those implementations.\footnote{One can prove that $D^{A}\triangleq\bbnum 1+A\times A$ cannot be
-a lawful monad. For details, see \texttt{\href{https://stackoverflow.com/questions/49742377/}{https://stackoverflow.com/questions/49742377/}}}
+this is defined by \lstinline!type D[A] = Option[(A, A)]!). Implement
+the \lstinline!flatten! and \lstinline!pure! methods for $D$ in
+at least two different ways. Show that some of the monad laws fail
+to hold for every implementation.\footnote{There are several implementations of \lstinline!pure! and \lstinline!flatten!
+for $D^{A}\triangleq\bbnum 1+A\times A$, but \emph{none} of them
+obey the monad laws. For details, see \texttt{\href{https://stackoverflow.com/questions/49742377/}{https://stackoverflow.com/questions/49742377/}}}
 
 \subsubsection{Exercise \label{subsec:Exercise-1-monads-8}\ref{subsec:Exercise-1-monads-8}}
 
@@ -6725,8 +6734,8 @@ Show that this function satisfies the equation:
 
 \subsubsection{Exercise \label{subsec:Exercise-monad-of-monoid-is-monoid}\ref{subsec:Exercise-monad-of-monoid-is-monoid}}
 
-Show that \lstinline!M[W]! is a monoid if \lstinline!M[_]! is a
-monad and \lstinline!W! is a monoid.
+Show that \lstinline!M[W]! is a monoid if \lstinline!M! is a monad
+and \lstinline!W! is a monoid.
 
 \subsubsection{Exercise \label{subsec:Exercise-1-monads-9-1}\ref{subsec:Exercise-1-monads-9-1}}
 
@@ -6799,14 +6808,14 @@ are monads:
 
 \textbf{(b)} A polynomial functor $F^{A}\triangleq p(A)$ when $p(x)$
 is a polynomial of the form $p(x)=x^{n_{1}}+x^{n_{2}}+...+x^{n_{k}}$
-with some positive integers $n_{1}$, ..., $n_{k}$. For example,
+with some distinct positive integers $n_{1}<...<n_{k}$. For example,
 $F^{A}\triangleq A\times A+A\times A\times A+A\times A\times A\times A\times A$. 
 
 \textbf{(c)} A polynomial functor $F^{A}\triangleq p(A)$ when $p(x)$
 is a polynomial of the form $p(x)=c_{1}x^{n_{1}}+c_{2}x^{n_{2}}+...+c_{k-1}x^{n_{k-1}}+x^{n_{k}}$
-with some positive integers $n_{1}$, ..., $n_{k}$, $c_{1}$, ...,
-$c_{k-1}$, where the coefficient at the highest power ($x^{n_{k}}$)
-\emph{must} be $1$. For example, $F^{A}\triangleq\bbnum 5\times A+\bbnum 2\times A\times A\times A+A\times A\times A\times A$.
+with some distinct positive integers $n_{1}<...<n_{k}$ and some positive
+integers $c_{1}$, ..., $c_{k-1}$; the coefficient at the highest
+power ($x^{n_{k}}$) \emph{must} be $1$. For example, $F^{A}\triangleq\bbnum 5\times A+\bbnum 2\times A\times A\times A+A\times A\times A\times A$.
 
 \subsubsection{Exercise \label{subsec:Exercise-monad-composition-mm}\ref{subsec:Exercise-monad-composition-mm}}
 
@@ -6885,17 +6894,17 @@ is that of a lifting,
 \text{flm}_{M}:(A\rightarrow M^{B})\rightarrow M^{A}\rightarrow M^{B}\quad,
 \]
 corresponding to a functor from the $M$-Kleisli category to the $M$-lifted
-category. To adapt this construction to a contrafunctor $H^{A}$,
-we need to define a lifting called, say, \textsf{``}\lstinline!contraFlatMap!\textsf{''},
+category. To adapt this construction to a contrafunctor $H$, we need
+to define a lifting called, say, \textsf{``}\lstinline!contraFlatMap!\textsf{''},
 with the type:
 \[
 \text{cflm}_{H}:(A\rightarrow H^{B})\rightarrow H^{B}\rightarrow H^{A}\quad.
 \]
-Note a curious feature of this type signature: it is covariant in
-$B$ (since it contains the contrafunctor $H^{B}$ in contravariant
-positions). So, $\text{cflm}_{H}$ does not have the type of a natural
-transformation with respect to $B$, unlike all other liftings we
-have seen, such as \lstinline!map!, \lstinline!liftOpt!, and \lstinline!flatMap!.
+Note a curious feature of this type signature: it is \emph{covariant}
+in $B$ (since it contains the type $H^{B}$ in contravariant positions).
+So, $\text{cflm}_{H}$ does not have the type of a natural transformation
+with respect to $B$, unlike all other liftings we have seen, such
+as \lstinline!map!, \lstinline!liftOpt!, and \lstinline!flatMap!.
 If the code of $\text{cflm}_{H}$ is fully parametric then $\text{cflm}_{H}$
 must satisfy a corresponding naturality law. It turns out that the
 naturality law gives a constraint so strong that it forces $H$ to
@@ -6978,11 +6987,11 @@ a more general construction:
 \subsubsection{Statement \label{subsec:Statement-contravariant-yoneda-identity-for-types}\ref{subsec:Statement-contravariant-yoneda-identity-for-types}
 (contravariant Yoneda identity\index{Yoneda identity!contravariant})}
 
-If $Z$ is a fixed type and $H^{\bullet}$ is any contrafunctor, the
-type $H^{Z}$ is equivalent to the type of natural transformations
-$\forall A.\,(A\rightarrow Z)\rightarrow H^{A}$. So, values $h:H^{Z}$
-are in a one-to-one correspondence with functions $t:\forall A.\,(A\rightarrow Z)\rightarrow H^{A}$
-obeying the naturality law:
+If $Z$ is a fixed type and $H$ is any contrafunctor, the type $H^{Z}$
+is equivalent to the type of natural transformations $\forall A.\,(A\rightarrow Z)\rightarrow H^{A}$.
+So, values $h:H^{Z}$ are in a one-to-one correspondence with functions
+$t:\forall A.\,(A\rightarrow Z)\rightarrow H^{A}$ obeying the naturality
+law:
 \begin{equation}
 \text{for all types }A,B\text{ and for all }f^{:A\rightarrow B},g^{:B\rightarrow Z}:\quad(t^{B}(g))\triangleright f^{\downarrow H}=t^{A}(f\bef g)\quad.\label{eq:naturality-law-of-t-for-contravariant-Yoneda}
 \end{equation}
@@ -7030,8 +7039,8 @@ where $H$ is a functor:
 \subsubsection{Statement \label{subsec:Statement-covariant-yoneda-identity-for-types}\ref{subsec:Statement-covariant-yoneda-identity-for-types}
 (covariant Yoneda identity)\index{Yoneda identity!covariant}}
 
-If $Z$ is a fixed type and $H^{\bullet}$ is any functor, the type
-$H^{Z}$ is equivalent to the type of natural transformations $\forall A.\,(Z\rightarrow A)\rightarrow H^{A}$.
+If $Z$ is a fixed type and $H$ is any functor, the type $H^{Z}$
+is equivalent to the type of natural transformations $\forall A.\,(Z\rightarrow A)\rightarrow H^{A}$.
 So, values $h:H^{Z}$ are in a one-to-one correspondence with functions
 $t:\forall A.\,(Z\rightarrow A)\rightarrow H^{A}$ obeying the naturality
 law:
@@ -7134,9 +7143,9 @@ possible functions with the type of \lstinline!ftr!. But the imposed
 naturality law~(\ref{eq:ftr-left-naturality-law}) constrains the
 code of \lstinline!ftr! so much that all possible functions \lstinline!ftr!
 satisfying Eq.~(\ref{eq:ftr-left-naturality-law}) are in a $1$-to-$1$
-correspondence with all possible functions \lstinline!tr!. The equivalence
-between \lstinline!tr! and \lstinline!ftr! does not hold without
-the naturality law~(\ref{eq:ftr-left-naturality-law}). 
+correspondence with all possible functions \lstinline!tr!. Without
+the naturality law~(\ref{eq:ftr-left-naturality-law}), the equivalence
+between \lstinline!tr! and \lstinline!ftr! would \emph{not} hold. 
 
 \subsection{Monads, effects, and runners}
 
@@ -7145,26 +7154,24 @@ Monads allow us to compose \textsf{``}monadic programs\index{monadic program}\te
 and tree-like monads $M$, a value of type $M^{A}$ represents a collection
 of values of type $A$ and is a result of nested iterations. For a
 pass/fail monad $M$, a value of type $M^{A}$ holds either a result
-of type $A$ or information about a failure. However, for many other
-monads $M$, a monadic program $m:M^{A}$ represents a single value
-of type $A$ wrapped by an \textsf{``}effectful wrapper\textsf{''} of some sort. In
-an application, we usually need to extract that value of type $A$
-from the \textsf{``}wrapper\textsf{''} $m$.
+of type $A$ or information about a failure. For other monads $M$,
+a monadic program $m:M^{A}$ represents a single value of type $A$
+wrapped by an \textsf{``}effectful wrapper\textsf{''} of some sort. In an application,
+we usually need to extract that value of type $A$ from the \textsf{``}wrapper\textsf{''}.
 
-To see how this works in general, consider monads of function type
-(such as \lstinline!Reader!, \lstinline!State!, and \lstinline!Cont!).
-These monads delay their computations until a runner is applied. A
-monadic program $m:M^{A}$ is a function whose body somehow wraps
-a value of type $A$, and a runner extracts that value. The function-type
-monads are often defined as case classes with a single part called
-\lstinline!run!, for example:
+To see how this works, consider monads of function type (such as \lstinline!Reader!,
+\lstinline!State!, and \lstinline!Cont!). These monads delay their
+computations until a runner is applied. A monadic program $m:M^{A}$
+is a function whose body somehow wraps a value of type $A$, and a
+runner extracts that value. The function-type monads are often defined
+as case classes with a single part called \lstinline!run!, for example:
 \begin{lstlisting}
 final case class Reader[Z, A](run: Z => A)
 final case class State[S, A](run: S => (A, S))
 final case class Cont[R, A](run: (A => R) => R)
 \end{lstlisting}
-In Scala syntax, this makes monadic programs appear to have a method
-called \lstinline!run!:
+In Scala syntax, this makes monadic programs appear to have a \lstinline!run!
+method:
 \begin{lstlisting}
 val s: State[S, A] = for { ... } yield { ... }   // A monadic program in the State monad.
 val init: S = ???                                // An initial state.
@@ -7279,10 +7286,10 @@ the \lstinline!Option! monad and other pass/fail monads, we could
 only use runners $\theta^{A}$ that work for a specific type $A$,
 for example, for $A=$ \lstinline!Int!:
 \begin{lstlisting}
-def runner: Option[Int] => Int = _.getOrElse(0) // For empty Option values, return a default.
+def runner: Option[Int] => Int = _.getOrElse(0) // For empty Option values, return some default Int value.
 \end{lstlisting}
 Even if we restrict all types to \lstinline!Int!, this runner will
-fail to obey the composition law:
+fail the composition law:
 \begin{lstlisting}
 val m1: Option[Int] = None
 val m2: Int => Option[Int] = { x => Some(x + 1) }
@@ -7323,15 +7330,16 @@ $M^{A}\rightarrow N^{A}$.
 
 \subsection{Monads in category theory. Monad morphisms\label{subsec:Monads-in-category-theory-monad-morphisms}}
 
-For any monad $M$, one defines a category, called the $M$-\index{Kleisli!category}Kleisli
-category where objects are all types (\lstinline!Int!, \lstinline!String!,
+For any monad $M$, one defines a category, which we call the $M$-\index{Kleisli!category}Kleisli
+category, where objects are all types (\lstinline!Int!, \lstinline!String!,
 etc.) and morphisms between types $A$ and $B$ are Kleisli functions
 of type $A\rightarrow M^{B}$. 
 
-One axiom of a category requires us to have an identity morphism $A\rightarrow M^{A}$
-for every object $A$; this is the monad $M$\textsf{'}s \lstinline!pure!
-method, $\text{pu}_{M}:A\rightarrow M^{A}$. Another axiom is the
-associativity of morphism composition operation, which must combine
+One axiom of a category requires us to have an identity morphism for
+every object $A$. For the $M$-Kleisli category, this is the monad
+$M$\textsf{'}s \lstinline!pure! method, $\text{pu}_{M}:A\rightarrow M^{A}$.
+Another axiom is the associativity of morphism composition operation.
+For the $M$-Kleisli category, the composition operation must combine
 functions of types $A\rightarrow M^{B}$ and $B\rightarrow M^{C}$
 into a function of type $A\rightarrow M^{C}$. The Kleisli composition
 $\diamond_{_{M}}$ is precisely that operation, and its associativity
@@ -7339,7 +7347,7 @@ law, $f\diamond_{_{M}}(g\diamond_{_{M}}h)=(f\diamond_{_{M}}g)\,\diamond_{_{M}}h$
 is equivalent to a law of \lstinline!flatMap! (Statements~\ref{subsec:Statement-associativity-law-for-kleisli}\textendash \ref{subsec:Statement-equivalence-kleisli-laws-and-flatMap-laws}).
 
 So, a functor $M$ is a monad if and only if the corresponding $M$-Kleisli
-category is lawful. This is an concise way of formulating the monad
+category is lawful. This is a concise way of formulating the monad
 laws.
 
 We have seen that, for some monads, proofs of the laws are easier
@@ -7399,8 +7407,8 @@ be equivalently expressed using the \lstinline!flatMap! method:
 \text{flm}_{M}(f^{:A\rightarrow M^{B}})\bef\phi^{:M^{B}\rightarrow N^{B}}=\phi\bef\text{flm}_{N}(f\bef\phi)\quad.\label{eq:monad-morphism-composition-law-using-flatMap}
 \end{equation}
 
-In terms of the Kleisli composition operations $\diamond_{_{M}}$
-and $\diamond_{_{N}}$, the composition law is:
+In terms of the operations $\diamond_{_{M}}$ and $\diamond_{_{N}}$,
+the composition law is:
 \[
 (f^{:A\rightarrow M^{B}}\bef\phi^{:M^{B}\rightarrow N^{B}})\diamond_{_{N}}(g^{:B\rightarrow M^{C}}\bef\phi^{:M^{C}\rightarrow N^{C}})=(f\diamond_{_{M}}g)\bef\phi^{:M^{C}\rightarrow N^{C}}\quad.
 \]
@@ -7432,7 +7440,7 @@ intuition, let us look at some examples of monad morphisms.
 
 Show that the function $\phi^{A}:Z+A\rightarrow\bbnum 1+A$ defined
 below is a monad morphism between the \lstinline!Either! and \lstinline!Option!
-monads. The implementation of $\phi$ is:
+monads. The code of $\phi$ is:
 \begin{lstlisting}
 def toOption[Z, A]: Either[Z, A] => Option[A] = {
   case Left(z)    => None
@@ -7619,7 +7627,7 @@ are equal to the two sides of Eq.~(\ref{eq:monad-morphism-naturality-law}).
 \textbf{(b)} Substitute the definitions $\text{flm}_{M}(f)=f^{\uparrow M}\bef\text{ftn}_{M}$
 and $\text{flm}_{N}(f)=f^{\uparrow N}\bef\text{ftn}_{N}$ into Eq.~(\ref{eq:monad-morphism-composition-law-using-flatMap}):
 \begin{align*}
- & f^{\uparrow M}\bef\text{ftn}_{M}\bef\phi=\gunderline{\phi\bef(f\bef\phi)^{\uparrow N}}\bef\text{ftn}_{N}\quad.\\
+ & f^{\uparrow M}\bef\text{ftn}_{M}\bef\phi=\gunderline{\phi\bef(f\bef\phi)^{\uparrow N}}\bef\text{ftn}_{N}\\
 {\color{greenunder}\text{use Eq.~(\ref{eq:monad-morphism-naturality-law})}:}\quad & =\gunderline{(f\bef\phi)^{\uparrow M}}\bef\phi\bef\text{ftn}_{N}=f^{\uparrow M}\bef\phi^{\uparrow M}\bef\phi\bef\text{ftn}_{M}\quad.
 \end{align*}
 This equality holds for any $f$, in particular with $f=\text{id}$,
@@ -7652,7 +7660,7 @@ The composition law for $\phi\bef\chi$ is verified by:
 
 For any monad $M$, the method $\text{pu}_{M}:A\rightarrow M^{A}$
 is a monad morphism $\text{pu}_{M}:\text{Id}\leadsto M$ between the
-identity monad and $M$.
+identity monad ($\text{Id}$) and $M$.
 
 \subparagraph{Proof}
 
@@ -7679,7 +7687,7 @@ value $m_{0}:M^{Z}$ is given.
 f:\left(Z\rightarrow A\right)\rightarrow M^{A}\quad,\quad\quad f\,(q^{:Z\rightarrow A})\triangleq m_{0}\triangleright q^{\uparrow M}\quad.
 \]
 Prove that $f$ is \emph{not} a monad morphism from the \lstinline!Reader!
-monad $R^{A}\triangleq Z\rightarrow A$ to the monad $M^{A}$, despite
+monad $R^{A}\triangleq Z\rightarrow A$ to the monad $M$, despite
 having the correct type signature.
 
 \textbf{(b)} Under the same assumptions, consider the function $\phi$
@@ -7688,14 +7696,36 @@ defined as:
 \phi:(Z\rightarrow M^{A})\rightarrow M^{A}\quad,\quad\quad\phi\,(q^{:Z\rightarrow M^{A}})\triangleq m_{0}\triangleright\text{flm}_{M}(q)\quad.
 \]
 Show that $\phi$ is \emph{not} a monad morphism from the monad $Q^{A}\triangleq Z\rightarrow M^{A}$
-to $M^{A}$.
+to $M$.
 
 \subsubsection{Exercise \label{subsec:Exercise-fmap-is-not-monadic-morphism-1}\ref{subsec:Exercise-fmap-is-not-monadic-morphism-1}}
 
 Show that \lstinline!List!\textsf{'}s \lstinline!headOption! method viewed
-as a function of type $\forall A.\:\text{List}^{A}\rightarrow\bbnum 1+A$
+as a function of type $\forall A.\,\text{List}^{A}\rightarrow\bbnum 1+A$
 is a natural transformation but \emph{not} a monad morphism between
 the monads \lstinline!List! and \lstinline!Option!.
+
+\subsubsection{Exercise \label{subsec:Exercise-reasoning-1-4-1}\ref{subsec:Exercise-reasoning-1-4-1}}
+
+Assume given functors $F$, $G$, $K$, $L$ and a natural transformation
+$\phi:F^{A}\rightarrow G^{A}$.
+
+\textbf{(a)} Prove that $\phi^{\uparrow K}:K^{F^{A}}\rightarrow K^{G^{A}}$
+is also a natural transformation.
+
+\textbf{(b)} Given another natural transformation $\psi:K^{A}\rightarrow L^{A}$,
+prove that the pair product of $\phi$ and $\psi$, that is, $\phi\boxtimes\psi:F^{A}\times K^{A}\rightarrow G^{A}\times L^{A}$,
+as well as the pair co-product $\phi\boxplus\psi:F^{A}+K^{A}\rightarrow G^{A}+L^{A}$,
+are also natural transformations. The \textbf{pair co-product}\index{pair co-product of functions|textit}
+of two functions $\phi$ and $\psi$ is defined by:
+\[
+(\phi\boxplus\psi):F^{A}+K^{A}\rightarrow G^{A}+L^{A}\quad,\quad\quad\phi\boxplus\psi\triangleq\,\begin{array}{|c||cc|}
+ & G^{A} & L^{A}\\
+\hline F^{A} & \phi & \bbnum 0\\
+K^{A} & \bbnum 0 & \psi
+\end{array}\quad.
+\]
+
 
 \subsection{Constructions of polynomial monads\label{subsec:Constructions-of-polynomial-monads}}
 
@@ -7705,22 +7735,21 @@ polynomial monads via the following operations:
 \begin{enumerate}
 \item Start with $F^{A}\triangleq Z+W\times A$, which is a monad (semi-monad)
 when $W$ is a monoid (semigroup).
-\item Given a polynomial monad $F^{A}$, create the monad $L^{A}\triangleq A+F^{A}$.
-\item Given two polynomial monads $F^{A}$ and $G^{A}$, create the monad
-$L^{A}\triangleq F^{A}\times G^{A}$.
-\item Given a polynomial monad $F^{A}$, create the monad $L^{A}\triangleq F^{Z+W\times A}$
+\item Given a polynomial monad $F$, create the monad $L^{A}\triangleq A+F^{A}$.
+\item Given two polynomial monads $F$ and $G$, create the monad $L^{A}\triangleq F^{A}\times G^{A}$.
+\item Given a polynomial monad $F$, create the monad $L^{A}\triangleq F^{Z+W\times A}$
 (see Section~\ref{sec:transformers-linear-monads}).
 \end{enumerate}
-It is an open question (see Problem~\ref{par:Problem-monads}) that
+It is an open question (see Problem~\ref{par:Problem-monads}) whether
 these are the only constructions available for polynomial monads.
-If the conjecture is true, we can create an algorithm that recognizes
-whether a given polynomial functor can be made into a monad by suitable
-definitions of \lstinline!flatten! and \lstinline!pure!. 
+If that is true, one could create an algorithm that recognizes whether
+a given polynomial functor can be made into a monad by suitable definitions
+of \lstinline!flatten! and \lstinline!pure!. 
 
 As an example, consider the fact that the polynomial functor $F^{A}\triangleq\bbnum 1+A\times A$
 cannot be made into a monad (Exercise~\ref{subsec:Exercise-1-monads-6}).
-One can also show that $F^{A}$ cannot be obtained through the monad
-constructions listed above. Indeed, the corresponding polynomial $f(x)=1+x^{2}$
+One can also show that $F$ cannot be obtained through the monad constructions
+listed above. Indeed, the corresponding polynomial $f(x)=1+x^{2}$
 does not contain any first powers of $x$. However, all constructions
 either start with a polynomial containing $x$, or add $x$, or take
 a product of two such polynomials. None of these operations could
@@ -7785,8 +7814,8 @@ Structural analysis can discover other examples of such functors systematically.
 As in the case of ordinary filterable functors, it turns out that
 we must at the same time analyze $M$-filterable contrafunctors.
 
-In the following constructions, we always assume that $M$ is a fixed,
-lawful monad.
+In the following constructions, we assume that $M$ is a fixed, lawful
+monad.
 
 We omit the proofs of all following statements because they are fully
 analogous to the proofs of filterable functor and contrafunctor constructions
@@ -7803,7 +7832,7 @@ A constant functor $F^{A}\triangleq Z$ is $M$-filterable with $\text{lift}_{M,F}
 The same statement shows that $F^{A}\triangleq M^{A}\rightarrow Z$
 and $F^{A}\triangleq A\rightarrow M^{Z}$ are $M$-filterable contrafunctors.
 
-The monad $M^{A}$ itself is $M$-filterable; $\text{lift}_{M,M}(f)\triangleq\text{flm}_{M}(f)$.
+The monad $M$ itself is $M$-filterable; $\text{lift}_{M,M}(f)\triangleq\text{flm}_{M}(f)$.
 
 The identity functor is not $M$-filterable except when $M$ is the
 identity monad, $M^{A}=\text{Id}^{A}\triangleq A$. (However, with
@@ -7818,17 +7847,17 @@ where $G$ and $H$ can be functors or contrafunctors independently.
 
 \paragraph{Products}
 
-If $F^{A}$ and $G^{A}$ are $M$-filterable then $L^{A}\triangleq F^{A}\times G^{A}$
+If $F$ and $G$ are $M$-filterable then $L^{A}\triangleq F^{A}\times G^{A}$
 is $M$-filterable (Statement~\ref{subsec:Statement-filterable-functor-product}).
 
 \paragraph{Co-products}
 
-If $F^{A}$ and $G^{A}$ are $M$-filterable then $L^{A}\triangleq F^{A}+G^{A}$
+If $F$ and $G$ are $M$-filterable then $L^{A}\triangleq F^{A}+G^{A}$
 is $M$-filterable (Statement~\ref{subsec:Statement-filterable-coproduct}).
 
 \paragraph{Function types}
 
-If $F^{A}$ is an $M$-filterable functor and $G^{A}$ is an $M$-filterable
+If $F$ is an $M$-filterable functor and $G$ is an $M$-filterable
 contrafunctor then $F^{A}\rightarrow G^{A}$ and $G^{A}\rightarrow F^{A}$
 are $M$-filterable (contra)functors (Statements~\ref{subsec:Statement-filterable-function-type}
 and~\ref{subsec:Statement-function-type-exponential-filterable-contrafunctor}).
@@ -7840,8 +7869,8 @@ both $F$ and $G$ are filterable as we have already seen.
 \paragraph{Recursive types}
 
 If $S^{A,R}$ is a bifunctor that is $M$-filterable with respect
-to $A$, the recursive functor $F^{A}$ defined by the type equation
-$F^{A}\triangleq S^{A,F^{A}}$ is $M$-filterable (Statement~\ref{subsec:Statement-filterable-recursive-type-1}).
+to $A$, the recursive functor $F$ defined by the type equation $F^{A}\triangleq S^{A,F^{A}}$
+is $M$-filterable (Statement~\ref{subsec:Statement-filterable-recursive-type-1}).
 
 If $S^{A,R}$ is a profunctor\index{profunctor} contravariant in
 $A$ and covariant in $R$, and additionally $S^{\bullet,R}$ is $M$-filterable
@@ -8995,19 +9024,19 @@ but this is very similar to lifting and the laws are similar to function
 if ting laws as we will see so what are the properties of this closely
 operation so let\textsf{'}s reformulate the laws of flat map in terms of the
 class the operation a class decomposition a diamond so the formulation
-becomes a very elegant set of laws so that left and right identity
-laws are like this so pure composed with F is if F composed with pure
-is f now here F must be one of these functions in now it\textsf{'}s obvious
-why they're called left and right identity loss pure is identity and
-this is exactly like a binary operation in a mono ed which has left
-identity right identity associative eighty law is written like this
-which is very concise and it follows directly from flm law because
-they're phalam law all you need to do is you write the FLN law which
-is this the that equals that and you prepend it with some function
-f arbitrary function f and then you rewrite this by definition F followed
-by flatmap is the Dimond operation so that becomes directly the left-hand
-side from here and the right-hand side from here now in written in
-this way the laws are very suggestive of a monrad so these laws express
+becomes an elegant set of laws so that left and right identity laws
+are like this so pure composed with F is if F composed with pure is
+f now here F must be one of these functions in now it\textsf{'}s obvious why
+they're called left and right identity loss pure is identity and this
+is exactly like a binary operation in a mono ed which has left identity
+right identity associative eighty law is written like this which is
+very concise and it follows directly from flm law because they're
+phalam law all you need to do is you write the FLN law which is this
+the that equals that and you prepend it with some function f arbitrary
+function f and then you rewrite this by definition F followed by flatmap
+is the Dimond operation so that becomes directly the left-hand side
+from here and the right-hand side from here now in written in this
+way the laws are very suggestive of a monrad so these laws express
 amyloid of functions where the binary operation is the diamond composition
 or the classic composition the functions must be all Class C functions
 so they must all have the as twisted type a to s be for some a and

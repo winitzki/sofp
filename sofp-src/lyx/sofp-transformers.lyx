@@ -5770,8 +5770,8 @@ final case class ListT[M[_]: Monad : Functor, A](value: M[Option[(A, ListT[M,
 
 \begin_layout Plain Layout
 
-      case Some((head, tail)) => comb(f(head), tail).value       // Type
- is M[Option[(A, ListT)]].
+      case Some((head, tail)) => comb(f(head), tail).value   // The `.value`
+ has type M[Option[(A, ListT)]].
 \end_layout
 
 \begin_layout Plain Layout
@@ -5838,8 +5838,17 @@ status open
 
 \begin_layout Plain Layout
 
-def flift[M[_]: Monad, A]: M[A] => ListT[M, A] = ListT(a => m.flatMap(ListT.pure(a
-).value))
+def flift[M[_]: Monad, A]: M[A] => ListT[M, A] = { m =>
+\end_layout
+
+\begin_layout Plain Layout
+
+  ListT(m.map(a => Some((a, ListT(Monad[M].pure(None))))))
+\end_layout
+
+\begin_layout Plain Layout
+
+}
 \end_layout
 
 \begin_layout Plain Layout
@@ -5849,8 +5858,17 @@ def blift[M[_]: Monad, A]: List[A] => ListT[M, A] =
 
 \begin_layout Plain Layout
 
-  _.foldRight(Monad[M].pure(None)){ case (a, tail) => Monad[M].pure(Some((a,
- blift(tail)))) }
+  _.foldRight(Monad[M].pure(None)) {
+\end_layout
+
+\begin_layout Plain Layout
+
+    case (a, tail) => Monad[M].pure(Some((a, blift(tail))))
+\end_layout
+
+\begin_layout Plain Layout
+
+  }
 \end_layout
 
 \end_inset
@@ -5858,8 +5876,10 @@ def blift[M[_]: Monad, A]: List[A] => ListT[M, A] =
 
 \begin_inset Formula 
 \begin{align*}
-\text{foreign lift}:\quad & \text{flift}:M^{A}\rightarrow T_{\text{List}}^{M,A}\quad,\quad\quad m^{:M^{A}}\triangleright\text{flift}\triangleq m\triangleright(a\rightarrow\bbnum 0+a\times\text{pu}_{M}(1+\bbnum 0))^{\uparrow M}\quad,\\
-\text{base lift}:\quad & \text{blift}:\text{List}^{A}\rightarrow T_{\text{List}}^{M,A}\quad,\quad\quad\text{blift}\triangleq\,\begin{array}{|c||c|}
+\text{foreign lift}:\quad & \text{flift}:M^{A}\rightarrow T_{\text{List}}^{M,A}\quad,\\
+ & \text{flift}\triangleq(a\rightarrow\bbnum 0+a\times\text{pu}_{M}(1+\bbnum 0))^{\uparrow M}\quad,\\
+\text{base lift}:\quad & \text{blift}:\text{List}^{A}\rightarrow T_{\text{List}}^{M,A}\quad,\\
+ & \text{blift}\triangleq\,\begin{array}{|c||c|}
  & M^{\bbnum 1+A\times T_{\text{List}}^{M,A}}\\
 \hline \bbnum 1 & 1\rightarrow\text{pu}_{M}(1+\bbnum 0)\\
 A\times\text{List}^{A} & a\times t\rightarrow\text{pu}_{M}(\bbnum 0+a\times\overline{\text{blift}}\,(t))
@@ -6147,8 +6167,12 @@ status open
 
 \begin_layout Plain Layout
 
-def ascend(n: Int): ListT[Reader[Int, *], Int] = ListT(Lazy(k => Some((n,
- ascend(n + k)))))
+def ascend(n: Int): ListT[Reader[Int, *], Int] =
+\end_layout
+
+\begin_layout Plain Layout
+
+  ListT(Lazy(k => Some((n, ascend(n + k)))))
 \end_layout
 
 \end_inset
@@ -6165,11 +6189,12 @@ ascend(n)
 
 \end_inset
 
- gives a well-defined value representing the sequence 
+ gives a well-defined, finite value, but that value contains functions evaluatin
+g the infinite sequence 
 \begin_inset Formula $\left[n,n+k,n+2k,...\right]$
 \end_inset
 
-.
+ step by step.
  The parameter 
 \begin_inset Formula $k$
 \end_inset
@@ -6199,7 +6224,19 @@ runListT
 
 \end_inset
 
- will not terminate when applied to such a sequence.
+ will not terminate when applied to 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+ascend(n)
+\end_layout
+
+\end_inset
+
+.
  
 \end_layout
 
@@ -6221,8 +6258,8 @@ ListT
 \begin_inset Formula $M$
 \end_inset
 
- for an unbounded-length stream, the target should be a stream type (i.e.,
- an on-call or a lazy list) rather than an eagerly evaluated 
+ for an unbounded-length stream, the target should be an iterator type (i.e.,
+ an on-call list) rather than an eagerly evaluated 
 \begin_inset listings
 inline true
 status open
@@ -6262,7 +6299,7 @@ A
 
 \end_inset
 
- is a monoid type.
+ is a monoid.
  For monoid types 
 \begin_inset listings
 inline true
@@ -6279,7 +6316,7 @@ A
 \begin_inset Formula $\text{List}^{A}\rightarrow A$
 \end_inset
 
- as a standard 
+ via the standard 
 \begin_inset listings
 inline true
 status open
@@ -6325,7 +6362,7 @@ status open
 
 \begin_layout Plain Layout
 
-brun
+brunE
 \end_layout
 
 \end_inset
@@ -6373,7 +6410,7 @@ status open
 
 \begin_layout Plain Layout
 
-def brun[M[_]: Monad, A: Monoid](listT: ListT[M, A]): M[A] = listT.value.flatMap
+def brunE[M[_]: Monad, A: Monoid](listT: ListT[M, A]): M[A] = listT.value.flatMap
  {
 \end_layout
 
@@ -6384,8 +6421,8 @@ def brun[M[_]: Monad, A: Monoid](listT: ListT[M, A]): M[A] = listT.value.flatMap
 
 \begin_layout Plain Layout
 
-  case Some((head, tail))    => Monad[M].pure(head) |+| brun(tail) // Monoid
- M[A].
+  case Some((head, tail))    => Monad[M].pure(head) |+| brunE(tail) // Using
+ the Monoid instance for M[A].
 \end_layout
 
 \begin_layout Plain Layout
@@ -6451,14 +6488,14 @@ noprefix "false"
 
 \end_inset
 
- whether this special version of 
+ whether 
 \begin_inset listings
 inline true
 status open
 
 \begin_layout Plain Layout
 
-brun
+brunE
 \end_layout
 
 \end_inset
@@ -6702,11 +6739,12 @@ StateT
 
 \end_inset
 
- does not have a general base runner of the form 
+ does not have a general base runner that could be expressed in the form
+ 
 \begin_inset Formula $\text{brun}\,(\theta_{\text{State}})$
 \end_inset
 
-: we cannot convert an 
+, because the type signatures do not allow us to convert an 
 \emph on
 arbitrary
 \emph default
@@ -6955,10 +6993,10 @@ base lift
 \begin_inset Quotes erd
 \end_inset
 
- is impossible: the required type signature
+ is impossible: the required type signature,
 \begin_inset Formula 
 \[
-\text{blift}:(\left(A\rightarrow R\right)\rightarrow R)\rightarrow(A\rightarrow M^{R})\rightarrow M^{R}
+\text{blift}:(\left(A\rightarrow R\right)\rightarrow R)\rightarrow(A\rightarrow M^{R})\rightarrow M^{R}\quad,
 \]
 
 \end_inset
@@ -8196,7 +8234,7 @@ Monad
 \series bold
 \size small
 Monad 
-\begin_inset Formula $T_{L}^{M}$
+\begin_inset Formula $T_{L}^{M,A}$
 \end_inset
 
 
@@ -8212,7 +8250,7 @@ Monad
 \series bold
 \size small
 Monad 
-\begin_inset Formula $T_{M}^{L}$
+\begin_inset Formula $T_{M}^{L,A}$
 \end_inset
 
 
@@ -8284,7 +8322,7 @@ Either[E, A]
 \begin_layout Plain Layout
 
 \size small
-\begin_inset Formula $T_{L}^{M,A}=R\rightarrow E+A$
+\begin_inset Formula $R\rightarrow E+A$
 \end_inset
 
 
@@ -8298,7 +8336,7 @@ Either[E, A]
 \begin_layout Plain Layout
 
 \size small
-\begin_inset Formula $T_{M}^{L,A}=R\rightarrow E+A$
+\begin_inset Formula $R\rightarrow E+A$
 \end_inset
 
 
@@ -8369,7 +8407,7 @@ Writer[W, A]
 \begin_layout Plain Layout
 
 \size small
-\begin_inset Formula $T_{L}^{M,A}=R\rightarrow A\times W$
+\begin_inset Formula $R\rightarrow A\times W$
 \end_inset
 
 
@@ -8383,7 +8421,7 @@ Writer[W, A]
 \begin_layout Plain Layout
 
 \size small
-\begin_inset Formula $T_{M}^{L,A}=R\rightarrow A\times W$
+\begin_inset Formula $R\rightarrow A\times W$
 \end_inset
 
 
@@ -8454,7 +8492,7 @@ List[A]
 \begin_layout Plain Layout
 
 \size small
-\begin_inset Formula $T_{L}^{M,A}=R\rightarrow\text{List}^{A}$
+\begin_inset Formula $R\rightarrow\text{List}^{A}$
 \end_inset
 
 
@@ -8468,7 +8506,7 @@ List[A]
 \begin_layout Plain Layout
 
 \size small
-\begin_inset Formula $T_{M}^{L,A}\triangleq R\rightarrow\bbnum 1+A\times T_{M}^{L,A}$
+\begin_inset Formula $R\rightarrow\bbnum 1+A\times T_{M}^{L,A}$
 \end_inset
 
 
@@ -8539,7 +8577,7 @@ State[S, A]
 \begin_layout Plain Layout
 
 \size small
-\begin_inset Formula $T_{L}^{M,A}=R\rightarrow S\rightarrow A\times S$
+\begin_inset Formula $R\rightarrow S\rightarrow A\times S$
 \end_inset
 
 
@@ -8553,7 +8591,7 @@ State[S, A]
 \begin_layout Plain Layout
 
 \size small
-\begin_inset Formula $T_{M}^{L,A}=S\rightarrow R\rightarrow A\times S$
+\begin_inset Formula $S\rightarrow R\rightarrow A\times S$
 \end_inset
 
 
@@ -8624,7 +8662,7 @@ State[S, A]
 \begin_layout Plain Layout
 
 \size small
-\begin_inset Formula $T_{L}^{M,A}=S\rightarrow(E+A)\times S$
+\begin_inset Formula $S\rightarrow(E+A)\times S$
 \end_inset
 
 
@@ -8638,7 +8676,7 @@ State[S, A]
 \begin_layout Plain Layout
 
 \size small
-\begin_inset Formula $T_{M}^{L,A}=S\rightarrow E+A\times S$
+\begin_inset Formula $S\rightarrow E+A\times S$
 \end_inset
 
 
@@ -8709,7 +8747,7 @@ Cont[R, A]
 \begin_layout Plain Layout
 
 \size small
-\begin_inset Formula $T_{L}^{M,A}=\left(E+A\rightarrow R\right)\rightarrow R$
+\begin_inset Formula $\left(E+A\rightarrow R\right)\rightarrow R$
 \end_inset
 
 
@@ -8723,7 +8761,7 @@ Cont[R, A]
 \begin_layout Plain Layout
 
 \size small
-\begin_inset Formula $T_{M}^{L,A}=\left(A\rightarrow E+R\right)\rightarrow E+R$
+\begin_inset Formula $\left(A\rightarrow E+R\right)\rightarrow E+R$
 \end_inset
 
 
@@ -10260,9 +10298,9 @@ literal "false"
 \end_layout
 
 \begin_layout Standard
-Throughout this chapter, we will build transformers for every exponential-polyno
-mial monad considered in this book (although some transformers will only
- partially satisfy the required laws).
+Throughout this chapter, we will build transformers for every monad considered
+ in this book (although some transformers will only partially satisfy the
+ required laws).
 \end_layout
 
 \begin_layout Subsection
@@ -10613,12 +10651,12 @@ Any monad contained in a stack, such as
  relevant transformers, such as:
 \begin_inset Formula 
 \[
-\text{flift}_{K}^{P}:P\leadsto(K\varangle P)\quad,\quad\text{blift}_{L}^{P}:L\leadsto(L\varangle P)\quad,\quad\text{frun}_{M}^{P,Q}(f^{:P\leadsto Q}):M\varangle P\leadsto M\varangle Q\quad,\quad\text{etc.,}
+\text{flift}_{K}^{P}:P\leadsto(K\varangle P)\quad,\quad\text{blift}_{L}^{P}:L\leadsto(L\varangle P)\quad,\quad\text{frun}_{M}^{P,Q}(f^{:P\leadsto Q}):M\varangle P\leadsto M\varangle Q\quad,
 \]
 
 \end_inset
 
-for any monad 
+and so on, for any monad 
 \begin_inset Formula $P$
 \end_inset
 
@@ -10646,9 +10684,10 @@ for any monad
 
 : 
 \begin_inset Formula 
-\[
-\text{flift}_{K\varangle L}^{P}:P\leadsto K\varangle L\varangle P=\text{flift}_{L}^{P}\bef\text{flift}_{K}^{L\varangle P}\quad,\quad\text{blift}_{L\varangle M}^{P}:L\varangle M\leadsto L\varangle M\varangle P=\text{frun}_{L}^{M,M\varangle P}(\text{blift}_{M}^{P})\quad.
-\]
+\begin{align*}
+ & \text{flift}_{K\varangle L}^{P}:P\leadsto K\varangle L\varangle P=\text{flift}_{L}^{P}\bef\text{flift}_{K}^{L\varangle P}\quad,\\
+ & \text{blift}_{L\varangle M}^{P}:L\varangle M\leadsto L\varangle M\varangle P=\text{frun}_{L}^{M,M\varangle P}(\text{blift}_{M}^{P})\quad.
+\end{align*}
 
 \end_inset
 
@@ -12200,9 +12239,10 @@ set
 
  that work with the state value:
 \begin_inset Formula 
-\[
-\text{get}:\text{State}^{S,S}\quad,\quad\quad\text{get}\triangleq s^{:S}\rightarrow s\times s\quad,\quad\quad\text{set}:S\rightarrow\text{State}^{S,\bbnum 1}\quad,\quad\quad\text{set}\triangleq s^{:S}\rightarrow\_^{:S}\rightarrow1\times s\quad.
-\]
+\begin{align*}
+ & \text{get}:\text{State}^{S,S}\quad,\quad\quad\text{get}\triangleq s^{:S}\rightarrow s\times s\quad,\\
+ & \text{set}:S\rightarrow\text{State}^{S,\bbnum 1}\quad,\quad\quad\text{set}\triangleq s^{:S}\rightarrow\_^{:S}\rightarrow1\times s\quad.
+\end{align*}
 
 \end_inset
 
@@ -12257,8 +12297,8 @@ State
 
 \end_inset
 
--monadic program can then be written as shown at left, without referring
- to the type signature 
+-monadic program can then be written as shown above, without referring to
+ the type signature 
 \begin_inset Formula $S\rightarrow A\times S$
 \end_inset
 
@@ -12676,7 +12716,7 @@ Either
 \end_layout
 
 \begin_layout Standard
-The second ingredient of the MTL-style programming involves 
+The second ingredient of the MTL-style programming is 
 \begin_inset Quotes eld
 \end_inset
 
@@ -12684,7 +12724,7 @@ lifting
 \begin_inset Quotes erd
 \end_inset
 
- the monad operations to arbitrary monad stacks.
+ the monadic operations to arbitrary monad stacks.
  For example, consider the 
 \begin_inset listings
 inline true
@@ -12697,7 +12737,7 @@ State
 
 \end_inset
 
- monad with the operations 
+ monad and its operations 
 \begin_inset Formula $\text{get}:\text{State}^{S,S}$
 \end_inset
 
@@ -14564,9 +14604,10 @@ Since the stack type is
 
  is:
 \begin_inset Formula 
-\[
-\text{clear}_{P}:\left(S\rightarrow W\times A\times S\right)\rightarrow S\rightarrow W\times A\times S\quad,\quad\quad\text{clear}_{P}\triangleq p^{:S\rightarrow W\times A\times S}\rightarrow p\bef(\text{clear}\boxtimes\text{id}^{S})\quad.
-\]
+\begin{align*}
+ & \text{clear}_{P}:\left(S\rightarrow W\times A\times S\right)\rightarrow S\rightarrow W\times A\times S\quad,\\
+ & \text{clear}_{P}\triangleq p^{:S\rightarrow W\times A\times S}\rightarrow p\bef(\text{clear}\boxtimes\text{id}^{S})\quad.
+\end{align*}
 
 \end_inset
 
@@ -14971,17 +15012,17 @@ status open
 
 \begin_layout Plain Layout
 
-           // Anywhere inside a for/yield:
+// Anywhere inside a for/yield:
 \end_layout
 
 \begin_layout Plain Layout
 
-  y <- Monad[L].pure(x).up // Assume x: A
+  y <- Monad[L].pure(x).up // x: A
 \end_layout
 
 \begin_layout Plain Layout
 
-  z <- f(y)                // f: A => T[B]
+  z <- f(y)        // f: A => T[B]
 \end_layout
 
 \end_inset
@@ -15139,7 +15180,7 @@ status open
 
 \begin_layout Plain Layout
 
-           // Anywhere inside a for/yield:
+// Anywhere inside a for/yield:
 \end_layout
 
 \begin_layout Plain Layout
@@ -15305,7 +15346,7 @@ status open
 
 \begin_layout Plain Layout
 
-            // Anywhere inside a for/yield:
+// Anywhere inside a for/yield:
 \end_layout
 
 \begin_layout Plain Layout
@@ -16061,8 +16102,10 @@ frun
 :
 \begin_inset Formula 
 \begin{align*}
- & \text{brun}:T_{\text{State}}^{M,A}\rightarrow M^{A}=(S\rightarrow M^{A\times S})\rightarrow M^{A}\quad\quad\text{vs.}\quad\theta_{\text{State}}:\left(S\rightarrow A\times S\right)\rightarrow A\quad,\\
- & \text{frun}:T_{\text{State}}^{M,A}\rightarrow\text{State}^{S,A}=(S\rightarrow M^{A\times S})\rightarrow S\rightarrow A\times S\quad\quad\text{vs.}\quad\theta_{M}^{\uparrow\text{State}}:(S\rightarrow M^{A}\times S)\rightarrow S\rightarrow A\times S\quad.
+ & \text{brun}:T_{\text{State}}^{M,A}\rightarrow M^{A}=(S\rightarrow M^{A\times S})\rightarrow M^{A}\\
+ & \quad\quad\text{vs.}\quad\theta_{\text{State}}:\left(S\rightarrow A\times S\right)\rightarrow A\quad,\\
+ & \text{frun}:T_{\text{State}}^{M,A}\rightarrow\text{State}^{S,A}=(S\rightarrow M^{A\times S})\rightarrow S\rightarrow A\times S\\
+ & \quad\quad\text{vs.}\quad\theta_{M}^{\uparrow\text{State}}:(S\rightarrow M^{A}\times S)\rightarrow S\rightarrow A\times S\quad.
 \end{align*}
 
 \end_inset
@@ -16150,7 +16193,8 @@ is no longer automatic and needs to be verified.
 \begin{align*}
 \text{left-hand side}:\quad & t\triangleright\text{frun}_{\text{State}}(\theta_{M})\bef\theta_{\text{State}}(i)=t\triangleright(t\rightarrow t\bef\theta_{M})\bef(t\rightarrow i\triangleright t\triangleright\pi_{1})\\
 \text{compute composition}:\quad & \quad=i\triangleright(t\bef\theta_{M})\triangleright\pi_{1}=i\triangleright t\bef\theta_{M}\bef\pi_{1}\quad,\\
-\text{left-hand side}:\quad & t\triangleright\text{brun}_{\text{State}}(i)\bef\theta_{M}=t\triangleright(t\rightarrow i\triangleright t\triangleright\pi_{1}^{\uparrow M})\triangleright\theta_{M}=i\triangleright t\bef\gunderline{\pi_{1}^{\uparrow M}\bef\theta_{M}}\\
+\text{left-hand side}:\quad & t\triangleright\text{brun}_{\text{State}}(i)\bef\theta_{M}=t\triangleright(t\rightarrow i\triangleright t\triangleright\pi_{1}^{\uparrow M})\triangleright\theta_{M}\\
+ & \quad=i\triangleright t\bef\gunderline{\pi_{1}^{\uparrow M}\bef\theta_{M}}\\
 \text{naturality law of }\theta_{M}:\quad & \quad=i\triangleright t\bef\theta_{M}\bef\pi_{1}\quad.
 \end{align*}
 
@@ -16899,9 +16943,10 @@ purity
 
  law:
 \begin_inset Formula 
-\[
-m\triangleright\text{flift}_{L}\triangleright\text{frun}_{L}(\theta_{M})=m\triangleright\theta_{M}\triangleright\text{pu}_{L}\quad,\quad\text{or equivalently:}\quad\quad\text{flift}_{L}\bef\text{frun}_{L}(\theta_{M})=\theta_{M}\bef\text{pu}_{L}\quad.
-\]
+\begin{align*}
+ & m\triangleright\text{flift}_{L}\triangleright\text{frun}_{L}(\theta_{M})=m\triangleright\theta_{M}\triangleright\text{pu}_{L}\quad,\\
+\text{or equivalently}:\quad & \text{flift}_{L}\bef\text{frun}_{L}(\theta_{M})=\theta_{M}\bef\text{pu}_{L}\quad.
+\end{align*}
 
 \end_inset
 
@@ -18595,9 +18640,10 @@ brun
 
  as the natural transformations:
 \begin_inset Formula 
-\[
-\text{flift}_{T}^{M}:\text{Id}^{M}\leadsto T^{M}\quad,\quad\quad\text{brun}_{T}^{M}:T^{M}\leadsto\text{Id}^{M}\quad,\quad\quad\text{frun}_{T}^{M,N}:(M\leadsto N)\rightarrow T^{M}\leadsto T^{N}\quad.
-\]
+\begin{align*}
+ & \text{flift}_{T}^{M}:\text{Id}^{M}\leadsto T^{M}\quad,\quad\quad\text{brun}_{T}^{M}:T^{M}\leadsto\text{Id}^{M}\quad,\\
+ & \text{frun}_{T}^{M,N}:(M\leadsto N)\rightarrow T^{M}\leadsto T^{N}\quad.
+\end{align*}
 
 \end_inset
 
@@ -19954,7 +20000,7 @@ literal "false"
 
 \end_inset
 
- and always produces a functor since Eq.
+ and always produces a new functor out of two functors, since Eq.
 \begin_inset space ~
 \end_inset
 
@@ -19992,7 +20038,8 @@ noprefix "false"
 \begin{align*}
  & \left(L\star M\right)^{A}\\
 \text{definitions of }L,M,\star:\quad & \cong\exists P.\,\exists Q.\,\gunderline{\left(P\times Q\rightarrow A\right)}\times\left(\bbnum 1+P\right)\times\left(R\rightarrow Q\right)\\
-\text{curry the arguments, move a quantifier}:\quad & \cong\exists P.\left(\bbnum 1+P\right)\times\gunderline{\exists Q.\left(Q\rightarrow P\rightarrow A\right)\times\left(R\rightarrow Q\right)}\\
+ & \text{curry the arguments, move a quantifier}:\quad\\
+ & \cong\exists P.\left(\bbnum 1+P\right)\times\gunderline{\exists Q.\left(Q\rightarrow P\rightarrow A\right)\times\left(R\rightarrow Q\right)}\\
 \text{co-Yoneda identity with }\exists Q:\quad & \cong\exists P.\left(\bbnum 1+P\right)\times\left(\gunderline{R\rightarrow P}\rightarrow A\right)\\
 \text{swap curried arguments}:\quad & \cong\exists P.\left(\bbnum 1+P\right)\times\left(P\rightarrow R\rightarrow A\right)\\
 \text{co-Yoneda identity with }\exists P:\quad & \cong\bbnum 1+\left(R\rightarrow A\right)\quad.
@@ -20758,7 +20805,7 @@ stacking
 \begin_inset Quotes erd
 \end_inset
 
- construction is written as
+ construction is written as:
 \begin_inset listings
 inline false
 status open
@@ -21423,7 +21470,8 @@ The monadic naturality of
 :
 \begin_inset Formula 
 \begin{align*}
-\text{expect }\text{brun}_{R}(\theta)\bef\phi:\quad & \text{frun}_{R}(\phi)\bef\text{brun}_{R}(\theta)=\gunderline{\text{frun}_{P}(\text{frun}_{Q}(\phi))\bef\text{brun}_{P}}\left(\text{blift}_{P}\bef\theta\right)\bef\text{brun}_{Q}\left(\text{flift}_{P}\bef\theta\right)\\
+\text{expect }\text{brun}_{R}(\theta)\bef\phi:\quad & \text{frun}_{R}(\phi)\bef\text{brun}_{R}(\theta)\\
+ & =\gunderline{\text{frun}_{P}(\text{frun}_{Q}(\phi))\bef\text{brun}_{P}}\left(\text{blift}_{P}\bef\theta\right)\bef\text{brun}_{Q}\left(\text{flift}_{P}\bef\theta\right)\\
 \text{same law for }\text{brun}_{P}:\quad & =\text{brun}_{P}\left(\text{blift}_{P}\bef\theta\right)\bef\gunderline{\text{frun}_{Q}(\phi)\bef\text{brun}_{Q}}\left(\text{flift}_{P}\bef\theta\right)\\
 \text{same law for }\text{brun}_{Q}:\quad & =\text{brun}_{P}\left(\text{blift}_{P}\bef\theta\right)\bef\text{brun}_{Q}\left(\text{flift}_{P}\bef\theta\right)\bef\phi=\text{brun}_{R}(\theta)\bef\phi\quad.
 \end{align*}
@@ -24428,7 +24476,7 @@ compatibility laws
 \begin_inset Quotes erd
 \end_inset
 
-
+ given in Eqs.
 \begin_inset space ~
 \end_inset
 
@@ -26104,7 +26152,7 @@ The laws of runners require that
  must be monad morphisms, i.e., the identity and composition laws must hold:
 \begin_inset Formula 
 \begin{align*}
- & \text{pu}_{L\circ M}\bef\text{frun}\,(\phi)=\text{pu}_{L\circ N}\quad,\quad\quad\text{ftn}_{L\circ M}\bef\text{frun}\,(\phi)=\left(\text{frun}\,(\phi)\right)^{\uparrow M\uparrow L}\bef\text{frun}\,(\phi)\bef\text{ftn}_{L\circ N}\quad,\\
+ & \text{pu}_{L\circ M}\bef\text{frun}\,(\phi)=\text{pu}_{L\circ N}\quad,\quad\text{ftn}_{L\circ M}\bef\text{frun}\,(\phi)=\left(\text{frun}\,(\phi)\right)^{\uparrow M\uparrow L}\bef\text{frun}\,(\phi)\bef\text{ftn}_{L\circ N}\quad,\\
  & \text{pu}_{L\circ M}\bef\text{brun}\,(\theta)=\text{pu}_{M}\quad,\quad\quad\text{ftn}_{L\circ M}\bef\text{brun}\,(\theta)=\left(\text{brun}\,(\theta)\right)^{\uparrow M\uparrow L}\bef\text{brun}\,(\theta)\bef\text{ftn}_{M}\quad.
 \end{align*}
 
@@ -26410,9 +26458,10 @@ brun
 
 :
 \begin_inset Formula 
-\[
-\phi^{:M\leadsto N}\bef\text{flift}_{L}^{N}=\text{flift}_{L}^{M}\bef(\phi^{:M\leadsto N})^{\uparrow L}\quad,\quad\quad(\phi^{:M\leadsto N})^{\uparrow L}\bef\text{brun}_{L}^{N}(\theta_{L})=\text{brun}_{L}^{M}(\theta_{L})\bef\phi^{:M\leadsto N}\quad.
-\]
+\begin{align*}
+ & \phi^{:M\leadsto N}\bef\text{flift}_{L}^{N}=\text{flift}_{L}^{M}\bef(\phi^{:M\leadsto N})^{\uparrow L}\quad,\\
+ & (\phi^{:M\leadsto N})^{\uparrow L}\bef\text{brun}_{L}^{N}(\theta_{L})=\text{brun}_{L}^{M}(\theta_{L})\bef\phi^{:M\leadsto N}\quad.
+\end{align*}
 
 \end_inset
 
@@ -26465,7 +26514,7 @@ The laws of runners require that
  must be monad morphisms, i.e., the identity and composition laws must hold:
 \begin_inset Formula 
 \begin{align*}
- & \text{pu}_{L\circ M}\bef\text{frun}\,(\phi)=\text{pu}_{N\circ M}\quad,\quad\quad\text{ftn}_{L\circ M}\bef\text{frun}\,(\phi)=\left(\text{frun}\,(\phi)\right)^{\uparrow M\uparrow L}\bef\text{frun}\,(\phi)\bef\text{ftn}_{N\circ M}\quad,\\
+ & \text{pu}_{L\circ M}\bef\text{frun}\,(\phi)=\text{pu}_{N\circ M}\quad,\quad\text{ftn}_{L\circ M}\bef\text{frun}\,(\phi)=\left(\text{frun}\,(\phi)\right)^{\uparrow M\uparrow L}\bef\text{frun}\,(\phi)\bef\text{ftn}_{N\circ M}\quad,\\
  & \text{pu}_{L\circ M}\bef\text{brun}\,(\theta)=\text{pu}_{L}\quad,\quad\quad\text{ftn}_{L\circ M}\bef\text{brun}\,(\theta)=\left(\text{brun}\,(\theta)\right)^{\uparrow M\uparrow L}\bef\text{brun}\,(\theta)\bef\text{ftn}_{L}\quad.
 \end{align*}
 
@@ -26604,7 +26653,7 @@ We now transform the left-hand side, aiming to obtain the same expression.
 \text{definitions of }\text{ftn}_{L\circ M}\text{ and }\text{brun}:\quad & =\text{sw}_{L,M}^{\uparrow L}\bef\text{ftn}_{L}\bef\gunderline{\text{ftn}_{M}^{\uparrow L}\bef\theta^{\uparrow L}}\\
 \text{composition law of }\theta:\quad & =\text{sw}_{L,M}^{\uparrow L}\bef\gunderline{\text{ftn}_{L}\bef\left(\theta\bef\theta\right)^{\uparrow L}}=\gunderline{\text{sw}_{L,M}^{\uparrow L}\bef\left(\theta\bef\theta\right)^{\uparrow L\uparrow L}}\bef\text{ftn}_{L}\\
 \text{functor composition}:\quad & =\gunderline{(\text{sw}_{L,M}\bef\theta^{\uparrow L})}^{\uparrow L}\bef\theta^{\uparrow L\uparrow L}\bef\text{ftn}_{L}\\
-\text{monadic naturality law of }\text{sw}_{L,M}:\quad & =\gunderline{\theta^{\uparrow L}}\bef\theta^{\uparrow L\uparrow L}\bef\text{ftn}_{L}\quad.
+\text{monadic naturality of }\text{sw}_{L,M}:\quad & =\gunderline{\theta^{\uparrow L}}\bef\theta^{\uparrow L\uparrow L}\bef\text{ftn}_{L}\quad.
 \end{align*}
 
 \end_inset
@@ -27244,7 +27293,7 @@ OptionT
 
 \end_inset
 
- monad transformer can be written as
+ monad transformer can be written as:
 \begin_inset listings
 inline false
 status open
@@ -27690,25 +27739,29 @@ We need to show that
 :
 \begin_inset Formula 
 \begin{align*}
- & \text{pu}_{L}^{\uparrow M}\bef\text{sw}=\,\left\Vert \begin{array}{cc}
+ & \text{pu}_{L}^{\uparrow M}\bef\text{sw}\\
+ & =\,\left\Vert \begin{array}{cc}
 \text{id} & \bbnum 0\\
 \bbnum 0 & q\times a\rightarrow q\times\text{pu}_{L}(a)
 \end{array}\right|\,\bef\,\left\Vert \begin{array}{c}
 (x^{:P}\rightarrow x+\bbnum 0^{:Q\times A})\bef\text{pu}_{L}\\
 q\times l\rightarrow l\triangleright(a^{:A}\rightarrow\bbnum 0^{:P}+q\times a)^{\uparrow L}
 \end{array}\right|\\
-\text{composition}:\quad & =\,\,\left\Vert \begin{array}{c}
+ & \text{composition}:\quad\\
+ & =\,\,\left\Vert \begin{array}{c}
 (x^{:P}\rightarrow x+\bbnum 0^{:Q\times A})\bef\text{pu}_{L}\\
 q\times a\rightarrow a\triangleright\gunderline{\text{pu}_{L}\bef(a^{:A}\rightarrow\bbnum 0^{:P}+q\times a)^{\uparrow L}}
 \end{array}\right|\\
-\text{pu}_{L}\text{'s naturality}:\quad & =\,\left\Vert \begin{array}{c}
+ & \text{pu}_{L}\text{'s naturality}:\quad\\
+ & =\,\left\Vert \begin{array}{c}
 (x^{:P}\rightarrow x+\bbnum 0^{:Q\times A})\bef\text{pu}_{L}\\
 (q\times a\rightarrow\bbnum 0^{:P}+q\times a)\bef\text{pu}_{L}
 \end{array}\right|\,=\,\begin{array}{|c||c|}
 P & x^{:P}\rightarrow x+\bbnum 0^{:Q\times A}\\
 Q\times A & q\times a\rightarrow\bbnum 0^{:P}+q\times a
 \end{array}\,\bef\text{pu}_{L}\\
-\text{matrix notation}:\quad & =\text{id}\bef\text{pu}_{L}=\text{pu}_{L}\quad.
+ & \text{matrix notation}:\quad\\
+ & =\text{id}\bef\text{pu}_{L}=\text{pu}_{L}\quad.
 \end{align*}
 
 \end_inset
@@ -27728,7 +27781,8 @@ We need to show that
 :
 \begin_inset Formula 
 \begin{align*}
- & \text{pu}_{M}\bef\text{sw}=\,\left\Vert \begin{array}{cc}
+ & \text{pu}_{M}\bef\text{sw}\\
+ & =\,\left\Vert \begin{array}{cc}
 \bbnum 0 & l^{:L^{A}}\rightarrow q_{0}\times l\end{array}\right|\,\bef\,\left\Vert \begin{array}{c}
 (x^{:P}\rightarrow x+\bbnum 0^{:Q\times A})\bef\text{pu}_{L}\\
 q\times l\rightarrow l\triangleright(x^{:A}\rightarrow\bbnum 0^{:P}+q\times x)^{\uparrow L}
@@ -27802,7 +27856,8 @@ noprefix "false"
 \text{definition of }\text{sw}:\quad & =x\rightarrow(x+\bbnum 0)\triangleright\,\left\Vert \begin{array}{c}
 (x^{:P}\rightarrow x+\bbnum 0^{:Q\times A})\bef\text{pu}_{L}\\
 q\times l\rightarrow l\triangleright(a\rightarrow\bbnum 0^{:P}+q\times a)^{\uparrow L}
-\end{array}\right|\,=(x^{:P}\rightarrow x+\bbnum 0^{:Q\times A})\bef\text{pu}_{L}\quad.
+\end{array}\right|\\
+ & =(x^{:P}\rightarrow x+\bbnum 0^{:Q\times A})\bef\text{pu}_{L}\quad.
 \end{align*}
 
 \end_inset
@@ -27916,14 +27971,15 @@ We need to show that
 :
 \begin_inset Formula 
 \begin{align}
- & \text{ftn}_{M}\bef\text{sw}=\,\left\Vert \begin{array}{cc}
+ & \text{ftn}_{M}\bef\text{sw}\nonumber \\
+ & =\,\left\Vert \begin{array}{cc}
 \text{id} & \bbnum 0\\
 q\times p\rightarrow p & \bbnum 0\\
 \bbnum 0 & q_{1}\times q_{2}\times a\rightarrow\left(q_{1}\oplus q_{2}\right)\times a
 \end{array}\right|\,\bef\,\left\Vert \begin{array}{c}
 (x^{:P}\rightarrow x+\bbnum 0)\bef\text{pu}_{L}\\
 q\times l\rightarrow l\triangleright(x\rightarrow\bbnum 0+q\times x)^{\uparrow L}
-\end{array}\right|\nonumber \\
+\end{array}\right|\\
  & =\,\,\left\Vert \begin{array}{c}
 (x^{:P}\rightarrow x+\bbnum 0)\bef\text{pu}_{L}\\
 \left(q\times p\rightarrow p+\bbnum 0\right)\bef\text{pu}_{L}\\
@@ -27972,7 +28028,8 @@ Then compute the composition
 :
 \begin_inset Formula 
 \begin{align*}
- & \text{sw}^{\uparrow M}\bef\text{sw}=\,\left\Vert \begin{array}{cc}
+ & \text{sw}^{\uparrow M}\bef\text{sw}\\
+ & =\,\left\Vert \begin{array}{cc}
 \text{id} & \bbnum 0\\
 \bbnum 0 & q\times p\rightarrow q\times\text{pu}_{L}\left(p+\bbnum 0\right)\\
 \bbnum 0 & q_{1}\times q_{2}\times l\rightarrow q_{1}\times(l\triangleright(x\rightarrow\bbnum 0+q_{2}\times x)^{\uparrow L})
@@ -27984,14 +28041,7 @@ q\times l\rightarrow(l\triangleright(x\rightarrow\bbnum 0+q\times x)^{\uparrow L
 (x^{:P}\rightarrow x+\bbnum 0)\bef\text{pu}_{L}\\
 q\times p\rightarrow\left(p+\bbnum 0\right)\triangleright\text{pu}_{L}\bef(x^{:M^{A}}\rightarrow\bbnum 0^{:P}+q\times x)^{\uparrow L}\\
 q_{1}\times q_{2}\times l\rightarrow l\triangleright(x^{:M^{A}}\rightarrow\bbnum 0^{:P}+q_{1}\times x)^{\uparrow L}\bef(x\rightarrow\bbnum 0+q_{2}\times x)^{\uparrow L}
-\end{array}\right|
-\end{align*}
-
-\end_inset
-
-
-\begin_inset Formula 
-\begin{align*}
+\end{array}\right|\\
  & =\,\left\Vert \begin{array}{c}
 (x^{:P}\rightarrow x+\bbnum 0)\bef\text{pu}_{L}\\
 q\times p\rightarrow(\bbnum 0^{:P}+q\times\left(p+\bbnum 0\right))\triangleright\text{pu}_{L}\\
@@ -28047,17 +28097,20 @@ Now we need to post-compose
 (q\times p\rightarrow\bbnum 0^{:P}+q\times\left(p+\bbnum 0\right))\bef\gunderline{\text{pu}_{L}\bef\text{ftn}_{M}^{\uparrow L}}\\
 q_{1}\times q_{2}\times l\rightarrow l\triangleright(x^{:M^{A}}\rightarrow\bbnum 0+q_{1}\times(\bbnum 0+q_{2}\times x))^{\uparrow L}\bef\text{ftn}_{M}^{\uparrow L}
 \end{array}\right|\\
-\text{naturality law of }\text{pu}_{L}:\quad & =\,\,\left\Vert \begin{array}{c}
+ & \text{naturality law of }\text{pu}_{L}:\quad\\
+ & =\,\,\left\Vert \begin{array}{c}
 (x^{:P}\rightarrow x+\bbnum 0)\bef\text{ftn}_{M}\bef\text{pu}_{L}\\
 (q\times p\rightarrow\bbnum 0^{:P}+q\times\left(p+\bbnum 0\right))\bef\text{ftn}_{M}\bef\text{pu}_{L}\\
 q_{1}\times q_{2}\times l\rightarrow l\triangleright(x^{:M^{A}}\rightarrow\gunderline{\text{ftn}_{M}\left(\bbnum 0+q_{1}\times(\bbnum 0+q_{2}\times x)\right)})^{\uparrow L}
 \end{array}\right|\\
-\text{compute }\text{ftn}_{M}(...):\quad & =\,\left\Vert \begin{array}{c}
+ & \text{compute }\text{ftn}_{M}(...):\quad\\
+ & =\,\left\Vert \begin{array}{c}
 (x^{:P}\rightarrow\text{ftn}_{M}(x+\bbnum 0))\bef\text{pu}_{L}\\
 (q\times p\rightarrow\gunderline{\text{ftn}_{M}(\bbnum 0^{:P}+q\times\left(p+\bbnum 0\right))})\bef\text{pu}_{L}\\
 q_{1}\times q_{2}\times l\rightarrow l\triangleright(x^{:M^{A}}\rightarrow\bbnum 0+\left(q_{1}\oplus q_{2}\right)\times x)^{\uparrow L}
 \end{array}\right|\\
-\text{compute }\text{ftn}_{M}(...):\quad & =\,\,\left\Vert \begin{array}{c}
+ & \text{compute }\text{ftn}_{M}(...):\quad\\
+ & =\,\,\left\Vert \begin{array}{c}
 (x^{:P}\rightarrow x+\bbnum 0)\bef\text{pu}_{L}\\
 (q\times p\rightarrow p+\bbnum 0)\bef\text{pu}_{L}\\
 q_{1}\times q_{2}\times l\rightarrow l\triangleright(x^{:M^{A}}\rightarrow\bbnum 0+\left(q_{1}\oplus q_{2}\right)\times x)^{\uparrow L}
@@ -28213,14 +28266,16 @@ q\times l\rightarrow l\triangleright\phi\bef(a\rightarrow\bbnum 0^{:P}+q\times a
 The right-hand side is:
 \begin_inset Formula 
 \begin{align*}
- & \phi^{\uparrow M}\bef\text{sw}_{N,M}=\,\left\Vert \begin{array}{cc}
+ & \phi^{\uparrow M}\bef\text{sw}_{N,M}\\
+ & =\,\left\Vert \begin{array}{cc}
 \text{id} & \bbnum 0\\
 \bbnum 0 & q\times l\rightarrow q\times\left(l\triangleright\phi\right)
 \end{array}\right|\,\bef\,\left\Vert \begin{array}{c}
 (x^{:P}\rightarrow x+\bbnum 0^{:Q\times A})\bef\text{pu}_{N}\\
 q\times n\rightarrow n\triangleright(a\rightarrow\bbnum 0^{:P}+q\times a)^{\uparrow N}
 \end{array}\right|\\
-\text{composition}:\quad & =\,\,\left\Vert \begin{array}{c}
+ & \text{composition}:\quad\\
+ & =\,\,\left\Vert \begin{array}{c}
 (x^{:P}\rightarrow x+\bbnum 0^{:Q\times A})\bef\text{pu}_{N}\\
 q\times l\rightarrow l\triangleright\phi\bef(a\rightarrow\bbnum 0^{:P}+q\times a)^{\uparrow N}
 \end{array}\right|\quad.
@@ -29332,7 +29387,7 @@ noprefix "false"
 \end_layout
 
 \begin_layout Standard
-Consider the functor composition of the 
+Consider the 
 \begin_inset listings
 inline true
 status open
@@ -29364,10 +29419,19 @@ Reader
 \begin_inset Formula $R_{2}^{A}\triangleq Z\rightarrow A$
 \end_inset
 
-:
+.
+ The functor composition of 
+\begin_inset Formula $R_{1}$
+\end_inset
+
+ and 
+\begin_inset Formula $R_{2}$
+\end_inset
+
+ is:
 \begin_inset Formula 
 \[
-P^{A}\triangleq((Z\rightarrow A)\rightarrow Q)\rightarrow Z\rightarrow A\quad.
+P^{A}\triangleq R_{1}\circ R_{2}=((Z\rightarrow A)\rightarrow Q)\rightarrow Z\rightarrow A\quad.
 \]
 
 \end_inset
@@ -30036,7 +30100,8 @@ swap
 \begin{align}
  & \text{sw}_{R,M}:M^{R^{A}}\rightarrow R^{M^{A}}\quad,\quad\quad\text{sw}_{R,M}\triangleq m^{:M^{R^{A}}}\rightarrow q^{:H^{M^{A}}}\rightarrow m\triangleright(r\rightarrow q\triangleright\text{pu}_{M}^{\downarrow H}\bef r)^{\uparrow M}\quad,\label{eq:rigid-monad-short-formula-for-swap}\\
  & \text{pu}_{T}:A\rightarrow H^{M^{A}}\rightarrow M^{A}\quad,\quad\quad\text{pu}_{T}\triangleq\text{pu}_{M}\bef\text{pu}_{R}=a^{:A}\rightarrow\_^{:H^{M^{A}}}\rightarrow\text{pu}_{M}(a)\quad,\nonumber \\
- & \text{ftn}_{T}\triangleq t^{:T^{T^{A}}}\rightarrow k^{:H^{M^{A}}}\rightarrow k\triangleright\big(t\triangleright(\text{flm}_{M}(r^{:R^{M^{A}}}\rightarrow r(k)))^{\uparrow R}\big)=\text{flm}_{R}\left(t\rightarrow q\rightarrow t\triangleright\text{flm}_{M}(r\rightarrow r(q))\right)\quad,\nonumber \\
+ & \text{ftn}_{T}\triangleq t^{:T^{T^{A}}}\rightarrow k^{:H^{M^{A}}}\rightarrow k\triangleright\big(t\triangleright(\text{flm}_{M}(r^{:R^{M^{A}}}\rightarrow r(k)))^{\uparrow R}\big)\nonumber \\
+ & \quad=\text{flm}_{R}\left(t\rightarrow q\rightarrow t\triangleright\text{flm}_{M}(r\rightarrow r(q))\right)\quad,\\
  & \text{flm}_{T}(f)=\text{flm}_{R}\big(y\rightarrow q\rightarrow y\triangleright\text{flm}_{M}(x\rightarrow q\triangleright(x\triangleright f))\big)\label{eq:rigid-monad-def-flm-t-via-flm-r}\\
  & \quad=t^{:R^{M^{A}}}\rightarrow q^{:H^{M^{B}}}\rightarrow q\triangleright\big(t\triangleright\big(\text{flm}_{M}(x^{:A}\rightarrow q\triangleright(x\triangleright f))\big)^{\uparrow R}\big)\quad.\label{eq:rigid-monad-flm-T-def}
 \end{align}
@@ -30229,9 +30294,10 @@ noprefix "false"
 
 ):
 \begin_inset Formula 
-\[
-\text{sw}_{R,M}:M^{R^{A}}\rightarrow R^{M^{A}}\quad,\quad\quad\text{sw}_{R,M}\triangleq m^{:M^{R^{A}}}\rightarrow q^{:H^{M^{A}}}\rightarrow m\triangleright(r^{:H^{A}\rightarrow A}\rightarrow q\triangleright\text{pu}_{M}^{\downarrow H}\bef r)^{\uparrow M}\quad.
-\]
+\begin{align*}
+ & \text{sw}_{R,M}:M^{R^{A}}\rightarrow R^{M^{A}}\quad,\\
+ & \text{sw}_{R,M}\triangleq m^{:M^{R^{A}}}\rightarrow q^{:H^{M^{A}}}\rightarrow m\triangleright(r^{:H^{A}\rightarrow A}\rightarrow q\triangleright\text{pu}_{M}^{\downarrow H}\bef r)^{\uparrow M}\quad.
+\end{align*}
 
 \end_inset
 
@@ -30373,7 +30439,8 @@ Substituting these definitions, we compute:
 \begin{align*}
  & f\diamond_{_{R}}g=a^{:A}\rightarrow k^{:H^{C}}\rightarrow a\triangleright\tilde{f}\big(k\triangleright(\tilde{g}(k))^{\downarrow H}\big)\,\gunderline{\bef}\,\tilde{g}(k)\\
 \triangleright\text{-notation}:\quad & =a\rightarrow k\rightarrow a\triangleright\gunderline{\tilde{f}}\big(k\triangleright(\tilde{g}(k))^{\downarrow H}\big)\triangleright\tilde{g}(k)\\
- & =a\rightarrow k\rightarrow f(a)(k\,\gunderline{\triangleright\,(\tilde{g}(k)})^{\downarrow H})\,\gunderline{\triangleright\,\tilde{g}(k)}=a\rightarrow k\rightarrow g\big(f(a)(k\triangleright(b\rightarrow g(b)(k))^{\downarrow H})\big)(k)\quad.
+ & =a\rightarrow k\rightarrow f(a)(k\,\gunderline{\triangleright\,(\tilde{g}(k)})^{\downarrow H})\,\gunderline{\triangleright\,\tilde{g}(k)}\\
+ & =a\rightarrow k\rightarrow g\big(f(a)(k\triangleright(b\rightarrow g(b)(k))^{\downarrow H})\big)(k)\quad.
 \end{align*}
 
 \end_inset
@@ -30999,7 +31066,8 @@ noprefix "false"
 :
 \begin_inset Formula 
 \begin{align*}
- & (\text{ftn}_{R}^{\uparrow M}\bef\text{sw})(m)(q)=q\triangleright\big(m\triangleright\text{ftn}_{R}^{\uparrow M}\gunderline{\bef}\text{sw}\big)=q\triangleright\big(m\triangleright\text{ftn}_{R}^{\uparrow M}\triangleright\gunderline{\text{sw}}\big)\\
+ & (\text{ftn}_{R}^{\uparrow M}\bef\text{sw})(m)(q)=q\triangleright\big(m\triangleright\text{ftn}_{R}^{\uparrow M}\gunderline{\bef}\text{sw}\big)\\
+ & =q\triangleright\big(m\triangleright\text{ftn}_{R}^{\uparrow M}\triangleright\gunderline{\text{sw}}\big)\\
 \text{use Eq.~(\ref{eq:rigid-monad-choice-swap-short})}:\quad & =m\triangleright\gunderline{\text{ftn}_{R}^{\uparrow M}\bef(r\rightarrow q\triangleright\text{pu}_{M}^{\downarrow H}\bef r)^{\uparrow M}}\\
 \text{composition law of }M:\quad & =m\triangleright\big(\text{ftn}_{R}\bef(r\rightarrow q\triangleright\text{pu}_{M}^{\downarrow H}\bef r)\big)^{\uparrow M}\quad.
 \end{align*}
@@ -31126,7 +31194,8 @@ noprefix "false"
  & q\triangleright\big(q\triangleright\big(\text{sw}\bef(x\rightarrow q\triangleright x)\big)^{\downarrow H}\triangleright\gunderline{\text{sw}(m)\bef\text{sw}}\big)\\
 \text{use Eq.~(\ref{eq:swap-law-3-derivation-1})}:\quad & =m\triangleright\big(r\rightarrow q\triangleright\text{pu}_{M}^{\downarrow H}\bef(q\triangleright\gunderline{\big(\text{sw}\bef(x\rightarrow q\triangleright x)\big)^{\downarrow H}\triangleright\text{pu}_{M}^{\downarrow H}}\bef r)\big)^{\uparrow M}\\
 \text{composition under }^{\downarrow H}:\quad & =m\triangleright\big(r\rightarrow q\triangleright\text{pu}_{M}^{\downarrow H}\bef(q\triangleright\big(\gunderline{\text{pu}_{M}\bef\text{sw}}\bef(x\rightarrow q\triangleright x)\big)^{\downarrow H}\bef r)\big)^{\uparrow M}\\
-\text{outer identity law of }\text{sw}:\quad & =m\triangleright\big(r\rightarrow q\triangleright\text{pu}_{M}^{\downarrow H}\bef(q\triangleright\big(\gunderline{\text{pu}_{M}^{\uparrow R}\bef(x\rightarrow q\triangleright x)}\big)^{\downarrow H}\bef r)\big)^{\uparrow M}\\
+ & \text{outer identity law of }\text{sw}:\quad\\
+ & =m\triangleright\big(r\rightarrow q\triangleright\text{pu}_{M}^{\downarrow H}\bef(q\triangleright\big(\gunderline{\text{pu}_{M}^{\uparrow R}\bef(x\rightarrow q\triangleright x)}\big)^{\downarrow H}\bef r)\big)^{\uparrow M}\\
 \text{compute composition}:\quad & =m\triangleright\big(r\rightarrow q\triangleright\text{pu}_{M}^{\downarrow H}\bef(q\triangleright\big(x\rightarrow q\triangleright\text{pu}_{M}^{\uparrow R}(x)\big)^{\downarrow H}\bef r)\big)^{\uparrow M}\quad.
 \end{align*}
 
@@ -31164,7 +31233,8 @@ We will apply both sides of the law to arbitrary
 \text{definition of }^{\uparrow R}:\quad & =q\triangleright\big(\text{ftn}_{M}^{\downarrow H}\gunderline{\bef}(m\triangleright\text{sw}^{\uparrow M}\triangleright\text{sw})\gunderline{\bef}\text{ftn}_{M}\big)\nonumber \\
 \triangleright\text{-notation}:\quad & =\big(\gunderline{q\triangleright\text{ftn}_{M}^{\downarrow H}}\triangleright(\gunderline{m\triangleright\text{sw}^{\uparrow M}}\triangleright\gunderline{\text{sw}})\big)\triangleright\text{ftn}_{M}\nonumber \\
 \text{use Eq.~(\ref{eq:rigid-monad-choice-swap-short})}:\quad & =\big(m\triangleright\gunderline{\text{sw}^{\uparrow M}}\triangleright\big(r\rightarrow q\triangleright\gunderline{\text{ftn}_{M}^{\downarrow H}\triangleright\text{pu}_{M}^{\downarrow H}}\bef r\gunderline{\big)^{\uparrow M}}\big)\triangleright\text{ftn}_{M}\nonumber \\
-\text{composition under }^{\downarrow H}\text{ and }^{\uparrow M}:\quad & =m\triangleright\big(\text{sw}\bef\big(r\rightarrow q\triangleright(\gunderline{\text{pu}_{M}\bef\text{ftn}_{M}})^{\downarrow H}\bef r\big)\big)^{\uparrow M}\bef\text{ftn}_{M}\nonumber \\
+ & \text{composition under }^{\downarrow H}\text{ and }^{\uparrow M}:\quad\nonumber \\
+ & =m\triangleright\big(\text{sw}\bef\big(r\rightarrow q\triangleright(\gunderline{\text{pu}_{M}\bef\text{ftn}_{M}})^{\downarrow H}\bef r\big)\big)^{\uparrow M}\bef\text{ftn}_{M}\\
 \text{left identity law of }M:\quad & =m\triangleright\big(\text{sw}\bef(r\rightarrow q\triangleright r)\big)^{\uparrow M}\bef\text{ftn}_{M}\quad.\label{eq:rigid-monad-1-swap-law-4-derivation-5}
 \end{align}
 
@@ -31200,7 +31270,8 @@ noprefix "false"
 ), we get:
 \begin_inset Formula 
 \begin{align*}
- & m\triangleright\big(\gunderline{\text{sw}\bef(r\rightarrow q\triangleright r)}\big)^{\uparrow M}\bef\text{ftn}_{M}=m\triangleright\big(r\rightarrow q\triangleright\text{pu}_{M}^{\downarrow H}\bef r\gunderline{\big)^{\uparrow M\uparrow M}\bef\text{ftn}_{M}}\\
+ & m\triangleright\big(\gunderline{\text{sw}\bef(r\rightarrow q\triangleright r)}\big)^{\uparrow M}\bef\text{ftn}_{M}\\
+ & =m\triangleright\big(r\rightarrow q\triangleright\text{pu}_{M}^{\downarrow H}\bef r\gunderline{\big)^{\uparrow M\uparrow M}\bef\text{ftn}_{M}}\\
 \text{naturality law of }\text{ftn}_{M}:\quad & =m\triangleright\text{ftn}_{M}\bef\big(r\rightarrow q\triangleright\text{pu}_{M}^{\downarrow H}\bef r\big)^{\uparrow M}\quad.
 \end{align*}
 
@@ -32028,7 +32099,8 @@ The functor laws hold due to the properties of the pair product:
 \begin_inset Formula 
 \begin{align*}
 \text{expect to equal }\text{id}:\quad & \text{frun}_{L}(\text{id})=\text{frun}_{G}(\text{id})\boxtimes\text{frun}_{H}(\text{id})=\text{id}\boxtimes\text{id}=\text{id}\quad,\\
-\text{expect to equal }\text{frun}_{L}(\phi\bef\chi):\quad & \text{frun}_{L}(\phi)\bef\text{frun}_{L}(\chi)=\big(\gunderline{\text{frun}_{G}(\phi)\bef\text{frun}_{G}(\chi)}\big)\boxtimes\big(\gunderline{\text{frun}_{H}(\phi)\bef\text{frun}_{H}(\chi)}\big)\\
+\text{expect to equal }\text{frun}_{L}(\phi\bef\chi):\quad & \text{frun}_{L}(\phi)\bef\text{frun}_{L}(\chi)\\
+ & \quad=\big(\gunderline{\text{frun}_{G}(\phi)\bef\text{frun}_{G}(\chi)}\big)\boxtimes\big(\gunderline{\text{frun}_{H}(\phi)\bef\text{frun}_{H}(\chi)}\big)\\
 \text{functor laws of }\text{frun}_{G},\,\text{frun}_{H}:\quad & \quad=\text{frun}_{G}(\phi\bef\chi)\boxtimes\text{frun}_{H}(\phi\bef\chi)=\text{frun}_{L}(\phi\bef\chi)\quad.
 \end{align*}
 
@@ -32053,7 +32125,16 @@ We may define a base runner in two different ways, by dropping either the
 
 \end_inset
 
-It is a monad morphism because it is a composition of a projection (Statement
+It is a monad morphism because it is a function composition of two monad
+ morphisms: 
+\begin_inset Formula $\text{brun}_{G}$
+\end_inset
+
+ and a projection function 
+\begin_inset Formula $\pi_{1}$
+\end_inset
+
+ (which is a monad morphism by Statement
 \begin_inset space ~
 \end_inset
 
@@ -32067,11 +32148,7 @@ noprefix "false"
 
 \end_inset
 
-) and a monad morphism 
-\begin_inset Formula $\text{brun}_{G}$
-\end_inset
-
-.
+).
  Function composition preserves monad morphisms (Statement
 \begin_inset space ~
 \end_inset
@@ -32221,10 +32298,6 @@ To verify the monadic naturality law of
 
 \end_inset
 
-
-\end_layout
-
-\begin_layout Standard
 To verify the monadic naturality law of an information-losing definition
  of 
 \begin_inset Formula $\text{brun}_{L}$
@@ -32754,12 +32827,13 @@ N^{M^{A}} & (t\rightarrow\bbnum 0^{:A}+\text{merge}\,(t))\bef\text{pu}_{M}
  & M^{A+N^{A}}\\
 \hline A & \text{pu}_{M}\bef(a\rightarrow a+\bbnum 0^{:N^{A}})^{\uparrow M}\\
 N^{A} & \text{pu}_{M}^{\uparrow N}\bef(t\rightarrow\bbnum 0^{:A}+\text{merge}\,(t))\bef\text{pu}_{M}
-\end{array}\,=\,\begin{array}{|c||c|}
+\end{array}\\
+ & =\,\,\begin{array}{|c||c|}
  & M^{A+N^{A}}\\
 \hline A & (a\rightarrow a+\bbnum 0^{:N^{A}})\bef\text{pu}_{M}\\
 N^{A} & (n\rightarrow\bbnum 0^{:A}+\text{merge}\,(n\triangleright\text{pu}_{M}^{\uparrow N}))\bef\text{pu}_{M}
 \end{array}\\
- & =\,\,\begin{array}{|c||c|}
+ & =\,\begin{array}{|c||c|}
  & A+N^{A}\\
 \hline A & a\rightarrow a+\bbnum 0^{:N^{A}}\\
 N^{A} & n\rightarrow\bbnum 0^{:A}+n\triangleright\text{pu}_{M}^{\uparrow N}\bef\text{merge}
@@ -32873,7 +32947,8 @@ The first rows of the matrices for the two sides of the law are now equal
 \begin_inset Formula 
 \begin{align*}
  & (t\rightarrow\bbnum 0+\text{merge}\,(t))\bef\text{sw}\overset{?}{=}\text{ftn}_{M}^{\uparrow N}\bef(t\rightarrow\bbnum 0+\text{merge}\,(t))\bef\text{pu}_{M}\quad,\\
-\text{apply both sides to }t:\quad & (\bbnum 0+t\triangleright\text{merge})\,\gunderline{\triangleright\,\text{sw}}\overset{?}{=}\big(\bbnum 0+t\triangleright\text{ftn}_{M}^{\uparrow N}\triangleright\text{merge}\big)\triangleright\text{pu}_{M}\quad,\\
+ & \text{apply both sides to }t:\quad\\
+ & (\bbnum 0+t\triangleright\text{merge})\,\gunderline{\triangleright\,\text{sw}}\overset{?}{=}\big(\bbnum 0+t\triangleright\text{ftn}_{M}^{\uparrow N}\triangleright\text{merge}\big)\triangleright\text{pu}_{M}\quad,\\
 \text{apply }\text{sw}:\quad & (\bbnum 0+t\triangleright\text{merge}\triangleright\text{merge})\triangleright\text{pu}_{M}\overset{?}{=}\big(\bbnum 0+t\triangleright\text{ftn}_{M}^{\uparrow N}\triangleright\text{merge}\big)\triangleright\text{pu}_{M}\quad.
 \end{align*}
 
@@ -32893,9 +32968,10 @@ merge
 
  has the following property:
 \begin_inset Formula 
-\[
-\text{merge}\bef\text{merge}=\text{ftn}_{M}^{\uparrow N}\bef\text{merge}\quad,\quad\text{or}:\quad\text{flift}_{K}^{\uparrow N}\bef\text{ftn}_{N}\bef\text{flift}_{K}^{\uparrow N}\bef\text{ftn}_{N}=\text{ftn}_{M}^{\uparrow N}\bef\text{flift}_{K}^{\uparrow N}\bef\text{ftn}_{N}\quad.
-\]
+\begin{align*}
+ & \text{merge}\bef\text{merge}=\text{ftn}_{M}^{\uparrow N}\bef\text{merge}\quad,\\
+\text{or}:\quad & \text{flift}_{K}^{\uparrow N}\bef\text{ftn}_{N}\bef\text{flift}_{K}^{\uparrow N}\bef\text{ftn}_{N}=\text{ftn}_{M}^{\uparrow N}\bef\text{flift}_{K}^{\uparrow N}\bef\text{ftn}_{N}\quad.
+\end{align*}
 
 \end_inset
 
@@ -32983,8 +33059,10 @@ flift
 \begin{align*}
 \text{expect to equal }\text{ftn}_{M}^{\uparrow N}\bef\text{merge}:\quad & \text{merge}\bef\text{merge}=\text{flift}_{K}^{\uparrow N}\bef\gunderline{\text{ftn}_{N}\bef\text{flift}_{K}^{\uparrow N}}\bef\text{ftn}_{N}\\
 \text{naturality of }\text{ftn}_{N}:\quad & =\text{flift}_{K}^{\uparrow N}\bef\text{flift}_{K}^{\uparrow N\uparrow N}\bef\gunderline{\text{ftn}_{N}\bef\text{ftn}_{N}}\\
-\text{associativity law of }\text{ftn}_{N}:\quad & =\gunderline{\text{flift}_{K}^{\uparrow N}\bef\text{flift}_{K}^{\uparrow N\uparrow N}\bef\text{ftn}_{N}^{\uparrow N}}\bef\text{ftn}_{N}=(\gunderline{\text{flift}_{K}\bef\text{flift}_{K}^{\uparrow N}\bef\text{ftn}_{N}})^{\uparrow N}\bef\text{ftn}_{N}\\
-\text{lifting law~(\ref{eq:free-pointed-transformer-use-lifting-derivation1})}:\quad & =\gunderline{(\text{ftn}_{M}\bef\text{flift}_{K})^{\uparrow N}}\bef\text{ftn}_{N}=\text{ftn}_{M}^{\uparrow N}\bef\gunderline{\text{flift}_{K}^{\uparrow N}\bef\text{ftn}_{N}}=\text{ftn}_{M}^{\uparrow N}\bef\text{merge}\quad.
+\text{associativity law of }\text{ftn}_{N}:\quad & =\gunderline{\text{flift}_{K}^{\uparrow N}\bef\text{flift}_{K}^{\uparrow N\uparrow N}\bef\text{ftn}_{N}^{\uparrow N}}\bef\text{ftn}_{N}\\
+ & =(\gunderline{\text{flift}_{K}\bef\text{flift}_{K}^{\uparrow N}\bef\text{ftn}_{N}})^{\uparrow N}\bef\text{ftn}_{N}\\
+\text{lifting law~(\ref{eq:free-pointed-transformer-use-lifting-derivation1})}:\quad & =\gunderline{(\text{ftn}_{M}\bef\text{flift}_{K})^{\uparrow N}}\bef\text{ftn}_{N}=\text{ftn}_{M}^{\uparrow N}\bef\gunderline{\text{flift}_{K}^{\uparrow N}\bef\text{ftn}_{N}}\\
+ & =\text{ftn}_{M}^{\uparrow N}\bef\text{merge}\quad.
 \end{align*}
 
 \end_inset
@@ -43189,7 +43267,7 @@ flift
 \begin_inset Formula $g^{:H^{C}\rightarrow A\rightarrow T_{L}^{M,C}}$
 \end_inset
 
- ignore their first arguments, we may write
+ ignore their first arguments, we may write:
 \begin_inset Formula 
 \[
 f\,\tilde{\diamond}_{_{T}}g=k^{:H^{C}}\rightarrow f(...)\diamond_{_{T_{L}}}g(...)=(\_^{:H^{C}})\rightarrow f(...)\diamond_{_{T_{L}}}g(...)\quad.
