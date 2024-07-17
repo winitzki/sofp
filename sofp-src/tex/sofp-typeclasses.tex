@@ -1296,6 +1296,95 @@ specific types. While it is useful to test laws with \texttt{scalacheck}
 proof that the laws hold. One of the main themes of this book is to
 show how to perform such symbolic derivations.
 
+\subsection{Non-extension methods of typeclasses}
+
+Most typeclasses contain methods that consume the values of a type
+that is constrained to belong to that typeclass. As shown in Example~\ref{subsec:tc-Example-metadata-extractors},
+if a type \lstinline!T! belongs to the typeclass \lstinline!HasMetadata!
+then the method \lstinline!getName: T => String! will consume a value
+of type \lstinline!T!. In those cases, it is convenient to define
+typeclass methods as extension methods and write code as \lstinline!t.getName!
+for values \lstinline!t: T!.
+
+In some cases, however, a typeclass will contain methods that do \emph{not}
+consume values of the types \lstinline!T! that belong to the typeclass.
+We will call them \textsf{``}non-extension methods\index{\textsf{``}non-extension methods}\textsf{''}.
+
+Consider Example~\ref{subsec:tc-Example-Pointed-type} showing the
+typeclass \lstinline!HasDefault! with the method \lstinline!value!
+that \emph{returns} values of type \lstinline!T!. To access the functionality
+of that typeclass, we need to write code such as \lstinline!implicitly[HasDefault[T]].value!.
+The method \textsf{``}\lstinline!value!\textsf{''} is not defined as an extension
+method on \lstinline!T!.
+
+Another such case is the \lstinline!empty! method of the \lstinline!Monoid!
+typeclass shown in Example~\ref{subsec:tc-Example-Monoids}. In programs
+that use the \lstinline!Monoid! typeclass, we could write \lstinline!implicitly[Monoid[T]].empty!
+when we need to access that method.
+
+What if we define \lstinline!empty! as an extension method on a value
+\lstinline!t: T!?
+\begin{lstlisting}
+implicit class MonoidEmpty[T: Monoid](t: T) {
+  def empty: T = implicitly[Monoid[T]].empty
+}
+\end{lstlisting}
+This code works but is not helpful. We will be able to write \lstinline!t.empty!
+only if we already have a value \lstinline!t! of a monoidal type
+\lstinline!T!. However, the importance of a monoid\textsf{'}s \lstinline!empty!
+method is that it can provide a value of the monoidal type \lstinline!T!
+in a program scope where no other values of type \lstinline!T! are
+available. Consider this code:
+\begin{lstlisting}[numbers=left]
+def toMonoid[T: Monoid]: Option[T] => T = {
+  case None      => implicitly[Monoid[T]].empty
+  case Some(t)   => t
+}
+\end{lstlisting}
+In the scope of line 2, the code has no given values of type \lstinline!T!.
+The \lstinline!empty! method is the only way of producing such values.
+
+To use non-extension methods of typeclasses more easily, Scala libraries
+often implement helper methods in a companion object of the typeclass.
+We will now show two ways of doing that for the \lstinline!Monoid!
+typeclass. 
+
+The first option is to define \lstinline!empty[T]! as a method in
+the companion object:
+\begin{lstlisting}
+object Monoid {
+  def empty[T: Monoid]: T = implicitly[Monoid[T]].empty
+}
+\end{lstlisting}
+Then we may write \lstinline!Monoid.empty[T]! instead of \lstinline!implicitly[Monoid[T]].empty!.
+
+A disadvantage of this approach is that the companion object will
+need to implement one helper method for each of the non-extension
+methods of a typeclass. This is not an issue for \lstinline!Monoid!
+since there is only one non-extension method.
+
+The second option is to define a helper method that fetches the typeclass
+evidence value from the implicit scope:
+\begin{lstlisting}
+object Monoid {
+  def apply[T: Monoid]: Monoid[T] = implicitly[Monoid[T]]
+}
+\end{lstlisting}
+Then we may write \lstinline!Monoid[T].empty! instead of \lstinline!implicitly[Monoid[T]].empty!.
+This approach works for typeclasses with any number of non-extension
+methods. As an example, let us re-implement the function \lstinline!toMonoid!
+using this technique:
+\begin{lstlisting}
+def toMonoid[T: Monoid]: Option[T] => T = {
+  case None      => Monoid[T].empty
+  case Some(t)   => t
+}
+\end{lstlisting}
+This is the style preferred by many Scala libraries. 
+
+The code examples in this book will assume that typeclasses define
+non-extension methods in their companion objects in some way.
+
 \section{Deriving typeclass instances via structural analysis}
 
 In Chapter~\ref{chap:Functors,-contrafunctors,-and} we analyzed
