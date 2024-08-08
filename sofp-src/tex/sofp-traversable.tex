@@ -13,9 +13,11 @@ is a major industrial use case of functional programming. Previous
 chapters examined systematically the properties of functions used
 in that style (\lstinline!map!, \lstinline!filter!, \lstinline!flatMap!,
 and \lstinline!zip!) and generalized them to many different type
-constructors. This chapter adopts the same approach to study and generalize
-the \lstinline!reduce! method. In this way, we will conclude the
-study of the \lstinline!map!/\lstinline!reduce! programming style.
+constructors. This chapter adopts the same approach to examine and
+generalize the \lstinline!reduce! method, which will lead to the
+concept of \textsf{``}traversable functors\textsf{''}. In this way, we will complete
+a theoretical study of the \lstinline!map!/\lstinline!reduce! programming
+style.
 
 \subsection{From \texttt{reduce} and \texttt{foldLeft} to \texttt{foldMap} and
 \texttt{traverse}\label{subsec:From-reduce-and-foldleft-to-foldmap}}
@@ -1347,13 +1349,17 @@ $L^{A}$ will have to contain a finite number of values of type $A$,
 and \lstinline!fold(f)(x)! is guaranteed to terminate for any terminating
 function $f:S^{A,Z}\rightarrow Z$.
 
-Instead of working with the general function $\text{fold}_{S}$ and
-defining all recursive types via \lstinline!Fix!, it is more convenient
-to implement and use specialized versions of $\text{fold}_{S}$ for
-already defined recursive types. The general implementation of $\text{fold}_{S}$
-in Eq.~(\ref{eq:fold-via-recursion-scheme-1}) can be translated
-mechanically (e.g., using macros or code generators) into code specialized
-for a given data type and recursion scheme.
+The method $\text{fold}_{S}$ works in the same way for all recursion
+schemes $S$. This makes $\text{fold}_{S}$ powerful but hard to use
+because we need to work with data structures defined via the \lstinline!Fix!
+type constructor. Instead of working with the general function $\text{fold}_{S}$
+and defining all recursive types via \lstinline!Fix!, it is more
+convenient to implement and use a specialized code of $\text{fold}_{S}$
+adapted to the data structure at hand. The general implementation
+of $\text{fold}_{S}$ in Eq.~(\ref{eq:fold-via-recursion-scheme-1})
+can be translated mechanically (in principle, even automatically using
+macros or code generators) into code specialized for a given data
+type and recursion scheme.
 
 For instance, while the type \lstinline!TreeN[A]! is equivalent to
 \lstinline!Fix[S3[A, *]]! shown above, it is easier to work with
@@ -1376,10 +1382,10 @@ like this:
 def printLaTeX[A](tree: TreeN[A]): String = "\\Tree" + foldTreeN[A, String](toLaTeX3)(tree)
 \end{lstlisting}
 
-Another simple example of an aggregation operation that cannot be
-expressed as a traversal is the task of determining the maximum branching
-number of a given rose tree. The function \lstinline!foldTreeN! now
-allows us to implement that:
+An example of an aggregation operation that cannot be expressed as
+a traversal is the task of determining the maximum branching number
+of a given rose tree. The function \lstinline!foldTreeN! now allows
+us to implement that:
 \begin{lstlisting}
 def maxBranching[A]: TreeN[A] => Int = foldTreeN[A, Int] {
   case Left(_)      => 0
@@ -1391,8 +1397,109 @@ scala> maxBranching(x3)
 res2: Int = 2
 \end{lstlisting}
 
+Another example of an operation not expressible via \lstinline!traverse!
+is \lstinline!zipWithDepth!, which we implemented in Section~\ref{subsec:Tasks-not-implementable-via-traverse}
+through custom code. We will now implement \lstinline!zipWithDepth!
+via $\text{fold}_{S}$ specialized to the binary tree recursion scheme
+$S^{A,R}\triangleq A+R\times R$ that defines the tree type constructor
+\lstinline!T2!. The code for the specialized version of $\text{fold}_{S}$
+is:
+\begin{lstlisting}
+type S[A, R] = Either[A, (R, R)]          // Recursion scheme for T2[A].
+def foldT2[A, Z](f: S[A, Z] => Z): T2[A] => Z = {
+  case Leaf(a)        => f(Left(a))
+  case Branch(l, r)   => f(Right((foldT2(f)(l), foldT2(f)(r))))
+}
+\end{lstlisting}
 
-\subsection{Recursion schemes. II. Unfolding operations}
+The function call \lstinline!foldT2(f)! will be able to convert any
+tree into a value of type \lstinline!Z! if we supply a function \lstinline!f!
+of type $A+Z\times Z\rightarrow Z$. It appears that we need the type
+\lstinline!Z! to contain a new depth-indexed tree. The function \lstinline!f!
+will be applied recursively to leaves and branches of a tree. The
+depth-indexed index can be computed correctly only if the type \lstinline!Z!
+somehow keeps track of the current depth in the tree. So, we cannot
+just set \lstinline!Z = T2[(A, Int)]!. We need to use a \lstinline!State!
+monad whose internal state (of type \lstinline!Int!) represents the
+current depth and is updated automatically. Let us define a suitable
+\lstinline!State! monad that we will denote by \lstinline!St! for
+brevity:
+\begin{lstlisting}
+final case class St[A](run: Int => (A, Int))  { // A State monad with internal state of type Int.
+  import io.chymyst.ch.implement                // Derive these methods automatically from types.
+  def flatMap[B](f: A => St[B]): St[B] = implement
+  def map[B](f: A => B): St[B] = implement
+}
+def incrementAndGet: St[Int] = St(s => (s + 1, s + 1))  // Increment the current state value.
+def get: St[Int] = St(s => (s, s))             // Fetch the current state value.
+def set(s: Int): St[Unit] = St(_ => ((), s))   // Set the state, ignore previous state value.
+\end{lstlisting}
+The folding result type \lstinline!Z! will be defined as \lstinline!Z = St[T2[(A, Int)]]!.
+The wrapped value (of type \lstinline!T2[(A, Int)]!) inside the \lstinline!State!
+monad will be the final decorated tree. To extract that tree, we will
+need to build a \lstinline!State! monad program and run it with the
+initial depth value \lstinline!0!. So, we expect the code of \lstinline!zipWithDepth!
+to look like this:
+\begin{lstlisting}
+def zipWithDepth[A](tree: T2[A]): T2[(A, Int)] =
+  foldT2[A, St[T2[(A, Int)]]](f).run(0)._1
+\end{lstlisting}
+
+It remains to implement a suitable function \lstinline!f! to which
+we will apply \lstinline!foldT2!. The value of the internal state
+represents the current depth of the tree element. We need to increment
+that depth whenever we find a branch and then traverse the two subtrees
+starting from the same depth value. The final code is:
+\begin{lstlisting}
+def zipWithDepth[A](tree: T2[A]): T2[(A, Int)] = foldT2[A, St[T2[(A, Int)]]] {
+  case Left(a) => for { s <- get } yield Leaf((a, s))   // Put the current depth into the Leaf value.
+  case Right((l, r))   => for {
+    s <- incrementAndGet   // Read the current depth after incrementing it.
+    x <- l                 // Traverse the left branch starting from depth `s`.
+    _ <- set(s)            // Set the same initial depth `s` for traversing the right branch.       
+    y <- r                 // Traverse the right branch.
+  } yield Branch(x, y)
+}(tree).run(0)._1
+\end{lstlisting}
+Here we need to use the \lstinline!State! monad\textsf{'}s method \lstinline!set(s)!
+with a value \lstinline!s! obtained from a previous monadic computation.
+
+To test the code, apply \lstinline!zipWithDepth! to a sample tree
+\lstinline!t2! used earlier in Sections~\ref{subsec:Decorating-a-tree-breadth-first-traversal}
+and~\ref{subsec:Tasks-not-implementable-via-traverse}:
+
+\begin{wrapfigure}{l}{0.78\columnwidth}%
+\vspace{-0.75\baselineskip}
+\begin{lstlisting}
+scala> zipWithDepth(t2)
+res0: T2[(Int, Int)] = Branch(Leaf((8, 1)), Branch(Branch(Leaf((3, 3)), Leaf((5, 3))), Leaf((4, 2))))
+\end{lstlisting}
+
+\vspace{-0.5\baselineskip}
+\end{wrapfigure}%
+
+\noindent ~{\tiny{}\Tree[ (8,1) [ [ (3,3) (5,3) ] (4,2) ] ]}
+
+\noindent ~
+
+Note that the the actually used type of \lstinline!foldT2! is somewhat
+similar to the type of \lstinline!traverse!:
+\begin{align*}
+ & \text{foldT2}:\big(S^{A,F^{L^{B}}}\rightarrow F^{L^{B}}\big)\rightarrow L^{A}\rightarrow F^{L^{B}}\quad,\\
+ & \text{trav}_{L}:(A\rightarrow F^{B})\rightarrow L^{A}\rightarrow F^{L^{B}}\quad.
+\end{align*}
+(Here $L=\text{T2}$ and $S$ is its recursion scheme.) We apply \lstinline!foldT2!
+to a function $f:S^{A,F^{L^{B}}}\rightarrow F^{L^{B}}$ whose $F$-effect
+is \emph{not} equivalent to an applicative functor\textsf{'}s effect: The function
+$f$ assigns the \lstinline!State! monad\textsf{'}s internal state to a previously
+computed value, which applicative effects cannot depend on a previous
+value. A recursion scheme-based folding ($\text{fold}_{S}$) can use
+arbitrary functors $F$, including monads. This is more powerful than
+the plain traversal, $\text{trav}_{L}(f^{:A\rightarrow F^{B}})$,
+that may only use applicative functors $F$. Because of that extra
+power, we were able to implement \lstinline!zipWithDepth! via $\text{fold}_{S}$.
+
+\subsection{Recursion schemes. II. Unfolding operations\label{subsec:Recursion-schemes.-II.unfolding}}
 
 A folding operation converts a collection to a single value. The opposite
 operation is \textsf{``}unfolding\textsf{''}: converting a single value into a collection.
@@ -1710,118 +1817,6 @@ res0: T2[Int] = Branch(Leaf(1), Branch(Leaf(2), Branch(Leaf(3), Branch(Leaf(4), 
 \end{wrapfigure}%
 
 \noindent ~{\tiny{}\Tree[ 1 [ 2  [3 [ 4 -1 ] ] ] ]}
-
-\subsection{Recursion schemes. III. Traversing operations}
-
-Folding with a recursion scheme ($\text{fold}_{S}$) allows us to
-implement operations such as \lstinline!printLaTeXSubtree! (Section~\ref{subsec:Recursion-schemes.-folding})
-that cannot be expressed via ordinary \lstinline!fold! or \lstinline!traverse!
-functions. Another operation not expressible via \lstinline!traverse!
-is \lstinline!zipWithDepth!, which we implemented in Section~\ref{subsec:Tasks-not-implementable-via-traverse}
-through custom code. We will now implement \lstinline!zipWithDepth!
-via a more general traversal operation ($\text{trav}_{S}$) parameterized
-by an arbitrary recursion scheme $S$ and an arbitrary functor $F$
-(not necessarily applicative!).
-
-To figure out the type signature of $\text{trav}_{S}$, consider the
-relationship between \lstinline!foldMap!, $\text{fold}_{S}$, and
-the ordinary \lstinline!traverse! (denoted $\text{trav}_{L}$):
-\begin{align*}
- & \text{foldMap}_{L}(f^{:A\rightarrow Z}):L^{A}\rightarrow Z\quad,\quad\quad\text{trav}_{L}(f^{:A\rightarrow F^{B}}):L^{A}\rightarrow F^{L^{B}}\quad,\\
- & \text{fold}_{S}(f^{:S^{A,Z}\rightarrow Z}):L^{A}\rightarrow Z\quad,\quad\quad\text{trav}_{S}(f^{:???}):L^{A}\rightarrow F^{L^{B}}\quad.
-\end{align*}
-We recover \lstinline!foldMap! from \lstinline!traverse! by setting
-the applicative functor $F$ as $F^{B}\triangleq Z$. So, we expect
-to obtain the type signature of $\text{trav}_{S}$ from the type signature
-of $\text{fold}_{S}$ if we replace $Z$ by $F^{L^{B}}$. The first
-argument $f$ of $\text{trav}_{S}$ will then have the type $S^{A,F^{L^{B}}}\rightarrow F^{L^{B}}$:
-\[
-\text{trav}_{S}:(S^{A,F^{L^{B}}}\rightarrow F^{L^{B}})\rightarrow L^{A}\rightarrow F^{L^{B}}\quad.
-\]
-To implement this method, begin with the type equivalence $L^{A}\cong S^{A,L^{A}}$.
-We can apply $\text{trav}_{S}(f)$ recursively to the values of type
-$L^{A}$ stored inside $S^{A,L^{A}}$ and obtain a value of type $S^{A,F^{L^{B}}}$:
-\[
-\big(s^{:S^{A,L^{A}}}\triangleright\,\overline{\text{trav}_{S}(f)}^{\uparrow S^{A,\bullet}}\big):S^{A,F^{L^{B}}}\quad.
-\]
-It remains to apply $f$ to the last obtained value. This completes
-the code of $\text{trav}_{S}$: 
-\[
-\text{trav}_{S}\big(f^{:S^{A,F^{L^{B}}}\rightarrow F^{L^{B}}}\big)\triangleq\overline{\text{trav}_{S}(f)}^{\uparrow S^{A,\bullet}}\bef f\quad.
-\]
-
-The method $\text{trav}_{S}$ works in the same way for all recursion
-schemes $S$ and for all type constructors $F$. This makes $\text{trav}_{S}$
-powerful but hard to use because we need to work with data structures
-defined via the \lstinline!Fix! type constructor. It is easier to
-use a specialized version of $\text{trav}_{S}$ for the data structure
-at hand, similarly to what we did in the previous sections for folding
-and unfolding. 
-
-To illustrate this, let us implement \lstinline!zipWithDepth! via
-$\text{trav}_{S}$ with a binary tree recursion scheme. We will use
-the \lstinline!State! monad as the functor $F$:
-\begin{lstlisting}
-final case class St[A](run: Int => (A, Int))  { // A State monad with internal state of type Int.
-  import io.chymyst.ch.implement                // Derive these methods automatically from types.
-  def flatMap[B](f: A => St[B]): St[B] = implement
-  def map[B](f: A => B): St[B] = implement
-}
-def incrementAndGet: St[Int] = St(s => (s + 1, s + 1))  // Increment the current state value.
-def get: St[Int] = St(s => (s, s))             // Fetch the current state value.
-def set(s: Int): St[Unit] = St(_ => ((), s))   // Set the state, ignore previous state value.
-\end{lstlisting}
-Next, define the recursion scheme $S^{A,R}$ and a specialized version
-of $\text{trav}_{S}$ for trees of type \lstinline!T2[A]!:
-\begin{lstlisting}
-type S[A, R] = Either[A, (R, R)]          // Recursion scheme for T2[A].
-def travT2[A, B, F[_]](f: S[A, F[T2[B]]] => F[T2[B]]): T2[A] => F[T2[B]] = {
-  case Leaf(a)        => f(Left(a))
-  case Branch(l, r)   => f(Right((travT2(f)(l), travT2(f)(r))))
-}
-\end{lstlisting}
-It remains to apply \lstinline!travT2! to a suitable function \lstinline!f!.
-The value of the internal state will represent the current depth of
-the tree element. We need to increment the depth whenever we find
-a branch and then traverse the two subtrees starting from the same
-depth value. The code is:
-\begin{lstlisting}
-def zipWithDepth[A](tree: T2[A]): T2[(A, Int)] = travS[A, (A, Int), St] {
-  case Left(a) => for { s <- get } yield Leaf((a, s))   // Put the current depth into the Leaf value.
-  case Right((l, r))   => for {
-    s <- incrementAndGet   // Read the current depth after incrementing it.
-    x <- l                 // Traverse the left branch starting from depth `s`.
-    _ <- set(s)            // Set the same initial depth `s` for traversing the right branch.       
-    y <- r                 // Traverse the right branch.
-  } yield Branch(x, y)
-}(tree).run(0)._1
-\end{lstlisting}
-To test the code, apply \lstinline!zipWithDepth! to a sample tree
-\lstinline!t2! used earlier in Sections~\ref{subsec:Decorating-a-tree-breadth-first-traversal}
-and~\ref{subsec:Tasks-not-implementable-via-traverse}:
-
-\begin{wrapfigure}{l}{0.78\columnwidth}%
-\vspace{-0.75\baselineskip}
-\begin{lstlisting}
-scala> zipWithDepth(t2)
-res0: T2[(Int, Int)] = Branch(Leaf((8, 1)), Branch(Branch(Leaf((3, 3)), Leaf((5, 3))), Leaf((4, 2))))
-\end{lstlisting}
-
-\vspace{-0.5\baselineskip}
-\end{wrapfigure}%
-
-\noindent ~{\tiny{}\Tree[ (8,1) [ [ (3,3) (5,3) ] (4,2) ] ]}
-
-\noindent ~
-
-Here we need to use the \lstinline!State! monad\textsf{'}s method \lstinline!set(s)!
-with a value \lstinline!s! obtained from a previous monadic computation.
-So, the code involves $\text{trav}_{S}(f)$ with a function $f:S^{A,F^{L^{B}}}\rightarrow F^{L^{B}}$
-whose $F$-effect is \emph{not} equivalent to an applicative functor\textsf{'}s
-effect (which cannot depend on a previously computed value). We can
-see that the recursion scheme-based traversal ($\text{trav}_{S}$)
-is more powerful than the plain traversal, $\text{trav}_{L}(f^{:A\rightarrow F^{B}})$,
-that may only use $F$\textsf{'}s applicative functor methods.
 
 \subsection{Exercises\index{exercises}}
 
@@ -4156,6 +4151,164 @@ morphism $\phi:F^{A}\rightarrow G^{A}$, the following equation holds:
 
 \section{Discussion and further developments}
 
+\subsection{Recursion schemes and structure-preserving maps}
+
+Sections~\ref{subsec:Recursion-schemes.-folding} and~\ref{subsec:Recursion-schemes.-II.unfolding}
+show the general \textsf{``}folding\textsf{''} and \textsf{``}unfolding\textsf{''} operations that
+work in the same way for all recursion schemes. It turns out that
+those operations are mathematically unique. We will now prove that
+there is only one \textsf{``}folding\textsf{''} function and only one \textsf{``}unfolding\textsf{''}
+function obeying appropriate laws. 
+
+What are those laws? The \textsf{``}folding\textsf{''} function had the type signature:
+\[
+\text{fold}_{S}:(S^{A,Z}\rightarrow Z)\rightarrow L^{A}\rightarrow Z\quad.
+\]
+Given $f:S^{A,Z}\rightarrow Z$, the function $\text{fold}_{S}(f)$
+transforms a value of type $L^{A}$ into a value of type $Z$. Here,
+the type $L^{A}$ is defined recursively via the equation $L^{A}\triangleq S^{A,L^{A}}$
+while the type $Z$ is arbitrary. 
+
+It is actually not so important that $L^{A}$ is a data structure
+with a type parameter, because the code of $\text{fold}_{S}$ always
+keeps $A$ fixed. So, we may simplify our considerations by eliminating
+the type parameter $A$. We replace the recursion scheme $S^{A,R}$
+by just $S^{R}$ (where $S$ is a functor) and the type $L^{A}$ by
+a type $T$ defined by the recursive equation $T\triangleq S^{T}$.
+Then the type of $\text{fold}_{S}$ is simplified to:
+\[
+\text{fold}_{S}:(S^{Z}\rightarrow Z)\rightarrow T\rightarrow Z\quad.
+\]
+
+At first sight, the types $T$ and $Z$ have nothing in common. However,
+we need to keep in mind that $T$ is equivalent to $S^{T}$ by definition
+of the recursive type $T$. The equivalent types $T$ and $S^{T}$
+are related by a pair of isomorphisms that we may call \lstinline!fix!
+and \lstinline!unfix!:
+\[
+\text{fix}:S^{T}\rightarrow T\quad,\quad\text{unfix}:T\rightarrow S^{T}\quad,\quad\text{fix}\bef\text{unfix}=\text{id}\quad,\quad\text{unfix}\bef\text{fix}=\text{id}\quad.
+\]
+We consider the functions \lstinline!fix! and \lstinline!unfix!
+as given. The type signature of $\text{fold}_{S}$ requires a function
+of type $S^{Z}\rightarrow Z$, which is similar to the type of \lstinline!fix!.
+So, inside the function body of $\text{fold}_{S}(f)$, we have types
+$T$ and $Z$ for which functions of types $S^{T}\rightarrow T$ and
+$S^{Z}\rightarrow Z$ are available.
+
+It is useful at this point to borrow some terminology from category
+theory where an object $Z$ with a morphism of type $S^{Z}\rightarrow Z$
+has a special name. The object $Z$ is called a \textbf{functor algebra}
+on the functor $S$, and\index{functor algebra} the morphism of type
+$S^{Z}\rightarrow Z$ is called the algebra\textsf{'}s \textbf{structure map}.\index{functor algebra!structure map}\footnote{In the mathematical literature, a functor algebra on a functor $F$
+is commonly referred to as an $F$\textbf{-algebra}\index{$F$-algebra!see functor algebra}.
+That terminology is rather inconvenient because the relevant functor
+is not always called $F$.}
+
+From a programmer\textsf{'}s viewpoint, an intuitive picture is that the type
+$Z$ must be able somehow to absorb information from the type $S^{Z}$.
+For instance, if $S$ is a recursion scheme for a binary tree (such
+as, $S^{R}=A+R\times R$ for \lstinline!T2!) then the type $S^{Z}\rightarrow Z$
+is equivalent to the product type $(A\rightarrow Z)\times(Z\times Z\rightarrow Z)$.
+So, $Z$ must support an operation that maps a tree leaf (of some
+fixed type $A$) into a value of type $Z$, and also an operation
+that maps two tree branches (both of type $Z$) into another value
+of type $Z$. Those operations are automatically \textsf{``}induced\textsf{''} by
+the recursion scheme $S$. The type $T$ must also support the same
+operations.
+
+So, both types $T$ and $Z$ have the property of being functor algebras
+on $S$. In other words, both types $T$ and $Z$ have operations
+induced by the recursion scheme $S$. It is then natural to expect
+that a useful map between values of types $T$ and $Z$ should preserve
+the structure of those operations. The mathematical formulation of
+that requirement is called the law of \textsf{``}\index{functor algebra!morphism law}functor
+algebra morphisms\textsf{''}.
+
+\subsubsection{Definition \label{subsec:Definition-functor-algebra}\ref{subsec:Definition-functor-algebra}}
+
+Given a functor $S$ and two $S$-functor algebras $X,$$Y$, with
+given structure maps $p_{X}:S^{X}\rightarrow X$ and $p_{Y}:S^{Y}\rightarrow Y$,
+a function $f:X\rightarrow Y$ is called a \textbf{functor algebra
+morphism}\index{functor algebra morphism} if the following law holds:
+\[
+\xymatrix{\xyScaleY{1.4pc}\xyScaleX{3.0pc}S^{X}\ar[r]\sp(0.5){\ p_{X}}\ar[d]\sp(0.45){\,f^{\uparrow S}} & X\ar[d]\sp(0.45){\,f}\\
+S^{Y}\ar[r]\sp(0.5){~p_{Y}} & Y
+}
+\]
+\begin{equation}
+p_{X}\bef f=f^{\uparrow S}\bef p_{Y}\quad.\label{eq:p-algebra-morphism-law-1}
+\end{equation}
+$\square$
+
+Suppose we are given a function $p_{Z}:S^{Z}\rightarrow Z$, which
+makes a type $Z$ into an $S$-functor algebra. Then it turns out
+that $\text{fold}_{S}(p_{Z}):T\rightarrow Z$ is a functor algebra
+morphism between $T$ and $Z$. In other words, the function $\text{fold}_{S}(p_{Z})$
+preserves the operations induced by the recursion scheme $S$.
+
+\subsubsection{Statement \label{subsec:Statement-catamorphism}\ref{subsec:Statement-catamorphism}}
+
+Consider a functor $S$ and a recursive type $T$ defined by $T\triangleq S^{T}$.
+The functions \lstinline!fix! $:S^{T}\rightarrow T$ and \lstinline!unfix!
+$:T\rightarrow S^{T}$ are assumed to be given. For any type $Z$
+and any function $g:S^{Z}\rightarrow Z$, define $f:T\rightarrow Z$
+by $f\triangleq\text{fold}_{S}(g)$, where $\text{fold}_{S}$ is defined
+in Section~\ref{subsec:Recursion-schemes.-folding}. Then $f$ is
+a functor algebra morphism: it obeys Eq.~(\ref{eq:p-algebra-morphism-law-1})
+with $X=T$, $p_{X}=\text{fix}$, $Y=Z$, $p_{Y}=g$. 
+
+\subparagraph{Proof}
+
+The functor algebra morphism law~(\ref{eq:p-algebra-morphism-law-1})
+of $f$ is:
+\[
+\text{fix}\bef f\overset{?}{=}f^{\uparrow S}\bef g\quad.
+\]
+Write the code of $f\triangleq\text{fold}_{S}(g)$:
+\[
+f:T\rightarrow Z\quad,\quad\quad f\triangleq\text{unfix}\bef\overline{f}^{\uparrow S}\bef g\quad.
+\]
+Pre-compose \lstinline!fix! to both sides of the equation for $f$:
+\begin{align*}
+ & \text{fix}\bef f=\gunderline{\text{fix}\bef\text{unfix}}\bef\overline{f}^{\uparrow S}\bef g\\
+{\color{greenunder}\text{recall that }\text{fix}\bef\text{unfix}=\text{id}:}\quad & =\overline{f}^{\uparrow S}\bef g\quad.
+\end{align*}
+We have obtained the required law. $\square$
+
+A similar property holds for the function \lstinline!unfold!. For
+any function $g:Z\rightarrow S^{Z}$ we define $f:Z\rightarrow T$
+by $f\triangleq\text{unfold}_{S}(g)$. Then we will have:
+\[
+f\bef\text{unfix}=g\bef f^{\uparrow S}\quad.
+\]
+This property is called the \textsf{``}$S$-\index{functor coalgebra morphism law}\textbf{functor
+coalgebra morphism} law\textsf{''} in category theory. Intuitively, it means
+that the function $f$, in a certain precise sense, preserves the
+operations required by the recursion scheme $S$. 
+
+The proof is analogous to that of Statement~\ref{subsec:Statement-catamorphism}.
+Write the code of $f\triangleq\text{unfold}_{S}(g)$:
+\[
+f\triangleq g\bef f^{\uparrow S}\bef\text{fix}\quad.
+\]
+It remains to compose \lstinline!unfix! with both sides of the equation
+above:
+\[
+f\bef\text{unfix}=g\bef f^{\uparrow S}\bef\gunderline{\text{fix}\bef\text{unfix}}=g\bef f^{\uparrow S}\quad.
+\]
+This proves the functor coalgebra morphism law for $f$.
+
+Note that these properties of $\text{fold}_{S}(g)$ and $\text{unfold}_{S}(g)$
+hold only under the assumption that the resulting functions terminate.
+The proofs do not show that those functions must terminate. As we
+have seen, functions obtained via \lstinline!fold! and \lstinline!unfold!
+will in some cases loop forever. The laws only hold when the functions
+do not generate infinite loops.
+
+In the mathematical literature, the function $\text{fold}_{S}$ is
+called a \textbf{catamorphism}\index{catamorphism}, and $\text{unfold}_{S}$
+is called an \index{anamorphism}\textbf{anamorphism}.
+
 \subsection{The missing laws of \texttt{traverse} and \texttt{zipWithIndex}\label{subsec:Laws-of-traverse-and-zipWithIndex}}
 
 The two laws of \lstinline!traverse! shown in this chapter do \emph{not}
@@ -4661,11 +4814,10 @@ This function is not useful because it ignores its argument $p$.
 In most of this book, recursive type constructors are defined via
 equations of the form $L^{A}\triangleq S^{A,L^{A}}$, where $S$ is
 a recursion scheme. We have seen one example of a recursive type constructor
-(a perfect-shaped tree, Sections~\ref{subsec:Perfect-shaped-trees}
-and~\ref{subsec:Example-traversal-perfect-shaped-tree}) that cannot
-be defined in this way. The reason is that the recursive type equation
-for a perfect-shaped binary tree\index{perfect-shaped tree} $\text{PT}$
-is:
+that cannot be defined in this way: a perfect-shaped tree (see Section~\ref{subsec:Perfect-shaped-trees}
+and Example~\ref{subsec:Example-traversal-perfect-shaped-tree}).
+The recursive type equation for a perfect-shaped binary tree\index{perfect-shaped tree}
+($\text{PT}$) is:
 \begin{equation}
 \text{PT}^{A}\triangleq A+\text{PT}^{A\times A}\quad.\label{eq:perfect-shaped-binary-tree-type-equation}
 \end{equation}
@@ -4673,7 +4825,8 @@ This type equation is not of the form $\text{PT}^{A}\triangleq S^{A,\text{PT}^{A
 because the recursive use of $\text{PT}$ contains a nontrivial type
 expression ($A\times A$) instead of just $A$. To express the type
 equation~(\ref{eq:perfect-shaped-binary-tree-type-equation}) via
-a recursion scheme, we introduce an additional functor $P$ and write:
+a recursion scheme, we need to introduce an additional functor $P$
+and write:
 \[
 \text{PT}^{A}\triangleq S^{A,\text{PT}^{P^{A}}}\quad,\quad\quad P^{A}\triangleq A\times A\quad.
 \]
