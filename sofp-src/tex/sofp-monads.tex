@@ -291,18 +291,20 @@ scala> for {
 res0: Seq[String] = List(aaa, aab, aac, aba, abb, abc, aca, acb, acc, baa, bab, bac, bba, bbb, bbc, bca, bcb, bcc, caa, cab, cac, cba, cbb, cbc, cca, ccb, ccc)
 \end{lstlisting}
 To obtain all permutations and nothing else, we need to exclude all
-repeated subsequences such as \lstinline!"aab"!. To achieve that,
-we must make \lstinline!y! iterate over letters that do not include
-the current value of \lstinline!x!:
+repeated subsequences such as \lstinline!"aab"!. We use the inline
+\textsf{``}\lstinline!if!\textsf{''} syntax to let \lstinline!y! iterate over letters
+different from the previously chosen values of \lstinline!x!, and
+to let \lstinline!z! iterate over letters different from the previously
+chosen \lstinline!x! and \lstinline!y!: 
 \begin{lstlisting}
-val xs = Seq("a", "b", "c")
+val letters = Seq("a", "b", "c")
 
 scala> for {
-      x <- xs
-      xsWithoutX = xs.filter(_ != x)
-      y <- xsWithoutX
-      xsWithoutXY = xsWithoutX.filter(_ != y)
-      z <- xsWithoutXY
+      x <- letters
+      y <- letters
+      if y != x
+      z <- letters
+      if z != x && z != y
 } yield x + y + z
 res1: Seq[String] = List(abc, acb, bac, bca, cab, cba) 
 \end{lstlisting}
@@ -4971,7 +4973,10 @@ a law-checking test function can be defined by:
 abstract class Monad[F[_]: Functor : Semi-monad] {
   def pure[A](a: A): F[A]
 }
-def checkMonadIdentityLaws[F[_], A, B]()(implicit mf: Monad[F], sf: Semi-monad[F],
+object Monad { // For convenience: enables Monad[F].pure() syntax.
+  def apply[F[_]: Monad]: Monad[F] = implicitly[Monad[F]]
+}
+def checkMonadIdentityLaws[F[_], A, B]()(implicit mf: Monad[F], sf: Semimonad[F],
       aa: Arbitrary[A], af: Arbitrary[F[A]], ab: Arbitrary[A => F[B]]) = {
     forAll { (x: A, g: A => F[B]) =>               
       mf.pure(x).flatMap(g) shouldEqual g(x)   // Left identity law.
@@ -6026,9 +6031,9 @@ is $L^{A}\triangleq Z\rightarrow F^{A}$.
 As with other monads of function type, derivations are made shorter
 by using the flipped Kleisli trick. We assume that $F$\textsf{'}s Kleisli
 composition $\diamond_{_{F}}$ is known and obeys the associativity
-law. When $F$ is a monad, we also assume that its pure method $\text{pu}_{F}$
-is known and obeys the identity laws. For the monad $L$, we will
-now define the \index{flipped@\textsf{``}flipped Kleisli\textsf{''} technique}flipped
+law. When $F$ is a monad, we also assume that its \lstinline!pure!
+method ($\text{pu}_{F}$) is known and obeys the identity laws. For
+the monad $L$, we will now define the \index{flipped@\textsf{``}flipped Kleisli\textsf{''} technique}flipped
 Kleisli composition $\tilde{\diamond}_{_{L}}$ and prove its laws.
 
 The ordinary Kleisli functions have types $A\rightarrow Z\rightarrow F^{B}$,
@@ -6071,7 +6076,7 @@ and \lstinline!pure!:
 \begin{lstlisting}
 type L[A] = Z => F[A]           // A type Z and a semi-monad F must be already defined.
 def flatMap_L[A, B](la: L[A])(f: A => L[B]): L[B] = { z => la(z).flatMap(a => f(a)(z)) }
-def pure_L[A](a: A): L[A] = { _ => implicitly[Monad[F]].pure(a) }
+def pure_L[A](a: A): L[A] = { _ => Monad[F].pure(a) }
 \end{lstlisting}
 
 
@@ -6632,21 +6637,23 @@ an explicit derivation.
 \subsubsection{Exercise \label{subsec:Exercise-1-monads-3}\ref{subsec:Exercise-1-monads-3}}
 
 The naturality law~(\ref{eq:naturality-law-of-flatten}) of \lstinline!flatten!
-is written in the code notation as:\index{naturality law!of flatten@of \lstinline!flatten!}
+is written as:\index{naturality law!of flatten@of \lstinline!flatten!}
 \[
 f^{\uparrow S\uparrow S}\bef\text{ftn}_{S}=\text{ftn}_{S}\bef f^{\uparrow S}\quad.
 \]
 Show that one \emph{cannot} replace $f^{\uparrow S}$ in that law
-by an arbitrary function $g:S^{A}\rightarrow S^{B}$. Find a counterexample
+by an arbitrary function $g:S^{A}\rightarrow S^{B}$. (Find a counterexample
 with a specific $S$, $A$, $B$, and $g:S^{A}\rightarrow S^{B}$
-for which $g^{\uparrow S}\bef\text{ftn}_{S}\neq\text{ftn}_{S}\bef g$.
+for which $g^{\uparrow S}\bef\text{ftn}_{S}\neq\text{ftn}_{S}\bef g$.)
 
 \subsubsection{Exercise \label{subsec:Exercise-1-monads-3-1}\ref{subsec:Exercise-1-monads-3-1}}
 
 Show that the laws hold for a non-standard \lstinline!List! monad
-whose \lstinline!flatten! method is:\index{monads!List monad with empty sub-lists@\texttt{List} monad with empty sub-lists}
+whose \lstinline!pure! method remains unchanged but the \lstinline!flatten!
+method is:\index{monads!List monad with empty sub-lists@\texttt{List} monad with empty sub-lists}
 \begin{lstlisting}
-def flatten[A](p: List[List[A]]): List[A] = if (p.exists(_.isEmpty)) Nil else p.flatten
+def flatten[A](p: List[List[A]]): List[A] =
+  if (p.exists(_.isEmpty)) Nil else p.flatten
 \end{lstlisting}
 
 
@@ -6662,13 +6669,12 @@ monad.)
 \subsubsection{Exercise \label{subsec:Exercise-1-monads-4}\ref{subsec:Exercise-1-monads-4}}
 
 Given an arbitrary monad $M$, show that the functor $F^{A}\triangleq\bbnum 2\times M^{A}$
-(which is equivalent to $M^{A}+M^{A}$) is a semi-monad but not a
-full monad.
+(which is equivalent to $M^{A}+M^{A}$) is a semi-monad but not always
+a monad.
 
 \subsubsection{Exercise \label{subsec:Exercise-1-monads-9}\ref{subsec:Exercise-1-monads-9}}
 
-Show that $P^{A}\triangleq Z+W\times A$ is a (full) monad if $W$
-is a monoid.
+Show that $P^{A}\triangleq Z+W\times A$ is a monad if $W$ is a monoid.
 
 \subsubsection{Exercise \label{subsec:Exercise-1-monads-5}\ref{subsec:Exercise-1-monads-5}}
 
@@ -6808,14 +6814,15 @@ are monads:
 
 \textbf{(b)} A polynomial functor $F^{A}\triangleq p(A)$ when $p(x)$
 is a polynomial of the form $p(x)=x^{n_{1}}+x^{n_{2}}+...+x^{n_{k}}$
-with some distinct positive integers $n_{1}<...<n_{k}$. For example,
-$F^{A}\triangleq A\times A+A\times A\times A+A\times A\times A\times A\times A$. 
+with some integers $1\leq n_{1}<...<n_{k}$. For example, the polynomial
+$p(x)=x^{2}+x^{3}+x^{5}$ gives $F^{A}\triangleq A\times A+A\times A\times A+A\times A\times A\times A\times A$.
+(Note that these rules do not allow $p(x)=1+x^{2}$.)
 
 \textbf{(c)} A polynomial functor $F^{A}\triangleq p(A)$ when $p(x)$
 is a polynomial of the form $p(x)=c_{1}x^{n_{1}}+c_{2}x^{n_{2}}+...+c_{k-1}x^{n_{k-1}}+x^{n_{k}}$
-with some distinct positive integers $n_{1}<...<n_{k}$ and some positive
-integers $c_{1}$, ..., $c_{k-1}$; the coefficient at the highest
-power ($x^{n_{k}}$) \emph{must} be $1$. For example, $F^{A}\triangleq\bbnum 5\times A+\bbnum 2\times A\times A\times A+A\times A\times A\times A$.
+with some integers $1\leq n_{1}<...<n_{k}$ and some positive integers
+$c_{1}$, ..., $c_{k-1}$; the coefficient at the highest power ($x^{n_{k}}$)
+\emph{must} be $1$. For example, $F^{A}\triangleq\bbnum 5\times A+\bbnum 2\times A\times A\times A+A\times A\times A\times A$.
 
 \subsubsection{Exercise \label{subsec:Exercise-monad-composition-mm}\ref{subsec:Exercise-monad-composition-mm}}
 
@@ -6849,7 +6856,7 @@ the right identity law:
 The left-hand side equals $\text{flm}_{M}(f\bef\text{pu}_{M})$. We
 found a formula that expresses \lstinline!map! through \lstinline!flatMap!:
 \begin{lstlisting}
-p.map(f) == p.flatMap(f andThen M.pure)
+p.map(f) == p.flatMap(f andThen Monad[M].pure)
 \end{lstlisting}
 \begin{equation}
 f^{\uparrow M}=\text{flm}_{M}(f\bef\text{pu}_{M})\quad.\label{eq:express-map-through-flatMap}
@@ -6881,10 +6888,9 @@ say that \lstinline!flatten! has the functionality of \lstinline!flatMap!
 without \lstinline!map!.
 
 In the previous chapter, we have seen that the laws of filterable
-functors are straightforwardly adapted to filterable contrafunctors.
-Could we do that with monads to obtain \textsf{``}contramonads\textsf{''}? It turns
-out that nontrivial \textsf{``}contramonads\index{contramonads}\textsf{''} do not
-exist. 
+functors are straightforwardly adapted to contrafunctors. Could we
+do that with monads to obtain \textsf{``}contramonads\textsf{''}? It turns out that
+nontrivial \textsf{``}contramonads\index{contramonads}\textsf{''} do not exist. 
 
 The first problem is defining a method analogous to \lstinline!flatMap!
 for contrafunctors. We turn to category theory (Section~\ref{subsec:Motivation-for-using-category-theory})
@@ -6930,7 +6936,8 @@ The method \lstinline!pure! for a contrafunctor $H$ is equivalent
 to a value $\text{wu}_{H}$ of type $H^{\bbnum 1}$ (Section~\ref{subsec:Pointed-contrafunctors}).
 In other words, the naturality law for $\text{pu}_{H}:A\rightarrow H^{A}$
 forces it to be a function that ignores its argument and always returns
-a fixed value of type $H^{A}$, denoted by $\text{cpu}_{H}$ in Sections~\ref{subsec:Co-pointed-functors}\textendash \ref{subsec:Pointed-contrafunctors}:
+a fixed value of type $H^{A}$. That function was denoted by $\text{cpu}_{H}$
+in Sections~\ref{subsec:Co-pointed-functors}\textendash \ref{subsec:Pointed-contrafunctors}:
 \[
 \text{pu}_{H}=\_^{:A}\rightarrow\text{cpu}_{H}^{A}=\_^{:A}\rightarrow\text{wu}_{H}\triangleright(\_^{:A}\rightarrow1)^{\downarrow H}\quad.
 \]
@@ -6940,11 +6947,12 @@ gives:
 \[
 f^{\downarrow H}=\text{cflm}_{H}(f\bef\text{pu}_{H})=\text{cflm}_{H}(\text{pu}_{H})=\text{id}\quad.
 \]
-The equation $f^{\downarrow H}=\text{id}$ holds only for constant
-contrafunctors $H^{A}\triangleq Z$ (with some fixed type $Z$). Constant
-contrafunctors are functors at the same time. We know from Section~\ref{subsec:Structural-analysis-of-monads}
+The equation $f^{\downarrow H}=\text{id}$ holds for any $f$ only
+with constant contrafunctors $H^{A}\triangleq Z$ (where $Z$ is a
+fixed type). Constant contrafunctors are functors at the same time.
+We know from Section~\ref{subsec:Structural-analysis-of-monads}
 that constant functors $F^{A}=Z$ are monads only when $Z=\bbnum 1$.
-So, nontrivial \textsf{``}contramonads\textsf{''} are not possible. 
+So, there are no nontrivial \textsf{``}contramonads\textsf{''}. 
 
 \subsection{Equivalence of natural transformations. Yoneda identities\label{subsec:Yoneda-identities}}
 
@@ -7007,7 +7015,7 @@ h=t^{Z}(\text{id}^{:Z\rightarrow Z})\quad,\quad\quad t^{A}(k^{:A\rightarrow Z})=
 the contrafunctor laws of $H$.
 
 \textbf{(a)} Given a value $h:H^{Z}$, we define $t$ via $h$ as
-$t(k)\triangleq h\triangleright k^{\downarrow H}$. Then we define
+$t(g)\triangleq h\triangleright g^{\downarrow H}$. Then we define
 a new $h'$ via $t$ as $h'\triangleq t(\text{id})$. We need to prove
 that $h'=h$:
 \[
@@ -7016,7 +7024,7 @@ h'=t(\text{id})=h\triangleright\gunderline{\text{id}^{\downarrow H}}=h\quad.
 If $t$ is defined via $h$ then $t$ will automatically satisfy the
 naturality law~(\ref{eq:naturality-law-of-t-for-contravariant-Yoneda}):
 \[
-(\gunderline{t(k)})\triangleright f^{\downarrow H}=h\triangleright\gunderline{k^{\downarrow H}\triangleright f^{\downarrow H}}=h\triangleright\gunderline{k^{\downarrow H}\bef f^{\downarrow H}}=h\triangleright(f\bef k)^{\downarrow H}\quad.
+(\gunderline{t(g)})\triangleright f^{\downarrow H}=h\triangleright\gunderline{g^{\downarrow H}\triangleright f^{\downarrow H}}=h\triangleright\gunderline{g^{\downarrow H}\bef f^{\downarrow H}}=h\triangleright(f\bef g)^{\downarrow H}=t(f\bef g)\quad.
 \]
 
 \textbf{(b)} Given a value $t:\forall A.\,(A\rightarrow Z)\rightarrow H^{A}$,
@@ -7059,7 +7067,7 @@ h=t^{Z}(\text{id}^{:Z\rightarrow Z})\quad,\quad\quad t^{A}(k^{:Z\rightarrow A})=
 the functor laws of $H$.
 
 \textbf{(a)} Given a value $h:H^{Z}$, we define $t$ via $h$ as
-$t(k)\triangleq h\triangleright k^{\uparrow H}$. Then we define a
+$t(g)\triangleq h\triangleright g^{\uparrow H}$. Then we define a
 new $h'$ via $t$ as $h'\triangleq t(\text{id})$. We need to prove
 that $h'=h$:
 \[
@@ -7068,7 +7076,7 @@ h'=t(\text{id})=h\triangleright\gunderline{\text{id}^{\uparrow H}}=h\quad.
 If $t$ is defined via $h$ then $t$ will automatically satisfy the
 naturality law~(\ref{eq:naturality-law-of-t-for-covariant-Yoneda}):
 \[
-(\gunderline{t(k)})\triangleright f^{\uparrow H}=h\triangleright\gunderline{k^{\uparrow H}\triangleright f^{\uparrow H}}=h\triangleright\gunderline{k^{\uparrow H}\bef f^{\uparrow H}}=h\triangleright(k\bef f)^{\uparrow H}\quad.
+(\gunderline{t(g)})\triangleright f^{\uparrow H}=h\triangleright\gunderline{g^{\uparrow H}\triangleright f^{\uparrow H}}=h\triangleright\gunderline{g^{\uparrow H}\bef f^{\uparrow H}}=h\triangleright(g\bef f)^{\uparrow H}=t(g\bef f)\quad.
 \]
 
 \textbf{(b)} Given a value $t:\forall A.\,(Z\rightarrow A)\rightarrow H^{A}$,
@@ -7212,12 +7220,12 @@ block or as an application of the \lstinline!flatMap! method,
 m=m_{1}\triangleright\text{flm}_{M}(m_{2})\quad.\label{eq:monad-runners-derivation1}
 \end{equation}
 We may imagine that $\theta\left(m\right)$ first runs the effects
-of $m_{1}$ obtaining a value $x$, and then runs the effects of $m_{2}(x)$
-obtaining a value $y$. So, it is natural to require that a runner
-$\theta$ applied to $m$ should give the same results as applying
-$\theta$ to $m_{1}$, which extracts a value $x$, and then applying
-the runner to $m_{2}(x)$. We can formulate this requirement as a
-law called the runner\textsf{'}s \index{composition law!of monad runners}\textbf{composition
+of $m_{1}$ (obtaining a value $x$) and then runs the effects of
+$m_{2}(x)$, obtaining a value $y$. So, it is natural to require
+that a runner $\theta$ applied to $m$ should give the same results
+as applying $\theta$ to $m_{1}$, which extracts a value $x$, and
+then applying the runner to $m_{2}(x)$. We can formulate this requirement
+as a law called the runner\textsf{'}s \index{composition law!of monad runners}\textbf{composition
 law}:
 \begin{lstlisting}
 runner(m) == runner(m2(runner(m1)))
@@ -7422,7 +7430,7 @@ The objects of that category are all the possible monads (type constructors
 such as \lstinline!Option!, \lstinline!Try!, etc.). The morphisms
 between objects $M$ and $N$ of that category are monad morphisms
 $M\leadsto N$ as defined above: natural transformations that preserve
-the structure of the monadic operations.
+the monadic operations.
 
 At the same time, a monad morphism $\phi$ can be viewed as a correspondence
 $g=f\bef\phi$ between Kleisli functions $f:A\rightarrow M^{B}$ and
@@ -7742,12 +7750,12 @@ when $W$ is a monoid (semigroup).
 \end{enumerate}
 It is an open question (see Problem~\ref{par:Problem-monads}) whether
 these are the only constructions available for polynomial monads.
-If that is true, one could create an algorithm that recognizes whether
+If that were true, one could create an algorithm that recognizes whether
 a given polynomial functor can be made into a monad by suitable definitions
 of \lstinline!flatten! and \lstinline!pure!. 
 
-As an example, consider the fact that the polynomial functor $F^{A}\triangleq\bbnum 1+A\times A$
-cannot be made into a monad (Exercise~\ref{subsec:Exercise-1-monads-6}).
+As an example, consider t the polynomial functor $F^{A}\triangleq\bbnum 1+A\times A$
+that \emph{cannot} be made into a monad (Exercise~\ref{subsec:Exercise-1-monads-6}).
 One can also show that $F$ cannot be obtained through the monad constructions
 listed above. Indeed, the corresponding polynomial $f(x)=1+x^{2}$
 does not contain any first powers of $x$. However, all constructions
@@ -7773,7 +7781,7 @@ instances. The first instance is the free pointed monad (construction
 The second is the product (construction 3) of the identity monad ($\text{Id}^{A}\triangleq A$)
 and the \lstinline!Option! monad ($\text{Opt}^{A}\triangleq\bbnum 1+A$,
 construction 1). The two monad instances are inequivalent because,
-for instance, they define their \lstinline!pure! method in different
+for instance, they define their \lstinline!pure! methods in different
 ways:
 \[
 \text{pu}_{1}\triangleq a^{:A}\rightarrow a+\bbnum 0^{:A\times A}\quad,\quad\quad\text{pu}_{2}\triangleq a^{:A}\rightarrow a\times(\bbnum 0^{:\bbnum 1}+a)\quad.
@@ -7832,13 +7840,13 @@ A constant functor $F^{A}\triangleq Z$ is $M$-filterable with $\text{lift}_{M,F}
 The same statement shows that $F^{A}\triangleq M^{A}\rightarrow Z$
 and $F^{A}\triangleq A\rightarrow M^{Z}$ are $M$-filterable contrafunctors.
 
-The monad $M$ itself is $M$-filterable; $\text{lift}_{M,M}(f)\triangleq\text{flm}_{M}(f)$.
+The monad $M$ itself is $M$-filterable with $\text{lift}_{M,M}(f)\triangleq\text{flm}_{M}(f)$.
 
 The identity functor is not $M$-filterable except when $M$ is the
 identity monad, $M^{A}=\text{Id}^{A}\triangleq A$. (However, with
 $M=\text{Id}$, the concept of $M$-filterable functor becomes trivial
 because all functors and all contrafunctors are $\text{Id}$-filterable.
-So, we will assume that $M\neq\text{Id}$.)
+To get nontrivial results, we will assume that $M\neq\text{Id}$.)
 
 The (contra)functor $F^{A}\triangleq G^{H^{A}}$ is $M$-filterable
 when $H$ is $M$-filterable and $G$ is any (contra)functor (Statements~\ref{subsec:Statement-filterable-composition-functors}
@@ -7864,7 +7872,7 @@ and~\ref{subsec:Statement-function-type-exponential-filterable-contrafunctor}).
 
 The filterable contrafunctor $M^{A}\rightarrow Z$ from Statement~\ref{subsec:Statement-examples-of-filterable-contrafunctors}
 is obtained from this construction if we set $F^{A}=M^{A}$ and $G^{A}=Z$;
-both $F$ and $G$ are filterable as we have already seen.
+both $F$ and $G$ are filterable.
 
 \paragraph{Recursive types}
 
