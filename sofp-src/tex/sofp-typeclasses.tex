@@ -195,15 +195,17 @@ function because it is defined for all values of its arguments and
 does not throw exceptions. 
 
 Total functions are safer to use than partial functions. The partial
-function \lstinline!p! can be converted into a total function by
-changing its type to \lstinline!Left[Int, String] => Int!. Another
-example: applying \lstinline!head! to a \lstinline!List! is unsafe,
-but the type \lstinline!NonEmptyList! guarantees at compile time
-that the first element exists:
+function \lstinline!p! can be made into a total function by changing
+its type to \lstinline!Left[Int, String] => Int!.
+
+Another example: applying \lstinline!head! to a \lstinline!List!
+is unsafe, but the type \lstinline!NonEmptyList! guarantees that
+the first element exists:
 \begin{lstlisting}
 val xs: NonEmptyList[Int] = ...
 val h = xs.head  // _.head is a total function for a NonEmptyList.
 \end{lstlisting}
+
 In these cases, we achieve safety by making types more constrained.
 Similarly, partial type-to-value functions (PTVFs) become safe to
 use if we impose suitable typeclass constraints on the type parameters.
@@ -274,17 +276,16 @@ type constraint if we include an \emph{additional argument} of type
 \begin{lstlisting}
 def avg[T](s: Seq[T], frac: Frac[T]): T
 \end{lstlisting}
-The value \lstinline!frac: Frac[T]! is called a \index{typeclass!instance value}\textbf{typeclass
-instance} value. Because that value needs to be passed to every call
-of \lstinline!avg[T]!, we will be unable to use types \lstinline!T!
-for which \lstinline!Frac[T]! is void (i.e., has no values). 
+We will be unable to use \lstinline!avg[T]! with types \lstinline!T!
+for which we have no values of type \lstinline!Frac[T]! because such
+a value needs to be passed to every call to \lstinline!avg[T]!. Such
+values are called \textsf{``}typeclass instance values\textsf{''} or, for brevity,
+just \textbf{typeclass instances}.\index{typeclass!instance value}
 
-A typeclass instance argument such as \lstinline!frac: Frac[T]! is
+A typeclass instance argument like \lstinline!frac: Frac[T]! is also
 called an \textbf{evidence parameter}\index{evidence value} \index{typeclass!evidence parameter}
 because it \textsf{``}provides evidence\textsf{''} that the type \lstinline!T! belongs
-to the type domain of the typeclass. Such evidence values are called
-\textsf{``}typeclass instance values\textsf{''} or, for brevity, just \textsf{``}typeclass
-instances\textsf{''}.
+to the type domain of the typeclass. 
 
 In this way, we implemented the typeclass constraint for the PTVF
 \lstinline!avg[T]!. The main steps were:
@@ -336,7 +337,7 @@ With these definitions, implementing \lstinline!avg[T]! becomes straightforward:
 \begin{lstlisting}
 def avg[T](s: Seq[T], frac: Frac[T]): T = {      // Assuming `s` is non-empty.
   val sum = s.reduce(frac.add)            // `s.reduce` fails if `s` is empty!
-  frac.intdiv(sum, s.length)              // Compute `sum/length`.
+  frac.intdiv(sum, s.length)              // Compute `sum/s.length`.
 }
 \end{lstlisting}
 To use this function, we need to pass a typeclass instance for the
@@ -377,12 +378,11 @@ val fracD = new Frac[Double] {
 The function \lstinline!avg[T]! works unchanged with this implementation
 of \lstinline!Frac!.
 
-The \lstinline!trait!-based code is significantly longer than the
-code based on a case class. One advantage of the longer code is the
-ability to combine typeclasses by inheriting from \lstinline!trait!s.
-We will look at that in more detail below. For now, we note that both
-implementations will require the programmer to add a significant amount
-of new code:
+The \lstinline!trait!-based code is longer than the code based on
+a case class. One advantage of the longer code is the ability to combine
+typeclasses by inheriting from \lstinline!trait!s. We will look at
+that in more detail below. For now, we note that both implementations
+require the programmer to add a significant amount of new code:
 \begin{itemize}
 \item Calls to \lstinline!func[T](args)! need to be changed to \lstinline!func[T](args, ti)!
 with typeclass instances \lstinline!ti!.
@@ -397,30 +397,31 @@ The extra work can be reduced (and sometimes avoided) by using Scala\textsf{'}s
 \subsection{Scala\textsf{'}s \texttt{implicit} values}
 
 An \textbf{implicit }\index{implicit value} declaration is a feature
-of Scala that makes arguments automatically available to functions
-that declare \textsf{``}implicit arguments\textsf{''}.
+of Scala that passes arguments automatically to functions that declare
+\textsf{``}implicit arguments\textsf{''}.
 
 Scala\textsf{'}s syntax for implicit values is:
 \begin{lstlisting}
 implicit val x: Int = 123
 \end{lstlisting}
 This declaration introduces an implicit value of type \lstinline!Int!
-into the current scope. That value will be automatically passed as
-an argument to any function declaring an argument of type \lstinline!Int!
-as \lstinline!implicit!:
+into the current scope. That value will be automatically passed to
+any function declaring an argument of type \lstinline!Int! as \lstinline!implicit!:
 \begin{lstlisting}
 def f(a: String)(implicit n: Int) = s"$a with $n"
 
 scala> f("xyz")
 res0: String = xyz with 123
 \end{lstlisting}
-We need to declare the arguments as \lstinline!implicit! in the function\textsf{'}s
-type signature, and the implicit arguments must be in a \emph{separate}
-\index{argument list}argument list.
+We need to declare the implicit arguments using the Scala keyword
+\lstinline!implicit! (in Scala 3, the keyword \textsf{``}\lstinline!given!\textsf{''}).
+All the implicit arguments must be in a \emph{separate} \index{argument list}argument
+list in the function\textsf{'}s type signature.
 
 The simplest useful function with an implicit argument is the identity
-function. In Scala 2, this function is called \lstinline!implicitly!.
-Compare its code with the code of the ordinary identity function:
+function. In Scala 2, this function is called \lstinline!implicitly!;
+in Scala 3, it is called \lstinline!summon!. Compare its code with
+the code of the ordinary identity function:
 \begin{lstlisting}
 def identity[T](t: T): T = t
 def implicitly[T](implicit t: T): T = t     // An identity function with an implicit argument.
@@ -498,7 +499,7 @@ argument as a \lstinline!Frac! typeclass evidence for \lstinline!T!:
 \begin{lstlisting}
 def avg[T](s: Seq[T])(implicit frac: Frac[T]): T = {
   val sum = s.reduce(frac.add)
-  frac.intdiv(sum, s.length)       // Compute `sum/length`.
+  frac.intdiv(sum, s.length)
 }
 \end{lstlisting}
 It is now easier to use the function \lstinline!avg! because evidence
@@ -576,7 +577,7 @@ of the function, as in \lstinline!x.plus(y)! or \lstinline!xs.foldLeft(0)(update
 \end{enumerate}
 The last two syntax features are often used when writing chains of
 function applications, such as \lstinline!xs.map(f).filter(g)!, because
-that code is easier to read than \lstinline!filter(map(xs, f), g)!. 
+that code is easier to work with than \lstinline!filter(map(xs, f), g)!. 
 
 The method syntax is available only for methods defined in a class.
 A special feature of Scala allows us to add new functions with method
@@ -623,19 +624,18 @@ as the expression:
 new AvgSyntax(Seq(1.0, 2.0, 3.0))(implicitly[Frac[Double]]).average
 \end{lstlisting}
 In this way, the method \lstinline!average! is actually invoked on
-a temporarily created value of type \lstinline!AvgSyntax!. These
-values will be created automatically because the class constructor
-of \lstinline!AvgSyntax! is declared as \lstinline!implicit!. Since
-the constructor of \lstinline!AvgSyntax! includes the typeclass constraint
-\lstinline![T: Frac]!, we will not be able to create values of type
-\lstinline!AvgSyntax[T]! for types \lstinline!T! not in the type
-domain of \lstinline!Frac!.
+a temporarily created value of type \lstinline!AvgSyntax!. That value
+will be created automatically because the class constructor of \lstinline!AvgSyntax!
+is declared as \lstinline!implicit!. Since the constructor of \lstinline!AvgSyntax!
+includes the typeclass constraint \lstinline![T: Frac]!, we will
+not be able to create values of type \lstinline!AvgSyntax[T]! for
+types \lstinline!T! not in the type domain of \lstinline!Frac!.
 
 This example illustrates the convenience of implementing PTVFs as
 extension methods. An extension method is defined only once but automatically
 becomes available for all types in the domain of the typeclass. Because
 of the typeclass constraint, the new method will be available \emph{only}
-on values of supported types.
+for supported types.
 
 This convenience comes at a cost: helper classes such as \lstinline!AvgSyntax!
 need to be explicitly imported into every scope where extension methods
@@ -948,8 +948,8 @@ res0: List[Int] = List(1, 2, 3, 4)
 Due to the associativity law~(\ref{eq:associativity-law-semigroup}),
 the result of \lstinline!x |+| y |+| z! does not depend on the choice
 of parentheses: \lstinline!(x |+| y) |+| z == x |+| (y |+| z)!. This
-makes programs written using the semigroup operation \lstinline!|+|!
-easier to understand and reason about.
+makes code involving the semigroup operation (\lstinline!|+|!) easier
+to read and to reason about.
 
 Semigroup types represent data that can be pairwise \textsf{``}merged\textsf{''} in
 a certain well-defined way. Using the \lstinline!Semigroup! typeclass,
@@ -999,7 +999,7 @@ containing all elements from \lstinline!x!, \lstinline!y!, and \lstinline!z!
 in their original order. It is evident that the concatenation \lstinline!x ++ (y ++ z)!
 is a list with the same elements in the same order. However, a rigorous
 proof of the associativity law for lists, starting from the code of
-the \lstinline!concat! function, requires significant work (see Section~\ref{subsec:Proofs-for-associativity-law-lists-and-arrays-concat}). 
+the \lstinline!concat! function, requires some work (see Section~\ref{subsec:Proofs-for-associativity-law-lists-and-arrays-concat}). 
 
 \subsubsection{Example \label{subsec:tc-Example-semigroup-alternative-implementations}\ref{subsec:tc-Example-semigroup-alternative-implementations}
 (alternative semigroup implementations)}
@@ -1052,14 +1052,14 @@ binary operation for a (different) semigroup, based on the same type
 \left(\left(a_{1}\times b_{1}\right)\oplus\left(a_{2}\times b_{2}\right)\right)\oplus\left(a_{3}\times b_{3}\right) & =\left(a_{1}\times b_{2}\right)\oplus\left(a_{3}\times b_{3}\right)=a_{1}\times b_{3}\quad,\\
 \left(a_{1}\times b_{1}\right)\oplus\left(\left(a_{2}\times b_{2}\right)\oplus\left(a_{3}\times b_{3}\right)\right) & =\left(a_{1}\times b_{1}\right)\oplus\left(a_{2}\times b_{3}\right)=a_{1}\times b_{3}\quad.
 \end{align*}
-The implementation is possible for any types $A$, $B$:
+The implementation works for any types $A$, $B$:
 \begin{lstlisting}
 implicit def semigroup2[A, B] = Semigroup[(A, B)]{ case ((a1, b1), (a2, b2)) => (a1, b2) }
 \end{lstlisting}
 
-One use case for this semigroup is to maintain a pair of timestamps
+One use case for this semigroup is for maintaining a pair of timestamps
 for the first and the last events in a temporally ordered series.
-Merging two such pairs for consecutive events means to keep the first
+Merging two such pairs for consecutive events will keep the first
 value from the first pair and the second value from the second pair.
 
 \textbf{(c)} It is clear that $x\oplus y\oplus z$ is the longest
@@ -1090,8 +1090,8 @@ value that acts as an \textsf{``}empty\textsf{''} value with respect to the semi
 operation. Combining the \textsf{``}empty\textsf{''} value with another value will
 not change that value. For instance, concatenating with an empty list
 does not change a given list; so, the empty list is the \textsf{``}empty\textsf{''}
-value for lists. Adding zero to an integer does not change that integer;
-so, zero is the \textsf{``}empty\textsf{''} value when adding integers.
+value for the list concatenation. Adding zero to an integer does not
+change that integer; so, zero is the \textsf{``}empty\textsf{''} value for the addition.
 
 A semigroup with a designated \textsf{``}empty\textsf{''} value is called a \textbf{monoid}\index{monoid|textit}.
 Formally, a type $T$ is a monoid when there is an associative binary
@@ -1183,7 +1183,7 @@ Does this implementation satisfy the laws of monoids? The associativity
 law\index{associativity law!of monoids} will hold for the monoid
 if the \lstinline!Semigroup! typeclass instance was already lawful.
 However, the value stored in the \lstinline!HasDefault! instance
-is not guaranteed to satisfy the identity laws~(\ref{eq:identity-laws-of-monoid})
+will not necessarily obey the identity laws~(\ref{eq:identity-laws-of-monoid})
 with respect to the \lstinline!combine! operation stored in the \lstinline!Semigroup!
 instance. The programmer must verify that the identity laws hold.
 It can happen that, for some type $T$, typeclass instances of \lstinline!Semigroup!
@@ -1192,7 +1192,6 @@ so that the monoid identity laws do not hold. In that case, a simple
 combination of \lstinline!Semigroup! and \lstinline!HasDefault!
 instances will not work, and a different \lstinline!Monoid! instance
 must be defined.
-
 
 \subsection{Typeclasses for type constructors\label{subsec:Typeclasses-for-type-constructors}}
 
@@ -1216,32 +1215,30 @@ In the type notation, this type signature is written as:
 \text{map}:\forall(A,B).\,F^{A}\rightarrow\left(A\rightarrow B\right)\rightarrow F^{B}\quad.
 \]
 So, a typeclass instance of the \lstinline!Functor! typeclass must
-contain this function as a value. But defining the typeclass as before
-via a \lstinline!case class! does not work with Scala 2:
+contain this function as a value. Scala 3 directly supports an argument
+type that \emph{itself} contains type quantifiers:
 \begin{lstlisting}[mathescape=true]
-final case class Functor[F[_]](map: $\forall(A,B).\,$F[A] => (A => B) => F[B])   // Not possible in Scala 2.
+final case class Functor[F[_]](map: [A] => [B] => F[A] => (A => B) => F[B])
 \end{lstlisting}
-Scala 3 directly supports an argument type that \emph{itself} contains
-type quantifiers such as $\forall(A,B)$. In Scala 2, we have to replace
-nested type quantifiers by a \lstinline!trait! with a \lstinline!def!
-method:\index{typeclass!Functor@\texttt{Functor}}
+In Scala 2, we have to use a \lstinline!trait! with a \lstinline!def!
+method like this:\index{typeclass!Functor@\texttt{Functor}}
 \begin{lstlisting}
 trait Functor[F[_]] {
   def map[A, B](fa: F[A])(f: A => B): F[B]
 }
 \end{lstlisting}
 The type constructor \lstinline!Functor! has the type parameter \lstinline!F[_]!,
-which is a type constructor. For any type constructor \lstinline!F!,
-a value of type \lstinline!Functor[F]! is a wrapper for a value of
-type $\forall(A,B).\,F^{A}\rightarrow\left(A\rightarrow B\right)\rightarrow F^{B}$.
-Values of type \lstinline!Functor! (i.e., typeclass instances) are
-implemented with the \textsf{``}\lstinline!new { ... }!\textsf{''} syntax:
+indicating that \lstinline!F! is itself a type constructor. A value
+of type \lstinline!Functor[F]! is a wrapper for a value of type $\forall(A,B).\,F^{A}\rightarrow\left(A\rightarrow B\right)\rightarrow F^{B}$.
+Values of type \lstinline!Functor[F]! (i.e., typeclass instances)
+are implemented with the \textsf{``}\lstinline!new { ... }!\textsf{''} syntax:
 \begin{lstlisting}
 implicit val functorSeq = new Functor[Seq] {
   def map[A, B](fa: Seq[A])(f: A => B): Seq[B] = fa.map(f)
 }
 \end{lstlisting}
-This is currently the most common way of defining typeclasses in Scala.
+This is currently the most common way of defining such typeclasses
+in Scala.
 
 It is convenient to declare \lstinline!map! as an extension method
 on the \lstinline!Functor! type constructors:
@@ -1251,7 +1248,7 @@ implicit class FunctorSyntax[F[_]: Functor, A](fa: F[A]) {    // Syntax helper.
 }
 \end{lstlisting}
 If this class definition is in scope, the \lstinline!map! method
-becomes available for values of functor types.
+becomes available for values of functor-wrapped types.
 
 Using the \lstinline!Functor! typeclass and the syntax helper, we
 can now implement the function \lstinline!inject!:
@@ -1267,10 +1264,10 @@ typeclass does not enforce the functor laws on the implementation.
 It is the programmer\textsf{'}s responsibility to verify that the laws hold.
 
 One way of checking the laws is to use the \texttt{scalacheck} library\index{scalacheck library@\texttt{scalacheck} library}\index{verifying laws with scalacheck@verifying laws with \texttt{scalacheck}}\footnote{\texttt{\href{https://www.scalacheck.org}{https://www.scalacheck.org}}}
-that automatically runs random tests for the given assertions, trying
-to discover a set of values for which some assertion fails. Using
-the \lstinline!Functor! typeclass constraint, we can implement a
-function (in our terminology, a PTVF) that checks the functor laws
+that automatically runs random tests for the given properties, trying
+to discover a set of values for which some property fails to hold.
+Using the \lstinline!Functor! typeclass constraint, we can implement
+a function (in our terminology, a PTVF) that checks the functor laws
 for \emph{any} given type constructor \lstinline!F!:
 \begin{lstlisting}
 import org.scalacheck.Arbitrary   // Necessary imports and definitions.
@@ -1388,12 +1385,13 @@ non-extension methods in their companion objects in some way.
 \section{Deriving typeclass instances via structural analysis}
 
 In Chapter~\ref{chap:Functors,-contrafunctors,-and} we analyzed
-the structure of functors by checking which of the six standard type
-constructions can make new functors out of previous ones. We will
-now apply the same\index{structural analysis} \index{types!structural analysis}\textbf{structural
-analysis} to various typeclasses. Is a product of two monoids a monoid?
-Is a co-product of two semigroups a semigroup? Answers to such questions
-will enable us to:
+the structure of functors and contrafunctors by checking which of
+the six standard type constructions can make new functors or contrafunctors
+out of previous ones. We will now apply the same\index{structural analysis}
+\index{types!structural analysis}\textbf{structural analysis} to
+various typeclasses. Is a product of two monoids a monoid? Is a co-product
+of two semigroups a semigroup? Answers to such questions will enable
+us to:
 \begin{itemize}
 \item Quickly decide whether a given type can have a typeclass instance
 of \lstinline!Monoid!, \lstinline!Semigroup!, etc.
@@ -1475,9 +1473,9 @@ f^{:A\rightarrow Z}\times g^{:B\rightarrow Z}\rightarrow a\times b\rightarrow f(
 \]
 Both implementations give a valid \lstinline!Extractor! instance
 (since there are no laws to check). However, every choice will use
-one of the two \lstinline!Extractor! instances and ignore the other.
-So, we can simplify this construction by keeping the typeclass constraint
-only for $A$ and allowing \emph{any} type $B$:
+only one of the two \lstinline!Extractor! instances and ignore the
+other. So, we can simplify this construction by keeping the typeclass
+constraint only for $A$ and allowing \emph{any} type $B$:
 \[
 \text{extractorPair}:\forall(A,B,Z).\,\text{Extractor}^{A}\rightarrow\text{Extractor}^{A\times B}\quad.
 \]
@@ -1509,12 +1507,12 @@ B & b\rightarrow g(b)
 \]
 \begin{lstlisting}
 def extractorEither[Z, A, B](implicit ti1: Extractor[Z, A], ti2: Extractor[Z, B]) =
-  Extractor[Z, Either[A, B]] {
-    case Left(a)    => ti1.extract(a)
-    case Right(b)   => ti2.extract(b)
-}
+          Extractor[Z, Either[A, B]] {
+            case Left(a)    => ti1.extract(a)
+            case Right(b)   => ti2.extract(b)
+          }
 \end{lstlisting}
-So, the co-product of $A$ and $B$ can be given a unique \lstinline!Extractor!
+So, the co-product of $A$ and $B$ has a unique \lstinline!Extractor!
 instance.
 
 Since the product and the co-product constructions preserve \lstinline!Extractor!
@@ -1620,8 +1618,7 @@ A recursive type equation defining a type $T$ can be written generally
 as $T\triangleq S^{T}$, where $S$ is a type constructor built up
 by composing $F_{1}$, $F_{2}$, and/or $F_{3}$ in some way. (The
 type constructor $S$ may use $Z$ or other fixed types.) For each
-of $F_{1}$, $F_{2}$, and/or $F_{3}$, we implemented a function
-of type:
+$F=F_{i}$ (with $i=1,2,3$), we implemented a function of type:
 \[
 \text{extractorF}:\text{Extractor}^{A}\rightarrow\text{Extractor}^{F^{A}}\quad.
 \]
@@ -1636,8 +1633,8 @@ then defined recursively as:
 x^{:T\rightarrow Z}\triangleq\text{extractorS}\left(x\right)\quad.
 \]
 The types match because the type $T$ is equivalent to the type $S^{T}$.
-As long as the definition of the recursive type $T$ is valid (i.e.,
-the type recursion terminates), the extractor function will also terminate.
+As long as the recursive type $T$ is not void (i.e., the type recursion
+terminates), the extractor function will also terminate.
 
 To illustrate this construction, let us derive an \lstinline!Extractor!
 instance for the type $T$ defined by Eq.~(\ref{eq:example-good-recursive-equation-extractor}).
@@ -1670,16 +1667,17 @@ P\times T & \_^{:P}\times t^{:T}\rightarrow f(t)
 \end{array}\quad.
 \]
 \begin{lstlisting}
-def extractorS[A](f: Extractor[A]): Extractor[S[A]] = Extractor[S[A]] { case (c, g) =>
-  g(c) match {
-    case Left(z)         => z
-    case Right((_, t))   => f.extract(t)
+def extractorS[A](f: Extractor[A]): Extractor[S[A]] = Extractor[S[A]] {
+  case (c, g) =>
+    g(c) match {
+      case Left(z)         => z
+      case Right((_, t))   => f.extract(t)
+    }
   }
-}
 \end{lstlisting}
 
 The recursive construction defines an \lstinline!Extractor! instance
-for $T$ by a recursive equation:
+for $T$ by:
 \begin{equation}
 \text{extractorT}\triangleq\text{extractorS}\left(\text{extractorT}\right)\quad.\label{eq:recursive-extractor-def}
 \end{equation}
@@ -1700,9 +1698,10 @@ res0: String = abc
 
 \paragraph{Why the recursion terminates}
 
-The above code shows that the recursive definition~(\ref{eq:recursive-extractor-def})
-terminates. Why does it? A recursive definition of the form $x\triangleq f(x)$
-could create an infinite loop, as in this code:
+The test code above shows that the recursive definition~(\ref{eq:recursive-extractor-def})
+terminates. Why does it, though? A recursive \emph{value} definition
+of the form $x\triangleq f(x)$ could create an infinite loop, as
+in this code:
 \begin{lstlisting}
 def f(i: Int): Int = i + 1
 def x: Int = f(x)
@@ -1720,15 +1719,15 @@ in the form of an \textsf{``}expanded function\textsf{''}:
 \begin{lstlisting}
 def extractorT: Extractor[TypeT] = Extractor { case TypeT(t) => extractorS(extractorT).extract(t) }
 \end{lstlisting}
-Although a function $f$ is equivalent to its \textbf{expanded form}
-\index{expanded form of a function!use in recursive values} $t\rightarrow f(t)$,
-there is an important difference: using expanded forms in the code
-will make recursive definitions \index{recursive function!termination}
-terminate.
+Although a function $f$ and its \textbf{expanded form} \index{expanded form of a function!use in recursive values}
+$t\rightarrow f(t)$ are equivalent, there is an important difference:
+writing expanded forms of functions will make recursive value definitions
+\index{recursive function!termination} terminate.
 
 To see an example of that, consider a recursive equation $f\triangleq k(f)$,
-where $k$ is some function. The Scala code \lstinline!val f = k(f)!
-creates an infinite loop when we compute anything that involves $f$:
+where $k$ is some function. The Scala code \lstinline!def f = k(f)!
+creates an infinite loop whenever we compute anything that involves
+$f$:
 \begin{lstlisting}[mathescape=true]
 def k(f: Int => Int): Int => Int = { x => if (x <= 0) 1 else 2 * f(x - 1) }
 def f: Int => Int = k(f)   // This definition is invalid!
@@ -1739,13 +1738,12 @@ java.lang.StackOverflowError: ...
 scala> f(4)                // Infinite loop: k(k(k(k(...)))(4)
 java.lang.StackOverflowError: ...
 \end{lstlisting}
-This code is clearly invalid. But if we expand the right-hand side
-of the recursive equation to:
+The code $f\triangleq k(f)$ is clearly invalid. But if we expand
+the right-hand side of this recursive definition to:
 \[
-f\triangleq t\rightarrow k(f)(t)
+f\triangleq t\rightarrow k(f)(t)\quad,
 \]
-instead of $f\triangleq k(f)$, the code will become valid, and the
-infinite loop disappears:
+instead of $f\triangleq k(f)$, the infinite loop disappears:
 \begin{lstlisting}[mathescape=true]
 def f: Int => Int = { x => k(f)(x) }   // This defines $\color{dkgreen} f(n) = 2^n $ for $\color{dkgreen}n \geq 0$.
 
@@ -1776,10 +1774,13 @@ type K[Z,P,Q,R,S] = Either[(Z, P), (Q, Q => Either[Z, (R, R => (Z, S))])]
 implicit def extractorK[Z,P,Q,R,S]: Extractor[Z, K[Z,P,Q,R,S]] = {
   implicit val e1 = extractorPair[Z, Z, S]  // $\color{dkgreen} Z \times S $. Needs Extractor[Z, Z].
   implicit val e2 = extractorFunc[Z, (Z, S), R]  // $\color{dkgreen} R\times\left(R\rightarrow Z\times S\right) $.
-  implicit val e3 = extractorEither[Z, Z, (R, R => (Z, S))]           // $\color{dkgreen} Z+R\times\left(R\rightarrow Z\times S\right) $.
-  implicit val e4 = extractorFunc[Z, Either[Z, (R, R => (Z, S))], Q] // $\color{dkgreen} Q\times\left(Q\rightarrow Z+R\times\left(R\rightarrow Z\times S\right)\right) $.
+           // $\color{dkgreen} Z+R\times\left(R\rightarrow Z\times S\right) $.
+  implicit val e3 = extractorEither[Z, Z, (R, R => (Z, S))]
+           // $\color{dkgreen} Q\times\left(Q\rightarrow Z+R\times\left(R\rightarrow Z\times S\right)\right) $.
+  implicit val e4 = extractorFunc[Z, Either[Z, (R, R => (Z, S))], Q]
   implicit val e5 = extractorPair[Z, Z, P]  // $\color{dkgreen} Z\times P $.
-  extractorEither[Z, (Z,P), (Q, Q => Either[Z, (R, R => (Z, S))])]   // Extractor for type $\color{dkgreen} K $.
+           // Extractor for type $\color{dkgreen} K $.
+  extractorEither[Z, (Z,P), (Q, Q => Either[Z, (R, R => (Z, S))])]
 }
 \end{lstlisting}
 The code computes each implicit value \lstinline!e1!, \lstinline!e2!,
@@ -1787,9 +1788,9 @@ The code computes each implicit value \lstinline!e1!, \lstinline!e2!,
 be present as implicits.
 
 The \lstinline!Extractor! typeclass is often used with \lstinline!Z = String!
-as a way to \textsf{``}print\textsf{''} values of different types, and it is then
-called \lstinline!Show!\index{typeclass!Show@\texttt{Show}}. When
-\lstinline!Z = Array[Byte]!, the typeclass is often called a \textsf{``}serializer\index{serializer}\textsf{''}. 
+as a way to print values of different types, and it is then called
+\lstinline!Show!\index{typeclass!Show@\texttt{Show}}. When \lstinline!Z = Array[Byte]!,
+the typeclass is often called a \textsf{``}serializer\index{serializer}\textsf{''}. 
 
 \begin{table}
 \begin{centering}
@@ -1822,7 +1823,7 @@ where $T\triangleq S^{T}$}\tabularnewline
 In Scala, the built-in operation \lstinline!==! is not type-safe
 because the code \lstinline!x == y! will compile regardless of the
 types of \lstinline!x! and \lstinline!y!. We can replace \lstinline!==!
-by a new operation \lstinline!===! constrained to a typeclass called
+by a new operation (\lstinline!===!) constrained to a typeclass called
 \lstinline!Eq!, ensuring that types can be meaningfully compared
 for equality. The equality comparison for values of type $A$ is a
 function of type $A\times A\rightarrow\bbnum 2$ (where $\bbnum 2$
