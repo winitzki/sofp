@@ -4,7 +4,8 @@
 
 # Requires pdftk and lyx.
 # Get lyx from www.lyx.org
-# For Mac, get pdftk from https://www.pdflabs.com/tools/pdftk-the-pdf-toolkit/pdftk_server-2.02-mac_osx-10.11-setup.pkg or else it may not work
+# For Mac, get pdftk from https://www.pdflabs.com/tools/pdftk-the-pdf-toolkit/pdftk_server-2.02-mac_osx-10.11-setup.pkg or else it may not work.
+#   Or try `brew install pdftk-java`.
 # For Windows, get pdftk from https://www.pdflabs.com/tools/pdftk-the-pdf-toolkit/pdftk_free-2.02-win-setup.exe
 
 source scripts/functions.sh
