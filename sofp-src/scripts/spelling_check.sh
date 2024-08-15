@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# Requirements: hunspell and en_US dictionary.
+# brew install hunspell
+# Download dictionaries, see http://wordlist.aspell.net/dicts/
+# Unpack en_us dictionary and copy it to $HOME/Library/Spelling/
+# Verify that the dictionary is installed: hunspell -D | grep en_US
+
 echo "Checking spelling with hunspell..."
 
 cat sofp*.tex | \
