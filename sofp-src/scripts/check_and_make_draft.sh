@@ -2,6 +2,7 @@
 
 # Requires pdftk and shasum.
 # For Mac, get pdftk from https://www.pdflabs.com/tools/pdftk-the-pdf-toolkit/pdftk_server-2.02-mac_osx-10.11-setup.pkg
+#   Or try `brew install pdftk-java`.
 
 name="sofp"
 

@@ -57,7 +57,7 @@ res0: L[(Int, String)] = Some(((123, "abc"), (456, "def")))
 \subsubsection{Example \label{subsec:Example-applicative-tree}\ref{subsec:Example-applicative-tree}}
 
 A \lstinline!zip! method can be implemented for a binary tree. We
-define the type constructor \lstinline!BTree[A]! by this code:
+define the type constructor \lstinline!BTree! by this code:
 \begin{lstlisting}
 sealed trait BTree[A]
 final case class Leaf[A](a: A) extends BTree[A]
@@ -140,7 +140,7 @@ constructors that are \emph{not} functors:
 
 \subsubsection{Example \label{subsec:Example-applicative-profunctor}\ref{subsec:Example-applicative-profunctor}}
 
-A pair of monoids is also a monoid (the \textsf{``}products\textsf{''} construction
+A pair of monoids is also a monoid (the \textsf{``}product\textsf{''} construction
 of Section~\ref{subsec:Monoids-constructions}). A \lstinline!Monoid!
 typeclass instance for a type \lstinline!A! can be represented by
 a value of type $L^{A}$, where the type constructor $L$ is defined
@@ -156,8 +156,8 @@ the type $A\times B$ when $A$ and $B$ are monoids. That function
 has the type signature of a \lstinline!zip! method for the type constructor
 $L$:
 \begin{lstlisting}
-def zip[A, B](la: L[A], lb: L[B]): L[(A, B)] = ( (la._1, lb._1),   // The result has type ((A, B),
-  { case ((a1, b1), (a2, b2)) => (la._2(a1, a2), lb._2(b1, b2)) }  // ((A, B), (A, B)) => (A, B)).
+def zip[A, B](la: L[A], lb: L[B]): L[(A, B)] = ( (la._1, lb._1),   // The result has type ((A, B), ((A, B), (A, B)) => (A, B)).
+  { case ((a1, b1), (a2, b2)) => (la._2(a1, a2), lb._2(b1, b2)) }
 )
 \end{lstlisting}
 Applying this function to any two monoid instances, we obtain an instance
@@ -175,7 +175,7 @@ derivation for product types (e.g., case classes).
 \subsection{Gathering all errors during computations\label{subsec:Programs-that-accumulate-errors}}
 
 A monadic program using pass/fail monads must stop at the first failure:
-the code \lstinline!flatMap(x => expr)! cannot evaluate \lstinline!expr!
+the code \lstinline!flatMap(x => g(x))! cannot evaluate \lstinline!g(x)!
 if a previous computation failed to produce a value for \lstinline!x!.
 However, if some pass/fail computations are independent of each other\textsf{'}s
 results, we may wish to run all those computations and gather all
@@ -203,12 +203,13 @@ We notice that the two \lstinline!div! operations do not depend on
 each other and may be computed separately. To achieve this, we define
 a \lstinline!map2! function for the type constructor \lstinline!Result!:
 \begin{lstlisting}
-def map2[A, B, C](ra: Result[A], rb: Result[B])(f: (A, B) => C): Result[C] = (ra, rb) match {
-  case (Left(e1), Left(e2))     => Left(e1 + "; " + e2)    // Messages are separated by a semicolon.
-  case (Left(e1), _)            => Left(e1)
-  case (_, Left(e2))            => Left(e2)
-  case (Right(a), Right(b))     => Right(f(a, b))
-}
+def map2[A, B, C](ra: Result[A], rb: Result[B])(f: (A, B) => C): Result[C] =
+  (ra, rb) match {
+    case (Left(e1), Left(e2))     => Left(e1 + "; " + e2)    // Messages are separated by a semicolon.
+    case (Left(e1), _)            => Left(e1)
+    case (_, Left(e2))            => Left(e2)
+    case (Right(a), Right(b))     => Right(f(a, b))
+  }
 \end{lstlisting}
  We can now use the \lstinline!map2! function to compute the two
 \lstinline!div! operations and gather the errors:
@@ -220,8 +221,8 @@ scala> for {
 res1: Either[String, Int] = Left(error: 1 / 0; error: 2 / 0)
 \end{lstlisting}
 The result of \lstinline!map2! is used in further monadic computations.
-In this way, we can combine code that gathers many errors with ordinary
-pass/fail monadic code that stops at the first error.
+In this way, we can combine pass/fail monadic code that stops at the
+first error and code that gathers many errors.
 
 This example can be generalized to the type \lstinline!Either[E, A]!,
 where the type \lstinline!E! is a semigroup with a \lstinline!combine!
@@ -276,15 +277,15 @@ val result: Future[Int] = for {
 \end{lstlisting}
 Recall that Scala\textsf{'}s \lstinline!Future! values are computations that
 have been scheduled to run on other threads (and may be already running).
-In this example, the computations in \lstinline!func1()!, \lstinline!func2()!,
-and \lstinline!func3()! do not depend on the previously computed
-values (\lstinline!x! and \lstinline!y!). So, we would like to run
-those computations in parallel. However, the monadic program will
-create a second \lstinline!Future! value and schedule the computation
-\lstinline!func2()! only after \lstinline!func1()! is done. Similarly,
-\lstinline!func3()! will not start until \lstinline!func2()! is
-done. This is because the functor block shown above is translated
-into \lstinline!flatMap! and \lstinline!map! methods like this:
+In this example, the computations in \lstinline!func2()! and \lstinline!func3()!
+do not depend on the previously computed values (\lstinline!x! and
+\lstinline!y!). So, we would like to run those computations in parallel.
+However, the monadic program will create a second \lstinline!Future!
+value and schedule the computation \lstinline!func2()! only after
+\lstinline!func1()! is done. Similarly, \lstinline!func3()! will
+not start until \lstinline!func2()! is done. This is because the
+functor block shown above is translated into \lstinline!flatMap!
+and \lstinline!map! methods like this:
 \begin{lstlisting}
 val result: Future[Int] =
   Future { func1() }.flatMap { x =>
@@ -294,16 +295,17 @@ val result: Future[Int] =
 The implementations of \lstinline!flatMap! and \lstinline!map! cannot
 detect whether the next computations actually depend on any previously
 computed values. So, the code of \lstinline!flatMap! and \lstinline!map!
-\emph{must} wait until all previous values are computed. We need a
-new function that can take advantage of the independence of effects
-on previous values. A possible type signature for that function is:
+\emph{must} wait until all previous \lstinline!Future! values are
+complete. We need a new function that can take advantage of the independence
+of effects on previous values. A possible type signature for that
+function is:
 \begin{lstlisting}
 def map3(f1: Future[Int], f2: Future[Int], f3: Future[Int], f: (Int, Int, Int) => Int): Future[Int] 
 \end{lstlisting}
 Generalizing this type signature to arbitrary types, we obtain the
 following \lstinline!map3! method:
 \begin{lstlisting}
-def map3[F[_], A, B, C, D](f1: F[A], f2: F[B], f3: F[C])(f: (A, B, C) => D): F[D]
+def map3[A, B, C, D](f1: F[A], f2: F[B], f3: F[C])(f: (A, B, C) => D): F[D]
 \end{lstlisting}
 It is straightforward to implement this method for \lstinline!F = Future!:
 \begin{lstlisting}
@@ -313,20 +315,20 @@ def map3[A, B, C, D](f1: Future[A], f2: Future[B], f3: Future[C])(f: (A, B, C) =
 This will run the three \lstinline!Future! computations in parallel
 because the arguments of \lstinline!map3! must be evaluated before
 \lstinline!map3! is called, and evaluating a \lstinline!Future!
-will schedule its computation immediately. To support different number
+will schedule its computation immediately. To support different numbers
 of arguments, we can implement similar functions \lstinline!map2!,
 \lstinline!map4!, etc.
 
-It is not obvious that the function \lstinline!map3! is related to
-\lstinline!zip!. However, once we study the properties of those functions
-in more detail, we will find that \lstinline!map3! can be expressed
-through \lstinline!map2!, and that defining \lstinline!map2! is
-equivalent to defining \lstinline!map! and \lstinline!zip! (assuming
-that certain naturality laws hold for these functions). So, applicative
-functors can be viewed as functors having either a \lstinline!map2!
-or a \lstinline!zip! method in addition to \lstinline!map!. We will
-also see that \lstinline!map4!, \lstinline!map5!, etc., can be all
-expressed through \lstinline!zip!.
+It is not obvious that the functions \lstinline!map2!, \lstinline!map3!
+and so on are related to \lstinline!zip!. However, once we study
+the properties of those functions in more detail, we will find that
+\lstinline!map3! can be expressed through \lstinline!map2!, and
+that defining \lstinline!map2! is equivalent to defining \lstinline!map!
+and \lstinline!zip! (assuming that certain naturality laws hold for
+these functions). So, applicative functors can be viewed as functors
+having either a \lstinline!map2! or a \lstinline!zip! method in
+addition to \lstinline!map!. We will also see that \lstinline!map4!,
+\lstinline!map5!, etc., can be all expressed through \lstinline!zip!.
 
 \section{Practical use of applicative functors}
 
@@ -411,10 +413,9 @@ def transpose[A](s: Seq[Seq[A]]): Seq[Seq[A]] = s.headOption match {
     map2(heads, transpose(tails)) { (x, y) => x +: y }
 }
 \end{lstlisting}
-This code is still incomplete: it returns an empty sequence for all
-arguments. We need to add another base case when the matrix \lstinline!s!
-has only one row (so \lstinline!tails! is empty). Here is the final
-code:
+This code is still incomplete: we need to add another base case when
+the matrix \lstinline!s! has only one row (so \lstinline!tails!
+is empty). Here is the final code:
 \begin{lstlisting}
 def transpose[A](s: Seq[Seq[A]]): Seq[Seq[A]] = s.headOption match {
   case None          => Seq()
@@ -516,8 +517,8 @@ functor $L^{A}\triangleq\text{String}+A$ contains a pattern match
 with four cases (see Section~\ref{subsec:Programs-that-accumulate-errors}).
 Writing similar code for \lstinline!map3! requires \emph{eight} cases
 (to match a triple of \lstinline!Either! values), and \lstinline!map4!
-would require $16$ cases. How can we implement all these functions
-without writing a lot of code?
+would require $16$ cases. How can we implement all those functions
+without writing a lot of repetitive code?
 
 One idea is to use the \lstinline!zip! method repeatedly, as we saw
 in the previous section. We would then implement \lstinline!map2!
@@ -612,8 +613,8 @@ The main advantage of this new syntax is that it becomes easier to
 implement \lstinline!fmap3!, \lstinline!fmap4!, etc. Let us see
 how we can use the \lstinline!ap! method to implement \lstinline!fmap3!:
 \begin{lstlisting}
-def fmap3[A, B, C, D](f: A => B => C => D): L[A] => L[B] => L[C] => L[D] = { la: L[A] =>
-  ap[B, C => D](la.map(f)) andThen ap[C, D] }
+def fmap3[A, B, C, D](f: A => B => C => D): L[A] => L[B] => L[C] => L[D] =
+  (la: L[A]) => ap[B, C => D](la.map(f)) andThen ap[C, D]
 \end{lstlisting}
 In the point-free style, this definition is written as:
 \[
@@ -624,7 +625,8 @@ than that of \lstinline!fmap2!. An implementation of \lstinline!fmap4!
 via \lstinline!ap! will be even more complicated. But with the infix
 syntax shown above, we can write:
 \begin{lstlisting}
-def fmap3[A, B, C, D](f: A => B => C => D)(a: L[A])(b: L[B])(c: L[C]): L[D] = f <@> a <*> b <*> c
+def fmap3[A, B, C, D](f: A => B => C => D)(a: L[A])(b: L[B])(c: L[C]): L[D] =
+  f <@> a <*> b <*> c
 def fmap4[A, B, C, D, E](f: A => B => C => D => E)(a: L[A])(b: L[B])(c: L[C])(d: L[D]): L[E] =
   f <@> a <*> b <*> c <*> d
 \end{lstlisting}
@@ -645,7 +647,7 @@ def xmap[A, B](la: L[A])(f: A => B, g: B => A): L[B] = (f(la._1), (b1, b2) => f(
 Composing \lstinline!zip! with \lstinline!xmap!, we obtain a new
 method we may call \lstinline!xmap2!:
 \begin{lstlisting}
-def xmap2[A,B,C](la: L[A], lb: L[B])(f: ((A,B)) => C, g: C => (A,B)): L[C] = xmap(zip(la, lb))(f, g)
+def xmap2[A, B, C](la: L[A], lb: L[B])(f: ((A, B)) => C, g: C => (A, B)): L[C] = xmap(zip(la, lb))(f, g)
 \end{lstlisting}
 Methods such as \lstinline!xmap3!, \lstinline!xmap4!, etc., may
 be defined similarly via \lstinline!zip3!, \lstinline!zip4!, etc.
@@ -658,13 +660,13 @@ The \lstinline!Reader! functor, $L^{A}\triangleq E\rightarrow A$,
 is applicative and supports a \lstinline!zip! method as well:
 \begin{lstlisting}
 type Reader[A] = E => A    // The fixed type E must be already defined.
-def zip[A, B](ra: Reader[A], rb: Reader[B]): Reader[(A, B)] = {
-  e => (ra(e), rb(e)) }
+def zip[A, B](ra: Reader[A], rb: Reader[B]): Reader[(A, B)] =
+  e => (ra(e), rb(e))
 \end{lstlisting}
 The \lstinline!map2! method is implemented similarly:
 \begin{lstlisting}
-def map2[A, B, C](ra: Reader[A], rb: Reader[B])(f: A => B => C): Reader[C] = {
-  e => f(ra(e))(rb(e)) }
+def map2[A, B, C](ra: Reader[A], rb: Reader[B])(f: A => B => C): Reader[C] =
+  e => f(ra(e))(rb(e))
 \end{lstlisting}
 These are the \emph{only} fully parametric implementations of the
 type signatures of \lstinline!zip! and \lstinline!map2! for \lstinline!Reader!.
@@ -707,18 +709,17 @@ over the list \lstinline!s!. So, \lstinline!average(s)! iterates
 
 It is sometimes undesirable (or impossible) to iterate over a sequence
 more than once. An example of that situation is a data stream whose
-data elements arrive over a network at high speed. Usually, the stream
-data cannot be stored because the data volume would grow too quickly.
-So, the program needs to be implemented as an aggregation\index{aggregation}
-operation that uses a single traversal of the stream. 
+data elements arrive over a network at high speed. Often, the stream\textsf{'}s
+data cannot be kept stored because the data volume would grow too
+quickly. So, the program needs to be written as an aggregation\index{aggregation}
+operation with a single traversal of the stream. 
 
 Another example is the computation of word distribution statistics
-in a large text corpus.\index{corpus}\footnote{Such as the \textsf{``}Common Crawl\textsf{''} corpus, see \texttt{\href{https://commoncrawl.org/}{https://commoncrawl.org/}}}
-For our purposes, a \textbf{corpus} is a sequence of large chunks
-of text. Each chunk takes a long time to download, and storing the
-entire sequence in memory is impossible. It is necessary to minimize
-the number of traversals of the corpus. Ideally, all computations
-need to be implemented in a single traversal.
+in a large text corpus,\footnote{Such as the \textsf{``}Common Crawl\textsf{''} corpus, see \texttt{\href{https://commoncrawl.org/}{https://commoncrawl.org/}}}
+that is, a sequence of large chunks of text. Each chunk takes a long
+time to download, and storing the entire sequence in memory is impossible.
+It is necessary to minimize the number of traversals of the text corpus.
+Ideally, all computations need to be implemented in a single traversal.
 
 Note that the \lstinline!sum! and \lstinline!size! methods are particular
 cases of a \lstinline!foldLeft! operation. We could avoid a double
@@ -730,7 +731,7 @@ def average(s: List[Double]): Double = {
   sum / size
 }
 \end{lstlisting}
-This maintains a combined accumulated state of type \lstinline!(Double, Int)!
+This code maintains a combined accumulated state of type \lstinline!(Double, Int)!
 for the \lstinline!sum! and \lstinline!size! aggregations. 
 
 We could always rewrite any number of aggregations as a single \lstinline!foldLeft!
@@ -739,16 +740,15 @@ function operating on a combined state value. How to avoid writing
 that code manually? The trick known as \textbf{fold fusion}\index{fold fusion}
 allows us to merge any number of \lstinline!fold!-like operations
 into a single operation. The code will automatically build and update
-the accumulated state correctly, traversing the sequence only once.
-
-In this section, we will implement fold fusion in two ways: as an
-\textsf{``}applicative\textsf{''} fusion and as a \textsf{``}monadic\textsf{''} fusion. The contrast
-between these approaches will illustrate the difference between applicative
-and monadic functors.
+the accumulated state correctly while traversing the sequence only
+once.
 
 The idea of fold fusion is to represent \lstinline!fold!-like operations
 by values of a certain type, and to implement functions that combine
-and \textsf{``}run\textsf{''} such operations.
+and \textsf{``}run\textsf{''} such operations. We will implement fold fusion in two
+ways: as an \textsf{``}applicative\textsf{''} fusion and as a \textsf{``}monadic\textsf{''} fusion.
+The contrast between these approaches will illustrate the difference
+between applicative and monadic functors.
 
 We begin by defining a type constructor that represents a \lstinline!fold!-like
 operation as a value. Let us look at the type signature of \lstinline!foldLeft!:
@@ -789,8 +789,8 @@ in the short type notation as:
  & \text{zip}_{\text{Fold}}:R\times\left(R\times Z\rightarrow R\right)\times S\times\left(S\times Z\rightarrow S\right)\rightarrow\left(R\times S\right)\times(R\times S\times Z\rightarrow R\times S)\quad.
 \end{align*}
 A fully parametric, information-preserving implementation of \lstinline!zipFold!
-follows unambiguously from its type signature. So, let us use the
-\index{curryhoward library@\texttt{curryhoward} library}\lstinline!curryhoward!
+(shown above) follows unambiguously from its type signature. So, let
+us use the \index{curryhoward library@\texttt{curryhoward} library}\lstinline!curryhoward!
 library\footnote{See \texttt{\href{https://github.com/Chymyst/curryhoward}{https://github.com/Chymyst/curryhoward}}}
 to generate the code automatically:
 \begin{lstlisting}
@@ -828,9 +828,9 @@ Seq(1.0, 2.0, 3.0).runFold(sum / length)    // Should return `2.0` here.
 \end{lstlisting}
 
 To enable this kind of code,\footnote{The library \texttt{scala-fold} (see \texttt{\href{https://github.com/amarpotghan/scala-fold}{https://github.com/amarpotghan/scala-fold}})
-implements this approach with additional features.} we need to add a final transformation to the \lstinline!Fold! type:
+implements this approach with additional features.} we add a final transformation to the \lstinline!Fold! type:
 \begin{lstlisting}
-final case class FoldOp[Z, R, A](init: R, update: (R, Z) => R, transform: R => A)
+case class FoldOp[Z, R, A](init: R, update: (R, Z) => R, transform: R => A)
 \end{lstlisting}
 A value of type \lstinline!FoldOp[Z, R, A]! represents a \lstinline!fold!-like
 operation for sequences of type \lstinline!Seq[Z]!. The operation
@@ -896,7 +896,7 @@ needed to run \lstinline!scanLeft!. The code for a corresponding
 runner (called \lstinline!runScan!) is:
 \begin{lstlisting}
 implicit class FoldOpScan[Z](zs: Seq[Z]) {
- def runScan[R,A](op: FoldOp[Z,R,A]): Seq[A] = zs.scanLeft(op.init)(op.update).map(op.transform).tail
+ def runScan[R, A](op: FoldOp[Z, R, A]): Seq[A] = zs.scanLeft(op.init)(op.update).map(op.transform).tail
 }
 \end{lstlisting}
 
@@ -917,13 +917,14 @@ fixed size $n$:
 To implement this, we first create a sliding window as a \lstinline!fold!-like
 operation and then do averaging:
 \begin{lstlisting}
-def window[A](n: Int): FoldOp[A, IndexedSeq[A], IndexedSeq[A]] = FoldOp(init = Vector(),
-  update = { (window, x) => (if (window.size < n) window else window.drop(1)) :+ x }, identity)
+def window[A](n: Int): FoldOp[A, IndexedSeq[A], IndexedSeq[A]] =
+  FoldOp(init = Vector(),
+         update = { (window, x) => (if (window.size < n) window else window.drop(1)) :+ x },
+         transform = identity)
 
 def window_average(n: Int) = window[Double](n).map(_.sum / n)
 \end{lstlisting}
-To test that the averaging code works as expected, we run some fold
-and scan operations:
+To test that the averaging code works as expected, we run some  operations:
 \begin{lstlisting}
 scala> (0 to 10).map(_.toDouble).runFold(average)
 res0: Double = 5.0
@@ -1063,7 +1064,7 @@ combinator\textsf{''} technique. In this technique, the programmer builds
 a large parser out of smaller ones by using different functions (\textsf{``}combinators\textsf{''}).
 We will now look at both applicative and monadic parser combinators.
 
-The parsing techniques will be illustrated on some toy \textsf{``}languages\textsf{''}.
+We will apply these parsing techniques to some toy \textsf{``}languages\textsf{''}.
 The first language encodes square roots of positive integers in an
 XML-like format, as, for example, in the strings \lstinline!<sqrt>121</sqrt>!,
 \lstinline!<sqrt><sqrt>10000</sqrt></sqrt>!, and \lstinline!123!.
@@ -1077,9 +1078,9 @@ To simplify the code, we define a parser as a function taking an input
 string and returning either a value of some type \lstinline!A! (the
 value \textsf{``}parsed out\textsf{''} of the input) or some error information. The
 parser also returns the unused part of the input string. So, we define
-the type constructor \lstinline!P[A]! by:
+the type constructor \lstinline!P! by:
 \begin{lstlisting}
-final case class P[A](run: String => (Either[Err, A], String)) // A parser returns a result or fails.
+final case class P[A](run: String => (Either[Err, A], String)) // A parser either returns a result or fails.
 type Err = List[String]           // A list of error messages.
 \end{lstlisting}
 
@@ -1225,7 +1226,7 @@ val emptyP: P[Unit] = P { s => if (s.isEmpty) (Right(()), s) else (Left(List("ju
 val p3: P[Int] = for {
   x <- intP                // Expect an integer.
   _ <- constP("=")         // Expect an equals sign.
-  _ <- constP(x.toString)  // Expect a string corresponding to the previously parsed integer `x`.
+  _ <- constP(x.toString)  // Expect the previously parsed integer `x`.
   _ <- emptyP              // Expect end of input.
 } yield x 
 \end{lstlisting}
@@ -1259,7 +1260,7 @@ fail with an informative message when a parsed integer is not equal
 to a given value:
 \begin{lstlisting}
 val success: P[Unit] = P { s => (Right(()), s) }  // Always-succeeding parser that consumes no input.
-def failure(message: String): P[Unit] = P { s => (Left(List(message)), s) } // Always-failing parser.
+def failure(message: String): P[Unit] = P { s => (Left(List(message)), s) } // Always-failing parser that consumes no input.
 
 def expect(n: Int): P[Unit] = intP.flatMap { x =>
   if (x == n) success else failure(s"got $x but expected $n")
@@ -1274,7 +1275,7 @@ scala> p4.run("1=2mumbo-jumbo gobbledy-gook")
 res12: (Either[Err, Int], String) = (Left(List("got 2 but expected 1", "junk at end")), "mumbo-jumbo gobbledy-gook")
 \end{lstlisting}
 
-Several parser combinator libraries\footnote{See, for example, the \textsf{``}\texttt{fastparse}\textsf{''} library: \texttt{\href{https://com-lihaoyi.github.io/fastparse}{https://com-lihaoyi.github.io/fastparse}}}
+Some parser combinator libraries\footnote{See, for example, the \textsf{``}\texttt{fastparse}\textsf{''} library: \texttt{\href{https://com-lihaoyi.github.io/fastparse}{https://com-lihaoyi.github.io/fastparse}}}
 are designed after these principles and provide applicative, monadic,
 filterable, monoidal, and other functionality for building up large
 parsers from parts.
@@ -1333,7 +1334,7 @@ Implement a \lstinline!zip! method for a \textbf{ternary tree}\index{ternary tre
 \begin{lstlisting}
 sealed trait T3[A]
 case class Leaf[A](a: A) extends T3[A]
-case class Branch[A](label: A, left: T3[A], center: T3[A], right: T3[A]) extends T3[A]
+case class Branch[A](label: A, x: T3[A], y: T3[A], z: T3[A]) extends T3[A]
 
 def zip[A, B](ta: T3[A], tb: T3[B]): T3[(A, B)] = ???
 \end{lstlisting}
@@ -1401,65 +1402,26 @@ laws will always hold if the code is fully parametric.)
 \subsubsection{Statement \label{subsec:Statement-map2-zip-equivalence}\ref{subsec:Statement-map2-zip-equivalence}
 (equivalence of \lstinline!map2! and \lstinline!zip!)}
 
-For any functor $L$ for which \lstinline!map2! or \lstinline!zip!
-can be implemented, the type of functions \lstinline!zip! (type signature
-$\text{zip}:L^{A}\times L^{B}\rightarrow L^{A\times B}$) is equivalent
-to the type of functions \lstinline!map2! (type signature $L^{A}\times L^{B}\rightarrow\left(A\times B\rightarrow C\right)\rightarrow L^{C}$),
+For any functor $L$, the type of functions \lstinline!zip! $:L^{A}\times L^{B}\rightarrow L^{A\times B}$
+is equivalent to the type of functions \lstinline!map2! $:L^{A}\times L^{B}\rightarrow\left(A\times B\rightarrow C\right)\rightarrow L^{C}$,
 assuming that the functions \lstinline!map2! satisfy the naturality
 law with respect to the type parameter $C$.
 
 \subparagraph{Proof}
 
-We need to show equivalence in two directions (from \lstinline!map2!
-to \lstinline!zip! and back).
-
-\textbf{(1)} Given any function $\text{map}_{2}:L^{A}\times L^{B}\rightarrow\left(A\times B\rightarrow C\right)\rightarrow L^{C}$
-satisfying the following naturality law:
+The type of \lstinline!map2! contains the type expression $(A\times B\rightarrow C)\rightarrow L^{C}$.
+By assumption, this type is restricted to natural transformations
+with respect to $C$. Then the covariant Yoneda identity may be applied
+(Statement~\ref{subsec:Statement-covariant-yoneda-identity-for-types}
+with $A=C$, $Z=A\times B$, and $H=L$). So, we obtain the type equivalence:
 \[
-\text{map}_{2}\,(p^{:L^{A}}\times q^{:L^{B}})(f^{:A\times B\rightarrow C})\triangleright(g^{:C\rightarrow D})^{\uparrow L}=\text{map}_{2}\,(p\times q)(f\bef g)\quad,
+\forall C.\,\left(A\times B\rightarrow C\right)\rightarrow L^{C}\cong H^{Z}=L^{A\times B}\quad.
 \]
-we first define a \lstinline!zip! method:
+It follows that, under the same naturality assumption:
 \[
-\text{zip}:L^{A}\times L^{B}\rightarrow L^{A\times B}\quad,\quad\quad\text{zip}\,(p^{:L^{A}}\times q^{:L^{B}})\triangleq\text{map}_{2}\,(p\times q)(\text{id}^{:A\times B\rightarrow A\times B})\quad,
+\forall C.\,L^{A}\times L^{B}\rightarrow\left(A\times B\rightarrow C\right)\rightarrow L^{C}\cong L^{A}\times L^{B}\rightarrow L^{A\times B}\quad.
 \]
-and then define a new \lstinline!map2!$^{\prime}$ function through
-that \lstinline!zip! method:
-\[
-\text{map}_{2}^{\prime}\,(p^{:L^{A}}\times q^{:L^{B}})(f^{:A\times B\rightarrow C})\triangleq(p\times q)\triangleright\text{zip}\triangleright f^{\uparrow L}\quad.
-\]
-We need to show that $\text{map}_{2}^{\prime}=\text{map}_{2}$. Apply
-$\text{map}_{2}^{\prime}$ to arbitrary arguments:
-\begin{align*}
- & \text{map}_{2}^{\prime}\,(p\times q)(f)=(p\times q)\triangleright\text{zip}\triangleright f^{\uparrow L}\\
- & =\text{map}_{2}\,(p\times q)(\text{id})\,\gunderline{\triangleright\,f^{\uparrow L}}\\
-{\color{greenunder}\text{naturality law of }\text{map}_{2}:}\quad & =\text{map}_{2}\,(p\times q)(\text{id}\bef f)=\text{map}_{2}\,(p\times q)(f)\quad.
-\end{align*}
-
-\textbf{(2)} Given any function $\text{zip}:L^{A}\times L^{B}\rightarrow L^{A\times B}$,
-we first define a \lstinline!map2! method:
-\[
-\text{map}_{2}\,(p^{:L^{A}}\times q^{:L^{B}})(f^{:A\times B\rightarrow C})\triangleq(p\times q)\triangleright\text{zip}\triangleright f^{\uparrow L}\quad,
-\]
-and then define a new \lstinline!zip!$^{\prime}$ function through
-that \lstinline!map2! method:
-\[
-\text{zip}^{\prime}\,(p^{:L^{A}}\times q^{:L^{B}})\triangleq\text{map}_{2}\,(p\times q)(\text{id}^{:A\times B\rightarrow A\times B})\quad.
-\]
-We need to show that $\text{zip}^{\prime}=\text{zip}$. Apply $\text{zip}^{\prime}$
-to arbitrary arguments $p$, $q$:
-\begin{align*}
- & \text{zip}^{\prime}\,(p^{:L^{A}}\times q^{:L^{B}})=\text{map}_{2}\,(p\times q)(\text{id}^{:A\times B\rightarrow A\times B})=(p\times q)\triangleright\text{zip}\triangleright\text{id}^{\uparrow L}\\
- & \quad=(p\times q)\triangleright\text{zip}=\text{zip}\,(p\times q)\quad.
-\end{align*}
-
-It remains to show that the \lstinline!map2! method will satisfy
-the naturality law if defined via \lstinline!zip!:
-\begin{align*}
- & \gunderline{\text{map}_{2}\,(p\times q)(f)}\triangleright g^{\uparrow L}=(p\times q)\triangleright\text{zip}\triangleright f^{\uparrow L}\triangleright g^{\uparrow L}\\
- & =(p\times q)\triangleright\text{zip}\triangleright(f\bef g)^{\uparrow L}\\
-{\color{greenunder}\text{definition of }\text{map}_{2}\text{ via }\text{zip}:}\quad & =\text{map}_{2}\,(p\times q)(f\bef g)\quad.
-\end{align*}
-$\square$
+ $\square$
 
 The equivalence of \lstinline!map2! and \lstinline!zip! follows
 a pattern similar to one shown in Section~\ref{subsec:Yoneda-identities}:
@@ -1467,8 +1429,7 @@ a function with one type parameter (a natural transformation) is equivalent
 to a function with two type parameters obeying a naturality law with
 respect to one of those type parameters. Here \lstinline!zip! is
 playing the role of the natural transformation, and \lstinline!map2!
-is a function obeying a naturality law. The proof of Statement~\ref{subsec:Statement-map2-zip-equivalence}
-is similar to the proof of Statement~\ref{subsec:Statement-tr-equivalent-to-ftr}.
+is a function obeying a naturality law.
 
 However, \lstinline!map2! is not a \textsf{``}lifting\textsf{''} in the sense of
 Section~\ref{subsec:Yoneda-identities}. The method \textsf{``}\lstinline!ap!\textsf{''}
@@ -1498,57 +1459,25 @@ signature $\text{ap}:L^{A\rightarrow B}\rightarrow L^{A}\rightarrow L^{B}$)
 is equivalent to the type of functions \lstinline!fmap2! (type signature
 $\left(A\rightarrow B\rightarrow C\right)\rightarrow L^{A}\rightarrow L^{B}\rightarrow L^{C}$),
 assuming that the functions \lstinline!fmap2! satisfy the naturality
-law with respect to the type parameter $C$.
+law with respect to the type parameter $A$.
 
 \subparagraph{Proof}
 
-We need to show equivalence in two directions (from \lstinline!fmap2!
-to \lstinline!ap! and back).
-
-\textbf{(1)} Given any function $\text{fmap}_{2}:\left(A\rightarrow B\rightarrow C\right)\rightarrow L^{A}\rightarrow L^{B}\rightarrow L^{C}$
-satisfying the following naturality law,
-\[
-\text{fmap}_{2}\,(g^{:X\rightarrow A}\bef f^{:A\rightarrow B\rightarrow C})(p^{:L^{X}})=\text{fmap}_{2}\,(f)(p\triangleright g^{\uparrow L})\quad,
-\]
-we first define an \lstinline!ap! method:
-\[
-\text{ap}:L^{A\rightarrow B}\rightarrow L^{A}\rightarrow L^{B}\quad,\quad\quad\text{ap}\,(r^{:L^{A\rightarrow B}})\triangleq\text{fmap}_{2}\,(\text{id}^{:(A\rightarrow B)\rightarrow A\rightarrow B})(r)\quad,
-\]
-and then define a new \lstinline!fmap2!$^{\prime}$ function through
-that \lstinline!ap! method:
-\[
-\text{fmap}_{2}^{\prime}\,(f^{:A\rightarrow B\rightarrow C})(p^{:L^{A}})\triangleq p\triangleright f^{\uparrow L}\triangleright\text{ap}\quad.
-\]
-We need to show that $\text{fmap}_{2}^{\prime}=\text{fmap}_{2}$.
-Apply $\text{fmap}_{2}^{\prime}$ to arbitrary arguments:
+The type of \lstinline!fmap2! is, by assumption, restricted to the
+type of natural transformations with respect to the type parameter
+$A$. We may rewrite that type as $(A\rightarrow Z)\rightarrow H^{A}$
+like this:
 \begin{align*}
- & \text{fmap}_{2}^{\prime}\,(f^{:A\rightarrow B\rightarrow C})(p^{:L^{A}})=p\triangleright f^{\uparrow L}\triangleright\text{ap}\\
- & =\text{fmap}_{2}\,(\text{id})(p\triangleright f^{\uparrow L})\\
-{\color{greenunder}\text{naturality law of }\text{fmap}_{2}:}\quad & =\text{fmap}_{2}\,(f\bef\text{id})(p)=\text{fmap}_{2}\,(f)(p)\quad.
+ & \left(A\rightarrow B\rightarrow C\right)\rightarrow L^{A}\rightarrow L^{B}\rightarrow L^{C}=(A\rightarrow Z)\rightarrow H^{A}\quad,\\
+{\color{greenunder}\text{if we define}:}\quad & Z\triangleq B\rightarrow C\quad\text{ and }H^{A}\triangleq L^{A}\rightarrow L^{B}\rightarrow L^{C}\quad.
 \end{align*}
-
-\textbf{(2)} Given any function $\text{ap}:L^{A\rightarrow B}\rightarrow L^{A}\rightarrow L^{A}$,
-we first define \lstinline!fmap2!:
+Because $H$ is a contravariant functor, the type expression $\forall A.\,(A\rightarrow Z)\rightarrow H^{A}$
+is in the form used in the contravariant Yoneda identity (Statement~\ref{subsec:Statement-contravariant-yoneda-identity-for-types}).
+So, we obtain the type equivalence:
 \[
-\text{fmap}_{2}\,(f^{:A\rightarrow B\rightarrow C})\triangleq f^{\uparrow L}\bef\text{ap}\quad,
+\forall A.\,\left(A\rightarrow B\rightarrow C\right)\rightarrow L^{A}\rightarrow L^{B}\rightarrow L^{C}\cong H^{Z}=L^{B\rightarrow C}\rightarrow L^{B}\rightarrow L^{C}\quad.
 \]
-and then define a new \lstinline!ap!$^{\prime}$ function through
-that \lstinline!fmap2! method:
-\[
-\text{ap}^{\prime}\triangleq\text{fmap}_{2}\,(\text{id})\quad.
-\]
-Then we need to show that $\text{ap}^{\prime}=\text{ap}$. We write:
-\[
-\text{ap}^{\prime}=\text{fmap}_{2}\,(\text{id})=\text{id}^{\uparrow L}\bef\text{ap}=\text{ap}\quad.
-\]
-
-It remains to show that the \lstinline!fmap2! method will satisfy
-the naturality law if defined via \lstinline!ap!:
-\begin{align*}
- & \text{fmap}_{2}\,(g\bef f)(p)=p\triangleright(g\bef f)^{\uparrow L}\bef\text{ap}=p\triangleright g^{\uparrow L}\triangleright\gunderline{f^{\uparrow L}\bef\text{ap}}\\
-{\color{greenunder}\text{definition of }\text{fmap}_{2}\text{ via }\text{ap}:}\quad & =(p\triangleright g^{\uparrow L})\triangleright\text{fmap}_{2}\,(f)=\text{fmap}_{2}\,(f)(p\triangleright g^{\uparrow L})\quad.
-\end{align*}
-$\square$
+ $\square$
 
 Since \lstinline!zip! is equivalent to \lstinline!map2! and \lstinline!map2!
 is equivalent to \lstinline!ap!, it follows (assuming suitable naturality
@@ -1750,11 +1679,12 @@ def monadicMap2(la: L[A], lb: L[B])(f: (A, B) => C): L[C] = for {
 Unlike the code of \lstinline!monadicMap2!, which uses the monad\textsf{'}s
 methods, \lstinline!map2(la, lb)! assumes that the effects in \lstinline!la!
 and \lstinline!lb! are independent of the wrapped values (such as
-\lstinline!x! and \lstinline!y!). But the type signatures of \lstinline!monadicMap2!
-and \lstinline!map2! are the same, and for some type constructors
-(e.g., the \lstinline!Reader! monad) the results are also the same.
-So, we will require that \lstinline!map2! should obey the same laws
-as the code in \lstinline!monadicMap2!.
+\lstinline!x! and \lstinline!y!) and so may implement different
+functionality than \lstinline!monadicMap2!. But the type signatures
+of \lstinline!monadicMap2! and \lstinline!map2! are the same, and
+for some type constructors (e.g., the \lstinline!Reader! monad) the
+results are also the same. So, we will require that \lstinline!map2!
+should obey the same laws as the code in \lstinline!monadicMap2!.
 
 To derive the laws of \lstinline!map2!, we will specialize the laws
 of monads (which are imposed on \lstinline!flatMap! and \lstinline!pure!)
@@ -1782,9 +1712,9 @@ for {
 for {
   x <- la
   (y, z) <- for {
-         yy <- lb
-         zz <- lc
-       } yield (yy, zz)
+    yy <- lb
+    zz <- lc
+  } yield (yy, zz)
 } yield g(x, y, z)
 \end{lstlisting}
 %
@@ -1793,9 +1723,9 @@ for {
 \begin{lstlisting}
 for {
   (x, y) <- for {
-              xx <- la
-              yy <- lb
-            } yield (xx, yy)
+       xx <- la
+       yy <- lb
+     } yield (xx, yy)
    z <- lc
 } yield g(x, y, z)
 \end{lstlisting}
@@ -1901,9 +1831,9 @@ Begin with the associativity law and write its two sides separately:
 \begin{align*}
  & \quad{\color{greenunder}\text{left-hand side}:}\quad\\
  & \text{map}_{2}\,(p^{:L^{A}}\times\text{map}_{2}\,(q^{:L^{B}}\times r^{:L^{C}})(\text{id}^{:B\times C\rightarrow B\times C}))\big(a^{:A}\times(b^{:B}\times c^{:C})\rightarrow g(a\times b\times c)\big)\\
- & \quad=\text{zip}\,(p\times\text{zip}\,(q\times r))\triangleright(a\times(b\times c)\rightarrow g(a\times b\times c))^{\uparrow L}\\
+ & \quad=\text{zip}\,(p\times\text{zip}\,(q\times r))\triangleright(a\times(b\times c)\rightarrow g(a\times b\times c))^{\uparrow L}\quad,\\
  & \quad{\color{greenunder}\text{right-hand side}:}\quad\\
- & \overset{!}{=}\text{map}_{2}\,(\text{map}_{2}\,(p\times q)(\text{id})\times r)\big((a^{:A}\times b^{:B})\times c^{:C}\rightarrow g(a\times b\times c)\big)\\
+ & \text{map}_{2}\,(\text{map}_{2}\,(p\times q)(\text{id})\times r)\big((a^{:A}\times b^{:B})\times c^{:C}\rightarrow g(a\times b\times c)\big)\\
  & \quad=\text{zip}\,(\text{zip}\,(p\times q)\times r)\triangleright((a\times b)\times c)\rightarrow g(a\times b\times c))^{\uparrow L}\quad.
 \end{align*}
 Both sides now depend on an arbitrary function $g^{:A\times B\times C\rightarrow D}$
@@ -1916,13 +1846,13 @@ rearrange the tuples:
 \]
 Then we can rewrite the two sides of the associativity law as:
 \begin{align*}
-{\color{greenunder}\text{left-hand side}:}\quad & \text{zip}\,(p\times\text{zip}\,(q\times r))\triangleright\varepsilon_{1,23}^{\uparrow L}\bef g^{\uparrow L}\\
-{\color{greenunder}\text{right-hand side}:}\quad & \overset{!}{=}\text{zip}\,(\text{zip}\,(p\times q)\times r)\triangleright\varepsilon_{12,3}^{\uparrow L}\bef g^{\uparrow L}\quad.
+{\color{greenunder}\text{left-hand side}:}\quad & \text{zip}\,(p\times\text{zip}\,(q\times r))\triangleright\varepsilon_{1,23}^{\uparrow L}\bef g^{\uparrow L}\quad,\\
+{\color{greenunder}\text{right-hand side}:}\quad & \text{zip}\,(\text{zip}\,(p\times q)\times r)\triangleright\varepsilon_{12,3}^{\uparrow L}\bef g^{\uparrow L}\quad.
 \end{align*}
 We can now omit $g^{\uparrow L}$ (see Exercise~\ref{subsec:Exercise-simplify-law-omit-lifted-function})
 and obtain an equivalent law:
 \begin{equation}
-\text{zip}\big(p\times\text{zip}\left(q\times r\right)\big)\triangleright\varepsilon_{1,23}^{\uparrow L}\overset{!}{=}\text{zip}\big(\text{zip}\left(p\times q\right)\times r\big)\triangleright\varepsilon_{12,3}^{\uparrow L}\quad.\label{eq:zip-associativity-law-with-epsilons}
+\text{zip}\big(p\times\text{zip}\left(q\times r\right)\big)\triangleright\varepsilon_{1,23}^{\uparrow L}=\text{zip}\big(\text{zip}\left(p\times q\right)\times r\big)\triangleright\varepsilon_{12,3}^{\uparrow L}\quad.\label{eq:zip-associativity-law-with-epsilons}
 \end{equation}
 A type diagram illustrating this law is shown below:
 \[
@@ -1938,17 +1868,17 @@ $A\times(B\times C)$ to $A\times B\times C$. Since $L$ is a functor,
 the lifted functions $\varepsilon_{1,23}^{\uparrow L}$ and $\varepsilon_{12,3}^{\uparrow L}$
 produce equivalences between the types $L^{(A\times B)\times C}$,
 $L^{A\times(B\times C)}$, and $L^{A\times B\times C}$. With those
-equivalences implied, we rewrite the associativity law in a simpler
+equivalences implied, we rewrite the associativity law in a shorter
 form:\index{associativity law!of zip@of \texttt{zip}}
 \[
 \text{zip}\big(p\times\text{zip}\left(q\times r\right)\big)\cong\text{zip}\big(\text{zip}\left(p\times q\right)\times r\big)\quad.
 \]
-To make this law more visually clear, let us temporarily use the infix
-syntax for \lstinline!zip! and write:
+To make this law visually clearer, let us temporarily use the infix
+syntax for \lstinline!zip!:
 \[
 p\,\,\text{zip}\,\,q\triangleq\text{zip}\big(p\times q\big)\quad.
 \]
-In this notation, the associativity law is:
+In this notation, the associativity law looks like this:
 \begin{equation}
 p\,\,\text{zip}\,\,(q\,\,\text{zip}\,\,r)\cong(p\,\,\text{zip}\,\,q)\,\,\text{zip}\,\,r\quad.\label{eq:zip-associativity-law}
 \end{equation}
@@ -1959,7 +1889,7 @@ at appropriate places. Apart from that, the law~(\ref{eq:zip-associativity-law})
 has the usual form of an associativity law for a binary operation.
 
 When writing laws with implied type equivalences, as in the formulation~(\ref{eq:zip-associativity-law}),
-we help build the intuition about applicative laws. We also save time
+we help build intuition about applicative laws. We also save time
 because we do not write out a number of tuple-swapping functions.
 To avoid errors, derivations using this technique must first check
 that all types match (up to tuple-swapping isomorphisms).
@@ -1983,21 +1913,21 @@ Express \lstinline!pure! through the \textsf{``}wrapped unit\textsf{''} value\in
 Then we get:
 \begin{align*}
 {\color{greenunder}\text{left-hand side}:}\quad & \text{zip}\,(\text{pu}_{L}(a)\times q)=\text{zip}\big((\text{wu}\triangleright(1\rightarrow a)^{\uparrow L})\times q\big)\\
-{\color{greenunder}\text{naturality law of }\text{zip}:}\quad & \quad=\text{zip}\,(\text{wu}\times q)\triangleright(1\times b^{:B}\rightarrow a\times b)^{\uparrow L}\\
-{\color{greenunder}\text{right-hand side}:}\quad & \overset{!}{=}q\triangleright(b\rightarrow a\times b)^{\uparrow L}\quad.
+{\color{greenunder}\text{naturality law of }\text{zip}:}\quad & \quad=\text{zip}\,(\text{wu}\times q)\triangleright(1\times b^{:B}\rightarrow a\times b)^{\uparrow L}\quad,\\
+{\color{greenunder}\text{right-hand side}:}\quad & q\triangleright(b\rightarrow a\times b)^{\uparrow L}\quad.
 \end{align*}
-To simplify this equation further, we note that the function $(1\times b^{:B}\rightarrow a\times b)^{\uparrow L}$
+To simplify this law further, we note that the function $(1\times b^{:B}\rightarrow a\times b)^{\uparrow L}$
 in the left-hand side and the function $(b^{:B}\rightarrow a\times b)^{\uparrow L}$
 in the right-hand side are similar. The only difference is between
 the arguments $1\times b$ and $b$. But the types $\bbnum 1\times B$
 and $B$ are equivalent. Let us define a function called \lstinline!ilu!
-(\textsf{``}insert left unit\textsf{''}) implementing this equivalence:
+(\textsf{``}insert left unit\textsf{''}) implementing that equivalence:
 \[
 \text{ilu}:B\rightarrow\bbnum 1\times B\quad,\quad\quad\text{ilu}\triangleq b^{:B}\rightarrow1\times b\quad.
 \]
-Now we can express both sides of the law as:
+Now we can express the law as:
 \begin{equation}
-\text{zip}\,(\text{wu}\times q)\triangleright(1\times b^{:B}\rightarrow a\times b)^{\uparrow L}\overset{!}{=}q\triangleright\text{ilu}^{\uparrow L}\triangleright(1\times b^{:B}\rightarrow a\times b)^{\uparrow L}\quad.\label{eq:left-identity-zip-derivation1}
+\text{zip}\,(\text{wu}\times q)\triangleright(1\times b^{:B}\rightarrow a\times b)^{\uparrow L}=q\triangleright\text{ilu}^{\uparrow L}\triangleright(1\times b^{:B}\rightarrow a\times b)^{\uparrow L}\quad.\label{eq:left-identity-zip-derivation1}
 \end{equation}
 Both sides contain the function $(1\times b^{:B}\rightarrow a\times b)^{\uparrow L}$
 with an arbitrary value $a^{:A}$ of arbitrary type $A$. Is it correct
@@ -2044,8 +1974,8 @@ So, \lstinline!wu! is the \textsf{``}empty value\textsf{''} for the binary opera
 \lstinline!zip!.
 
 We have shown that the laws of \lstinline!map2! are simpler when
-formulated via \lstinline!zip!. In that formulation, the laws of
-applicative functors are similar to the laws of a \emph{monoid}\index{monoid}
+written via \lstinline!zip!. In that formulation, the laws of applicative
+functors are similar to the laws of a \emph{monoid}\index{monoid}
 (see Example~\ref{subsec:tc-Example-Monoids}): the binary operation
 is \lstinline!zip! and the empty value is \lstinline!wu!. 
 
@@ -2084,7 +2014,7 @@ An applicative functor $L$ is \textbf{commutative}\index{applicative functor!com
 if its \lstinline!zip! operation satisfies the commutativity law\index{commutativity law!of zip@of \texttt{zip}}
 (in addition to the standard applicative laws):
 \begin{align}
- & \text{zip}\,(p^{:L^{A}}\times q^{:L^{B}})=\text{zip}\,(q\times p)\triangleright(b^{:B}\times a^{:A}\rightarrow a\times b)^{\uparrow L}\nonumber \\
+ & \text{zip}\,(p^{:L^{A}}\times q^{:L^{B}})=\text{zip}\,(q\times p)\triangleright(b^{:B}\times a^{:A}\rightarrow a\times b)^{\uparrow L}\quad,\nonumber \\
 {\color{greenunder}\text{or equivalently}:}\quad & \text{swap}\bef\text{zip}=\text{zip}\bef\text{swap}^{\uparrow L}\quad.\label{eq:commutativity-law-of-zip}
 \end{align}
 Here we used the standard Scala function \lstinline!swap! defined
@@ -2097,9 +2027,10 @@ and suggestively:
 \[
 p\,\,\text{zip}\,\,q\cong q\,\,\text{zip}\,\,p\quad.
 \]
-This definition agrees with that of the commutative monad (Exercise~\ref{subsec:Exercise-1-monads-9-1}).
-A monad\textsf{'}s commutativity property is defined via code that is equivalent
-to the \lstinline!map2! operation:\texttt{\textcolor{blue}{\footnotesize{}}}
+This definition agrees with that of the commutative monad\index{monads!commutative}
+(Exercise~\ref{subsec:Exercise-1-monads-9-1}). A monad\textsf{'}s commutativity
+property is defined via code that is equivalent to the \lstinline!map2!
+operation:\texttt{\textcolor{blue}{\footnotesize{}}}
 \begin{lstlisting}
 def map2[A, B, C](p: M[A], q: M[B])(f: (A, B) => C): M[C] = for {
     x <- p               // Effects of p and q are independent of
@@ -2138,11 +2069,11 @@ the type signature required for a monad\textsf{'}s \lstinline!flatMap! for
 parallelizable.
 
 In many cases, a commutative applicative functor will also be a \emph{non-commutative}
-monad. Some examples are the \lstinline!Either! and \lstinline!List!
-functors. For these and other functors, the \lstinline!map2! and
-\lstinline!zip! methods must be defined separately and not derived
-from the monadic methods. If we \emph{did} choose to define the \lstinline!map2!
-method via the monadic methods, there are two possible implementations:
+monad. Examples are the list-like and the tree-like functors. For
+those and other functors, the \lstinline!map2! and \lstinline!zip!
+methods must be defined separately and not derived from the monadic
+methods. If we \emph{did} choose to define the \lstinline!map2! method
+via the monadic methods, there are two possible implementations:\vspace{0.4\baselineskip}
 
 \noindent %
 \begin{minipage}[c][1\totalheight][t]{0.45\columnwidth}%
@@ -2166,7 +2097,7 @@ map2(p, q)(f) == for { // Inverse order.
 
 \noindent The difference is only in the order in which the effects
 of \lstinline!p! and \lstinline!q! are concatenated. The two corresponding
-\lstinline!zip! functions differ by the permutation of the effects:
+\lstinline!zip! functions differ by the order of the effects:
 \begin{align*}
  & \text{zip}\left(p\times q\right)\triangleq p\triangleright\text{flm}_{L}(a\rightarrow q\triangleright(b\rightarrow a\times b)^{\uparrow L})\quad,\\
  & \text{zip}^{\prime}\left(p\times q\right)\triangleq q\triangleright\text{flm}_{L}(b\rightarrow p\triangleright(a\rightarrow a\times b)^{\uparrow L})=\text{zip}\left(q\times p\right)\triangleright\text{swap}^{\uparrow L}\quad.
@@ -2213,8 +2144,8 @@ This is the right-hand side of Eq.~(\ref{eq:associativity-law-of-zip-commutative
 \textbf{(2)} Apply the commutativity law to the right-hand side of
 Eq.~(\ref{eq:associativity-law-of-zip-commutative-short}):
 \begin{align*}
- & r\,\,\text{zip}\,\,(\gunderline q\,\,\text{zip}\,\,\gunderline p)=\gunderline r\,\,\text{zip}\,\,\gunderline{(p\,\,\text{zip}\,\,q)}=(p\,\,\text{zip}\,\,q)\,\,\text{zip}\,\,r\\
-{\color{greenunder}\text{use Eq.~(\ref{eq:associativity-law-of-zip-commutative-short})}:}\quad & \overset{!}{=}p\,\,\text{zip}\,\,(q\,\,\text{zip}\,\,r)\quad.
+ & r\,\,\text{zip}\,\,(\gunderline q\,\,\text{zip}\,\,\gunderline p)\cong\gunderline r\,\,\text{zip}\,\,\gunderline{(p\,\,\text{zip}\,\,q)}\cong(p\,\,\text{zip}\,\,q)\,\,\text{zip}\,\,r\\
+{\color{greenunder}\text{use Eq.~(\ref{eq:associativity-law-of-zip-commutative-short})}:}\quad & \cong p\,\,\text{zip}\,\,(q\,\,\text{zip}\,\,r)\quad.
 \end{align*}
 We have derived Eq.~(\ref{eq:zip-associativity-law}). $\square$
 
@@ -2266,14 +2197,15 @@ and \lstinline!wu! since the laws of \lstinline!map2! and \lstinline!zip!
 were derived directly from the monad laws. If the monad is non-commutative,
 there will be two inequivalent implementations of \lstinline!zip!.
 So, each monad construction gives at least one applicative construction.
-We will focus on constructions that generate applicative functors
-and have no analogous monad constructions.
+We will focus on constructions that produce applicative functors and
+have no analogous monad constructions.
 
 \paragraph{Type parameters}
 
 Three type constructions are based on using just type parameters:
 a constant functor, $L^{A}\triangleq Z$, the identity functor $L^{A}\triangleq A$,
-and the functor composition, $L^{A}\triangleq F^{G^{A}}$.
+and the functor composition, $L^{A}\triangleq F^{G^{A}}$ (also written
+as $L\triangleq F\circ G$).
 
 Given a fixed \emph{monoid} type $Z$, the constant functor $L^{A}\triangleq Z$
 is applicative. To see this, consider the operation \lstinline!zip!
@@ -2296,7 +2228,8 @@ and the wrapped unit (\lstinline!wu!) is just the unit value. All
 required laws hold for the identity function.
 
 The functor composition $L\triangleq F\circ G$ of two applicative
-functors $F$ and $G$ is again applicative:
+functors $F$ and $G$ is again applicative, unlike the functor composition
+of monads that often does not produce a new monad.
 
 \subsubsection{Statement \label{subsec:Statement-applicative-composition}\ref{subsec:Statement-applicative-composition}}
 
@@ -2394,26 +2327,22 @@ We note that the lifting to $L$ is defined by $f^{\uparrow L}\triangleq f^{\upar
 
 To verify the left identity law of $\text{zip}_{L}$:
 \begin{align*}
- & \quad{\color{greenunder}\text{expect to equal }(p\times q)\triangleright\text{ilu}^{\uparrow L}:}\quad\\
- & \text{zip}_{L}\big(\gunderline{\text{wu}_{L}}\times(p^{:F^{A}}\times q^{:G^{A}})\big)=\gunderline{\text{zip}_{L}}((\text{wu}_{F}\times\text{wu}_{G})\times(p\times q))\\
- & \quad{\color{greenunder}\text{definition of }\text{zip}_{L}:}\quad\\
- & =\text{zip}_{F}(\text{wu}_{F}\times p)\times\text{zip}_{G}(\text{wu}_{G}\times q)\\
- & \quad{\color{greenunder}\text{left identity laws of }\text{zip}_{F}\text{ and }\text{zip}_{G}:}\quad\\
- & =(p\triangleright\text{ilu}^{\uparrow F})\times(q\triangleright\text{ilu}^{\uparrow G})=(p\times q)\triangleright(\text{ilu}^{\uparrow F}\boxtimes\text{ilu}^{\uparrow G})\\
- & \quad{\color{greenunder}\text{definition of }^{\uparrow L}:}\quad\\
- & =(p\times q)\triangleright\text{ilu}^{\uparrow L}\quad.
+{\color{greenunder}\text{expect to equal }(p\times q)\triangleright\text{ilu}^{\uparrow L}:}\quad & \text{zip}_{L}\big(\gunderline{\text{wu}_{L}}\times(p^{:F^{A}}\times q^{:G^{A}})\big)\\
+ & =\gunderline{\text{zip}_{L}}((\text{wu}_{F}\times\text{wu}_{G})\times(p\times q))\\
+{\color{greenunder}\text{definition of }\text{zip}_{L}:}\quad & =\text{zip}_{F}(\text{wu}_{F}\times p)\times\text{zip}_{G}(\text{wu}_{G}\times q)\\
+{\color{greenunder}\text{left identity laws of }\text{zip}_{F}\text{ and }\text{zip}_{G}:}\quad & =(p\triangleright\text{ilu}^{\uparrow F})\times(q\triangleright\text{ilu}^{\uparrow G})\\
+ & =(p\times q)\triangleright(\text{ilu}^{\uparrow F}\boxtimes\text{ilu}^{\uparrow G})\\
+{\color{greenunder}\text{definition of }^{\uparrow L}:}\quad & =(p\times q)\triangleright\text{ilu}^{\uparrow L}\quad.
 \end{align*}
 
 To verify the right identity law of $\text{zip}_{L}$:
 \begin{align*}
- & \quad{\color{greenunder}\text{expect to equal }(p\times q)\triangleright\text{iru}^{\uparrow L}:}\quad\\
- & \text{zip}_{L}\big((p^{:F^{A}}\times q^{:G^{A}})\times\gunderline{\text{wu}_{L}}\big)=\gunderline{\text{zip}_{L}}((p\times q)\times(\text{wu}_{F}\times\text{wu}_{G}))\\
- & \quad{\color{greenunder}\text{definition of }\text{zip}_{L}:}\quad\\
- & =\text{zip}_{F}(p\times\text{wu}_{F})\times\text{zip}_{G}(q\times\text{wu}_{G})\\
- & \quad{\color{greenunder}\text{right identity laws of }\text{zip}_{F}\text{ and }\text{zip}_{G}:}\quad\\
- & =(p\triangleright\text{iru}^{\uparrow F})\times(q\triangleright\text{iru}^{\uparrow G})=(p\times q)\triangleright(\text{iru}^{\uparrow F}\boxtimes\text{iru}^{\uparrow G})\\
- & \quad{\color{greenunder}\text{definition of }^{\uparrow L}:}\quad\\
- & =(p\times q)\triangleright\text{iru}^{\uparrow L}\quad.
+{\color{greenunder}\text{expect to equal }(p\times q)\triangleright\text{iru}^{\uparrow L}:}\quad & \text{zip}_{L}\big((p^{:F^{A}}\times q^{:G^{A}})\times\gunderline{\text{wu}_{L}}\big)\\
+ & =\gunderline{\text{zip}_{L}}((p\times q)\times(\text{wu}_{F}\times\text{wu}_{G}))\\
+{\color{greenunder}\text{definition of }\text{zip}_{L}:}\quad & =\text{zip}_{F}(p\times\text{wu}_{F})\times\text{zip}_{G}(q\times\text{wu}_{G})\\
+{\color{greenunder}\text{right identity laws of }\text{zip}_{F}\text{ and }\text{zip}_{G}:}\quad & =(p\triangleright\text{iru}^{\uparrow F})\times(q\triangleright\text{iru}^{\uparrow G})\\
+ & =(p\times q)\triangleright(\text{iru}^{\uparrow F}\boxtimes\text{iru}^{\uparrow G})\\
+{\color{greenunder}\text{definition of }^{\uparrow L}:}\quad & =(p\times q)\triangleright\text{iru}^{\uparrow L}\quad.
 \end{align*}
 
 To verify the associativity law, begin with its left-hand side and
@@ -2535,7 +2464,7 @@ The two sides of the associativity law are expressions of type $Z+F^{A\times B\t
 {\color{greenunder}\text{right-hand side}:}\quad & \text{zip}_{L}\big(\text{zip}_{L}(p^{:Z+F^{A}}\times q^{:Z+F^{B}})\times r^{:Z+F^{C}}\big)\triangleright\varepsilon_{12,3}^{\uparrow L}\quad.
 \end{align*}
 Since each of the arguments $p$, $q$, $r$ may be in one of the
-two parts of the disjunction type $Z+F^{A}$, we have 8 cases. We
+two parts of the disjunctive type $Z+F^{A}$, we have 8 cases. We
 note, however, that the code of $\text{zip}_{L}(p\times q)$ will
 return a value of type $Z+\bbnum 0$ whenever at least one of the
 arguments ($p$, $q$) is of type $Z+\bbnum 0$. So, a composition
@@ -2643,24 +2572,24 @@ which is justified because the compatibility law holds automatically
 for $\text{ex}_{H}\triangleq\text{id}$ and $\text{zip}_{H}\triangleq\text{id}$.
  $\square$
 
-It is important that Statements~\ref{subsec:Statement-co-product-with-constant-functor-applicative}\textendash \ref{subsec:Statement-co-product-with-identity-applicative}
+Note that Statements~\ref{subsec:Statement-co-product-with-constant-functor-applicative}\textendash \ref{subsec:Statement-co-product-with-identity-applicative}
 define the methods \lstinline!zip! and \lstinline!wu! differently
 for $L^{A}\triangleq Z+F^{A}$ and for $L^{A}\triangleq A+F^{A}$.
 Only then the applicative laws of \lstinline!zip! and \lstinline!wu!
-will hold for those functors. Also, those definitions agree with the
-code of \lstinline!zip! and \lstinline!wu! for the \lstinline!Either!
+will hold for those functors. However, those definitions agree with
+the code of \lstinline!zip! and \lstinline!wu! for the \lstinline!Either!
 functor (Section~\ref{subsec:Programs-that-accumulate-errors}).
 The \lstinline!Either! functor ($L^{A}\triangleq Z+A$ with a monoid
 type $Z$) is constructed as $L^{A}\triangleq Z+F^{A}$ with $F^{A}\triangleq A$
 (via Statement~\ref{subsec:Statement-co-product-with-constant-functor-applicative})
 or as $L^{A}\triangleq A+F^{A}$ with $F^{A}\triangleq Z$ (via Statement~\ref{subsec:Statement-co-product-with-identity-applicative}).
 
-The following statement generalizes the construction $L^{A}\triangleq A+F^{A}$
+We will now generalize the construction $L^{A}\triangleq A+F^{A}$
 to $L^{A}\triangleq H^{A}+F^{A}$ where $H$ is applicative and at
 the same time co-pointed (see Section~\ref{subsec:Co-pointed-functors}).
 The code for $\text{zip}_{L}$ will use the co-pointed functor\textsf{'}s \lstinline!extract!
-method. The next statement shows that $\text{zip}_{L}$ will obey
-the applicative laws if a special \textbf{compatibility law}\index{compatibility law!of extract and zip@of \texttt{extract} and \texttt{zip}}
+method. Then $\text{zip}_{L}$ will obey the applicative laws if a
+special \textbf{compatibility law}\index{compatibility law!of extract and zip@of \texttt{extract} and \texttt{zip}}
 holds for \lstinline!extract! and \lstinline!zip!:
 \begin{align}
  & \text{ex}_{H}(\text{zip}_{H}(p^{:H^{A}}\times q^{:H^{B}}))=\text{ex}_{H}(p)\times\text{ex}_{H}(q)\quad,\nonumber \\
@@ -2671,7 +2600,7 @@ A simple example of a co-pointed applicative functor is $H^{A}\triangleq A\times
 
 \subsubsection{Statement \label{subsec:Statement-co-pointed-applicative-example}\ref{subsec:Statement-co-pointed-applicative-example}}
 
-Given any applicative functor $G^{\bullet}$, the functor $H^{A}\triangleq A\times G^{A}$
+Given any applicative functor $G$, the functor $H^{A}\triangleq A\times G^{A}$
 is applicative and co-pointed. The compatibility law~(\ref{eq:compatibility-law-of-extract-and-zip})
 holds if the \lstinline!extract! method is defined by $\text{ex}_{H}\triangleq\pi_{1}=a^{:A}\times\_^{:G^{A}}\rightarrow a$.
 
@@ -2734,11 +2663,10 @@ We are now ready to prove the co-pointed co-product construction:
 
 \subsubsection{Statement \label{subsec:Statement-co-product-with-co-pointed-applicative}\ref{subsec:Statement-co-product-with-co-pointed-applicative}}
 
-The functor $L^{A}\triangleq H^{A}+F^{A}$ is applicative if $F$
-and $H$ are applicative and in addition $H$ is co-pointed with a
-method $\text{ex}_{H}:H^{A}\rightarrow A$ that satisfies the compatibility
-law~(\ref{eq:compatibility-law-of-extract-and-zip}). The applicative
-methods of $L$ are defined by:
+The functor $L^{A}\triangleq H^{A}+F^{A}$ is applicative when $F$
+and $H$ are applicative and $H$ is co-pointed with a method $\text{ex}_{H}:H^{A}\rightarrow A$
+that obeys the compatibility law~(\ref{eq:compatibility-law-of-extract-and-zip}).
+The applicative methods of $L$ are defined by:
 \begin{align*}
  & \text{zip}_{L}:(H^{A}+F^{A})\times(H^{B}+F^{B})\rightarrow H^{A\times B}+F^{A\times B}\quad,\\
  & \text{zip}_{L}\triangleq\,\begin{array}{|c||cc|}
@@ -2823,7 +2751,7 @@ The associativity law is an equation between values of type $H^{A\times B\times 
 \]
 The operation $\text{zip}_{L}(p\times q)$ is defined in such a way
 that it returns a value of type $H^{A\times B}+\bbnum 0$ only when
-both $p$ and $q$ are in the left part of the disjunction:
+both $p$ and $q$ are in the left part of the disjunctive type:
 \[
 \text{zip}_{L}\big((a^{:H^{A}}+\bbnum 0^{:F^{A}})\times(b^{:H^{B}}+\bbnum 0^{:F^{B}})\big)=\text{zip}_{H}(a\times b)+\bbnum 0^{:F^{A\times B}}\quad.
 \]
@@ -2841,8 +2769,8 @@ The two sides are equal due to the associativity law of $\text{zip}_{H}$.
 
 \textbf{(2)} The argument $q$ has type $\bbnum 0+F^{B}$. In this
 case, $\text{zip}_{L}$ reduces to $\text{zip}_{F}$ after converting
-arguments of type $H^{A}+0$ to type $F^{A}$ when needed. We may
-define this conversion as a helper function \textsf{``}\lstinline!toF!\textsf{''}:
+arguments of type $H^{A}+\bbnum 0$ to type $F^{A}$ when needed.
+We may define this conversion as a helper function \textsf{``}\lstinline!toF!\textsf{''}:
 \begin{align*}
  & \text{toF}:H^{A}+F^{A}\rightarrow F^{A}\quad,\quad\quad\text{toF}\triangleq\,\begin{array}{|c||c|}
  & F^{A}\\
@@ -3039,7 +2967,7 @@ is applicative, and so on, until we show that $S^{A,N^{A}}$ is applicative.
 use only Statements~\ref{subsec:Statement-applicative-composition},
 \ref{subsec:Statement-applicative-product}, \ref{subsec:Statement-co-product-with-constant-functor-applicative},
 \ref{subsec:Statement-co-product-with-identity-applicative}, and~\ref{subsec:Statement-co-product-with-co-pointed-applicative}.
-These statements guarantee that $L$ will be commutative if all relevant
+Those statements guarantee that $L$ will be commutative if all relevant
 fixed types are commutative monoids. $\square$
 
 \paragraph{Function types}
@@ -3096,7 +3024,7 @@ If $F$ and $H$ are commutative then $L$ is also commutative.
 It turns out that we can verify the required laws without long derivations
 by using type constructions whose validity we already proved. Let
 us define $N^{A}\triangleq H^{A}\times F^{L^{A}}$ for brevity. Then
-the definition of $L$ is equivalently written as $L^{A}=A+N^{A}=A+H^{A}\times F^{L^{A}}$.
+the definition of $L$ is equivalently written as $L^{A}=A+N^{A}$.
 This type is built up from applicative functors $H$, $F$, and (recursively)
 $L$ itself. The functor $A+N^{A}$ is applicative due to Statement~\ref{subsec:Statement-co-product-with-identity-applicative},
 while $N^{A}=H^{A}\times F^{L^{A}}$ is a functor product (Statement~\ref{subsec:Statement-applicative-product}).
@@ -3143,7 +3071,7 @@ The overline reminds us that $\overline{\text{zip}_{N}}$ uses a recursive
 call to $\overline{\text{zip}_{L}}$. %
 \begin{comment}
 $\text{zip}\left(p\times q\right)$ is simplified when one its arguments
-($p$, $q$) are in the left part of the disjunction. If $p\triangleq a^{:A}+\bbnum 0^{:N^{A}}$
+($p$, $q$) are in the left part of the disjunctive type. If $p\triangleq a^{:A}+\bbnum 0^{:N^{A}}$
 and $q^{:L^{B}}$ is arbitrary, we have:
 \begin{align}
  & \text{zip}_{L}(p\times q)=(p\times q)\triangleright\text{zip}_{L}=(p\times q)\triangleright\,\begin{array}{|c||cc|}
@@ -3277,15 +3205,17 @@ and \lstinline!zip! for this tree-like monad are \emph{not} compatible
 with its monad methods. To see this, it suffices to note that even
 a simple tree-like monad (the binary tree, $L^{A}\triangleq A+L^{A}\times L^{A}$)
 is not commutative. The applicative functor $L$, however, is commutative
-because it is built from $H^{A}\triangleq\bbnum 1$ and $F^{A}\triangleq A\times A$;
-those are polynomial functors with commutative monoidal coefficients.
+because it is built as $L^{A}=A+H^{A}\times F^{L^{A}}$ with the functors
+$H^{A}\triangleq\bbnum 1$ and $F^{A}\triangleq A\times A$; those
+are polynomial functors with commutative monoidal coefficients.
 
-The next statement generalizes the \lstinline!List! functor, 
+The next statement generalizes the \lstinline!List! functor, defined
+as:
 \[
 \text{List}^{A}\triangleq\bbnum 1+A\times\text{List}^{A}\quad,
 \]
 by introducing \emph{three} arbitrary applicative functors into the
-above formula for $\text{List}^{A}$.
+above formula.
 
 \subsubsection{Statement \label{subsec:Statement-applicative-recursive-type-1}\ref{subsec:Statement-applicative-recursive-type-1}}
 
@@ -3354,7 +3284,7 @@ type of a function. A simple example when this problem occurs is with
 the \lstinline!List! functor. The value $\text{wu}_{\text{List}}$
 is then defined as:
 \[
-\text{List}^{A}\triangleq\bbnum 1+A\times\text{List}^{A}\quad,\quad\quad\text{wu}_{\text{List}}\triangleq\bbnum 0+1\times\text{wu}_{\text{List}}\quad.
+\text{wu}_{\text{List}}:\text{List}^{\bbnum 1}\cong\bbnum 1+\bbnum 1\times\text{List}^{\bbnum 1}\quad,\quad\quad\text{wu}_{\text{List}}\triangleq\bbnum 0+1^{:\bbnum 1}\times\text{wu}_{\text{List}}\quad.
 \]
 This value apparently represents an \emph{infinite} list of unit values:
 \[
@@ -3364,12 +3294,12 @@ We need a \textsf{``}lazy list\index{lazy collection}\textsf{''} (or another non
 collection) if we want to define \lstinline!wu! recursively by the
 code shown above. However, the data structure $\text{List}^{A}$ is
 eagerly evaluated and can only hold a finite number of values. So,
-we must conclude that \lstinline!wu! is undefined for the functor
-\lstinline!List!, which then cannot be considered a fully lawful
-applicative functor. Nevertheless, the associativity and the commutativity
-laws hold for the \lstinline!zip! method of \lstinline!List!. The
-absence of a well-defined value \lstinline!wu! does not lead to practical
-disadvantages when working with finite lists. 
+we must conclude that \lstinline!wu! is undefined for the eager functor
+\lstinline!List!, which then cannot be considered a lawful applicative
+functor if the standard definition of \lstinline!zip! is used. Nevertheless,
+the associativity and the commutativity laws hold for \lstinline!zip!.
+The absence of a well-defined value \lstinline!wu! does not lead
+to practical disadvantages when working with finite lists. 
 
 For certain choices of $F$, $G$, and $H$, the functor $L$ will
 be a monad. It is important that the implementation of applicative
@@ -3383,10 +3313,9 @@ Also, the \lstinline!List! monad\textsf{'}s \lstinline!pure! method (returning
 a list with a single value) differs from the applicative \lstinline!pure!
 method (returning an infinite list of values, as we just saw).
 
-There could exist other recursive constructions that produce lawful
-applicative functors. For instance, one could assume an \textsf{``}biapplicative
-bifunctor\textsf{''} $P$ having a \lstinline!bizip! method with this type
-signature: 
+There  exist other recursive constructions that produce lawful applicative
+functors. For instance, one could assume an \textsf{``}biapplicative bifunctor\textsf{''}
+$P$ having a \lstinline!bizip! method with this type signature:
 \[
 \text{bizip}_{P}^{A,B,F}:P^{A,F^{A}}\times P^{B,F^{B}}\rightarrow P^{A\times B,F^{A}\times F^{B}}\quad(\text{for all functors }F)\quad.
 \]
@@ -3467,8 +3396,7 @@ Contrafunctors (see Section~\ref{subsec:Contrafunctors}) support
 a \lstinline!contramap! method instead of \lstinline!map!. So, contrafunctors
 cannot have the \lstinline!map2! or \lstinline!ap! methods. Nevertheless,
 the applicative laws can be formulated via \lstinline!zip! and \lstinline!wu!
-methods using \lstinline!contramap!. That is the formulation we will
-use for contrafunctors.
+methods using \lstinline!contramap!:
 
 \subsubsection{Definition \label{subsec:Definition-applicative-contrafunctor}\ref{subsec:Definition-applicative-contrafunctor}}
 
@@ -3493,7 +3421,7 @@ It is important to require the laws to hold. Otherwise, a function
 with the type signature of \lstinline!zip! could be implemented for
 any contrafunctor $C$:
 \[
-\text{badZip}:C^{A}\times C^{B}\rightarrow C^{A\times B}\quad,\quad\quad\text{badZip}\triangleq p^{:C^{A}}\times\_^{:C^{B}}\rightarrow p\triangleright(a\times b\rightarrow a)^{\downarrow C}\quad.
+\text{badZip}:C^{A}\times C^{B}\rightarrow C^{A\times B}\quad,\quad\quad\text{badZip}\triangleq(p^{:C^{A}}\times\_^{:C^{B}})\rightarrow p\triangleright(a\times b\rightarrow a)^{\downarrow C}\quad.
 \]
 This function loses information because it ignores one of its arguments.
 Intuitively, we expect that some laws will fail for this function.
@@ -3529,8 +3457,8 @@ with functors:
 
 \subsubsection{Statement \label{subsec:Statement-applicative-contrafunctor-composition}\ref{subsec:Statement-applicative-contrafunctor-composition}}
 
-If $F^{\bullet}$ is an applicative \emph{functor} and $G^{\bullet}$
-is an applicative contrafunctor then the contrafunctor $C^{A}\triangleq F^{G^{A}}$
+If $F$ is an applicative \emph{functor} and $G$ is an applicative
+contrafunctor then the contrafunctor $C^{A}\triangleq F^{G^{A}}$
 (equivalently written as $C\triangleq F\circ G$) is applicative.
 
 \subparagraph{Proof}
@@ -3762,12 +3690,10 @@ is reduced to the associativity law of $\text{zip}_{F}$. Since the
 laws of $\text{zip}_{F}$ and $\text{zip}_{G}$ hold by assumption,
 we will not need to consider these two cases any further. 
 
-To verify the associativity law in the remaining cases, write $p\times\text{zip}_{C}(q\times r)$
-separately:
+To verify the associativity law in the remaining cases, write the
+expression $p\times\text{zip}_{C}(q\times r)$ separately:
 \begin{align*}
- & p\times\text{zip}_{C}(q\times r)
-\end{align*}
-\begin{align*}
+ & p\times\text{zip}_{C}(q\times r)\\
  & =(q\times r)\triangleright\,\begin{array}{|c||cc|}
  & C^{A}\times F^{B\times C} & C^{A}\times G^{B\times C}\\
 \hline F^{B}\times F^{C} & g\times h\rightarrow p\times\text{zip}_{F}(g\times h) & \bbnum 0\\
@@ -4005,7 +3931,7 @@ can define \lstinline!pure! and \lstinline!xmap2!:
 \begin{align*}
  & \text{pu}_{P}:A\rightarrow P^{A}\quad,\quad\quad\text{pu}_{P}(a^{:A})\triangleq\text{wu}_{P}\triangleright(\_^{:A}\rightarrow1)^{\downarrow P}(\_^{:\bbnum 1}\rightarrow a)^{\uparrow P}\quad,\\
  & \text{xmap}_{2}:(A\times B\rightarrow D)\times(D\rightarrow A\times B)\rightarrow P^{A}\times P^{B}\rightarrow P^{D}\quad,\\
- & \text{xmap}_{2}(f^{:A\times B\rightarrow D}\times g^{:D\rightarrow A\times B})\triangleq\text{zip}_{P}\bef(g^{\downarrow C}f^{\uparrow C})\quad.
+ & \text{xmap}_{2}(f^{:A\times B\rightarrow D}\times g^{:D\rightarrow A\times B})\triangleq\text{zip}_{P}\bef(g^{\downarrow P}f^{\uparrow P})\quad.
 \end{align*}
 
 It is important that the \lstinline!pure! method ($\text{pu}_{P}$)
@@ -4235,8 +4161,8 @@ In this case, any arguments of types $\bbnum 0+F^{...}$ are ignored
 by $\text{zip}_{P}$, while the arguments of type $Z+\bbnum 0$ are
 combined using the monoid $Z$\textsf{'}s binary operation ($\oplus$). So,
 the result of the \lstinline!zip! operation is the same if we replace
-any arguments ($p$, $q$, $r$) of type $\bbnum 0+F^{\bullet}$ by
-the empty value $e_{Z}$. For example:
+any arguments ($p$, $q$, $r$) of type $\bbnum 0+F^{...}$ by the
+empty value $e_{Z}$. For example:
 \[
 \text{zip}_{P}\big((z+\bbnum 0)\times(\bbnum 0+k^{:F^{A}})\big)=z+\bbnum 0=\text{zip}_{P}\big((z+\bbnum 0)\times(e_{Z}+\bbnum 0)\big)\quad.
 \]
@@ -4313,7 +4239,7 @@ holds, then $P^{A}\triangleq H^{A}+F^{A}$ is also applicative:
 H^{A}\times F^{B} & \bbnum 0 & ((\text{ex}_{H}\bef\text{pu}_{F})\boxtimes\text{id})\bef\text{zip}_{F}\\
 F^{A}\times H^{B} & \bbnum 0 & (\text{id}\boxtimes(\text{ex}_{H}\bef\text{pu}_{F}))\bef\text{zip}_{F}\\
 F^{A}\times F^{B} & \bbnum 0 & \text{zip}_{F}
-\end{array}\quad;
+\end{array}\quad.
 \end{align*}
 The method $\text{wu}_{P}:H^{\bbnum 1}+F^{\bbnum 1}$ is defined by
 $\text{wu}_{P}\triangleq\text{wu}_{H}+\bbnum 0^{:F^{\bbnum 1}}$.
@@ -4391,7 +4317,7 @@ The associativity law is an equation between values of type $H^{A\times B\times 
 \end{align*}
 The operation $\text{zip}_{P}(p\times q)$ is defined in such a way
 that it returns a value of type $H^{A\times B}+\bbnum 0$ only when
-both $p$ and $q$ are in the left part of the disjunction:
+both $p$ and $q$ are in the left part of the disjunctive type:
 \[
 \text{zip}_{P}\big((a^{:H^{A}}+\bbnum 0^{:F^{A}})\times(b^{:H^{B}}+\bbnum 0^{:F^{B}})\big)=\text{zip}_{H}(a\times b)+\bbnum 0^{:F^{A\times B}}\quad.
 \]
@@ -4411,9 +4337,9 @@ The two sides are equal due to the associativity law of $\text{zip}_{H}$.
 
 \textbf{(2)} The argument $q$ has type $\bbnum 0+F^{B}$. In this
 case, $\text{zip}_{P}$ reduces to $\text{zip}_{F}$ after converting
-arguments of types $H^{...}+0$ to types $F^{...}$ when needed. We
-may define this conversion as a function \textsf{``}\lstinline!toF!\textsf{''} as
-in the proof of Statement~\ref{subsec:Statement-co-product-with-co-pointed-applicative}.
+arguments of types $H^{...}+\bbnum 0$ to types $F^{...}$ when needed.
+We may define this conversion as a function \textsf{``}\lstinline!toF!\textsf{''}
+as in the proof of Statement~\ref{subsec:Statement-co-product-with-co-pointed-applicative}.
 The associativity law of $\text{zip}_{P}$ is then reduced to the
 same law of $\text{zip}_{F}$:
 \begin{align*}
@@ -4599,7 +4525,7 @@ $\square$
 
 Note that the functor $H$ must be \emph{covariant} in the last construction
 ($P^{A}\triangleq H^{A}\rightarrow G^{A}$). Otherwise, the profunctor
-$P$ will not be applicative even the simple cases such as $P^{A}\triangleq H^{A}\rightarrow A$.
+$P$ will not be applicative even in simple cases such as $P^{A}\triangleq H^{A}\rightarrow A$.
 (We omit the proof of that statement.)
 
 \section{Discussion and further developments}
@@ -4768,7 +4694,7 @@ via the monad\textsf{'}s \lstinline!flatMap!.
 However, in many cases we need to define the \lstinline!map2! method
 in a different way because expressing \lstinline!map2! via \lstinline!flatMap!
 does not give us the required functionality. We have seen several
-examples of this. For instance, the standard behavior of \lstinline!map2!
+examples of this. For instance, the behavior of \lstinline!map2!
 for sequences, trees, and \lstinline!Either! is not compatible with
 the standard \lstinline!flatMap! methods of those functors.
 
@@ -4786,8 +4712,8 @@ functors with monoidal fixed types. (All our examples of non-applicative
 functors involve non-polynomial functors.) But we have seen that not
 all polynomial functors are monads.\footnote{It is unknown how to characterize or enumerate all polynomial functors
 that are monads (see Problems~\ref{par:Problem-monads-1}\textendash \ref{par:Problem-monads}).} Example~\ref{subsec:Example-applicative-not-monad} shows a simple
-applicative functor ($L^{A}\triangleq\bbnum 1+A\times A$) that does
-\emph{not} have a lawful monad implementation (Exercise~\ref{subsec:Exercise-1-monads-7-not-a-monad}).
+applicative functor\index{applicative functor!not a monad} ($L^{A}\triangleq\bbnum 1+A\times A$)
+that does \emph{not} have a lawful monad implementation (Exercise~\ref{subsec:Exercise-1-monads-7-not-a-monad}).
 
 We have also seen that the \lstinline!zip! and \lstinline!wu! operations
 exist for some type constructors that are not covariant. We conclude
@@ -4822,10 +4748,10 @@ have $\text{zip}_{K}=\text{id}$.
 
 It also seems reasonable to require that $\phi$ should map the method
 $\text{pu}_{H}$ to $\text{pu}_{K}$. This gives the \textbf{identity
-law}: $\text{pu}_{H}\bef\phi=\text{pu}_{K}$.\index{identity laws!of applicative morphisms}
-Functions $\phi$ satisfying these two laws are called \textbf{applicative
+law}: $\text{pu}_{H}\bef\phi=\text{pu}_{K}$ (equivalently, $\phi(\text{wu}_{H})=\text{wu}_{K}$).\index{identity laws!of applicative morphisms}
+Functions $\phi$ satisfying those laws are called \textbf{applicative
 morphisms}\index{applicative morphism} between two applicative functors
-$H$ and $K$. The two laws display the similarity between applicative
+$H$ and $K$. Those laws display the similarity between applicative
 morphisms and monad morphisms (Section~\ref{subsec:Monads-in-category-theory-monad-morphisms}).
 
 \subsection{Deriving the laws of \texttt{ap} using category theory}
@@ -4860,8 +4786,8 @@ laws. Finally, we will need to prove that \lstinline!ap! satisfies
 the identity and composition laws appropriate for a (categorical)
 functor.
 
-This section will f derive and verify the laws of \lstinline!ap!
-in that way.
+This section will derive and verify the laws of \lstinline!ap! in
+that way.
 
 The first step is to define two categories between which we will establish
 a categorical functor. The objects of both categories are ordinary
@@ -4960,8 +4886,8 @@ in Section~\ref{subsec:Deriving-the-laws-of-zip}):
 Using these equations, we find that the two sides of the associativity
 law of $\odot$ are equal:
 \begin{align*}
-{\color{greenunder}\text{left-hand side}:}\quad & \gunderline{\text{zip}\left(\text{zip}\left(p\times q\right)\times r\right)\triangleright\varepsilon_{12,3}}\bef(f\times g\times h\rightarrow f\bef g\bef h)\\
-{\color{greenunder}\text{right-hand side}:}\quad & =\gunderline{\text{zip}\left(p\times\text{zip}\left(q\times r\right)\right)\triangleright\varepsilon_{1,23}}\bef(f\times g\times h\rightarrow f\bef g\bef h)\quad.
+{\color{greenunder}\text{left-hand side}:}\quad & \gunderline{\text{zip}\left(\text{zip}\left(p\times q\right)\times r\right)\triangleright\varepsilon_{12,3}^{\uparrow L}}\bef(f\times g\times h\rightarrow f\bef g\bef h)^{\uparrow L}\\
+{\color{greenunder}\text{right-hand side}:}\quad & =\gunderline{\text{zip}\left(p\times\text{zip}\left(q\times r\right)\right)\triangleright\varepsilon_{1,23}^{\uparrow L}}\bef(f\times g\times h\rightarrow f\bef g\bef h)^{\uparrow L}\quad.
 \end{align*}
 The underlined expressions are equal due to the associativity law~(\ref{eq:zip-associativity-law-with-epsilons})
 of \lstinline!zip!.
@@ -5010,8 +4936,8 @@ functions $\varepsilon_{1,23}$ and $\varepsilon_{12,3}$ and write:
 Using these equations, we find that the two sides of the associativity
 law of $\odot$ are equal:
 \begin{align*}
-{\color{greenunder}\text{left-hand side}:}\quad & \gunderline{\text{zip}\left(r\times\text{zip}\left(q\times p\right)\right)\triangleright\varepsilon_{1,23}}\bef(h\times g\times f\rightarrow f\bef g\bef h)^{\uparrow L}\\
-{\color{greenunder}\text{right-hand side}:}\quad & =\gunderline{\text{zip}\left(\text{zip}\left(q\times r\right)\times p\right)\triangleright\varepsilon_{12,3}}\bef(h\times g\times f\rightarrow f\bef g\bef h)\quad.
+{\color{greenunder}\text{left-hand side}:}\quad & \gunderline{\text{zip}\left(r\times\text{zip}\left(q\times p\right)\right)\triangleright\varepsilon_{1,23}^{\uparrow L}}\bef(h\times g\times f\rightarrow f\bef g\bef h)^{\uparrow L}\\
+{\color{greenunder}\text{right-hand side}:}\quad & =\gunderline{\text{zip}\left(\text{zip}\left(q\times r\right)\times p\right)\triangleright\varepsilon_{12,3}^{\uparrow L}}\bef(h\times g\times f\rightarrow f\bef g\bef h)^{\uparrow L}\quad.
 \end{align*}
 The underlined expressions are equal due to the associativity law
 of \lstinline!zip!. $\square$
@@ -5023,13 +4949,12 @@ in Section~\ref{subsec:Applicative-morphisms}. Applicative morphisms
 have type $L^{A}\rightarrow M^{A}$, while $L$-ap morphisms have
 type $L^{A\rightarrow B}$.} We may now write the laws of a (categorical) functor between the
 $L$-ap and the $L$-lifted categories. Such a functor consists of
-two mappings: a mapping between objects: each type $A$ is mapped
-to the type $L^{A}$; and a mapping between morphisms: each $L$-ap
+two mappings: a mapping between objects (each type $A$ is mapped
+to the type $L^{A}$) and a mapping between morphisms (each $L$-ap
 morphism $f:L^{A\rightarrow B}$ is mapped to the morphism $\text{ap}\left(f\right):L^{A}\rightarrow L^{B}$
-in the $L$-lifted category. In other words, we expect the function
-\lstinline!ap! to play the role of the morphism mapping of that functor.
-So, we expect that this mapping must obey the laws of identity and
-composition.
+in the $L$-lifted category). We expect the function \lstinline!ap!
+to play the role of the morphism mapping of that functor. So, we expect
+that this mapping must obey the laws of identity and composition.
 
 The identity law says that the function \lstinline!ap! must map the
 identity morphism of the $L$-ap category into the identity morphism
@@ -5099,8 +5024,8 @@ applied to $r$:
 \end{align*}
 The remaining difference is reduced to the associativity law of \lstinline!zip!:
 \begin{align*}
-{\color{greenunder}\text{left-hand side}:}\quad & \gunderline{\text{zip}\big(\text{zip}\left(q\times p\right)\times r\big)\triangleright\varepsilon_{12,3}}\bef(h\times g\times a\rightarrow a\triangleright g\triangleright h)^{\uparrow L}\\
-{\color{greenunder}\text{right-hand side}:}\quad & =\gunderline{\text{zip}\big(q\times\text{zip}\left(p\times r\right)\big)\triangleright\varepsilon_{1,23}}\bef\big(h\times g\times a\rightarrow a\triangleright g\triangleright h\big)^{\uparrow L}\quad.
+{\color{greenunder}\text{left-hand side}:}\quad & \gunderline{\text{zip}\big(\text{zip}\left(q\times p\right)\times r\big)\triangleright\varepsilon_{12,3}^{\uparrow L}}\bef(h\times g\times a\rightarrow a\triangleright g\triangleright h)^{\uparrow L}\\
+{\color{greenunder}\text{right-hand side}:}\quad & =\gunderline{\text{zip}\big(q\times\text{zip}\left(p\times r\right)\big)\triangleright\varepsilon_{1,23}^{\uparrow L}}\bef\big(h\times g\times a\rightarrow a\triangleright g\triangleright h\big)^{\uparrow L}\quad.
 \end{align*}
 The underlined expressions are equal due to the associativity law~(\ref{eq:zip-associativity-law-with-epsilons})
 of \lstinline!zip!. $\square$
@@ -5126,16 +5051,16 @@ law. That law is equivalent to an additional law of \lstinline!ap!
 \subsection{The pattern of \textquotedblleft functorial\textquotedblright{} typeclasses
 and category theory\label{subsec:The-pattern-of-functorial-typeclasses}}
 
-In the previous chapters, we have derived several equivalent formulations
-of the laws of various typeclasses (such as functor, contrafunctor,
-filterable, monad, applicative). We found that some of these formulations
-are easier to use when verifying the laws by hand. However, in every
-case we have found a certain formulation of the typeclass laws in
-terms of the laws of a \textsf{``}lifting\textsf{''} (namely, the identity and composition
-laws). This formulation is important because it makes contact with
-category theory, which provides assurance that the laws are chosen
-reasonably and correctly. Let us now summarize what we have learned
-about the laws of the typeclasses.
+In this and previous chapters, we have derived several equivalent
+formulations of the laws of various typeclasses (such as functor,
+contrafunctor, filterable, monad, applicative). We found that some
+of these formulations are easier to use when verifying the laws by
+hand. However, in every case we have found a certain formulation of
+the typeclass laws in terms of the laws of a \textsf{``}lifting\textsf{''} (namely,
+the identity and composition laws). This formulation is important
+because it makes contact with category theory, which provides assurance
+that the laws are chosen reasonably and correctly. Let us now summarize
+what we have learned about the laws of the typeclasses.
 
 In many cases considered so far, we were able to find a certain typeclass
 method whose type signature looks like a \textsf{``}lifting\textsf{''} between functions
@@ -5255,7 +5180,7 @@ Show that the following functors $F$ \emph{cannot} be applicative:
 
 \textbf{(b)} $F^{A}\triangleq\left(A\rightarrow P\right)\rightarrow\bbnum 1+A\quad.$
 
-Here $P$ and $Q$ are some arbitrary, unknown, but fixed monoidal
+Here $P$ and $Q$ are some arbitrary, unequal, but fixed monoidal
 types.
 
 \subsubsection{Exercise \label{subsec:Exercise-applicative-II-4-2}\ref{subsec:Exercise-applicative-II-4-2}}
@@ -5266,10 +5191,10 @@ constructions to avoid long proofs.
 
 \subsubsection{Exercise \label{subsec:Exercise-applicative-I-1-1-1}\ref{subsec:Exercise-applicative-I-1-1-1}}
 
-Implement a \textsf{``}padding\textsf{''} \lstinline!zip! method for lists \lstinline!List[A]!
-such that the shorter list is padded with the \emph{last} value until
-its length is equal to that of the longer list. Zipping with an empty
-list returns again an empty list. A sample test:
+Implement a \textsf{``}padding\textsf{''} \lstinline!zip! method for lists such that
+the shorter list is padded with the \emph{last} value until its length
+is equal to that of the longer list. Zipping with an empty list returns
+again an empty list. A sample test:
 \begin{lstlisting}
 def paddingZip[A, B](left: List[A], right: List[B]): List[(A, B)] = ???
 
@@ -5310,7 +5235,7 @@ $u=v$.
 
 Show that $\text{pu}_{L}(f)\odot\text{pu}_{L}(g)=\text{pu}_{L}\left(f\bef g\right)$
 for an applicative functor $L$. The operation $\odot$ is defined
-in Statement~\ref{subsec:Statement-ap-category-laws}(b).
+as in Statement~\ref{subsec:Statement-ap-category-laws}(b).
 
 \subsubsection{Exercise \label{subsec:Exercise-additional-law-of-ap}\ref{subsec:Exercise-additional-law-of-ap}}
 
@@ -5332,11 +5257,10 @@ To complement Statement~\ref{subsec:Statement-applicative-composition},
 prove that:
 
 \textbf{(a)} If $F$ is an applicative functor and $G$ is an applicative
-contrafunctor then the contrafunctor $L^{A}\triangleq G^{F^{A}}$
-is applicative.
+contrafunctor then the contrafunctor $G\circ F$ is applicative.
 
 \textbf{(b)} If $F$ and $G$ are both applicative contrafunctors
-then $L^{A}\triangleq F^{G^{A}}$ is an applicative \emph{functor}.
+then $F\circ G$ is an applicative \emph{functor}.
 
 \textbf{(c)} In both parts \textbf{(a)} and \textbf{(b)}, if $F$
 and $G$ are commutative then $L$ is also commutative.
@@ -5362,7 +5286,8 @@ constructions.)
 
 \subsubsection{Exercise \label{subsec:Exercise-applicative-profunctor-composition}\ref{subsec:Exercise-applicative-profunctor-composition}}
 
-Prove Statement~\ref{subsec:Statement-applicative-profunctor-composition}.
+Prove Statement~\ref{subsec:Statement-applicative-profunctor-composition}
+(similarly to Statement~\ref{subsec:Statement-applicative-contrafunctor-composition}).
 
 \subsubsection{Exercise \label{subsec:Exercise-profunctor-example}\ref{subsec:Exercise-profunctor-example}}
 
