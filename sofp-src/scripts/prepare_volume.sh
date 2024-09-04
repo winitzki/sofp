@@ -9,15 +9,15 @@ function pdfPages {
 }
 
 vol1_ISBN="ISBN (vol.~1): 978-1-4710-4004-7"
-vol1_ISBN_barcode="vol1_isbn_barcode.pdf"
+vol1_ISBN_barcode="vol1_isbn_barcode_embedded_fonts.pdf"
 vol1_url="https://www.lulu.com/shop/sergei-winitzki/the-science-of-functional-programming-part-i/paperback/product-dyyq2zm.html"
 
 vol2_ISBN="ISBN (vol.~2): 978-1-4461-9146-0"
-vol2_ISBN_barcode="vol2_isbn_barcode.pdf"
+vol2_ISBN_barcode="vol2_isbn_barcode_embedded_fonts.pdf"
 vol2_url="https://www.lulu.com/shop/sergei-winitzki/the-science-of-functional-programming-part-ii/paperback/product-655e7wm.html"
 
 vol3_ISBN="ISBN (vol.~3): 978-1-4461-9136-1"
-vol3_ISBN_barcode="vol3_isbn_barcode.pdf"
+vol3_ISBN_barcode="vol3_isbn_barcode_embedded_fonts.pdf"
 vol3_url="https://www.lulu.com/shop/sergei-winitzki/the-science-of-functional-programming-part-ii/paperback/product-p668z4q.html"
 
 v=$1
@@ -124,7 +124,7 @@ esac
   echo "Using volume $v ISBN '$isbn'"
   sed -i.bak -e 's|\({\\footnotesize{}\)ISBN: [^}]*\(}\\\\\)|\1'"$isbn"'\2|;' $dir/$name.tex
   # Add barcode to back cover.
-  sed -i.bak -e 's|%\(.*\){barcode}.*|\1{'"$barcode"'}|' $dir/sofp-back-cover-no-bg.tex
+  sed -i.bak -e 's|%\(.*\){barcode}\(.*\)$|\1{'"$barcode"'}\2|' $dir/sofp-back-cover-no-bg.tex
 
 mv $dir/$name.tex $dir/sofp.tex
 
