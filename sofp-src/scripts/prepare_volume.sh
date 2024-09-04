@@ -124,7 +124,7 @@ esac
   echo "Using volume $v ISBN '$isbn'"
   sed -i.bak -e 's|\({\\footnotesize{}\)ISBN: [^}]*\(}\\\\\)|\1'"$isbn"'\2|;' $dir/$name.tex
   # Add barcode to back cover.
-  sed -i.bak -e 's|%\(.*\){barcode}.*|\1{'"$barcode"'}|' $dir/sofp-back-cover-no-bg.tex
+  sed -i.bak -e 's|%\(.*\){barcode}\(.*\)$|\1{'"$barcode"'}\2|' $dir/sofp-back-cover-no-bg.tex
 
 mv $dir/$name.tex $dir/sofp.tex
 
