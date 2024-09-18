@@ -43,7 +43,7 @@ For those unfamiliar with the GNU FDL: this means the book is free (as in "freed
 
 This `git` repository
 contains the full source code for the book (LyX / LaTeX / jpg / pdf) and shell scripts for building a PDF version of the book.
-So, this is a "transparent" copy in the sense of the GNU license; the source code of the book is in a format that is convenient to use and to modify.
+So, this is a "transparent" copy in the sense of the GNU license: the source code of the book is in a format that is convenient to use and to modify.
 
 The ["Releases" section](https://github.com/winitzki/sofp/releases) of this repository contains (under "Assets") the full uncorrected draft (`sofp.pdf`)
 and the finished and proof-read part of the draft (`sofp-draft.pdf`).
@@ -59,11 +59,17 @@ The talk slides are not part of the book and are partially obsolete both in cont
 
 # Current status of the book
 
-Chapters 1-12 and 14, as well as appendices and discussion chapters are ready after a second proofreading of the draft.
+The book is split into three volumes, corresponding to the three parts ranged by difficulty.
 
-Chapter 13 remains under construction. It is the last chapter to be written. After that, the book will be ready for general release. 
+Volume 1 (Chapters 1-5) and Volume 2 (Chapters 6-12) are ready. Volume 3 is still in the works.
 
-# Leanpub version of the draft
+[Volume 1 on Amazon](https://www.amazon.com/Science-Functional-Programming-Part-tutorial/dp/1471040046/)
+
+[Volume 2 on Amazon](https://www.amazon.com/dp/144619146X/)
+
+Chapter 13 in Volume 3 remains under construction. It is the last chapter to be written. After that, the book will be ready for general release. 
+
+# Leanpub version of the full draft
 
 The draft version is [available for purchase on leanpub](https://leanpub.com/sofp) for people who want to be notified about updates.
 
