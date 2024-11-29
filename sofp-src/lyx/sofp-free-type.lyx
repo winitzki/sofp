@@ -1093,8 +1093,9 @@ before
 \emph default
  running them.
  We may also implement different runners that execute the same DSL program
- on a remote computer, on a distributed file system, on GPUs instead of
- CPUs, or in a test-only sandbox environment, with logging or benchmarking.
+ in a number of ways: for example, on a remote computer, on a distributed
+ file system, on GPUs instead of CPUs, or in a test-only sandbox environment,
+ with logging or benchmarking.
 \end_layout
 
 \begin_layout Subsection
@@ -3847,7 +3848,7 @@ def runFileC[A]: PrgFileC[A] => A = {
 
 \end_inset
 
-The code of 
+The definition of 
 \begin_inset listings
 inline true
 status open
@@ -3998,6 +3999,7 @@ def runComplex[A]: PrgComplex[A] => A = {
 
 \begin_layout Plain Layout
 
+}
 \end_layout
 
 \begin_layout Plain Layout
@@ -4981,7 +4983,7 @@ val prgComplex: PrgComplex[Complex] = for {
 
 \begin_layout Plain Layout
 
-  r <- Op(Rotate(x, Phase(Complex(0, 1))))
+  r <- Op(Rotate(z, Phase(Complex(0, 1))))
 \end_layout
 
 \begin_layout Plain Layout
@@ -4995,7 +4997,7 @@ val prgComplex: PrgComplex[Complex] = for {
 
 \begin_layout Plain Layout
 
-scala> runComplex(runnerComplex)(prgComplex2)
+scala> run(runnerComplex)(prgComplex)
 \end_layout
 
 \begin_layout Plain Layout
@@ -5054,7 +5056,103 @@ F
 \end_inset
 
 , for reasons explained later in this chapter.
- Note that 
+ The full code is:
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+sealed trait MonadDSL[F[_], A] {
+\end_layout
+
+\begin_layout Plain Layout
+
+  def flatMap[B](f: A => MonadDSL[F, B]): MonadDSL[F, B] = Bind(this)(f)
+\end_layout
+
+\begin_layout Plain Layout
+
+  def map[B](f: A => B): MonadDSL[F, B] = flatMap(f andThen MonadDSL.pure)
+\end_layout
+
+\begin_layout Plain Layout
+
+}
+\end_layout
+
+\begin_layout Plain Layout
+
+final case class Val[F[_], A](a: A) extends MonadDSL[F, A]
+\end_layout
+
+\begin_layout Plain Layout
+
+final case class Bind[F[_], A, B](pa: MonadDSL[F, B])(val f: B => MonadDSL[F,
+ A]) extends MonadDSL[F, A]
+\end_layout
+
+\begin_layout Plain Layout
+
+final case class Op[F[_], A](op: F[A]) extends MonadDSL[F, A]
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+trait Runner[F[_]] {  def apply[X]: F[X] => X  }
+\end_layout
+
+\begin_layout Plain Layout
+
+\end_layout
+
+\begin_layout Plain Layout
+
+object MonadDSL {
+\end_layout
+
+\begin_layout Plain Layout
+
+  def pure[F[_], A](a: A): MonadDSL[F, A] = Val(a)
+\end_layout
+
+\begin_layout Plain Layout
+
+  def run[F[_], A](runner: Runner[F]): MonadDSL[F, A] => A = {
+\end_layout
+
+\begin_layout Plain Layout
+
+    case Val(a) => a
+\end_layout
+
+\begin_layout Plain Layout
+
+    case bind@Bind(pa) => run(runner)(bind.f(run(runner)(pa)))
+\end_layout
+
+\begin_layout Plain Layout
+
+    case Op(op) => runner.apply(op)
+\end_layout
+
+\begin_layout Plain Layout
+
+  }
+\end_layout
+
+\begin_layout Plain Layout
+
+}
+\end_layout
+
+\end_inset
+
+Note that 
 \begin_inset listings
 inline true
 status open
@@ -5395,10 +5493,6 @@ final case class Read(p: JPath)  extends PrgFileC[String]
 
 \end_inset
 
-
-\end_layout
-
-\begin_layout Standard
 Typically, a type constructor 
 \begin_inset listings
 inline true
@@ -5657,7 +5751,7 @@ PrgFileC[String]
 
 \end_inset
 
- because those are the only allowed types of values that can be wrapped
+ because those are the only allowed types of values that may be wrapped
  by  
 \begin_inset listings
 inline true
@@ -6234,15 +6328,8 @@ status open
 \end_layout
 
 \begin_layout Standard
-We may say that failures of the monad laws are 
-\begin_inset Quotes eld
-\end_inset
-
-not observable
-\begin_inset Quotes erd
-\end_inset
-
- since the laws will hold after running the DSL programs.
+The failures of the monad laws are not important in practice, because those
+ laws will hold after running the DSL programs.
 \end_layout
 
 \begin_layout Standard
