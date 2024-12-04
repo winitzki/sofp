@@ -148,9 +148,9 @@ representing file operations as values of type \lstinline!PrgFile!
 and complex-number calculations as values of type \lstinline!PrgComplex!,
 we can compose, verify, or optimize our DSL programs \emph{before}
 running them. We may also implement different runners that execute
-the same DSL program on a remote computer, on a distributed file system,
-on GPUs instead of CPUs, or in a test-only sandbox environment, with
-logging or benchmarking.
+the same DSL program in a number of ways: for example, on a remote
+computer, on a distributed file system, on GPUs instead of CPUs, or
+in a test-only sandbox environment, with logging or benchmarking.
 
 \subsection{Stage 2: implementing type safety in the DSLs}
 
@@ -541,8 +541,8 @@ def runFileC[A]: PrgFileC[A] => A = {
   case Read(p)   => new String(Files.readAllBytes(p))
 }
 \end{lstlisting}
-The code of \lstinline!PrgFile! becomes shorter since we moved some
-code out of it:
+The definition of \lstinline!PrgFile! becomes shorter since we moved
+some code out of it:
 \begin{lstlisting}
 // The same code for sealed trait PrgFile[A] and object PrgFile.
 // The case classes are changed to:
@@ -569,7 +569,7 @@ def runComplex[A]: PrgComplex[A] => A = {
   case Val(a)             => a
   case bind@Bind(pa)      => runComplex(bind.f(runComplex(pa)))
   case Op(op)             => runComplexC(op)    // Run the custom operation and get the result.
-
+}
 sealed trait PrgComplexC[A]
 final case class Add(x: Complex, y: Complex)      extends PrgComplexC[Complex]
 final case class Mul(x: Complex, y: Complex)      extends PrgComplexC[Complex]
@@ -693,10 +693,10 @@ val prgComplex: PrgComplex[Complex] = for {
   x <- Op(Add(Complex(1, 1), Complex(0, 1)))
   y <- Op(Mul(x, Complex(3, -4)))
   z <- Op(Conj(y))
-  r <- Op(Rotate(x, Phase(Complex(0, 1))))
+  r <- Op(Rotate(z, Phase(Complex(0, 1))))
 } yield r
 
-scala> runComplex(runnerComplex)(prgComplex2)
+scala> run(runnerComplex)(prgComplex)
 res0: Complex = Complex(x = 2.000000000000001, y = 11.0)
 \end{lstlisting}
 
@@ -706,9 +706,30 @@ res0: Complex = Complex(x = 2.000000000000001, y = 11.0)
 The previous section gave motivation for defining the type constructor
 \lstinline!MonadDSL[F[_], A]!. That type constructor is called the
 \textsf{``}free monad on \lstinline!F!\textsf{''}, for reasons explained later in
-this chapter. Note that \lstinline!MonadDSL[F[_], A]! supports the
-monad\textsf{'}s methods \lstinline!map!, \lstinline!flatMap!, and \lstinline!pure!,
-which \lstinline!F! does not necessarily have. So, we may view \lstinline!MonadDSL[F[_], A]!
+this chapter. The full code is:
+\begin{lstlisting}
+sealed trait MonadDSL[F[_], A] {
+  def flatMap[B](f: A => MonadDSL[F, B]): MonadDSL[F, B] = Bind(this)(f)
+  def map[B](f: A => B): MonadDSL[F, B] = flatMap(f andThen MonadDSL.pure)
+}
+final case class Val[F[_], A](a: A) extends MonadDSL[F, A]
+final case class Bind[F[_], A, B](pa: MonadDSL[F, B])(val f: B => MonadDSL[F, A]) extends MonadDSL[F, A]
+final case class Op[F[_], A](op: F[A]) extends MonadDSL[F, A]
+
+trait Runner[F[_]] {  def apply[X]: F[X] => X  }
+
+object MonadDSL {
+  def pure[F[_], A](a: A): MonadDSL[F, A] = Val(a)
+  def run[F[_], A](runner: Runner[F]): MonadDSL[F, A] => A = {
+    case Val(a) => a
+    case bind@Bind(pa) => run(runner)(bind.f(run(runner)(pa)))
+    case Op(op) => runner.apply(op)
+  }
+}
+\end{lstlisting}
+Note that \lstinline!MonadDSL[F[_], A]! supports the monad\textsf{'}s methods
+\lstinline!map!, \lstinline!flatMap!, and \lstinline!pure!, which
+\lstinline!F! does not necessarily have. So, we may view \lstinline!MonadDSL[F[_], A]!
 as a special wrapper that adds the monadic variable-binding functionality
 to any given DSL whose operations are described by an effect constructor
 \lstinline!F!.
@@ -722,9 +743,9 @@ Begin by writing down the types of the available operations in the
 DSL. The operations may be functions between fixed known types, such
 as $\text{Int}\rightarrow\text{Int}\rightarrow\text{String}$ or $\text{String}\rightarrow\bbnum 1$.
 Operations may be also functions with type parameters, for example,
-$A\times\text{Int}\rightarrow\text{String}$ where $A$ is a type
-parameter. In every case, we need to write down the types in the form
-of a simple (non-curried) function, such as $P\rightarrow Q$, where
+$A\times\text{Int}\rightarrow\text{String}$ (where $A$ is a type
+parameter). In every case, we need to express the types in the form
+of a \emph{non-curried} function, such as $P\rightarrow Q$, where
 $P$ and $Q$ are type expressions possibly depending on some type
 parameters.
 
@@ -755,7 +776,6 @@ sealed trait PrgFileC[_]
 final case class Path(p: String) extends PrgFileC[JPath]
 final case class Read(p: JPath)  extends PrgFileC[String]
 \end{lstlisting}
-
 Typically, a type constructor \lstinline!F! defined in this way will
 be a GADT\index{GADT}. In the example shown above, \lstinline!PrgFileC!
 cannot be a functor because it is impossible to create values of type
@@ -776,7 +796,7 @@ in values of type \lstinline!F[A]! then the runner only needs to
 work for those types. In the \lstinline!PrgFile! DSL, the runner
 only needs to work with arguments of types \lstinline!PrgFileC[JPath]!
 and \lstinline!PrgFileC[String]! because those are the only allowed
-types of values that can be wrapped by  \lstinline!PrgFileC!. The
+types of values that may be wrapped by  \lstinline!PrgFileC!. The
 runner will never be given an argument of type \lstinline!PrgFile[X]!
 with an arbitrary unknown \lstinline!X!. However, different effect
 constructors may have different allowed types, and \lstinline!MonadDSL!
@@ -805,17 +825,17 @@ scala> runFileDSL(prgFile1)
 res0: String = "version = 1"
 \end{lstlisting}
 
-Note that each DSL operation needs to be wrapped in an \lstinline!Op!
-case class. To make the code shorter, we may define an implicit conversion
-from \lstinline!PrgFileC[A]! to \lstinline!Op[A]!:
+It may be inconvenient that each DSL operation needs to be wrapped
+in an \lstinline!Op! case class. To make the code shorter, we may
+define an implicit conversion from \lstinline!PrgFileC! to \lstinline!Op!:
 \begin{lstlisting}
-implicit def toOp[A](p: PrgFileC[A]): Op[A] = Op(p) // *** check if this code actually works
-val prgFile2: FileDSL[String] = for { // Does it help if we begin the functor block with a Pure()?
+implicit def toOp[A](p: PrgFileC[A]): Op[PrgFileC, A] = Op(p)
+val prgFile2: FileDSL[String] = for {
   x <- Path("config.txt")
   y <- Read(x)
 } yield y
 
-scala> runFileDSL(prgFile1)
+scala> runFileDSL(prgFile2)
 res1: String = "version = 1"
 \end{lstlisting}
 
@@ -850,8 +870,8 @@ we apply a runner \lstinline!r! to both sides, we get:
 /* right-hand side: */   r(Bind(Bind(p)(f))(g)) == r(g(r(Bind(p)(f)))) == r(g(r(f(r(p)))))
 \end{lstlisting}
 
-We may say that failures of the monad laws are \textsf{``}not observable\textsf{''}
-since the laws will hold after running the DSL programs.
+The failures of the monad laws are not important in practice, because
+those laws will hold after running the DSL programs.
 
 Could we implement \lstinline!MonadDSL!\textsf{'}s \lstinline!flatMap! method
 differently so that the monad laws already hold before applying a
@@ -866,7 +886,7 @@ applying \lstinline!flatMap! to \lstinline!Bind! should directly
 return the value required by the associativity law. The new code of
 \lstinline!flatMap! is:
 \begin{lstlisting}
-sealed trait MonadDSL[F[_], A] { *** check that this code works
+sealed trait MonadDSL[F[_], A] {
   def flatMap[B](f: A => MonadDSL[F, B]): MonadDSL[F, B] = this match {
     case Val(a)          => f(a)
     case bind@Bind(pa)   => Bind(pa)(x => Bind(bind.f(x))(f))
@@ -894,8 +914,8 @@ and obtain a monad runner of type \lstinline!MonadDSL[F, A] => A!.
 
 More generally, we may need to run the $F$-effects into \emph{another
 monad}. Given an effect runner of type $\forall X.\,F^{X}\rightarrow M^{X}$,
-where $M$ is some monad, we hope to obtain a runner with type signature
-$\forall A.\,\text{MonadDSL}^{F,A}\rightarrow M^{A}$.
+where $M$ is some monad, we would like to obtain a DSL runner with
+type signature $\forall A.\,\text{MonadDSL}^{F,A}\rightarrow M^{A}$.
 
 To see an example of using such general runners in practice, assume
 that the execution of $F$-effects may produce errors.\footnote{\index{jokes}\textsf{``}\emph{A function that launches real-world missiles
@@ -905,25 +925,25 @@ for discussion.)} For instance, the code of \lstinline!runFileC! (the runner for
 \lstinline!PrgFile! DSL) will throw exceptions when files are not
 found or not readable. We may catch those exceptions with Scala\textsf{'}s
 standard \lstinline!Try! class. We will then need to replace a runner
-of type \lstinline!PrgFileC[X] => X! by a polymorphic function of
-type \lstinline!PrgFileC[X] => Try[X]!. The new code looks like this:
+of type \lstinline!PrgFileC[X] => X! by a runner of type \lstinline!PrgFileC[X] => Try[X]!.
+The new code looks like this:
 \begin{lstlisting}
 trait RunnerTry[F[_]] { def run[X]: F[X] => Try[X] }
 val runnerFileTry = new RunnerTry[PrgFileC] { def run[X]: PrgFileC[X] => Try[X] = p => Try(runFileC(p)) }
 \end{lstlisting}
  The code of the \lstinline!MonadDSL!\textsf{'}s runner needs to be modified
-to accommodate the new type. Since a \lstinline!Val(a)! cannot generate
+to accommodate the new type. Since a \lstinline!Val! cannot generate
 errors (only $F$-effects can), we transform a \lstinline!Val(a)!
 into \lstinline!Success(a)!. A \lstinline!Bind! value can only result
 from using \lstinline!MonadDSL!\textsf{'}s \lstinline!flatMap!, and so it
 is reasonable to transform \lstinline!Bind! into a call to \lstinline!Try!\textsf{'}s
 \lstinline!flatMap! method. The new runner\textsf{'}s code becomes:
 \begin{lstlisting}
-def runTry[F[_], A](runnerTry: RunnerTry[F]): MonadDSL[F, A] => Try[A] = {
+def runTry[F[_], A](runner: RunnerTry[F]): MonadDSL[F, A] => Try[A] = {
   case Val(a)          => Success(a)
   case bind@Bind(pa)   => runTry(runner)(pa).flatMap(bind.f andThen runTry(runner)) // Use flatMap from Try.
-  case Op(op)          => runner.apply(op)
-} *** check that this code works
+  case Op(op)          => runner.run(op)
+}
 \end{lstlisting}
 
 Let us generalize the code of \lstinline!runTry! to an arbitrary
@@ -939,9 +959,9 @@ for the free monad:
 trait RunnerM[F[_], M[_]] { def run[X]: F[X] => M[X] }
 def runM[F[_], M[_]: Monad, A](runnerM: RunnerM[F, M]): MonadDSL[F, A] => M[A] = {
   case Val(a)          => Monad[M].pure(a)
-  case bind@Bind(pa)   => runM(runnerM)(pa).flatMap(bind.f andThen runM(runnerM)) // Use flatMap from M.
+  case bind@Bind(pa)   => runM(runnerM).apply(pa).flatMap(bind.f andThen runM(runnerM)) // Use flatMap from M.
   case Op(op)          => runnerM.run(op)
-} *** check that this code works
+}
 \end{lstlisting}
 
 We have implemented the universal runner by mapping \lstinline!MonadDSL!\textsf{'}s
@@ -980,8 +1000,8 @@ construction uses \lstinline!F! as a type parameter, and so it works
 equally well with every \lstinline!F!.
 
 A monad must support the methods \lstinline!pure!, \lstinline!flatMap!,
-and \lstinline!map!. The effect constructor \lstinline!F! often
-does not have these methods. The \lstinline!MonadDSL! constructor
+and \lstinline!map!. The effect constructor \lstinline!F! will not
+necessarily have these methods. The \lstinline!MonadDSL! constructor
 is able to convert an arbitrary \lstinline!F! into a monad because
 \lstinline!MonadDSL! defines the methods \lstinline!pure!, \lstinline!flatMap!,
 and \lstinline!map! in a special way. Those methods create some data
@@ -993,14 +1013,14 @@ are not part of the code of \lstinline!MonadDSL! and will need to
 be supplied separately. So, we may run the same \lstinline!MonadDSL!
 program using different runners.
 
-The code of \lstinline!MonadDSL! satisfies our goal of producing
-a type-safe DSL out of a given set of domain-specific operations.
-But it turns out that \lstinline!MonadDSL! is not the only way of
-turning a given type constructor \lstinline!F! into a monad. Various
-presentations and blog posts about the free monad have used different
-implementations that are not obviously equivalent to each other. Here
-are three examples that we will call \lstinline!Free1!, \lstinline!Free2!,
-and \lstinline!Free3!. 
+The code of \lstinline!MonadDSL! as shown in the previous section
+will satisfy our goal of producing a type-safe DSL out of a given
+set of domain-specific operations. But it turns out that \lstinline!MonadDSL!
+is not the only way of turning a given type constructor \lstinline!F!
+into a monad. Various presentations and blog posts about the free
+monad have used different implementations that are not obviously equivalent
+to each other. Here are three examples that we will call \lstinline!Free1!,
+\lstinline!Free2!, and \lstinline!Free3!. 
 
 In a 2012 blog post,\footnote{See \texttt{\href{http://www.haskellforall.com/2012/06/you-could-have-invented-free-monads.html}{http://www.haskellforall.com/2012/06/you-could-have-invented-free-monads.html}}}
 \index{Gabriella Gonzalez}G.~Gonzalez showed a free monad corresponding
