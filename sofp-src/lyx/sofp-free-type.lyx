@@ -8233,7 +8233,7 @@ status open
 
 \begin_layout Plain Layout
 
-Pure
+Pure3
 \end_layout
 
 \end_inset
@@ -8642,12 +8642,12 @@ sealed trait Free4[F[_], A] {
 
 \begin_layout Plain Layout
 
-  def flatMap[B](f: A => Free4[F, B]): Free4[F, B] = Bind(this)(f)
+  def flatMap[B](f: A => Free4[F, B]): Free4[F, B] = Bind4(this, f)
 \end_layout
 
 \begin_layout Plain Layout
 
-  def map[B](f: A => B): Free4[F, B] = FMap(this)(f)
+  def map[B](f: A => B): Free4[F, B] = FMap(this, f)
 \end_layout
 
 \begin_layout Plain Layout
@@ -8673,25 +8673,25 @@ object Free4 {
 \begin_layout Plain Layout
 
 final case class Val[F[_], A](a: A)                                    
-        extends Free4[F, A]
+    extends Free4[F, A]
 \end_layout
 
 \begin_layout Plain Layout
 
-final case class Bind4[F[_], A, B](pa: Free4[F, B])(val f: B => Free4[F,
- A])   extends Free4[F, A]
+final case class Bind4[F[_], A, B](pa: Free4[F, B], f: B => Free4[F, A])
+   extends Free4[F, A]
 \end_layout
 
 \begin_layout Plain Layout
 
-final case class FMap[F[_], A, B](pa: Free4[F, B])(val f: B => A)      
-        extends Free4[F, A]
+final case class FMap[F[_], A, B](pa: Free4[F, B], f: B => A)          
+    extends Free4[F, A]
 \end_layout
 
 \begin_layout Plain Layout
 
-final case class Op[F[_], A](op: F[A]) extends Free4[F, A] // Wrap all domain-sp
-ecific operations.
+final case class Op[F[_], A](op: F[A]) extends Free4[F, A]  // All domain-specif
+ic operations.
 \end_layout
 
 \end_inset
@@ -8708,22 +8708,22 @@ def run4[F[_], A](runner: Runner[F]): Free4[F, A] => A = {
 
 \begin_layout Plain Layout
 
-  case Val(a)            => a
+  case Val(a)        => a
 \end_layout
 
 \begin_layout Plain Layout
 
-  case bind @ Bind4(pa)  => run4(runner)(bind.f(run4(runner)(pa)))
+  case Bind4(pa, f)  => run4(runner)(f(run4(runner)(pa)))
 \end_layout
 
 \begin_layout Plain Layout
 
-  case fmap @ FMap(pa)   => fmap.f(run4(runner)(pa))
+  case FMap(pa, f)   => f(run4(runner)(pa))
 \end_layout
 
 \begin_layout Plain Layout
 
-  case Op(op)            => runner.apply(op)
+  case Op(op)        => runner.apply(op)
 \end_layout
 
 \begin_layout Plain Layout
@@ -9264,24 +9264,22 @@ def free4toFree3[F[_], A]: Free4[F, A] => Free3[F, A] = {
 
 \begin_layout Plain Layout
 
-  case fmap @ FMap(p)   => Bind(free4toFree3(p))(fmap.f andThen Free3.pure)
- // Replace FMap by Bind.
+  case FMap(p, f)    => FlatMap(free4toFree3(p), f andThen Pure3.apply)
 \end_layout
 
 \begin_layout Plain Layout
 
-  case Val(a)           => Val(a)                                  // All
- other cases are unchanged.
+  case Val(a)        => Pure3(a)
 \end_layout
 
 \begin_layout Plain Layout
 
-  case bind@Bind(p)     => Bind(free4toFree3(p))(bind.f)
+  case Bind4(p, f)   => FlatMap(free4toFree3(p), f andThen free4toFree3)
 \end_layout
 
 \begin_layout Plain Layout
 
-  case Op(op)           => Op(op)
+  case Op(op)        => Suspend(op)
 \end_layout
 
 \begin_layout Plain Layout
@@ -9315,7 +9313,7 @@ Free4
 
 \end_inset
 
-) is implemented by translating all case classes identically:
+) is implemented by translating all case classes almost identically:
 \begin_inset listings
 inline false
 status open
@@ -9327,17 +9325,17 @@ def free3toFree4[F[_], A]: Free3[F, A] => Free4[F, A] = {
 
 \begin_layout Plain Layout
 
-  case Val(a)           => Val(a)
+  case Pure3(a)        => Val(a)
 \end_layout
 
 \begin_layout Plain Layout
 
-  case bind@Bind(p)     => Bind(free3toFree4(p))(bind.f)
+  case FlatMap(p, f)   => Bind4(free3toFree4(p), f andThen free3toFree4)
 \end_layout
 
 \begin_layout Plain Layout
 
-  case Op(op)           => Op(op)
+  case Suspend(op)     => Op(op)
 \end_layout
 
 \begin_layout Plain Layout
@@ -9347,6 +9345,10 @@ def free3toFree4[F[_], A]: Free3[F, A] => Free4[F, A] = {
 
 \end_inset
 
+
+\end_layout
+
+\begin_layout Standard
 The composition 
 \begin_inset listings
 inline true
@@ -9359,9 +9361,32 @@ free3toFree4 andThen free4toFree3
 
 \end_inset
 
- is an identity transformation because each case class is simply copied
- over to the other type.
- However, the composition in the other order, 
+ is an identity transformation because each case class of 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Free3
+\end_layout
+
+\end_inset
+
+ is simply copied over to the corresponding case class of 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Free4
+\end_layout
+
+\end_inset
+
+.
+ However, the composition in the opposite order (
 \begin_inset listings
 inline true
 status open
@@ -9373,7 +9398,7 @@ free4toFree3 andThen free3toFree4
 
 \end_inset
 
-, is not an identity since 
+) is not an identity function because 
 \begin_inset listings
 inline true
 status open
@@ -9385,27 +9410,27 @@ free3toFree4
 
 \end_inset
 
- never creates any values of type 
+ never creates any 
 \begin_inset listings
 inline true
 status open
 
 \begin_layout Plain Layout
 
-FMap
+FMap()
 \end_layout
 
 \end_inset
 
-.
- It is impossible to convert any values of type 
+ values.
+ (It is impossible to convert values of type 
 \begin_inset listings
 inline true
 status open
 
 \begin_layout Plain Layout
 
-Bind
+FlatMap
 \end_layout
 
 \end_inset
@@ -9459,7 +9484,7 @@ f: A => B
 
 \end_inset
 
-.
+.)
 \end_layout
 
 \begin_layout Standard
@@ -9587,7 +9612,59 @@ runFree3(runner)(free3program) == runFree4(runner)(free3toFree4(free3program))
 
 \end_inset
 
+
+\end_layout
+
+\begin_layout Standard
 To verify this, we first note that the case classes 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Pure3
+\end_layout
+
+\end_inset
+
+, 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+FlatMap
+\end_layout
+
+\end_inset
+
+, and 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Suspend
+\end_layout
+
+\end_inset
+
+ within 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Free3
+\end_layout
+
+\end_inset
+
+ and the corresponding classes 
 \begin_inset listings
 inline true
 status open
@@ -9623,19 +9700,7 @@ Op
 
 \end_inset
 
- within the types 
-\begin_inset listings
-inline true
-status open
-
-\begin_layout Plain Layout
-
-Free3
-\end_layout
-
-\end_inset
-
- and 
+ of 
 \begin_inset listings
 inline true
 status open
@@ -9672,12 +9737,12 @@ Free4
 
 \end_inset
 
- containing those case classes will give the same results when run.
+ containing just those case classes will give the same results when run.
 \end_layout
 
 \begin_layout Standard
-It remains to verify that the runners will produce the same results for
- a 
+It remains to check that the runners will produce the same results for a
+ 
 \begin_inset listings
 inline true
 status open
@@ -9733,7 +9798,7 @@ status open
 
 \begin_layout Plain Layout
 
-p = FMap(q)(f)
+p = FMap(q, f)
 \end_layout
 
 \end_inset
@@ -9745,7 +9810,7 @@ status open
 
 \begin_layout Plain Layout
 
-runFree4(runner)(p) == runFree4(runner)(FMap(q)(f)) == f(runFree4(runner)(q))
+runFree4(runner)(p) == runFree4(runner)(FMap(q, f)) == f(runFree4(runner)(q))
 \end_layout
 
 \end_inset
@@ -9781,7 +9846,7 @@ status open
 
 \begin_layout Plain Layout
 
-free4toFree3(p) == Bind(q)(f andThen Free3.pure)
+free4toFree3(p) == Bind(q, f andThen Pure3.apply)
 \end_layout
 
 \end_inset
@@ -9817,18 +9882,18 @@ status open
 
 \begin_layout Plain Layout
 
-runFree3(runner)(free4toFree3(p)) == runFree3(runner)(Bind(free4toFree3(q))(f
- andThen Free3.pure))
+runFree3(runner)(free4toFree3(p)) == runFree3(runner)(Bind(free4toFree3(q),
+ f andThen Pure3.apply))
 \end_layout
 
 \begin_layout Plain Layout
 
-   == runFree3(runner)(Free3.pure(f(runFree3(runner)(free4toFree3(q)))))
+   == runFree3(runner)(Pure3.apply(f(runFree3(runner)(free4toFree3(q)))))
 \end_layout
 
 \begin_layout Plain Layout
 
-   == runFree3(runner)(Pure(f(runFree3(runner)(free4toFree3(q)))))
+   == runFree3(runner)(Pure3(f(runFree3(runner)(free4toFree3(q)))))
 \end_layout
 
 \begin_layout Plain Layout
@@ -9900,10 +9965,14 @@ q
 \end_inset
 
  is a 
-\emph on
+\begin_inset Quotes eld
+\end_inset
+
 smaller
-\emph default
- monadic program (contains fewer case classes) than 
+\begin_inset Quotes erd
+\end_inset
+
+ monadic program (using fewer case classes) than 
 \begin_inset listings
 inline true
 status open
@@ -9928,7 +9997,7 @@ q
 
 \end_inset
 
- contains case classes other than 
+ contains only case classes other than 
 \begin_inset listings
 inline true
 status open
@@ -10109,7 +10178,7 @@ status open
 
 \begin_layout Plain Layout
 
-Pure
+Pure3
 \end_layout
 
 \end_inset
@@ -10158,7 +10227,7 @@ status open
 
 \begin_layout Plain Layout
 
-Pure
+Pure3
 \end_layout
 
 \end_inset
@@ -10275,7 +10344,19 @@ Free3[F, A]
 \end_inset
 
 .
- So, we write code like this:
+ So, we write the code of 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+free2toFree3
+\end_layout
+
+\end_inset
+
+ like this:
 \begin_inset listings
 inline false
 status open
@@ -10287,7 +10368,7 @@ def free2toFree3[F[_], A]: Free2[F, A] => Free3[F, A] = {
 
 \begin_layout Plain Layout
 
-  case Return(a)    => Pure(a)
+  case Return(a)    => Pure3(a)
 \end_layout
 
 \begin_layout Plain Layout
@@ -10354,7 +10435,7 @@ Free2
 
 \end_inset
 
-'s case classes.***
+'s case classes.
 \begin_inset listings
 inline false
 status open
@@ -10366,12 +10447,12 @@ def free3toFree2[F[_], A]: Free3[F, A] => Free2[F, A] = {
 
 \begin_layout Plain Layout
 
-  case Pure(a)         => Return(a)
+  case Pure3(a)        => Return(a)
 \end_layout
 
 \begin_layout Plain Layout
 
-  case Suspend(f)      => Bind(f, a => Return(a))
+  case Suspend(f)      => ???
 \end_layout
 
 \begin_layout Plain Layout
@@ -10386,7 +10467,63 @@ def free3toFree2[F[_], A]: Free3[F, A] => Free2[F, A] = {
 
 \end_inset
 
-***Some of these conversions are injective.
+To convert 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Suspend
+\end_layout
+
+\end_inset
+
+ to 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Free2
+\end_layout
+
+\end_inset
+
+, note that Free2 does not***Some of these conversions are injective.
+\begin_inset listings
+inline false
+status open
+
+\begin_layout Plain Layout
+
+def free3toFree2[F[_], A]: Free3[F, A] => Free2[F, A] = {
+\end_layout
+
+\begin_layout Plain Layout
+
+  case Pure3(a)        => Return(a)
+\end_layout
+
+\begin_layout Plain Layout
+
+  case Suspend(f)      => Bind(f, Return(_))
+\end_layout
+
+\begin_layout Plain Layout
+
+  case FlatMap(p, g)   => ???
+\end_layout
+
+\begin_layout Plain Layout
+
+}
+\end_layout
+
+\end_inset
+
+
 \end_layout
 
 \begin_layout Subsection
@@ -10432,9 +10569,9 @@ Free4
 
 \end_inset
 
- involve a special use of type parameters that is not supported by the type
+ involve a special use of type parameters that is not expressed by the type
  and code notations shown in this book so far.
- The missing feature is types with an 
+ The missing feature is a type with an 
 \series bold
 existential quantifier
 \series default
@@ -10967,7 +11104,7 @@ MonadDSL
 \begin_inset Formula 
 \begin{align*}
 \text{MonadDSL}^{F,T} & \triangleq\text{Val}^{F,T}+\text{Op}^{F,T}+\exists A.\,\text{Bind}^{F,T,A}\\
- & \quad\quad=T+F^{T}+\exists A.\,\text{MonadDSL}^{F,A}\times(A\rightarrow\text{MonadDSL}^{F,T})\quad.
+ & =T+F^{T}+\exists A.\,\text{MonadDSL}^{F,A}\times(A\rightarrow\text{MonadDSL}^{F,T})\quad.
 \end{align*}
 
 \end_inset
@@ -11641,7 +11778,15 @@ The previous section shows that a type expression with an existentially
 \begin_inset Formula $C$
 \end_inset
 
- and only exposes its existence.
+ and only exposes its 
+\begin_inset Quotes eld
+\end_inset
+
+existence
+\begin_inset Quotes erd
+\end_inset
+
+.
  Fully parametric
 \begin_inset Index idx
 status open
@@ -11761,7 +11906,7 @@ universal
 \begin_inset Formula $C$
 \end_inset
 
-.
+ in the same way.
  So, we a fully parametric function of type 
 \begin_inset Formula $(\exists C.\,F^{C})\rightarrow D$
 \end_inset
