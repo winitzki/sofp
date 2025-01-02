@@ -1028,12 +1028,12 @@ to this Scala code:
 \begin{lstlisting}
 abstract class Free1[F[_]: Functor, T] {
   def flatMap[A](f: T => Free1[F, A]): Free1[F, A] = this match {
-    case Pure(t)      => f(a)
+    case Pure(t)      => f(t)
     case Flatten(p)   => Flatten(p.map(g => g.flatMap(f))) // Use F\textsf{'}s Functor instance.
   }
 }
-final case class Pure[F[_], T](t: T)                 extends Free1[F, T]
-final case class Flatten[F[_], T](p: F[Free1[F, T]]) extends Free1[F, T] 
+final case class Pure[F[_]: Functor, T](t: T)                 extends Free1[F, T]
+final case class Flatten[F[_]: Functor, T](p: F[Free1[F, T]]) extends Free1[F, T]
 \end{lstlisting}
 
 In 2014,\footnote{See \texttt{\href{http://functionaltalks.org/2014/11/23/runar-oli-bjarnason-free-monad/}{http://functionaltalks.org/2014/11/23/runar-oli-bjarnason-free-monad/}}}
@@ -1043,7 +1043,7 @@ implementation of a free monad:
 sealed trait Free2[F[_], T] {
   def flatMap[A](f: T => Free2[F, A]): Free2[F, A] = this match {
     case Return(t)    => f(t)
-    case Bind(p, g)   => Bind(p, (b => g(b) flatMap f))
+    case Bind(p, g)   => Bind(p, (b: Any) => g(b) flatMap f)
   }
 }
 final case class Return[F[_], T](t: T)                          extends Free2[F, T]
@@ -1056,7 +1056,7 @@ where the code for the free monad looked like this:
 sealed trait Free3[F[_], T] {
   def flatMap[A](f: T => Free3[F, A]): Free3[F, A] = FlatMap(this, f) 
 }
-final case class Pure[F[_], T](t: T)                                      extends Free3[F, T]
+final case class Pure3[F[_], T](t: T)                                     extends Free3[F, T]
 final case class Suspend[F[_], T](f: F[T])                                extends Free3[F, T]
 final case class FlatMap[F[_], T, A](p: Free3[F, A], g: A => Free3[F, T]) extends Free3[F, T]
 \end{lstlisting}
@@ -1065,7 +1065,7 @@ The main differences between \lstinline!Free1!, \lstinline!Free2!,
 and \lstinline!Free3! are in the definitions of the case classes
 and of the \lstinline!flatMap! functions, so we omitted all other
 code. The type of \lstinline!Free3! is the same as \lstinline!MonadDSL!
-except for renaming \lstinline!Pure! to \lstinline!Val!, \lstinline!Suspend!
+except for renaming \lstinline!Pure3! to \lstinline!Val!, \lstinline!Suspend!
 to \lstinline!Op!, and \lstinline!FlatMap(f, g)! to \lstinline!Bind(f)(g)!.
 However, \lstinline!Free1! and \lstinline!Free2! have different
 data in their case classes and are not obviously equivalent to each
@@ -1101,62 +1101,62 @@ result is a new encoding of the free monad that we will call \lstinline!Free4!
 (since it uses $4$ case classes):
 \begin{lstlisting}
 sealed trait Free4[F[_], A] {
-  def flatMap[B](f: A => Free4[F, B]): Free4[F, B] = Bind(this)(f)
-  def map[B](f: A => B): Free4[F, B] = FMap(this)(f)
+  def flatMap[B](f: A => Free4[F, B]): Free4[F, B] = Bind4(this, f)
+  def map[B](f: A => B): Free4[F, B] = FMap(this, f)
 }
 object Free4 {
   def pure[F[_], A](a: A): Free4[F, A] = Val(a)
 }
-final case class Val[F[_], A](a: A)                                            extends Free4[F, A]
-final case class Bind[F[_], A, B](pa: Free4[F, B])(val f: B => Free4[F, A])    extends Free4[F, A]
-final case class FMap[F[_], A, B](pa: Free4[F, B])(val f: B => A)              extends Free4[F, A]
-final case class Op[F[_], A](op: F[A]) extends Free4[F, A] // Wrap all domain-specific operations.
+final case class Val[F[_], A](a: A)                                        extends Free4[F, A]
+final case class Bind4[F[_], A, B](pa: Free4[F, B], f: B => Free4[F, A])   extends Free4[F, A]
+final case class FMap[F[_], A, B](pa: Free4[F, B], f: B => A)              extends Free4[F, A]
+final case class Op[F[_], A](op: F[A]) extends Free4[F, A]  // All domain-specific operations.
 \end{lstlisting}
 The code of the runner needs to be revised accordingly:
 \begin{lstlisting}
-def run[F[_], A](runner: Runner[F]): Free4[F, A] => A = {
-  case Val(a)            => a
-  case bind @ Bind(pa)   => run(runner)(bind.f(run(runner)(pa)))
-  case fmap @ FMap(pa)   => fmap.f(run(runner)(pa))
-  case Op(op)            => runner.apply(op)
-} *** check that this code works
+def run4[F[_], A](runner: Runner[F]): Free4[F, A] => A = {
+  case Val(a)        => a
+  case Bind4(pa, f)  => run4(runner)(f(run4(runner)(pa)))
+  case FMap(pa, f)   => f(run4(runner)(pa))
+  case Op(op)        => runner.apply(op)
+}
 \end{lstlisting}
 
 The code of \lstinline!Free4!\textsf{'}s methods \lstinline!map!, \lstinline!flatMap!,
 and \lstinline!pure! merely wraps the arguments of each method into
 a case class without performing any computations with those arguments.
-We call this implementation of the free monad the \textbf{raw tree
-encoding}\index{free monad!raw tree encoding}. The name means that
-a DSL program is a fully unevaluated (or \textsf{``}raw\textsf{''}) expression tree
-that creates a new nested case class for each step of the required
-computations.
+We call this implementation the \textbf{raw tree encoding}\index{free monad!raw tree encoding}
+of the free monad. The name means that a DSL program is a completely
+unevaluated (or \textsf{``}raw\textsf{''}) expression tree that uses a new nested
+case class for each step of a computation.
 
 \subsection{Deriving reduced encodings of the free monad}
 
 In the raw tree encoding (\lstinline!Free4!), \emph{none} of the
 monad laws hold. This is not a problem in practice because the monad
-laws will hold after running a DSL program. However, we notice that
-the \lstinline!Free3! encoding (which is the same as \lstinline!MonadDSL!
+laws will hold after running a DSL program and extracting the final
+values (or running into another lawful monad). However, we notice
+that the \lstinline!Free3! encoding (which is the same as \lstinline!MonadDSL!
 from Section~\ref{subsec:Stage-5:-refactoring-monadDSL}) satisfies
-the monad\textsf{'}s right identity law by design. A byproduct of that design
-is that \lstinline!Free3! has fewer case classes than \lstinline!Free4!.
-We also notice that the code of \lstinline!Free2! uses just $2$
-case classes and satisfies all monad laws.
+the monad\textsf{'}s right identity law automatically, by design. A byproduct
+of that design is that \lstinline!Free3! has fewer case classes than
+\lstinline!Free4!. We also notice that the code of \lstinline!Free2!
+uses just $2$ case classes and satisfies all monad laws.
 
 These observations suggest that we might find an encoding with fewer
-case classes (which we call a \textbf{reduced encoding}) if we use
-the monad laws when designing the free monad\textsf{'}s type constructor. To
-see how this works, we will first reduce \lstinline!Free4! to \lstinline!Free3!
-and then \lstinline!Free3! to \lstinline!Free2! by imposing certain
-monad laws directly on the DSL program values. These derivations will
-also show that \lstinline!Free2!, \lstinline!Free3!, and \lstinline!Free4!
-are equivalent to each other in their expressive power.\footnote{The \lstinline!Free1! encoding cannot be derived from the others
+case classes (which we call a \textbf{reduced encoding}\index{free monad!reduced encoding})
+if we impose some of the monad laws when designing the free monad\textsf{'}s
+type constructor. To see how this works, we will first reduce \lstinline!Free4!
+to \lstinline!Free3! and then \lstinline!Free3! to \lstinline!Free2!
+by imposing certain monad laws directly on the DSL program values.
+These derivations will also show that \lstinline!Free2!, \lstinline!Free3!,
+and \lstinline!Free4! are equivalent to each other in their expressive
+power.\footnote{The \lstinline!Free1! encoding cannot be derived from the others
 because \lstinline!Free1! \emph{requires} that the effect constructor
 \lstinline!F! be a functor with a \lstinline!map! method, while
 the other encodings work for any \lstinline!F!. Later in this chapter,
 we will prove that \lstinline!Free1! is equivalent to \lstinline!Free2!
-when \lstinline!F! is a functor. We will also show more examples
-of free typeclass constructions that require another typeclass.}
+when \lstinline!F! is a functor. }
 
 To derive \lstinline!Free3! from \lstinline!Free4!, we use the right
 identity law of \lstinline!flatMap! to express \lstinline!map! through
@@ -1165,36 +1165,37 @@ identity law of \lstinline!flatMap! to express \lstinline!map! through
 p.map(f) == p.flatMap (f andThen pure)
 \end{lstlisting}
 As we have already seen, this definition makes the right identity
-law hold for \lstinline!Free3!. Following the form of that law, we
-write a function for transforming a \lstinline!Free4! program into
-a \lstinline!Free3! program:
+law hold for \lstinline!Free3! automatically. Following the form
+of that law, we write a function for transforming a \lstinline!Free4!
+program into a \lstinline!Free3! program:
 \begin{lstlisting}
 def free4toFree3[F[_], A]: Free4[F, A] => Free3[F, A] = {
-  case fmap @ FMap(p)   => Bind(free4toFree3(p))(fmap.f andThen Free3.pure) // Replace FMap by Bind.
-  case Val(a)           => Val(a)                                  // All other cases are unchanged.
-  case bind@Bind(p)     => Bind(free4toFree3(p))(bind.f)
-  case Op(op)           => Op(op)
+  case FMap(p, f)    => FlatMap(free4toFree3(p), f andThen Pure3.apply)
+  case Val(a)        => Pure3(a)
+  case Bind4(p, f)   => FlatMap(free4toFree3(p), f andThen free4toFree3)
+  case Op(op)        => Suspend(op)
 }
 \end{lstlisting}
 An inverse transformation (from \lstinline!Free3! to \lstinline!Free4!)
-is implemented by translating all case classes identically:
+is implemented by translating all case classes almost identically:
 \begin{lstlisting}
 def free3toFree4[F[_], A]: Free3[F, A] => Free4[F, A] = {
-  case Val(a)           => Val(a)
-  case bind@Bind(p)     => Bind(free3toFree4(p))(bind.f)
-  case Op(op)           => Op(op)
+  case Pure3(a)        => Val(a)
+  case FlatMap(p, f)   => Bind4(free3toFree4(p), f andThen free3toFree4)
+  case Suspend(op)     => Op(op)
 }
 \end{lstlisting}
+
 The composition \lstinline!free3toFree4 andThen free4toFree3! is
-an identity transformation because each case class is simply copied
-over to the other type. However, the composition in the other order,
-\lstinline!free4toFree3 andThen free3toFree4!, is not an identity
-since \lstinline!free3toFree4! never creates \lstinline!Free4! values
-of type \lstinline!FMap!. It is impossible to convert any values
-of type \lstinline!Bind! to \lstinline!FMap! because it is impossible
-to determine whether a given function of type \lstinline!A => Free3[B]!
+an identity transformation because each case class of \lstinline!Free3!
+is simply copied over to the corresponding case class of \lstinline!Free4!.
+However, the composition in the opposite order (\lstinline!free4toFree3 andThen free3toFree4!)
+is not an identity function because \lstinline!free3toFree4! never
+creates any \lstinline!FMap()! values. (It is impossible to convert
+values of type \lstinline!FlatMap! to \lstinline!FMap! because it
+is impossible to determine whether a given function of type \lstinline!A => Free3[B]!
 is expressible in the form \lstinline!(f andThen pure)! with some
-\lstinline!f: A => B!.
+\lstinline!f: A => B!.)
 
 It follows that \lstinline!free3toFree4! is injective while \lstinline!free4toFree3!
 is surjective. In this sense, the encoding \lstinline!Free4! is \textsf{``}larger\textsf{''}
@@ -1206,30 +1207,33 @@ the results will be the same:
 runFree4(runner)(free4program) == runFree3(runner)(free4toFree3(free4program))
 runFree3(runner)(free3program) == runFree4(runner)(free3toFree4(free3program))
 \end{lstlisting}
-To verify this, we first note that the case classes \lstinline!Val!,
-\lstinline!Bind!, and \lstinline!Op! within the types \lstinline!Free3!
-and \lstinline!Free4! will be evaluated in exactly the same way by
-both runners. So, DSL programs in \lstinline!Free3! and \lstinline!Free4!
-containing those case classes will give the same results when run.
 
-It remains to verify that the runners will produce the same results
+To verify this, we first note that the case classes \lstinline!Pure3!,
+\lstinline!FlatMap!, and \lstinline!Suspend! within \lstinline!Free3!
+and the corresponding classes \lstinline!Val!, \lstinline!Bind!,
+and \lstinline!Op! of \lstinline!Free4! will be evaluated in exactly
+the same way by both runners. So, DSL programs in \lstinline!Free3!
+and \lstinline!Free4! containing just those case classes will give
+the same results when run.
+
+It remains to check that the runners will produce the same results
 for a \lstinline!Free4! program containing an \lstinline!FMap! case
 class and for the corresponding \lstinline!Free3! program. Running
-a \lstinline!Free4! program of the form \lstinline!p = FMap(q)(f)!,
+a \lstinline!Free4! program of the form \lstinline!p = FMap(q, f)!,
 we will get:
 \begin{lstlisting}
-runFree4(runner)(p) == runFree4(runner)(FMap(q)(f)) == f(runFree4(runner)(q))
+runFree4(runner)(p) == runFree4(runner)(FMap(q, f)) == f(runFree4(runner)(q))
 \end{lstlisting}
 The \lstinline!Free3! program corresponding to \lstinline!p! is:
 \begin{lstlisting}
-free4toFree3(p) == Bind(q)(f andThen Free3.pure)
+free4toFree3(p) == Bind(q, f andThen Pure3.apply)
 \end{lstlisting}
 Running the program \lstinline!free4toFree3(p)! with \lstinline!Free3!\textsf{'}s
 runner will give:
 \begin{lstlisting}
-runFree3(runner)(free4toFree3(p)) == runFree3(runner)(Bind(free4toFree3(q))(f andThen Free3.pure))
-   == runFree3(runner)(Free3.pure(f(runFree3(runner)(free4toFree3(q)))))
-   == runFree3(runner)(Pure(f(runFree3(runner)(free4toFree3(q)))))
+runFree3(runner)(free4toFree3(p)) == runFree3(runner)(Bind(free4toFree3(q), f andThen Pure3.apply))
+   == runFree3(runner)(Pure3.apply(f(runFree3(runner)(free4toFree3(q)))))
+   == runFree3(runner)(Pure3(f(runFree3(runner)(free4toFree3(q)))))
    == f(runFree3(runner)(free4toFree3(q))))
 \end{lstlisting}
 The last expression differs from the result of evaluating \lstinline!runFree4(runner)(p)!
@@ -1238,53 +1242,62 @@ So, it remains to show that:
 \begin{lstlisting}
 f(runFree4(runner)(q)) == f(runFree3(runner)(free4toFree3(q))))
 \end{lstlisting}
-Note that \lstinline!q! is a \emph{smaller} monadic program (contains
+Note that \lstinline!q! is a \textsf{``}smaller\textsf{''} monadic program (using
 fewer case classes) than \lstinline!p!. If \lstinline!q! contains
-case classes other than \lstinline!FMap!, we already showed that
-\lstinline!runFree4! and \lstinline!runFree3! give the same results.
-If \lstinline!q! again contains the \lstinline!FMap! case class,
-we will use the inductive assumption that \lstinline!runFree4! and
-\lstinline!runFree3! give the same results when evaluating smaller
+only case classes other than \lstinline!FMap!, we already showed
+that \lstinline!runFree4! and \lstinline!runFree3! give the same
+results. If \lstinline!q! again contains the \lstinline!FMap! case
+class, we will use the inductive assumption that \lstinline!runFree4!
+and \lstinline!runFree3! give the same results when evaluating smaller
 monadic programs.
 
 Let us now derive \lstinline!Free2! from \lstinline!Free3!. A conversion
 function \lstinline!free2toFree3! needs to replace \lstinline!Free2!\textsf{'}s
 case classes (\lstinline!Return! and \lstinline!Bind!) by \lstinline!Free3!\textsf{'}s
-case classes (\lstinline!Pure!, \lstinline!Suspend!, and \lstinline!FlatMap!).
-The \lstinline!Return! case class corresponds to \lstinline!Pure!.
+case classes (\lstinline!Pure3!, \lstinline!Suspend!, and \lstinline!FlatMap!).
+The \lstinline!Return! case class corresponds to \lstinline!Pure3!.
 Trying to replace \lstinline!Bind! by \lstinline!FlatMap!, we find
 that the type of their data are not the same: the first part of \lstinline!Bind!
 has type \lstinline!F[A]! while the first part of \lstinline!FlatMap!
 has type \lstinline!Free3[F, A]!. We note that \lstinline!Suspend!
 converts \lstinline!F[A]! into \lstinline!Free3[F, A]!. So, we write
-code like this:
+the code of \lstinline!free2toFree3! like this:
 \begin{lstlisting}
 def free2toFree3[F[_], A]: Free2[F, A] => Free3[F, A] = {
-  case Return(a)    => Pure(a)
+  case Return(a)    => Pure3(a)
   case Bind(p, g)   => FlatMap(Suspend(p), g andThen free2toFree3)
 }
 \end{lstlisting}
 
 The inverse conversion function (\lstinline!free3toFree2!) is more
 complicated because \lstinline!Suspend! and \lstinline!FlatMap!
-are not straightforwardly mapped into \lstinline!Free2!\textsf{'}s case classes.{*}{*}{*}
+are not straightforwardly mapped into \lstinline!Free2!\textsf{'}s case classes.
 \begin{lstlisting}
 def free3toFree2[F[_], A]: Free3[F, A] => Free2[F, A] = {
-  case Pure(a)         => Return(a)
-  case Suspend(f)      => Bind(f, a => Return(a))
+  case Pure3(a)        => Return(a)
+  case Suspend(f)      => ???
   case FlatMap(p, g)   => ???
 }
 \end{lstlisting}
-{*}{*}{*}Some of these conversions are injective.
+To convert \lstinline!Suspend! to \lstinline!Free2!, note that Free2
+does not{*}{*}{*}Some of these conversions are injective.
+\begin{lstlisting}
+def free3toFree2[F[_], A]: Free3[F, A] => Free2[F, A] = {
+  case Pure3(a)        => Return(a)
+  case Suspend(f)      => Bind(f, Return(_))
+  case FlatMap(p, g)   => ???
+}
+\end{lstlisting}
+
 
 \subsection{Types with existential quantifiers}
 
 The previous section showed all derivations in the Scala code syntax
 rather than in the code notation. The reason is that the constructions
 \lstinline!Free2!, \lstinline!Free3!, and \lstinline!Free4! involve
-a special use of type parameters that is not supported by the type
+a special use of type parameters that is not expressed by the type
 and code notations shown in this book so far. The missing feature
-is types with an \textbf{existential quantifier}\index{existential quantifier (exists)@existential quantifier ($\exists$)},
+is a type with an \textbf{existential quantifier}\index{existential quantifier (exists)@existential quantifier ($\exists$)},
 which is denoted by the symbol $\exists$ (pronounced \textsf{``}exists\textsf{''}).
 
 To clarify the usage of the symbol $\exists$, we begin by recalling
@@ -1334,7 +1347,7 @@ Adding the type notation for the case classes \lstinline!Val! and
 \lstinline!Op!, we get the following expression for the type \lstinline!MonadDSL!:
 \begin{align*}
 \text{MonadDSL}^{F,T} & \triangleq\text{Val}^{F,T}+\text{Op}^{F,T}+\exists A.\,\text{Bind}^{F,T,A}\\
- & \quad\quad=T+F^{T}+\exists A.\,\text{MonadDSL}^{F,A}\times(A\rightarrow\text{MonadDSL}^{F,T})\quad.
+ & =T+F^{T}+\exists A.\,\text{MonadDSL}^{F,A}\times(A\rightarrow\text{MonadDSL}^{F,T})\quad.
 \end{align*}
 
 To explain the name \textsf{``}existential\textsf{''}, we may imagine that the type
@@ -1444,7 +1457,7 @@ and universal quantifiers.
 The previous section shows that a type expression with an existentially
 quantified type, such as $\exists C.\,A\times C\times\left(C\rightarrow B\right)$,
 hides the actual type under the parameter $C$ and only exposes its
-existence. Fully parametric\index{fully parametric!code} external
+\textsf{``}existence\textsf{''}. Fully parametric\index{fully parametric!code} external
 code may work with values of type $C$ as long as $C$ is treated
 as an unknown and arbitrary type. This agrees with the restriction
 that fully parametric code may not make decisions based on the actual
@@ -1466,10 +1479,10 @@ us to use values of the type $C$ as long as the code does not depend
 on a specific type that is hidden under $C$. This means treating
 $C$ as a \emph{type parameter}. Functions with type parameters have
 type signatures with the \emph{universal} quantifier, such as $\forall C.\:F^{C}\rightarrow G^{C}$,
-showing that the same code works with any type $C$. So, we a fully
-parametric function of type $(\exists C.\,F^{C})\rightarrow D$ must
-be a function of type $F^{C}\rightarrow D$ that works in the same
-way for all types $C$. We usually write the types of such functions
+showing that the same code works with any type $C$ in the same way.
+So, we a fully parametric function of type $(\exists C.\,F^{C})\rightarrow D$
+must be a function of type $F^{C}\rightarrow D$ that works in the
+same way for all types $C$. We usually write the types of such functions
 as $\forall C.\,F^{C}\rightarrow D$. We conclude that the following
 types are equivalent:
 \begin{equation}
