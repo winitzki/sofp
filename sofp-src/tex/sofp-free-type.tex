@@ -1056,8 +1056,8 @@ where the code for the free monad looked like this:
 sealed trait Free3[F[_], T] {
   def flatMap[A](f: T => Free3[F, A]): Free3[F, A] = FlatMap(this, f) 
 }
-final case class Pure3[F[_], T](t: T)                                     extends Free3[F, T]
-final case class Suspend[F[_], T](f: F[T])                                extends Free3[F, T]
+final case class Pure3[F[_], T](t: T)      extends Free3[F, T]
+final case class Suspend[F[_], T](f: F[T]) extends Free3[F, T]
 final case class FlatMap[F[_], T, A](p: Free3[F, A], g: A => Free3[F, T]) extends Free3[F, T]
 \end{lstlisting}
 
@@ -1074,14 +1074,20 @@ of the free monad. The different codes implement the same idea (turning
 a type constructor \lstinline!F! into a monad) in different ways.
 
 To figure out how to use those codes in practice, a programmer might
-ask the following questions: Are the three encodings equivalent? What
-laws does their code need to satisfy in order to be considered \textsf{``}correct\textsf{''}?
-The \lstinline!Free2! type has 2 case classes and \lstinline!Free3!
-has 3; are there any other encodings of the free monad? Is there a
-systematic way of finding constructions that convert any type into
-a \textsf{``}free functor\textsf{''}, a \textsf{``}free monoid\textsf{''}, or into another \textsf{``}free\textsf{''}
-typeclass? The rest of this chapter will develop the required theory
-and show the derivations needed to answer these questions. 
+ask: 
+\begin{itemize}
+\item Are these encodings equivalent (given that \lstinline!Free2! has
+2 case classes and \lstinline!Free3! has 3)? 
+\item Are there any other encodings of the free monad? 
+\item What laws should an encoding satisfy in order to be considered \textsf{``}correct\textsf{''}? 
+\item These encodings convert an arbitrary type constructor \lstinline!F!
+into something that looks like a monad. What about other typeclasses
+(functor, applicative, etc.)? Is there a systematic way of converting
+any type constructor into a \textsf{``}free functor\textsf{''}, a \textsf{``}free applicative\textsf{''},
+or into another \textsf{``}free\textsf{''} typeclass? 
+\end{itemize}
+The rest of this chapter will develop the required theory and show
+the derivations needed to answer these questions. 
 
 \subsection{The raw tree encoding}
 
@@ -1104,13 +1110,10 @@ sealed trait Free4[F[_], A] {
   def flatMap[B](f: A => Free4[F, B]): Free4[F, B] = Bind4(this, f)
   def map[B](f: A => B): Free4[F, B] = FMap(this, f)
 }
-object Free4 {
-  def pure[F[_], A](a: A): Free4[F, A] = Val(a)
-}
 final case class Val[F[_], A](a: A)                                        extends Free4[F, A]
 final case class Bind4[F[_], A, B](pa: Free4[F, B], f: B => Free4[F, A])   extends Free4[F, A]
 final case class FMap[F[_], A, B](pa: Free4[F, B], f: B => A)              extends Free4[F, A]
-final case class Op[F[_], A](op: F[A]) extends Free4[F, A]  // All domain-specific operations.
+final case class Op[F[_], A](op: F[A]) extends Free4[F, A] // Wrap domain-specific operations.
 \end{lstlisting}
 The code of the runner needs to be revised accordingly:
 \begin{lstlisting}
@@ -1125,27 +1128,27 @@ def run4[F[_], A](runner: Runner[F]): Free4[F, A] => A = {
 The code of \lstinline!Free4!\textsf{'}s methods \lstinline!map!, \lstinline!flatMap!,
 and \lstinline!pure! merely wraps the arguments of each method into
 a case class without performing any computations with those arguments.
-We call this implementation the \textbf{raw tree encoding}\index{free monad!raw tree encoding}
-of the free monad. The name means that a DSL program is a completely
-unevaluated (or \textsf{``}raw\textsf{''}) expression tree that uses a new nested
+We call \lstinline!Free4! the \textbf{raw tree encoding}\index{free monad!raw tree encoding}
+of the free monad. The name \textsf{``}raw tree\textsf{''} means that a DSL program
+is a completely unevaluated expression tree that uses a new nested
 case class for each step of a computation.
 
 \subsection{Deriving reduced encodings of the free monad}
 
-In the raw tree encoding (\lstinline!Free4!), \emph{none} of the
-monad laws hold. This is not a problem in practice because the monad
+The raw tree encoding (\lstinline!Free4!) satisfies \emph{none} of
+the monad laws. This is not a problem in practice because the monad
 laws will hold after running a DSL program and extracting the final
-values (or running into another lawful monad). However, we notice
-that the \lstinline!Free3! encoding (which is the same as \lstinline!MonadDSL!
-from Section~\ref{subsec:Stage-5:-refactoring-monadDSL}) satisfies
-the monad\textsf{'}s right identity law automatically, by design. A byproduct
-of that design is that \lstinline!Free3! has fewer case classes than
-\lstinline!Free4!. We also notice that the code of \lstinline!Free2!
+values (or after running into another, lawful monad). However, we
+notice that the \lstinline!Free3! encoding (which is the same as
+\lstinline!MonadDSL! from Section~\ref{subsec:Stage-5:-refactoring-monadDSL})
+satisfies the monad\textsf{'}s right identity law automatically, by design.
+A byproduct of that design is that \lstinline!Free3! has fewer case
+classes than \lstinline!Free4!. We also notice that the code of \lstinline!Free2!
 uses just $2$ case classes and satisfies all monad laws.
 
 These observations suggest that we might find an encoding with fewer
 case classes (which we call a \textbf{reduced encoding}\index{free monad!reduced encoding})
-if we impose some of the monad laws when designing the free monad\textsf{'}s
+if we impose some of the monad laws when designing the encoding\textsf{'}s
 type constructor. To see how this works, we will first reduce \lstinline!Free4!
 to \lstinline!Free3! and then \lstinline!Free3! to \lstinline!Free2!
 by imposing certain monad laws directly on the DSL program values.
@@ -1279,16 +1282,62 @@ def free3toFree2[F[_], A]: Free3[F, A] => Free2[F, A] = {
   case FlatMap(p, g)   => ???
 }
 \end{lstlisting}
-To convert \lstinline!Suspend! to \lstinline!Free2!, note that Free2
-does not{*}{*}{*}Some of these conversions are injective.
+To convert \lstinline!Free3!\textsf{'}s \lstinline!Suspend! to \lstinline!Free2!,
+we need to find a case class from \lstinline!Free2! that can encode
+a value of type \lstinline!F[A]! for some \lstinline!A!. The only
+suitable case class is \lstinline!Bind!. We use the right identity
+law of monads (\lstinline!x.flatMap(pure) == x!) to implement \lstinline!Suspend!
+via \lstinline!Bind!:
 \begin{lstlisting}
 def free3toFree2[F[_], A]: Free3[F, A] => Free2[F, A] = {
   case Pure3(a)        => Return(a)
-  case Suspend(f)      => Bind(f, Return(_))
+  case Suspend(f)      => Bind[F, A, A](f, Return(_))
   case FlatMap(p, g)   => ???
 }
 \end{lstlisting}
+Clearly, \lstinline!Free3!\textsf{'}s \lstinline!FlatMap! must be also expressed
+via \lstinline!Free2!\textsf{'}s \lstinline!Bind!. But the first argument
+of \lstinline!Bind! must be of type \lstinline!F[A]! for some \lstinline!A!,
+while the first argument of \lstinline!FlatMap! could be any value
+of type \lstinline!Free3!. We pattern-match on that argument and
+then use the monad\textsf{'}s associativity law to rewrite \lstinline!FlatMap(FlatMap(...))!
+into a form where the first argument of \lstinline!FlatMap! may be
+simplified:
+\begin{lstlisting}
+def free3toFree2[F[_], A]: Free3[F, A] => Free2[F, A] = {
+  case Pure3(a)        => Return(a)
+  case Suspend(f)      => Bind[F, A, A](f, Return(_))
+  case FlatMap(p, g)   => p match {
+      case Pure3(t)          => free3toFree2(g(t))
+      case Suspend(f)        => Bind(f, g andThen free3toFree2)
+      case FlatMap(p2, g2)   => free3toFree2(FlatMap(p2, (x: Any) => FlatMap(g2(x), g)))
+    }
+}
+\end{lstlisting}
 
+Looking now at the composition \lstinline!free2toFree3 andThen free3toFree2!,
+we find that \lstinline!Bind! and \lstinline!Return! are mapped
+back to themselves with the same arguments. However, the composition
+in the opposite order (\lstinline!free3toFree2 andThen free2toFree3!)
+is not an identity function: it converts \lstinline!Suspend! to \lstinline!FlatMap!
+and may rearrange nested \lstinline!FlatMap! structures. It follows
+that \lstinline!free2toFree3! is injective and \lstinline!free3toFree2!
+is surjective. In that sense, \lstinline!Free2! is \textsf{``}smaller\textsf{''}
+than \lstinline!Free3!. 
+
+To summarize, we found that imposing monad laws can create a smaller
+encoding that has an injective map into a larger encoding. Nevertheless,
+the results of running monadic programs into some target monad will
+be the same for all encodings, because the differences between encodings
+correspond to imposing certain monad laws.
+
+We will find later in this chapter that a similar situation occurs
+in many other typeclasses. There are different encodings that may
+obey some of the typeclass laws. The raw tree encoding obeys no typeclass
+laws and is the largest of all encodings; the smallest encoding obeys
+all the laws. The more laws are obeyed, the smaller the encoding.
+There are injective maps from smaller encodings to larger ones, and
+surjective maps from larger to smaller encodings.
 
 \subsection{Types with existential quantifiers}
 
@@ -1307,8 +1356,8 @@ sealed trait MonadDSL[F[_], T] {
   def flatMap[A](...) = ...
   def map[A](f: T => A): MonadDSL[F, A] = Bind(this)(f andThen MonadDSL.pure)
 }
-final case class Val[F[_], T](t: T)                                          extends MonadDSL[F, T]
-final case class Op[F[_], T](f: F[T])                                        extends MonadDSL[F, T]
+final case class Val[F[_], T](t: T)   extends MonadDSL[F, T]
+final case class Op[F[_], T](f: F[T]) extends MonadDSL[F, T]
 final case class Bind[F[_], T, A](p: MonadDSL[F, A])(g: A => MonadDSL[F, T]) extends MonadDSL[F, T]
 \end{lstlisting}
 The case class \lstinline!Bind[F, T, A]! uses the type parameter
@@ -1602,9 +1651,9 @@ and find:
 $\square$
 
 It is important that the function type $(\forall C.\,F^{C}\rightarrow D)\rightarrow D$
-has the univeresal quantifier $\forall C$ in the type expression
-$\forall C.\,F^{C}\rightarrow D$ \emph{inside} the function argument.
-The type with both quantifiers outside, $\forall C.\,\forall D.\,(F^{C}\rightarrow D)\rightarrow D$
+has the universal quantifier $\forall C$ in the type expression $\forall C.\,F^{C}\rightarrow D$
+\emph{inside} the function argument. The type with both quantifiers
+outside ($\forall C.\,\forall D.\,(F^{C}\rightarrow D)\rightarrow D$)
 is \emph{not} equivalent to $\exists C.\,F^{C}$.
 
 \section{Free constructions for other typeclasses}
@@ -1612,9 +1661,9 @@ is \emph{not} equivalent to $\exists C.\,F^{C}$.
 The free monad was motivated by implementing a type-safe DSL that
 supports user-defined bound variables. However, we may view the free
 monad as just a trick that wraps an arbitrary type constructor in
-some case classes to obtain the features of a monad. Are there similar
-tricks for adding the features of an applicative functor, a filterable
-functor, etc., to an arbitrary type constructor? 
+some case classes in order to obtain the features of a monad. Are
+there similar tricks for adding the features of an applicative functor,
+a filterable functor, etc., to an arbitrary type constructor? 
 
 Looking at the raw tree encoding and other encodings of the free monad,
 we find a recipe that we can generalize to many other typeclasses.
@@ -2494,13 +2543,13 @@ construction to other similar typeclasses. We will then extend the
 results to typeclasses for type constructors (such as \lstinline!Functor!
 and \lstinline!Monad!).
 
-The free monoid is a type constructor ($\text{FM}$) that transforms
-an arbitrary type $T$ into a new type ($\text{FM}^{T}$) having a
-\lstinline!Monoid! typeclass instance. Values of type $T$ can be
-wrapped into values of type $\text{FM}^{T}$. For any given monoid
-$M$ and a given function of type $T\rightarrow M$, a \textsf{``}free monoid
-program\textsf{''} (i.e., a value of type $\text{FM}^{T}$) can be \textsf{``}run
-into $M$\textsf{''}. The resulting runner (of type $\text{FM}^{T}\rightarrow M$)
+The free monoid is a type constructor (denoted by \textsf{``}$\text{FM}$\textsf{''})
+that transforms an arbitrary type $T$ into a new type ($\text{FM}^{T}$)
+having a \lstinline!Monoid! typeclass instance. Values of type $T$
+can be wrapped into values of type $\text{FM}^{T}$. For any given
+monoid $M$ and a given function of type $T\rightarrow M$, a \textsf{``}free
+monoid program\textsf{''} (i.e., a value of type $\text{FM}^{T}$) can be
+\textsf{``}run into $M$\textsf{''}. The resulting runner (of type $\text{FM}^{T}\rightarrow M$)
 will preserve the monoid operations between $\text{FM}^{T}$ and $M$.
 So, the monoid laws will hold after running a \textsf{``}free monoid program\textsf{''},
 even when the chosen encoding $\text{FM}^{T}$ violates some of the
