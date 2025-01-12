@@ -167,15 +167,14 @@ this program causes a run-time error:
 scala> runFile(Read(Read(Val("file"))))
 java.lang.Exception: Illegal PrgFile operation: Read(Read(Val(file)))
 \end{lstlisting}
-All DSL program values are of the same type (\lstinline!PrgFile!)
-regardless of their intended meaning. So, the Scala compiler cannot
-verify that we are using the DSL correctly. It would be better if
-the DSL program \lstinline!Read(Read(Val("file")))! failed to compile.
-To achieve that, we need to use different Scala types for DSL programs
-returning a \lstinline!String! and a \lstinline!Path!. So, let us
-replace the type \lstinline!PrgFile! by a type constructor \lstinline!PrgFile[A]!,
-representing a DSL program that will return a value of type \lstinline!A!
-when we run it:
+The Scala compiler cannot verify that we are using the DSL correctly.
+It would be better if the invalid DSL program \lstinline!Read(Read(Val("file")))!
+failed to compile. To achieve that, it would help to have different
+Scala types for DSL programs returning a \lstinline!String! and a
+\lstinline!Path!. So, let us replace the type \lstinline!PrgFile!
+by a type constructor \lstinline!PrgFile[A]!, representing a DSL
+program that will return a value of type \lstinline!A! when we run
+it:
 \begin{lstlisting}
 import java.nio.file.{Path => JPath}
 import java.nio.file.{Files, Paths}
@@ -190,8 +189,8 @@ def runFile[A]: PrgFile[A] => A = {
   case Read(p)  => new String(Files.readAllBytes(runFile(p)))
 }
 \end{lstlisting}
-Our example DSL is now fully type-safe.\index{type safety} Invalid
-programs are rejected at compile time:
+Our example DSL is now type-safe.\index{type safety} Invalid programs
+are rejected at compile time:
 \begin{lstlisting}
 val prgFile: PrgFile[String] = Read(Path(Read(Path(Val("config_location.txt")))))
 
@@ -207,7 +206,7 @@ res4 = runFile(Read(Read(Val("file"))))
 Compilation Failed 
 \end{lstlisting}
 
-A similar problem exists in our DSL for complex numbers. The code
+A similar problem exists in the DSL for complex numbers. The code
 of \lstinline!runComplex! assumes that the \lstinline!Rotate! operation
 is always applied to a \lstinline!Phase!, but the DSL does not enforce
 that assumption. Both arguments of the \lstinline!Rotate! operation
@@ -225,9 +224,10 @@ res5: Complex = Complex(11.0, -2.0)
 
 To achieve type safety, we add a type parameter to \lstinline!PrgComplex!.
 A DSL program of type \lstinline!PrgComplex[A]! will return a value
-of type \lstinline!A! when run. (So, the new DSL programs will be
-able to compute values of any type, not only of type \lstinline!Complex!.)
-The new definitions of the case classes are:
+of type \lstinline!A! when run. (Another benefit of this enhancement
+is that the new DSL programs will be able to compute values of any
+type, not only of type \lstinline!Complex!.) The new definitions
+of the case classes are:
 \begin{lstlisting}
 sealed trait PrgComplex[A]
 final case class Val(c: Complex)                                       extends PrgComplex[Complex]
@@ -430,15 +430,8 @@ object PrgFile {
 Here we defined \lstinline!map! via \lstinline!flatMap! by using
 a monad\textsf{'}s right identity law, as shown in Eq.~(\ref{eq:express-map-through-flatMap}).
 
-Like other DSL operations, the methods \lstinline!map!, \lstinline!flatMap!,
-and \lstinline!pure! do not run or evaluate any parts of a DSL program.
-They only create some nested data structures containing not-yet-called
-functions. The necessary logic will be executed when the \lstinline!run!
-method is invoked. At that time, the entire DSL program will be converted
-into a result value.
-
-Because \lstinline!map! and \lstinline!flatMap! are defined, DSL
-programs can now be written as functor blocks:
+Because \lstinline!map! and \lstinline!flatMap! are now defined,
+we may write DSL programs as functor blocks:
 \begin{lstlisting}
 val prg: PrgFile[String] = for {
   p <- Path(Val("config.txt"))
@@ -481,6 +474,27 @@ def runFile[A]: PrgFile[A] => A = {
 }
 \end{lstlisting}
 
+It is important that the DSL operations (such as \lstinline!Path!
+and \lstinline!Read!) and the monad methods \lstinline!map!, \lstinline!flatMap!,
+and \lstinline!pure! do not run or evaluate any parts of a DSL program.
+They only create some nested data structures containing not-yet-called
+functions:
+\begin{lstlisting}
+scala> prg
+res10: PrgFile[String] = Bind(Path("config.txt"))
+\end{lstlisting}
+The Scala interpreter does not print the second curried argument of
+the \lstinline!Bind! case class (of type \lstinline!B => PrgFile[A]!);
+but that argument is a function that in any case cannot be meaningfully
+printed. 
+
+Typically, a monadic DSL program is a nested case class containing
+some function that, when called, will return further nested case classes
+and functions, etc. All those functions are waiting to be called;
+no side effects have been run yet. The actual business logic and side
+effects will be executed only when the \lstinline!run! method is
+applied. At that time, the entire DSL program will be converted into
+a result value.
 
 \subsection{Stage 5: refactoring to reuse common code\label{subsec:Stage-5:-refactoring-monadDSL}}
 
@@ -1694,49 +1708,7 @@ and \lstinline!Free4! holds only after applying a runner to a free
 monad value; the free monad encodings \lstinline!Free2!, \lstinline!Free3!,
 \lstinline!Free4! are \emph{not} equivalent as type constructors.)
 
-\section{Free constructions for other typeclasses}
-
-The free monad was motivated by implementing a type-safe DSL that
-supports user-defined bound variables. However, we may view the free
-monad as just a trick that wraps an arbitrary type constructor in
-some case classes in order to add the features of a monad. Are there
-similar tricks for adding the features of an applicative functor,
-a filterable functor, etc., to an arbitrary type constructor? 
-
-Looking at the raw tree encoding and other encodings of the free monad,
-we find a recipe that we can generalize to many other typeclasses.
-Let us now formulate this recipe more formally.
-
-The first step is to define the raw tree encoding of the free typeclass.
-For the free monad, we wrote a case class for each of the monad\textsf{'}s
-standard methods (\lstinline!map!, \lstinline!flatMap!, \lstinline!pure!)
-and another case class for wrapping the given set of DSL operations.
-The same recipe gives a raw tree encoding for many other free typeclasses,
-as long as the typeclass operations are of the form of functions whose
-last return type is again of the same typeclass. For instance, a monad
-\lstinline!M!\textsf{'}s \lstinline!flatMap! has the type signature of the
-form \lstinline!... => M[A]!, where the last return type uses the
-same monad \lstinline!M!.
-
-The second step is to implement the \textsf{``}universal runner\textsf{''} that transforms
-a free typeclass value into a value of another type belonging to the
-same typeclass. For instance, the universal runner for the free monad
-on \lstinline!F! takes any other monad $M$ and a polymorphic function
-of type $\forall T.\,F^{T}\rightarrow M^{T}$ and converts a free
-monad value of type \lstinline!MonadDSL[F, A]! into a result value
-of type \lstinline!M[A]!.
-
-Typically, the raw tree encoding will not satisfy the laws of the
-typeclass. (However, the laws will hold after applying the runner.) 
-
-The third step is to impose some of the typeclass laws and to obtain
-a reduced encoding that uses a smaller number of case classes and
-satisfies the chosen laws automatically. The code of the universal
-runner needs to be revised to work with the reduced encoding.
-
-The following sections will show several examples of these constructions. 
-
-\subsection{Expected properties of a free typeclass construction}
+\section{Expected properties of a free typeclass construction\label{sec:Expected-properties-of-free-typeclass}}
 
 What general properties a programmer should expect from all free typeclass
 constructions? To determine that, let us review the properties of
@@ -1760,10 +1732,10 @@ and with arbitrary effect runners, since the monad $M$ and the function
 \lstinline!runnerM: RunnerM! are parameters in \lstinline!run4M!.
 
 In particular, we may choose the monad $M$ as a free monad on another
-effect constructor (say, $G$) such that we have a function $f:\forall T.\,F^{T}\rightarrow G^{T}$.
-Then the universal runner can give us a transformation from \lstinline!Free4[F, A]!
-to \lstinline!Free4[G, A]!. We just need to supply an effect runner,
-which must be a function of type $\forall T.\,F^{T}\rightarrow\text{Free}_{4}^{G,T}$.
+effect constructor (say, $G$). Given a function $f:\forall T.\,F^{T}\rightarrow G^{T}$,
+could we convert \lstinline!Free4[F, A]! into \lstinline!Free4[G, A]!?
+We can use \lstinline!run4M! to implement that transformation if
+we supply an effect runner, which must be a function of type $\forall T.\,F^{T}\rightarrow\text{Free}_{4}^{G,T}$.
 We can obtain that function via the composition of $f$ and the \lstinline!Op!
 constructor that embeds $G^{T}\rightarrow\text{Free}_{4}^{G,T}$.
 The result is an \textsf{``}effect map\textsf{''} function that we could implement
@@ -1781,80 +1753,310 @@ def emap4[F[_], G[_], A](runner: RunnerM[F, G]): Free4[F, A] => Free4[G, A] = {
 \text{emap}_{4}^{F,G,A}:(\forall T.\,F^{T}\rightarrow G^{T})\rightarrow\text{Free}_{4}^{F,A}\rightarrow\text{Free}_{4}^{G,A}\quad.
 \]
 This type signature is like that of \lstinline!fmap! except it works
-with type constructors.
+with type constructors. The code can be simplified if we substitute
+the code of \lstinline!run4M! and inline \lstinline!runnerM!:
+\begin{lstlisting}
+def emap4[F[_], G[_], A](runner: RunnerM[F, G]): Free4[F, A] => Free4[G, A] = {
+    case Val(a)          => Val(a)
+    case Bind4(pa, f)    => emap4(runner)(pa).flatMap(f andThen emap4(runner))
+    case FMap(pa, f)     => emap4(runner)(pa).map(f)
+    case Op(op)          => Op(runner.apply(op))
+}
+\end{lstlisting}
+In this form, the code of \lstinline!emap4! no longer depends on
+\lstinline!run4M!. We will now use this fact to replace \lstinline!run4M!
+by an equivalent but simpler function that is more convenient in proofs. 
 
-It turns out that \lstinline!run4M(runnerM)! always produces functions
-(of type $\forall A.\,\text{Free}_{4}^{F,A}\rightarrow M^{A}$) that
-\textsf{``}preserve the monad\textsf{'}s operations\textsf{''} in the sense that they satisfy
-the laws of monad morphisms. (Those functions are not, strictly speaking,
-monad morphisms because $\text{Free}_{4}^{F,A}$ does not itself obey
-the monad laws.) To understand the significance of this property,
-we need to understand in detail why the monad laws hold after applying
-the runner. For that, it will help to replace the type of \lstinline!run4M!
-by a simpler type signature. The type of \lstinline!run4M! is written
-in the type notation as:
+The type signature of \lstinline!run4M! is written in the type notation
+as:
 \[
 \text{run}_{4}^{F,M,A}:(\forall T.\,F^{T}\rightarrow M^{T})\rightarrow\text{Free}_{4}^{F,A}\rightarrow M^{A}\quad.
 \]
-Since $F$ is a parameter, we may set $F=M$ in that type. Then the
-effect runner (of type $\forall T.\,M^{T}\rightarrow M^{T}$) can
-be just the identity function. Evaluating $\text{run}_{4}^{M,M,A}(\text{id})$,
-we obtain a function of type $\text{Free}_{4}^{M,A}\rightarrow M^{A}$
-that we call the \textsf{``}free evaluator\textsf{''} for \lstinline!Free4!. The
-Scala code for the free evaluator of \lstinline!Free4! is a simplification
-of the code of \lstinline!run4M!:
+Since $F$ is a parameter, we could set $F=M$ in that type. Then
+the effect runner (of type $\forall T.\,M^{T}\rightarrow M^{T}$)
+can be just an identity function. Evaluating $\text{run}_{4}^{M,M,A}(\text{id})$,
+we obtain a certain function of type $\text{Free}_{4}^{M,A}\rightarrow M^{A}$
+that we call the \textbf{free evaluator} for\index{free monad!free evaluator}
+\lstinline!Free4!. The Scala code for \lstinline!Free4!\textsf{'}s free evaluator
+is a simplification of the code of \lstinline!run4M!:
 \begin{lstlisting}
 def eval4[M[_]: Monad, A]: Free4[M, A] => M[A] = {
   case Val(a)          => Monad[M].pure(a)
   case Bind4(pa, f)    => eval4.apply(pa).flatMap(f andThen eval4.apply)
-  case FMap(pa, f)     => eval4.apply(pa).flatMap(f andThen Monad[M].pure)
+  case FMap(pa, f)     => eval4.apply(pa).map(f) // Using M\textsf{'}s map method.
   case Op(op)          => op
 }
 \end{lstlisting}
+This form of the code shows that the free evaluator recursively substitutes
+$M$\textsf{'}s monad methods (\lstinline!pure!, \lstinline!flatMap!, \lstinline!map!)
+instead of \lstinline!Free4!\textsf{'}s wrappers (\lstinline!Val!, \lstinline!Bind4!,
+\lstinline!FMap!). 
 
 Given a free evaluator, we can use \lstinline!emap4! to recover the
 universal runner:
 \begin{lstlisting}
-run4M[F, M, A](runnerM: RunnerM[F, M])(p) = eval4[M, A](emap4[F, M, A](runnerM)(p))
+run4M[F, M, A](runnerM: RunnerM[F, M])(p) == eval4[M, A](emap4[F, M, A](runnerM)(p))
 \end{lstlisting}
 
-The contravariant Yoneda identity for type constructors (Eq.~(\ref{eq:contravariant-yoneda-identity-for-type-constructors})
-proved in Section~\ref{subsec:The-Yoneda-identities-for-type-constructors})
-gives the type equivalence: 
+With some work, it can be proved that the \emph{types} of \lstinline!run4M!
+and \lstinline!eval4! are themselves equivalent. The proof can proceed
+via the \textsf{``}contravariant Yoneda identity\textsf{''} for type constructors
+(see Section~\ref{subsec:The-Yoneda-identities-for-type-constructors}).
+That identity gives the type equivalence shown in Eq.~(\ref{eq:contravariant-yoneda-identity-for-type-constructors}).
+Substituting in that equation $P\triangleq M$ and $(S^{F})^{A}\triangleq\text{Free}_{4}^{F,A}\rightarrow M^{A}$,
+we get the type equivalence: 
 \begin{align*}
  & \forall F^{\bullet}.\,\forall A.\,(\forall T.\,F^{T}\rightarrow M^{T})\rightarrow\text{Free}_{4}^{F,A}\rightarrow M^{A}\\
  & \quad\quad\cong\forall A.\,\text{Free}_{4}^{M,A}\rightarrow M^{A}\quad.
 \end{align*}
-We call the function of type $\text{Free}_{4}^{M,A}\rightarrow M^{A}$
-the \textsf{``}free evaluator\textsf{''}. 
+The last line ($\text{Free}_{4}^{M,A}\rightarrow M^{A}$) is the type
+signature of the free evaluator.
 
-Values of type $\text{Free}_{4}^{F,A}$ do not obey the monad laws
-directly; however, the monad laws \emph{will} hold after applying
-the runner, as long as $M$ is a lawful monad. To understand how that
-happens, 
+Looking at the code of \lstinline!emap4!, we see that it recursively
+substitutes the operations of $\text{Free}_{4}^{G,A}$ instead of
+the corresponding operations of $\text{Free}_{4}^{F,A}$. We say that
+(for any fixed \lstinline!runner! function) the function \lstinline!emap4(runner)!
+\textsf{``}preserves the monad\textsf{'}s operations\textsf{''}. The same property holds for
+the code of \lstinline!eval4!.
 
-{*}{*}{*}we need to look in detail at the way the runner converts
-a free monad program\textsf{'}s effects to the effects of a specific monad
-$M$. 
+It is important to express this property formally. A monad can be
+defined via two operations (\lstinline!pure! and \lstinline!flatMap!).
+Denote temporarily by $e^{A}$ the function \lstinline!emap4[F, G, A](runner)!,
+where \lstinline!runner: RunnerM[F, G]! is fixed. From the code of
+\lstinline!emap4!, we can see that the \lstinline!Val! case class
+is mapped from \lstinline!Free4[F, A]! to \lstinline!Free4[G, A]!
+without change. Writing that as an equation, and keeping in mind that
+the \lstinline!Val! case class is the result of applying the \lstinline!pure!
+method, we get, for any $x^{:A}$:
+\[
+e^{A}\big(\text{pu}_{\text{Free}_{4}^{F,\bullet}}(x)\big)=\text{pu}_{\text{Free}_{4}^{G,\bullet}}(x)\quad.
+\]
+Turning to the \lstinline!flatMap! method, we find for any $p:\text{Free}_{4}^{F,A}$
+and $f:A\rightarrow\text{Free}_{4}^{F,B}$ that:
+\[
+e^{B}\big(p\triangleright\text{flm}_{\text{Free}_{4}^{F,\bullet}}(f)\big)=e^{A}(p)\triangleright\text{flm}_{\text{Free}_{4}^{G,\bullet}}(f\bef e^{B})\quad.
+\]
+These two equations are the same as the identity and composition laws
+of monad morphisms, shown as Eq.~(\ref{eq:monad-morphism-identity-law})
+and Eq.~(\ref{eq:monad-morphism-composition-law-using-flatMap})
+in Chapter~\ref{chap:Semimonads-and-monads}. So, the laws of monad
+morphisms express the property of preserving the operations of the
+\lstinline!Monad! typeclass. (Strictly speaking, the functions of
+the form \lstinline!emap4(runner)! cannot be called monad morphisms:
+$\text{Free}_{4}^{F,A}$ is not a monad as it fails to obey the monad
+laws.) 
 
-{*}{*}{*}The code of \lstinline!run4M! converts the free monad\textsf{'}s
-\lstinline!pure! to monad $M$\textsf{'}s \lstinline!pure!; the free monad\textsf{'}s
-\lstinline!map! to monad $M$\textsf{'}s \lstinline!map!; and the free monad\textsf{'}s
-\lstinline!flatMap! to the monad $M$\textsf{'}s \lstinline!flatMap!. Whenever
-a value of type $\text{Free}_{4}^{F,A}$ uses the effect constructor
-$F$ via the \lstinline!Op! case class, the given function of type
-$F^{T}\rightarrow M^{T}$ is applied.
+We have derived the code of \lstinline!emap4! by applying \lstinline!run4M!
+to a specific runner of type $\forall T.\,F^{T}\rightarrow\text{Free}_{4}^{G,T}$.
+However, the code of \lstinline!run4M! uses patterns quite similar
+to those of \lstinline!emap4!. We can see that the function \lstinline!run4M(runnerM)!
+will preserve the monad operations for any given \lstinline!runner: RunnerM[F, M]!.
+The reason for that can be read off the code of the function \lstinline!run4M(runnerM)!:
+it converts the free monad\textsf{'}s \lstinline!pure! to monad $M$\textsf{'}s \lstinline!pure!;
+the free monad\textsf{'}s \lstinline!map! to monad $M$\textsf{'}s \lstinline!map!;
+and the free monad\textsf{'}s \lstinline!flatMap! to the monad $M$\textsf{'}s \lstinline!flatMap!.
+Whenever a value of type $\text{Free}_{4}^{F,A}$ uses the effect
+constructor $F$ via the \lstinline!Op! case class, the given function
+of type $F^{T}\rightarrow M^{T}$ is applied. In this way, \lstinline!run4M(runnerM)!
+recursively substitutes $M$\textsf{'}s monad operations instead of the corresponding
+operations of \lstinline!Free4!. So, \lstinline!run4M(runnerM)!
+will obey the monad morphism laws for any given \lstinline!runner: RunnerM[F, M]!. 
 
-{*}{*}{*}
+The same holds for \lstinline!eval4!: an unevaluated expression tree
+represented by \lstinline!Free4[M, A]! is converted into specific
+operations of the given monad $M$ and is evaluated to a specific
+value of type $M^{A}$ by translating \lstinline!Free4!\textsf{'}s operations
+into the corresponding operations of the monad $M$.
 
-Violations of the monad laws are \textsf{``}hidden\textsf{''} when we map to a lawful
-monad in an operation-preserving way.
+It turns out that the monad morphism laws of the runner and the free
+evaluator have far-reaching consequences for the theory of typeclasses
+with laws. For now, let us list the properties that are relevant for
+practical programming with free monads:
+\begin{enumerate}
+\item For a given monad $M$ and a fixed function \lstinline!runnerM!,
+the function \lstinline!run4M(runnerM)! preserves the monad operations
+(i.e., satisfies the laws of monad morphisms). The free evaluator
+\lstinline!eval4! also preserves the monad operations.
+\item The universal runner and the free evaluator are unique: For a fixed
+\lstinline!runnerM!, the function \lstinline!run4M(runnerM)! is
+the \emph{only} function of type $\text{Free}_{4}^{F,A}\rightarrow M^{A}$
+that preserves the monad operations. The free evaluator \lstinline!eval4!
+is the \emph{only} function of type $\text{Free}_{4}^{M,A}\rightarrow M^{A}$
+that preserves the monad operations.
+\item For any two effect constructors $F$ and $G$ and a map $f:\forall A.\ F^{A}\rightarrow G^{A}$
+between them, there is a unique function (found as \lstinline!emap4(f)!)
+of type $\text{Free}_{4}^{F,A}\rightarrow\text{Free}_{4}^{G,A}$ that
+preserves the monad operations.
+\item Any violations of the monad laws in a \lstinline!Free4! program will
+disappear once a runner is applied and a final value of type $M^{A}$
+is computed (as long as $M$ is a lawful monad).
+\end{enumerate}
+We will prove these properties later in this book (Section~\ref{sec:Laws-of-free-constructions})
+once we develop the necessary technique. For now, let us comment on
+the practical significance of the items 1\textendash 4 listed above.
 
-{*}{*}{*} universal runner, E{[}S{]} => S instead of (T => S) => E{[}T{]}
-=> S; typeclass-preserving maps; universal properties; covariance
-in T; etc.?
+Programmers use the runner to convert a free monad program (a value
+of type, say, \lstinline!Free4[F, A]!) into a final value of type
+\lstinline!M[A]!, for some monad \lstinline!M!. If the runner preserves
+the monad operations, the programmer is justified to reason about
+the free program in the same way as about a monad program whose effects
+are evaluated immediately. 
 
-\subsection{Free pointed types}
+For example, look at a monadic program in \lstinline!Free4! with
+a chain of some \lstinline!F!-effects:
+\begin{lstlisting}
+val program1: Free4[F, C] = for {
+  x <- Op(f1)     // x: A
+  y <- Op(f2(x))  // y: B
+  z <- Op(f3(y))  // z: C
+} yield z
+
+val result1: M[C] = run4M(runnerM)(program1) // With some chosen runnerM.
+\end{lstlisting}
+Here \lstinline!f1!, \lstinline!f2(x)!, and \lstinline!f3(y)! are
+some values of types \lstinline!F[A]!, \lstinline!F[B]!, and \lstinline!F[C]!,
+say. The programmer needs to be able to reason about this monadic
+program as \textsf{``}first we run the effect of \lstinline!f1!, expecting
+to get a value \lstinline!x!; then we run the effect of \lstinline!f2(x)!\textsf{''},
+and so on. This reasoning is correct only if the runner indeed runs
+the effects in the specified order and with this business logic. We
+may refactor \lstinline!program1! into a composition of two monadic
+programs like this:
+\begin{lstlisting}
+val program1a: Free4[F, B] = for {
+  x <- Op(f1)
+  y <- Op(f2(x))
+} yield y
+
+def program1b(y: B): Free4[F, C] = Op(f3(y))
+
+val program1_refactored: Free4[F, C] = for {
+  y <- program1a
+  z <- program1b(y)
+} yield z
+\end{lstlisting}
+The programmer\textsf{'}s intuition behind this refactoring is that \lstinline!program1a!
+will run the first two effects and \lstinline!program1b! will run
+the third effect. For this intuition to remain correct even \emph{after}
+applying a runner, we must have the property that the two parts (\lstinline!program1a!
+and \lstinline!program1b!) could be run separately, giving the same
+result after composing them:
+\begin{lstlisting}
+val result1a: M[B] = run4M(runnerM)(program1a)
+
+def result1b(y: B): M[C] = run4M(runnerM)(program1b(y))
+
+val result1_refactored: M[C] = for { // Using monad M\textsf{'}s operations.
+  y <- result1a
+  z <- result1b(y)
+} yield z
+\end{lstlisting}
+The value \lstinline!result1_refactored! will be equal to \lstinline!result1!
+as long as the runner preserves the monad\textsf{'}s operations (that is, obeys
+the laws of monad morphisms). If this property does not hold for some
+runner, a programmer would regard that runner as incorrectly written.
+
+The uniqueness property says that there is only one correct logic
+for executing the effects of the free monad, and that the runner \lstinline!run4M!
+and the free evaluator \lstinline!eval4! do implement that logic.
+Indeed, a programmer would not expect that there should be several
+inequivalent runners that would sometimes give different results when
+running the same monadic program (using the same effect runner of
+type $F^{A}\rightarrow M^{A}$).
+
+So, the properties 1 and 2 express the programmer\textsf{'}s expectations about
+how a runner should execute the effects in a free monad program.
+
+Property 3 can be formulated more abstractly: the free monad $\text{Free}_{4}^{F,A}$
+is covariant with respect to the type constructor $F$. Note that
+$F$ is a type parameter in the code of \lstinline!Free4[F, A]!.
+Covariance with respect to the type constructor enables the programmer
+to transform one free monad into another whenever needed by using
+the function \lstinline!emap4! . The function \lstinline!emap4!
+is similar to \lstinline!fmap! for ordinary functors except that
+the argument of \lstinline!emap4! is a function of type $\forall A.\,F^{A}\rightarrow G^{A}$
+with the quantifier $\forall A$ \emph{inside}.
+
+Property 4 means that it is not necessary to require that a free monad
+encoding should satisfy the monad laws. This justifies the use of
+free encodings that violate some of the laws. The programmer may refactor
+free monadic programs as if they obeyed the monad laws. All violations
+of the monad laws will become invisible once a runner is applied.
+
+\section{Free constructions for other typeclasses}
+
+The free monad was motivated by implementing a type-safe DSL that
+supports user-defined bound variables. However, we may view the free
+monad as just a trick that wraps an arbitrary type constructor in
+some case classes in order to add the features of a monad. Are there
+similar tricks for adding the features of an applicative functor,
+a filterable functor, etc., to an arbitrary type constructor? 
+
+Looking at the raw tree encoding and other encodings of the free monad,
+we find a recipe that we can generalize to many other typeclasses.
+Let us now formulate this recipe more formally.
+
+The first step is to define the raw tree encoding of the free typeclass.
+For the free monad, we wrote a case class for each of the monad\textsf{'}s
+standard methods (\lstinline!map!, \lstinline!flatMap!, \lstinline!pure!)
+and another case class for wrapping the given set of custom DSL operations.
+So, we generalize this to any other typeclass: each of the methods
+is translated to a new case class that stores the method\textsf{'}s arguments
+and performs no evaluation. In addition, there is an \lstinline!Op!
+case class for wrapping the custom operations. 
+
+This recipe gives a raw tree encoding for many other free typeclasses,
+as long as the typeclass operations are of the form of functions whose
+last return type is again of the same typeclass. For instance, a monad
+\lstinline!M!\textsf{'}s \lstinline!flatMap! has the type signature of the
+form \lstinline!... => M[A]!, where the last return type uses the
+same monad \lstinline!M!.
+
+The second step is to implement the universal runner and/or the free
+evaluator that transform a free typeclass value into a value of another
+type belonging to the same typeclass. For instance, the universal
+runner for the free monad \lstinline!MonadDSL! takes any other monad
+$M$ and a polymorphic function of type $\forall T.\,F^{T}\rightarrow M^{T}$
+and converts a value of type \lstinline!MonadDSL[F, A]! into a result
+value of type \lstinline!M[A]!. The free evaluator is a simpler function
+that converts \lstinline!MonadDSL[M, A]! into \lstinline!M[A]!.
+The universal runner can be expressed through the free evaluator.
+
+Typically, the raw tree encoding will not satisfy the laws of the
+typeclass. (However, the laws will hold after applying a runner.) 
+
+The third step is to impose some of the typeclass laws and to obtain
+a reduced encoding that uses a smaller number of case classes and
+satisfies the chosen laws automatically. The code of the universal
+runner needs to be revised to work with the reduced encoding.
+
+We can also generalize the properties listed in Section~\ref{sec:Expected-properties-of-free-typeclass}
+to an arbitrary typeclasse. Suppose $T$ is a type that does not belong
+to the typeclass, and denote the free typeclass instance constructed
+on $T$ by $\text{Free}^{T}$. We will formulate the expected properties
+in terms of the free evaluator (\lstinline!eval!) as its type signature
+is simpler than that of the univeresal runner:
+\begin{enumerate}
+\item For a given type $M$ that belongs to a typeclass, the free evaluator
+function (\lstinline!eval!) of type $\text{Free}^{M}\rightarrow M$
+preserves the typeclass operations.
+\item The free evaluator \lstinline!eval! is the \emph{only} possible function
+of type $\text{Free}^{M}\rightarrow M$ that preserves the typeclass
+operations.
+\item The constructor $\text{Free}^{T}$ is covariant with respect to $T$:
+For any two types constructors $T$ and $U$ and a map $f:T\rightarrow U$
+between them, there is a unique function of type $\text{Free}^{T}\rightarrow\text{Free}^{U}$
+that preserves the typeclass operations.
+\item Any violations of the typeclass laws in a $\text{Free}^{T}$ program
+will disappear once a runner is applied and a final value of type
+$M$ is computed (as long as $M$ is a lawful typeclass instance).
+\end{enumerate}
+The following sections will show examples of various free typeclass
+constructions. We will not prove that those properties hold, because
+Section~\ref{sec:Laws-of-free-constructions} will show general proofs
+that hold for all relevant typeclasses and any possible laws.
+
+\subsection{Free pointed type}
 
 One of the simplest typeclasses is the \textbf{pointed}\index{pointed type}
 type (a type that has a designated default value). This is the \lstinline!HasDefault!
@@ -1897,37 +2099,35 @@ The \lstinline!HasDefault! typeclass has no laws, so the raw tree
 encoding ($\bbnum 1+T$) cannot be reduced by imposing any typeclass
 laws. 
 
-The free pointed typeclass comes with a \textsf{``}universal runner\textsf{''}, which
-is a function from \lstinline!FreeDefault[T]! to a chosen pointed
-type $P$. The runner needs to know how to translate $T$ into $P$,
-and the code can be written as:
+Let us implement the free evaluator for the free pointed class. The
+free evaluator is a function of type \lstinline!FreeDefault[P] => P!,
+where $P$ is a chosen pointed type:
 \begin{lstlisting}
-def runner[T, P: HasDefault](run: T => P): Option[T] => P = {
-  case Some(t)   => run(t)
-  case None      => implicitly[HasDefault[P]].value // Use the default.
-}
+def evalP[P: HasDefault]: Option[P] => P = {
+  case Some(p)   => p
+  case None      => implicitly[HasDefault[P]].value
 \end{lstlisting}
 This logic repeats the Scala standard library\textsf{'}s \lstinline!getOrElse!
 method for \lstinline!Option!. For any value \lstinline!x: Option[T]!:
 \begin{lstlisting}
-runner(run)(x) == x.map(run).getOrElse(implicitly[HasDefault[P]].value)
+evalP(x) == x.getOrElse(implicitly[HasDefault[P]].value)
 \end{lstlisting}
-So, we can view \lstinline!getOrElse! as a general form of the universal
-runner for the free pointed typeclass.
+So, we can view \lstinline!getOrElse! as a form of the free evaluator
+for the free pointed typeclass.
 
 What if the type $T$ is already pointed? The free pointed type on
 $T$ is $\bbnum 1+T$, which is never equivalent to $T$. However,
-the universal runner can be applied to the identity function of type
-$T\rightarrow T$ and gives a function of type $\bbnum 1+T\rightarrow T$.
-When $T$ is itself of the form $\bbnum 1+U$ then that function (of
-type $\bbnum 1+\bbnum 1+U\rightarrow\bbnum 1+U$) is the standard
-method \lstinline!flatten! defined on \lstinline!Option! types.
+the free evaluator can be applied with the type $T$ and gives a function
+of type $\bbnum 1+T\rightarrow T$. When $T$ is itself of the form
+$\bbnum 1+U$ then that function (of type $\bbnum 1+\bbnum 1+U\rightarrow\bbnum 1+U$)
+is the standard method \lstinline!flatten! defined on \lstinline!Option!
+types.
 
 In this way, \lstinline!Option!\textsf{'}s standard methods \lstinline!getOrElse!
 and \lstinline!flatten! are seen as regular properties of the free
 pointed type construction.
 
-\subsection{Free semigroups}
+\subsection{Free semigroup}
 
 A semigroup (see Example~\ref{subsec:tc-Example-Semigroups}) is
 a typeclass with a single method called \lstinline!combine!. A common
@@ -1937,8 +2137,8 @@ semigroup\textsf{'}s law is the associativity law for the operation $\oplus$.
 
 How can we convert an arbitrary type $T$ into a semigroup? Following
 the general recipe, we first construct the raw tree encoding of a
-free semigroup on a given type $T$. There is one case class for the
-binary operation and another for wrapping a value of type $T$.
+free semigroup on $T$. There is one case class for the binary operation
+and another for wrapping a value of type $T$:
 \begin{lstlisting}
 sealed trait FSR[T]
 final case class Combine[T](left: FSR[T], right: FSR[T]) extends FSR[T]
@@ -1948,13 +2148,14 @@ The type notation for this type constructor is:
 \[
 \text{FSR}^{T}\triangleq T+\text{FSR}^{T}\times\text{FSR}^{T}\quad.
 \]
-We can now see that \lstinline!FSR[T]! is a binary tree with leaf
-values of type $T$ (see Section~\subsecref{Binary-trees}).
+So, \lstinline!FSR[T]! is a binary tree with leaf values of type
+$T$ (see Section~\subsecref{Binary-trees}). We see that $\text{FSR}^{T}$
+is covariant in $T$ and has a \lstinline!Functor! instance.
 
 We can implement a \lstinline!Semigroup! typeclass instance for \lstinline!FSR[T]!
 like this:
 \begin{lstlisting}
-implicit def semigroupFSR[T]: Semigroup[FSR[T]] = Semigroup((l, r) => Combine(l, r)) *** verify code
+implicit def semigroupFSR[T]: Semigroup[FSR[T]] = Semigroup((l, r) => Combine(l, r))
 \end{lstlisting}
 
 For convenience, we will define a syntax extension so that we can
@@ -1963,34 +2164,56 @@ use the infix binary operation \lstinline!|+|!:
 implicit class SemigroupOp[S: Semigroup](s: S) {
   def |+|(other: S): S = implicitly[Semigroup[S]].combine(s, other)
 }
+def wrap[T](t: T): FSR[T] = Wrap(t)
 \end{lstlisting}
 
-As usual with raw tree encodings, the free semigroup\textsf{'}s binary operation
+As usual for a raw tree encoding, the free semigroup\textsf{'}s binary operation
 \lstinline!|+|! does not perform any computations but simply wraps
 its arguments into the case class \lstinline!Combine!. A \textsf{``}free
 semigroup program\textsf{''} (a value of type \lstinline!FSR[T]!) corresponds
 to an unevaluated expression tree containing a number of nested \lstinline!Combine!
 case classes as well as some values of type \lstinline!T! wrapped
-in \lstinline!Wrap!. 
-
-The next step is to implement a universal runner that will evaluate
-that expression tree. Given any semigroup \lstinline!S! and any function
-of type \lstinline!T => S!, we can evaluate \lstinline!FSR[T]! into
-\lstinline!S! like this:
+in \lstinline!Wrap!. Here is an example:
 \begin{lstlisting}
-def runner[S: Semigroup, T](runT: T => S): FSR[T] => S = {
-  case Combine(left, right)   => runner(runT)(left) |+| runner(runT)(right)
-  case Wrap(value)            => runT(value)
+scala> val t1 = (wrap(1) |+| wrap(2)) |+| wrap(3)
+t1: FSR[Int] = Combine(Combine(Wrap(1), Wrap(2)), Wrap(3))
+\end{lstlisting}
+The associativity law is violated in the raw tree encoding:
+\begin{lstlisting}
+scala> val t2 = wrap(1) |+| (wrap(2) |+| wrap(3))
+t2: FSR[Int] = Combine(Wrap(1), Combine(Wrap(2), Wrap(3)))
+\end{lstlisting}
+The values \lstinline!t1! and \lstinline!t2! are not equal. This
+is to be expected because the unevaluated expression trees $(1+2)+3$
+and $1+(2+3)$ are different (even though the results will be equal
+after evaluation).
+
+The next step is to implement the free evaluator for \lstinline!FSR!.
+Given any semigroup \lstinline!S!, we can evaluate \lstinline!FSR[S]!
+into \lstinline!S! like this:
+\begin{lstlisting}
+def evalFSR[S: Semigroup]: FSR[S] => S = {
+  case Combine(left, right)   => evalFSR(left) |+| evalFSR(right)
+  case Wrap(value)            => value
 }
 \end{lstlisting}
 
-This code is analogous to the code of \lstinline!foldMap! \index{foldMap function@\texttt{foldMap} function}for
+We can implement the universal runner via \lstinline!evalFSR! and
+\lstinline!FSR!\textsf{'}s \lstinline!map! method:
+
+\begin{lstlisting}
+def runnerFSR[S: Semigroup, T](runT: T => S): FSR[T] => S =
+  fsr => evalFSR(fsr.map(runT))
+\end{lstlisting}
+Substituting the code of \lstinline!FSR!\textsf{'}s \lstinline!map! method,
+we obtain:\lstinline!def runnerFSR[S: Semigroup, T](runT: T => S): FSR[T] => S = {  case Combine(left, right)   => runnerFSR(runT)(left) |+| runnerFSR(runT)(right)  case Wrap(value)            => runT(value)}!This
+code is analogous to the code of \lstinline!foldMap! \index{foldMap function@\texttt{foldMap} function}for
 aggregating tree-like data (Section~\subsecref{Aggregating-tree-like-data-bfs}).
 
 Let us see an example of an \lstinline!FSR!-program for a free semigroup
 on \lstinline!String!:
 \begin{lstlisting}
-val fsfProgram: FSR[String] = Wrap("abc") |+| (Wrap("xyz") |+| Wrap(""))
+val fsfProgram: FSR[String] = wrap("abc") |+| (wrap("xyz") |+| wrap(""))
 \end{lstlisting}
  To run this program, we need to choose another semigroup (\lstinline!S!)
 and provide a function that maps \lstinline!String! to \lstinline!S!.
@@ -1999,21 +2222,19 @@ addition. The function \lstinline!runT: String => Int! will return
 the length of the string. In this way, we can compute the total length
 of all strings within the \lstinline!FSR!-program:
 \begin{lstlisting}
-*** test that this works
 implicit semigroupInt: Semigroup[Int] = Semigroup(_ + _)
 
-scala> runner(_.length)(fsfProgram)
+scala> runnerFSR(_.length)(fsfProgram)
 res0: Int = 6
 \end{lstlisting}
 
 The associativity law of \lstinline!|+|! will hold after applying
 the runner to an \lstinline!FSR!-program because associativity is
 assumed to hold for the operation \lstinline!|+|! of the semigroup
-\lstinline!S!. However, the raw tree encoding itself does not obey
-the associativity law because the nested data structure \lstinline!Combine(Combine(x, y), z)!
-is not equal to \lstinline!Combine(x, Combine(y, z))!. The next step
-is to look for a reduced encoding of the free semigroup that obeys
-the associativity law.
+\lstinline!S!. However, as we have seen, the raw tree encoding itself
+does not obey the associativity law. The next step is to look for
+a reduced encoding of the free semigroup that obeys the associativity
+law.
 
 The associativity law would hold if the result of \lstinline!Combine(x, y) |+| z!
 were not \lstinline!Combine(Combine(x, y), z)! but \lstinline!Combine(x, Combine(y, z))!.
@@ -2023,7 +2244,7 @@ by modifying the \lstinline!Semigroup! typeclass instance:
 implicit def semigroupFSR[T]: Semigroup[FSR[T]] = Semigroup((l, r) => l match {
   case Wrap(value)     => Combine(l, r)
   case Combine(p, q)   => p |+| (q |+| r) // Recursive call of |+|.
-}) *** verify that this code works
+})
 \end{lstlisting}
 The data structure from the new \lstinline!|+|! operation will be
 of the form \lstinline!Combine(Wrap(x), Combine(Wrap(y), ...))!,
@@ -2036,19 +2257,17 @@ carries no functionality by itself. So, we can reuse the non-empty
 list type \lstinline!NEL! and its \lstinline!concat! function (see
 Example~\ref{subsec:Disjunctive-Example-non-empty-list-foldLeft}
 and Exercise~\ref{subsec:Disjunctive-Exercise-non-empty-list-2}).
-The universal runner is similar to the code of the \lstinline!foldLeft!
-function shown in Example~\ref{subsec:Disjunctive-Example-non-empty-list-foldLeft}:
+The free evaluator becomes:
 \begin{lstlisting}
-implicit def semigroupNEL[T]: Semigroup[NEL[T]] = Semigroup((l, r) => concat(l, r))
- 
-@tailrec def runner[S: Semigroup, T](runT: T => S)(n: NEL[T]): S = n match {
-  case Last(x)        => runT(x)
-  case More(x, tail)  => runner(runT)(tail)
+def evalNEL[S: Semigroup)(n: NEL[S]): S = n match {
+  case Last(x)         => x
+  case More(x, tail)   => x |+| evalNEL(tail) // Operation |+| is for S.
 }
 \end{lstlisting}
 
 This defines \lstinline!NEL[T]! as a reduced encoding of the free
-semigroup on \lstinline!T!. 
+semigroup on \lstinline!T!. This encoding gives a free semigroup
+that satisfies the associativity law automatically.
 
 Comparing the raw tree encoding \lstinline!FSR[T]! and the reduced
 encoding \lstinline!NEL[T]!, we find some differences in run-time
@@ -2056,7 +2275,7 @@ performance. For \lstinline!NEL[T]!, the binary operation \lstinline!|+|!
 involves concatenating two lists, which may require traversing the
 lists. The raw tree encoding\textsf{'}s binary operation takes constant time
 as it only wraps the data in a new case class. However, \lstinline!NEL[T]!\textsf{'}s
-run operation may be implemented with tail recursion while \lstinline!FSR[T]!
+run operation could be implemented with tail recursion while \lstinline!FSR[T]!
 is a binary tree whose traversal cannot be tail-recursive.
 
 \subsection{Free monoid and its partially lawful encodings\label{subsec:Free-monoids}}
@@ -2065,10 +2284,10 @@ A monoid (see Example~\ref{subsec:tc-Example-Monoids}) is a typeclass
 with a two methods: \lstinline!combine! and \lstinline!empty!. The
 monoid\textsf{'}s laws are the associativity law and two identity laws.
 
-To convert an arbitrary type $T$ into a free monoid on $T$, we follow
-the general recipe and write the raw tree encoding. There is one case
-class for the binary operation, one case class for \lstinline!empty!,
-and one for wrapping a value of type $T$.
+To arrive at the free monoid construction, we follow the general recipe
+and begin by writing the raw tree encoding. There is one case class
+for the binary operation, one case class for \lstinline!empty!, and
+one for wrapping a value of type $T$.
 \begin{lstlisting}
 sealed trait FMR[T]
 final case class Combine[T](left: FMR[T], right: FMR[T]) extends FMR[T]
@@ -2084,10 +2303,10 @@ values of type $\bbnum 1+T$:
 \[
 \text{FMR}^{T}=\text{Tree2}^{\bbnum 1+T}\quad.
 \]
-The binary tree type \lstinline!Tree2! was defined in Section~\ref{subsec:Binary-trees}.
-The data type $\text{FMR}^{T}$ represents an \emph{unevaluated} expression
-tree built from the monoid operations and from values of type $T$,
-for example:
+The binary tree \lstinline!Tree2! was defined in Section~\ref{subsec:Binary-trees}.
+The data type $\text{FMR}^{T}$ is covariant in $T$ and represents
+an unevaluated expression tree built from the monoid operations and
+from values of type $T$:
 
 \begin{wrapfigure}{l}{0.6\columnwidth}%
 \vspace{-0.4\baselineskip}
@@ -2107,67 +2326,75 @@ implicit def monoidFMR[T]: Monoid[FMR[T]] = Monoid((l, r) => Combine(l, r), Empt
 We define a syntax extension for the infix binary operation \lstinline!|+|!
 as in the previous section.
 
-As usual with raw tree encodings, this free monoid\textsf{'}s operations not
-perform any computations but only create nested case classes. Those
-nested case classes represent an unevaluated expression tree of an
-\textsf{``}\lstinline!FMR!-program\textsf{''}. The next step is to implement a universal
-runner that will evaluate that expression tree using the operations
-of any chosen monoid \lstinline!M!. Given a function \lstinline!T => M!,
-we can convert any \lstinline!FMR!-program (a value of type \lstinline!FMR[T]!)
-into a value of type \lstinline!M! like this:
+As usual with raw tree encodings, this free monoid\textsf{'}s operations do
+not perform any computations but only create nested case classes.
+Those nested case classes represent an unevaluated expression tree
+of an \textsf{``}\lstinline!FMR!-program\textsf{''}. The next step is to implement
+a free evaluator that will evaluate that expression tree using the
+operations of any chosen monoid \lstinline!M!. We can convert any
+\lstinline!FMR!-program of type \lstinline!FMR[M]! into a value
+of type \lstinline!M! like this:
 \begin{lstlisting}
-def runnerFMR[M: Monoid, T](runT: T => M)(fmr: FMR[T]): M = fmr match {
-  case Combine(left, right)   => runnerFMR(runT)(left) |+| runnerFMR(runT)(right)
+def evalFMR[M: Monoid, T](fmr: FMR[M]): M = fmr match {
+  case Combine(left, right)   => evalFMR(left) |+| evalFMR(runT)(right)
   case Empty()                => Monoid[M].empty
-  case Wrap(value)            => runT(value)
+  case Wrap(value)            => value
 }
 \end{lstlisting}
 
-The raw tree encoding \lstinline!FMR[T]! does not satisfy any of
-the monoid laws (the associativity law and the two identity laws).
+The raw tree encoding \lstinline!FMR[T]! does not satisfy \emph{any}
+of the monoid laws (the associativity law and the two identity laws).
 This is not a problem in practice, since the laws will hold after
 running an \lstinline!FMR!-program into any lawful monoid \lstinline!M!.
 Imposing the monoid laws will help us find reduced encodings of the
 free monoid.
 
 As with the free semigroup, the associativity law will hold if we
-replace a binary tree by a non-empty list. The result is a non-empty
-list of values of type $\bbnum 1+T$. The type \lstinline!NEL[Option[T]]!
-is a possible encoding of the free monoid; it satisfies the associativity
-law but fails the identity laws. The empty value of the free monoid
-is represented by a single-element list containing \lstinline!None!
-(in the code notation, $[1+\bbnum 0^{:T}]$). The identity laws of
-the monoid would hold if lists of the form: 
+replace a binary tree by a non-empty list. The resulting data type
+is a non-empty list of values of type $\bbnum 1+T$. The type \lstinline!NEL[Option[T]]!
+is a possible encoding of that type; it satisfies the associativity
+law but fails the identity laws. To see the failure, note that the
+monoid \lstinline!NEL[Option[T]]!\textsf{'}s empty value is represented by
+a single-element list containing the value \lstinline!None! (in the
+code notation, $[1+\bbnum 0^{:T}]$). The identity laws of the monoid
+would hold if lists of the form: 
 \[
 \left[\bbnum 0+x_{1},...,\bbnum 0+x_{m},1+\bbnum 0,\bbnum 0+y_{1},...,\bbnum 0+y_{n}\right]
 \]
-were replaced by lists $\left[x_{1},...,x_{m},y_{1},...,y_{n}\right]$
-that do not contain any \lstinline!None! values. This would mean
-that it is enough to use \lstinline!NEL[T]! instead of \lstinline!NEL[Option[T]]!,
-except for the possibility that a non-empty list contains only \lstinline!None!
-values. For simplicity, we can represent that situation by an \emph{empty}
-list. So, we may replace \lstinline!NEL[Option[T]]! by simply \lstinline!List[T]!.
+were automatically replaced by lists $\left[x_{1},...,x_{m},y_{1},...,y_{n}\right]$
+that do not contain any \lstinline!None! values. 
+
+If this replacement were implemented, the data type could be simplified
+to \lstinline!NEL[T]! instead of \lstinline!NEL[Option[T]]!, except
+for the possibility that a non-empty list contains only \lstinline!None!
+values. For simplicity, we can use an \emph{empty} list for that situation.
+So, we may replace \lstinline!NEL[Option[T]]! by simply \lstinline!List[T]!.
 The binary operation for \lstinline!List[T]! is just the \lstinline!concat!
 function for lists; the empty list is the empty monoid value.
 
-The type \lstinline!List[T]! is the shortest reduced encoding for
-the free monoid on $T$, and it satisfies all monoid laws. The runner
-is the same as the \lstinline!foldMap! function for lists (see Section~\ref{subsec:From-reduce-and-foldleft-to-foldmap}):\index{foldMap function@\texttt{foldMap} function}
+In this way we arrive at the type \lstinline!List[T]! as the shortest
+reduced encoding for the free monoid on $T$, which satisfies all
+monoid laws. The free evaluator is the same as the \lstinline!reduceE!
+function for lists (see Section~\ref{subsec:Equivalence-of-foldLeft,foldMap,reduce,and-toList}),
+and the universal runner is the same as the \lstinline!foldMap! function
+for lists (see Section~\ref{subsec:From-reduce-and-foldleft-to-foldmap}):\index{foldMap function@\texttt{foldMap} function}
 \begin{lstlisting}
+def evalList[M: Monoid]: List[M] => M = reduceE
 def runnerList[M: Monoid, T](runT: T => M): List[T] => M = foldMap[M, T](runT)
 \end{lstlisting}
 
-There exist other reduced encodings that satisfy only a subset of
-the monoid laws. As an example, let us define a reduced encoding of
-the free monoid that satisfies the identity laws but not the associativity
-law. To impose the identity laws on $\text{Tree2}^{\bbnum 1+T}$,
-we note that the identity laws reduce expression trees creating \textsf{``}empty\textsf{''}
-leaf values ($1+\bbnum 0^{:T}$) to expression trees that do not contain
-any \textsf{``}empty\textsf{''} values in the leaves. For instance, the value \lstinline!exampleFMR!
-defined above will be reduced to just \lstinline!Combine(Wrap(456), Wrap(123))!.
-If all leaves of the expression tree are \lstinline!Empty!, the tree
-must be reduced to just a single empty value. This means we can simplify
-the encoding from $\text{Tree2}^{\bbnum 1+T}$ to $\bbnum 1+\text{Tree2}^{T}$.
+There exist other reduced encodings of the free monoid that satisfy
+only a subset of the monoid laws. As an example, let us derive a reduced
+encoding of the free monoid that satisfies the identity laws but not
+the associativity law. To impose the identity laws on $\text{Tree2}^{\bbnum 1+T}$,
+we note that those laws require us to reduce expression trees creating
+\textsf{``}empty\textsf{''} leaf values ($1+\bbnum 0^{:T}$) to expression trees that
+do not contain any \textsf{``}empty\textsf{''} values in the leaves. For instance,
+the value \lstinline!exampleFMR! defined above will be reduced to
+just \lstinline!Combine(Wrap(456), Wrap(123))!. If all leaves of
+the expression tree are \lstinline!Empty!, the tree must be reduced
+to just a single empty value. This means we can simplify the encoding
+from $\text{Tree2}^{\bbnum 1+T}$ to $\bbnum 1+\text{Tree2}^{T}$.
 
 To summarize, we have obtained four different \textsf{``}partially lawful\textsf{''}
 free monoid encodings:\\
@@ -2266,19 +2493,51 @@ scala> f4_to_f3(List(1)) |+| f4_to_f3(List(2, 3))
 res1: F3[Int] = Some(Branch(Leaf(1), Branch(Leaf(2), Leaf(3))))
 \end{lstlisting}
 The trees are not the same because \lstinline!F3! does not obey the
-monoid associativity law while \lstinline!F4! does.
+monoid associativity law, while \lstinline!F4! does.
 
-{*}{*}{*}Show injectivity of those transformations
+However, the inverse transformation (\lstinline!F3! to \lstinline!F4!)
+\emph{preserves} the monoid operations: the empty value (\lstinline!None: F3[T]!)
+is mapped to the empty list, and a combination of two values is always
+mapped to the concatenation of two lists. 
+
+As another example, consider the mappings between \lstinline!F2!
+and \lstinline!F4!. A data structure of type \lstinline!F2[T] = NEL[Option[T]]!
+is converted to the type \lstinline!List[T]! by omitting all empty
+\lstinline!Option! values; if there are no non-empty values, the
+result is an empty \lstinline!List!. The inverse transformation maps
+an empty list to a single-element \lstinline!NEL!.
+\begin{lstlisting}
+def f2_to_f4[T]: NEL[Option[T]] => List[T] = _.toList.flatten
+
+def f4_to_f2[T]: List[T] => NEL[Option[T]] = _.map(Some(_)) match {
+  case Nil => Last(None)
+  case head :: tail = toNEL(head, tail)
+}
+\end{lstlisting}
+Here, we have used the function \lstinline!toNEL! shown in Section~\ref{subsec:Disjunctive-Example-non-empty-list-foldLeft}.
+
+Looking at this code, we can check that \lstinline!f4_to_f2 andThen f2_to_f4!
+is an identity transformation of type \lstinline!List[T] => List[T]!.
+However, the composition in the other order (\lstinline!f2_to_f4 andThen f4_to_f2!)
+is not an identity function. For instance, it maps a non-empty list
+containing two or more \lstinline!None! values into a non-empty list
+containing just one \lstinline!None! value. It follows that \lstinline!f4_to_f2!
+is an injective function while \lstinline!f2_to_f4! is a surjective
+function. In this sense, \lstinline!F4! is a \textsf{``}smaller\textsf{''} encoding
+than \lstinline!F2!.
 
 Looking at these examples, we find that whenever a free monoid encoding
-\lstinline!P! obeys \emph{more laws} than another encoding \lstinline!Q!,
-the transformation of type \lstinline!P => Q! does not preserve the
-monoid operations (while the opposite one, \lstinline!Q => P!, does).
-At the same time, the transformation of type \lstinline!P => Q! is
-injective, suggesting that the encoding is \textsf{``}smaller\textsf{''} when it satisfies
-more laws. These observations will be generalized in Section~\ref{subsec:Free--typeclasses-that-satisfy-laws}
-to a rigorous theory of free typeclass encodings that satisfy only
-a subset of the laws of a given typeclass.
+\lstinline!P! obeys \emph{fewer laws} than another encoding \lstinline!Q!,
+the transformation of type \lstinline!P => Q! preserves the monoid
+operations, while the inverse transformation, of type \lstinline!Q => P!,
+does not. At the same time, the transformation of type \lstinline!Q => P!
+is injective, suggesting that the encoding is \textsf{``}smaller\textsf{''} when it
+satisfies more laws. 
+
+It turns out that these observations are valid generally for \emph{all}
+encodings of free typeclasses. This will be shown in Section~\ref{subsec:Free--typeclasses-that-satisfy-laws},
+which develops a rigorous theory of free typeclass encodings that
+satisfy only a subset of the laws of a given typeclass.
 
 \subsection{Free functors}
 
@@ -2286,18 +2545,15 @@ Consider the \lstinline!Functor! typeclass whose only method is \lstinline!fmap!
 \[
 \text{fmap}:\left(A\rightarrow B\right)\rightarrow F^{A}\rightarrow F^{B}\quad.
 \]
-For some type constructors $F$, the \lstinline!fmap! method is not
-available. An example is when $F$ is a contrafunctor or a GADT. (See
-Section~\ref{subsec:Examples-of-non-functors} for more examples.)
-Let us now apply the raw tree encoding recipe to the \lstinline!Functor!
-typeclass. The result will be a new type constructor that we call
-a \textbf{free functor on} $F$.\index{free functor} Here $F$ is
-the effect constructor and does not need to be covariant with respect
-to its type parameter.
+The \lstinline!fmap! method is not available for some type constructors
+$F$, such as contrafunctors or GADTs. (See Section~\ref{subsec:Examples-of-non-functors}
+for more examples.) Let us now apply the raw tree encoding recipe
+to the \lstinline!Functor! typeclass. The result will be a new type
+constructor that we call a \textbf{free functor on} $F$.\index{free functor} 
 
 The recipe tells us to define a case class for the \lstinline!fmap!
 method and another case class to wrap the given type constructor $F$.
-So, the raw tree encoding of a free functor on $F$ looks like this:
+So, the raw tree encoding of the free functor on $F$ looks like this:
 \begin{lstlisting}
 sealed trait FFR[F[_], A] {
   def map[B](f: A => B): FFR[F, B] = FMap(f, this)
@@ -2318,16 +2574,18 @@ that the existentially quantified type must be assigned to a specific
 type every time we create a specific value.
 
 A \textsf{``}free functor program\textsf{''} is a value of type \lstinline!FFR[F, A]!.
-To construct such values, we need to begin with a wrapped \lstinline!F!-operation
-followed by some \lstinline!map! methods. To use a free functor program
-in practice, we need to apply a runner to it. A simple runner is a
-function of type $\forall A.\,\text{FFR}^{F,A}\rightarrow A$ that
-extracts a value of type $A$ from a free functor program. To obtain
-a runner, we need to know how to extract values from the effect constructor
-$F$. That information is given by a function of type $\forall C.\,F^{C}\rightarrow C$
-(an \index{effect runner}effect runner for $F$). To implement such
-functions, we use the trait \lstinline!Runner! defined in Section~\ref{subsec:A-first-recipe-monadic-dsl}.
-Now we can write the code of the runner for $\text{FFR}^{F,A}$:
+To construct such values, we must begin with a wrapped \lstinline!F!-operation
+and then apply zero or more \lstinline!map! methods. 
+
+To use a free functor program in practice, we need to apply a runner
+to it. A simple runner is a function of type $\forall A.\,\text{FFR}^{F,A}\rightarrow A$
+that extracts a value of type $A$ from a free functor program. To
+obtain a runner, we need to know how to extract values from the effect
+constructor $F$. That information is given by a function of type
+$\forall C.\,F^{C}\rightarrow C$ (an \index{effect runner}effect
+runner for $F$). To implement such functions, we use the trait \lstinline!Runner!
+defined in Section~\ref{subsec:A-first-recipe-monadic-dsl}. Now
+we can write the code of the runner for $\text{FFR}^{F,A}$:
 \begin{lstlisting}
 def runFFR[F[_], A](runner: Runner[F]): FFR[F, A] => A = {
   case FMap(f, p)   => f(runFFR(runner)(p))
@@ -2676,7 +2934,7 @@ is the free \lstinline!MyTypeclass! in the lawful Church encoding.
 The laws hold! This is more economical than the raw tree encoding,
 see the \lstinline!Semigroup! example.
 
-\section{Laws of free constructions}
+\section{Laws of free constructions\label{sec:Laws-of-free-constructions}}
 
 This chapter developed the free monad via the implementation of a
 simple type-safe DSL. We found different encodings of the free monad
@@ -4062,7 +4320,7 @@ p_{C}^{\prime}=\text{pu}_{E}^{\uparrow P}\bef\gunderline{p_{E}^{C}\bef s}=\gunde
 \]
 $\square$
 
-\subsubsection{Exercise \label{subsec:Exercise-P-algebras-monad-algebras}\ref{subsec:Exercise-P-algebras-monad-algebras}}
+\subsubsection{Exercise \label{subsec:Exercise-P-algebras-monad-algebras}\ref{subsec:Exercise-P-algebras-monad-algebras}\index{exercises}}
 
 Suppose $E$ is a free $P$-typeclass encoding according to Definition~\ref{subsec:Definition-free-P-typeclass-encoding}.
 If $C$ and $D$ are any given $E$-algebras, the proof of Statement~\ref{subsec:Statement-Monad-algebra-is-P-typeclass}
@@ -4072,7 +4330,109 @@ show that $f$ is also a $P$-algebra morphism between the $P$-algebras
 $C$ and $D$. $\square$
 
 We can now use monad algebras to prove that certain typeclass constructions
-always give new and lawful typeclass instances. {*}{*}{*}
+always produce lawful typeclass instances. {*}{*}{*}
+
+{*}{*}{*}Constructions: product, function, recursion.
+
+\subsubsection{Statement \label{subsec:Statement-Monad-algebra-product}\ref{subsec:Statement-Monad-algebra-product}}
+
+If $A$ and $B$ are $E$-monad algebras then so is $A\times B$.
+
+\subparagraph{Proof}
+
+Recall that the structure map of type $E^{A\times B}\rightarrow A\times B$
+was given in Section~\ref{subsec:P-typeclasses}. If $u^{:E^{A}\rightarrow A}$
+and $v^{:E^{B}\rightarrow B}$ are some given structure maps of the
+$E$-monad algebras $A$ and $B$ then we define $w:E^{A\times B}\rightarrow A\times B$
+by:
+\[
+w\triangleq p^{:E^{A\times B}}\rightarrow(p\triangleright\pi_{1}^{\uparrow E}\bef u)\times(p\triangleright\pi_{2}^{\uparrow E}\bef v)\quad.
+\]
+It remains to verify that $w$ satisfies the laws of monad algebras.
+The identity law:
+\begin{align*}
+{\color{greenunder}\text{expect to equal }a\times b:}\quad & (a^{:A}\times b^{:B})\triangleright\text{pu}_{E}\triangleright w\\
+{\color{greenunder}\text{definition of }w:}\quad & =(\gunderline{(a\times b)\triangleright\text{pu}_{E}\bef\pi_{1}^{\uparrow E}}\bef u)\times(\gunderline{(a\times b)\triangleright\text{pu}_{E}\bef\pi_{2}^{\uparrow E}}\bef v)\\
+{\color{greenunder}\text{naturality of }\text{pu}_{E}:}\quad & =(\gunderline{(a\times b)\triangleright\pi_{1}}\bef\gunderline{\text{pu}_{E}\bef u})\times(\gunderline{(a\times b)\triangleright\pi_{2}}\bef\gunderline{\text{pu}_{E}\bef v})\\
+{\color{greenunder}\text{use the identity laws of }u,v:}\quad & =(a\triangleright\text{id})\times(b\triangleright\text{id})=a\times b\quad.
+\end{align*}
+To verify the composition law, substitute an arbitrary value $q:E^{E^{A\times B}}$
+into both sides. Begin with the left-hand side:
+\begin{align*}
+{\color{greenunder}\text{left-hand side}:}\quad & q\triangleright\text{ftn}_{E}\bef w=(q\triangleright\gunderline{\text{ftn}_{E}\bef\pi_{1}^{\uparrow E}}\bef u)\times(q\triangleright\gunderline{\text{ftn}_{E}\bef\pi_{2}^{\uparrow E}}\bef v)\\
+{\color{greenunder}\text{naturality of }\text{ftn}_{E}:}\quad & =(q\triangleright\pi_{1}^{\uparrow E\uparrow E}\bef\gunderline{\text{ftn}_{E}\bef u})\times(q\triangleright\pi_{2}^{\uparrow E\uparrow E}\bef\gunderline{\text{ftn}_{E}\bef v})\\
+{\color{greenunder}\text{use the composition laws of }u,v:}\quad & =(q\triangleright\pi_{1}^{\uparrow E\uparrow E}\bef u^{\uparrow E}\bef u)\times(q\triangleright\pi_{2}^{\uparrow E\uparrow E}\bef v^{\uparrow E}\bef v)\quad.
+\end{align*}
+We cannot simplify the last expression any more, so we turn to the
+right-hand side:
+\begin{align*}
+{\color{greenunder}\text{right-hand side}:}\quad & q\triangleright w^{\uparrow E}\triangleright w=(q\triangleright\gunderline{w^{\uparrow E}\bef\pi_{1}^{\uparrow E}}\bef u)\times(q\triangleright\gunderline{w^{\uparrow E}\bef\pi_{2}^{\uparrow E}}\bef v)\\
+ & =(q\triangleright(w\bef\pi_{1})^{\uparrow E}\bef u)\times(q\triangleright(w\bef\pi_{2})^{\uparrow E}\bef v)\quad.
+\end{align*}
+The functions $w\bef\pi_{1}$ and $w\bef\pi_{2}$ can be simplified:
+$p^{:E^{A\times B}}\triangleright w\bef\pi_{1}=p\triangleright\pi_{1}^{\uparrow E}\bef u$.
+This gives $w\bef\pi_{1}=\pi_{1}^{\uparrow E}\bef u$ and similarly
+$w\bef\pi_{2}=\pi_{2}^{\uparrow E}\bef v$. Substituting those formulas
+into the last line in the derivation above, we get:
+\begin{align*}
+{\color{greenunder}\text{right-hand side}:}\quad & (q\triangleright(\gunderline{w\bef\pi_{1}})^{\uparrow E}\bef u)\times(q\triangleright(\gunderline{w\bef\pi_{2}})^{\uparrow E}\bef v)\\
+ & =(q\triangleright\gunderline{(\pi_{1}^{\uparrow E}\bef u)^{\uparrow E}}\bef u)\times(q\triangleright\gunderline{(\pi_{2}^{\uparrow E}\bef v)^{\uparrow E}}\bef v)\\
+ & =(q\triangleright\pi_{1}^{\uparrow E\uparrow E}\bef u^{\uparrow E}\bef u)\times(q\triangleright\pi_{2}^{\uparrow E\uparrow E}\bef v^{\uparrow E}\bef v)\quad.
+\end{align*}
+The last line is equal to the left-hand side of the law. $\square$
+
+\subsubsection{Statement \label{subsec:Statement-Monad-algebra-exp}\ref{subsec:Statement-Monad-algebra-exp}}
+
+If $R$ is any fixed type and $A$ is an $E$-monad algebra then so
+is $R\rightarrow A$.
+
+\subparagraph{Proof}
+
+Given a structure map $u:E^{A}\rightarrow A$, we define the structure
+map $w:E^{R\rightarrow A}\rightarrow R\rightarrow A$ as:
+\[
+w(p^{:E^{R\rightarrow A}})\triangleq r^{:R}\rightarrow p\triangleright(g^{:R\rightarrow A}\rightarrow g(r))^{\uparrow E}\bef u\quad.
+\]
+For brevity, let us denote:
+\[
+k_{r}\triangleq g^{:R\rightarrow A}\rightarrow g(r)\quad\quad,\quad\text{or equivalently}:\quad g\triangleright k_{r}\triangleq g(r).
+\]
+Then $w$ is equivalently defined by:
+\[
+w(p)(r)=r\triangleright(p\triangleright w)=p\triangleright k_{r}^{\uparrow E}\bef u\quad.
+\]
+
+To verify the identity law:
+\begin{align*}
+{\color{greenunder}\text{expect to equal }f:}\quad & f^{:R\rightarrow A}\triangleright\text{pu}_{E}\bef w=r^{:R}\rightarrow f\triangleright\gunderline{\text{pu}_{E}\bef k_{r}^{\uparrow E}}\bef u\\
+{\color{greenunder}\text{naturality of }\text{pu}_{E}:}\quad & =r^{:R}\rightarrow\gunderline{f\triangleright k_{r}}\bef\text{pu}_{E}\bef u=r^{:R}\rightarrow f(r)\triangleright\gunderline{\text{pu}_{E}\bef u}\\
+{\color{greenunder}\text{identity law of }u:}\quad & =r^{:R}\rightarrow f(r)=f\quad.
+\end{align*}
+To verify the composition law, substitute arbitrary value $q:E^{E^{R\rightarrow A}}$
+and $r^{:R}$ into both sides. Begin with the left-hand side:
+\begin{align*}
+{\color{greenunder}\text{left-hand side}:}\quad & r\triangleright(q\triangleright\text{ftn}_{E}\triangleright w)=q\triangleright\gunderline{\text{ftn}_{E}\bef k_{r}^{\uparrow E}}\bef u\\
+{\color{greenunder}\text{naturality of }\text{ftn}_{E}:}\quad & =q\triangleright k_{r}^{\uparrow E\uparrow E}\bef\gunderline{\text{ftn}_{E}\bef u}\\
+{\color{greenunder}\text{use the composition law of }u:}\quad & =q\triangleright k_{r}^{\uparrow E\uparrow E}\bef u^{\uparrow E}\bef u\quad.
+\end{align*}
+Turn now to the right-hand side:
+\begin{align*}
+{\color{greenunder}\text{right-hand side}:}\quad & r\triangleright(q\triangleright w^{\uparrow E}\bef w)=q\triangleright\gunderline{w^{\uparrow E}\bef k_{r}^{\uparrow E}}\bef u\\
+ & =q\triangleright(w\bef k_{r})^{\uparrow E}\bef u\quad.
+\end{align*}
+The function $w\bef k_{r}$ can be simplified:
+\[
+x\triangleright w\bef k_{r}=x\triangleright w\triangleright(g^{:R\rightarrow A}\rightarrow g(r))=w(x)(r)=x\triangleright k_{r}^{\uparrow E}\bef u\quad,
+\]
+which gives: $w\bef k_{r}=k_{r}^{\uparrow E}\bef u$. Substituting
+that into the right-hand side of the law, we get:
+\begin{align*}
+{\color{greenunder}\text{right-hand side}:}\quad & q\triangleright(w\bef k_{r})^{\uparrow E}\bef u=q\triangleright(k_{r}^{\uparrow E}\bef u)^{\uparrow E}\bef u\\
+ & =q\triangleright k_{r}^{\uparrow E\uparrow E}\bef u^{\uparrow E}\bef u\quad.
+\end{align*}
+This coincides with the left-hand side. $\square$
+
+{*}{*}{*}$\square$
 
 \subsection{Church encodings of free $P$-typeclasses\label{subsec:Church-encodings-for-free-P-typeclasses}}
 
