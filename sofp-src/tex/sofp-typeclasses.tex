@@ -4800,6 +4800,31 @@ $F$ has a function $q$ with these properties. So, the given conditions
 for the function $q$ are just a more complicated but equivalent definition
 of a co-pointed functor.
 
+\subsubsection{Exercise \label{par:Exercise-additional-6}\ref{par:Exercise-additional-6}}
+
+Consider a typeclass called \textsf{``}\lstinline!Splittable!\textsf{''} for functors\index{splittable functors}
+$F$ that have an additional method called \lstinline!split!:
+\[
+\text{split}^{A,B}:F^{A+B}\rightarrow F^{A}+B\quad,
+\]
+satisfying a \index{non-degeneracy law!of splittable functors}non-degeneracy
+law:
+\[
+(x^{:A}\rightarrow x+\bbnum 0^{:B})^{\uparrow F}\bef\text{split}=y^{:F^{A}}\rightarrow y+\bbnum 0^{:B}\quad,
+\]
+and a special associativity law\index{associativity law!of splittable functors},
+which is an equation for functions of type $F^{A+B+C}\rightarrow F^{A}+B+C$:
+\[
+\text{split}^{A+B,C}\bef\,\begin{array}{|c||cc|}
+ & F^{A}+B & C\\
+\hline F^{A+B} & \text{split}^{A,B} & \bbnum 0\\
+C & \bbnum 0 & \text{id}
+\end{array}\,=\text{split}^{A,B+C}\quad.
+\]
+Show that all polynomial functors $F$ belong to this typeclass. Show
+that some non-polynomial functors, such as $F^{A}\triangleq Z\rightarrow A$,
+do \emph{not} belong to this typeclass.
+
 \section{Further developments}
 
 \subsection{The existence of values for recursive types\label{subsec:Recursive-types-and-the-existence-of-their-values}}
@@ -5343,7 +5368,7 @@ type-to-type function (TTF) since it takes a type parameter that is
 itself a TTF.\index{higher-order type function} Higher-order TTFs
 are often called \textsf{``}higher-kinded types\index{types!higher-kinded}\textsf{''}.
 
-For higher-order TTFs, Scala requires syntax such as \lstinline!Functor[F[_]]!
+For higher-order TTFs, Scala requires syntax such as \lstinline!F[G[_]]!
 or \lstinline!F[_[_]]!, for example:
 \begin{lstlisting}[mathescape=true]
 // Ap1 and Ap2 substitute type arguments into various type constructors.
@@ -5351,14 +5376,19 @@ type Ap1[F[_], A] = F[A]   // $\text{Ap1} : ((*\rightarrow*) \times*)\rightarrow
 type Ap2[P[_[_], _], Q[_], R] = P[Q, R] // Ap2: $\color{dkgreen}(((*\rightarrow*)\times*\rightarrow*)\times(*\rightarrow*)\times*)\rightarrow* $
 type G[A] = Either[(A, A, String), A]   // G: $\color{dkgreen} *\rightarrow* $
 type X = Ap2[Ap, G, Int]   // OK; X is now Either[(Int, Int, String), Int]
-type Y = Ap2[Ap, Ap, Int]  // Type error: the second argument of Ap2 has wrong kind.
-type Z = Ap2[G, G, Int]    // Type error: the first argument of Ap2 has wrong kind.
+type Y = Ap2[Ap, Ap, Int]  // Error: wrong kind of the second argument of Ap2.
+type Z = Ap2[G, G, Int]    // Error: wrong kind of the first argument of Ap2.
 \end{lstlisting}
 The \textsf{``}kind projector\textsf{''} plugin is often needed when writing code
-with higher-order TTFs:
+with higher-order TTFs. For instance, let us define a type constructor
+\lstinline!Twice! that applies a given type constructor $Q$ twice
+to its type argument and substitutes the result into another type
+constructor $P$.
+\[
+\text{Twice}:(((*\rightarrow*)\times*\rightarrow*)\times(*\rightarrow*)\times*)\rightarrow*\quad,\quad\quad\text{Twice}^{P,Q,R}\triangleq P^{Q\circ Q,R}\quad.
+\]
+The code is:
 \begin{lstlisting}[mathescape=true]
-// `Twice` will apply the type constructor Q twice to its type argument, and substitute into P.
-// Twice$\color{dkgreen}:(((*\rightarrow*)\times*\rightarrow*)\times(*\rightarrow*)\times*)\rightarrow* $
 type Twice[P[_[_], _], Q[_], R] = P[Lambda[X => Q[Q[X]]], R]
 type O2[A] = Option[(A, A)]                                  // O2: $\color{dkgreen}* \rightarrow *$
 type X2 = Twice[Ap1, O2, Int]         // X2 is now Option[(Option[(Int, Int)], Option[(Int, Int)])].
@@ -5420,8 +5450,8 @@ Using this technique, we can define a relation \lstinline!MayConvert!
 and write the code for \lstinline!convertNumber!:
 \begin{lstlisting}
 final case class MayConvert[A, B](convert: A => B)  // Evidence value contains a conversion function.
-implicit val ev1 = MayConvert[Short, Float](_.toFloat)          // Evidence value for [Short, Float].
-implicit val ev2 = MayConvert[Int, Double](_.toDouble)          // Evidence value for [Int, Double].
+implicit val ev1 = MayConvert[Short, Float](_.toFloat)
+implicit val ev2 = MayConvert[Int, Double](_.toDouble)
 def convertNumber[M, N](x: M)(implicit ev: MayConvert[M, N]): N = ev.convert(x)
 \end{lstlisting}
 With these definitions, it will be a compile-time error to use \lstinline!convertNumber!
@@ -5750,11 +5780,14 @@ We can implement this definition by the Scala code:
 final case class PTypeclass[P[_]: Functor, A](methods: P[A] => A)
 \end{lstlisting}
 The code allows us to declare any $P$-typeclass. For example, the
-\lstinline!Monoid! typeclass can be declared by:
+\lstinline!Monoid! typeclass can be declared by first defining a
+type constructor corresponding to the monoid\textsf{'}s structure functor ($P^{A}\triangleq\bbnum 1+A\times A$)
+and then using that functor to define a type constructor for evidence
+values (\lstinline!PMonoid!):
 \begin{lstlisting}
-final case class MonoidStructure[A](s: Option[(A, A)])
-val monoidStructureFunctor: Functor[MonoidStructure] = ... /* implementation */
-type PMonoid[A] = PTypeclass[MonoidStructure, A]
+final case class MonoidSF[A](s: Option[(A, A)])
+val functorMonoidSF: Functor[MonoidSF] = ... /* implementation */
+type PMonoid[A] = PTypeclass[MonoidSF, A]
 \end{lstlisting}
 
 Typeclasses for type constructors (\lstinline!Functor!, \lstinline!Pointed!,
@@ -5769,7 +5802,7 @@ This type signature is of the form $P^{F}\rightarrow F$ except for
 the additional type parameters. The laws of type constructor typeclasses
 are also more complicated because they often involve multiple type
 parameters and arbitrary functions. To simplify the presentation in
-this section, we will only consider typeclasses for simple types,
+this section, we will only consider $P$-typeclasses for simple types,
 such as \lstinline!Semigroup! or \lstinline!Monoid!.
 
 Implementing the \lstinline!Monoid! typeclass via a structure functor
@@ -5876,19 +5909,18 @@ which is not of the form $P^{A}\rightarrow A$ for any functor $P$.
 Another such typeclass is \lstinline!Copointed!, whose method $F^{A}\rightarrow A$
 is not of the form $P^{F}\rightarrow F$ even if we add more type
 parameters. However, the instance values of these typeclasses can
-be written as $A\rightarrow P^{A}$ with some functor $P$. Based
+be written as $A\rightarrow P^{A}$ with some functor $P$. Examples
+are \textsf{``}extractor\textsf{''} typeclasses (e.g., \lstinline!Show!) and \lstinline!Traversable!
+functors (Chapter~\ref{chap:9-Traversable-functors-and}). Based
 on that description, some general results can be proved also for those
 typeclasses. For example, the \emph{co-product} construction (rather
 than the product construction) works for them. Given values of types
 $A\rightarrow P^{A}$ and $B\rightarrow P^{B}$, we can produce a
-value of type $A+B\rightarrow P^{A+B}$, i.e., a co-product instance,
-but not necessarily a value of type $A\times B\rightarrow P^{A\times B}$,
-which would be a product-type instance. 
+value of type $A+B\rightarrow P^{A+B}$, i.e., a co-product instance.
 
 An example of a typeclass to which neither description applies is
 the \lstinline!Eq! typeclass. Its evidence values have type $A\times A\rightarrow\bbnum 2$,
 which is neither of the form $P^{A}\rightarrow A$ nor $A\rightarrow P^{A}$.
-Another such example is the \lstinline!Traversable! typeclass (Chapter~\ref{chap:9-Traversable-functors-and}).
 
 \begin{comment}
 this tutorial is about typeclasses and type level functions to motivate
