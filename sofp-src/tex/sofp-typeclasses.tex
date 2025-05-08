@@ -69,17 +69,17 @@ time. (Here, \lstinline!Fractional! and \lstinline!Functor! are
 custom types that need to be implemented in a special way, as we will
 show.) 
 
-In these examples, we are restricting a type parameter to a subset
-of possible types, because only types from that subset have certain
-methods and properties that we need. A subset of types, together with
-the required properties those types must satisfy, is called a \textbf{typeclass}\index{typeclass}.
-The syntax \lstinline![T: Fractional]! is a \textbf{typeclass constraint}\index{typeclass!constraint}
-that forces the type \lstinline!T! to belong to the typeclass \lstinline!Fractional!.
+In these examples, we restricted a type parameter to a subset of possible
+types, because only types from that subset have certain methods and
+properties that our code depends on. A subset of types, together with
+the required methods and properties those methods must have, is called
+a \textbf{typeclass}\index{typeclass}. The syntax \lstinline![T: Fractional]!
+is a \textbf{typeclass constraint}\index{typeclass!constraint} that
+forces the type \lstinline!T! to belong to the typeclass \lstinline!Fractional!.
 
-This chapter focuses on defining and using typeclasses and on understanding
-their properties. We will see in detail how to implement typeclasses
-in Scala and to enable the syntax \lstinline![T: Fractional]! and
-\lstinline![F[_]: Functor]!. 
+This chapter focuses on defining and using typeclasses. We will see
+in detail how to implement typeclasses in Scala and to enable the
+syntax \lstinline![T: Fractional]! and \lstinline![F[_]: Functor]!. 
 
 \section{Implementing typeclasses}
 
@@ -89,153 +89,98 @@ used with an incorrectly chosen type \lstinline!T!. If the Scala
 library did not already implement the \lstinline!Fractional! typeclass,
 how could we reproduce that functionality?
 
-\subsection{Imposing constraints via evidence values}
+\subsection{Imposing typeclass constraints via evidence values}
 
-The body of the function \lstinline!average[T]! must somehow use
-the correct methods for adding and dividing values of type \lstinline!T!.
-{*}{*}{*}be compiled once and for all; it cannot have different code
-for different types \lstinline!T!.
+The body of the function \lstinline!average[T]! must somehow be able
+to use the correct methods for adding and dividing values of type
+\lstinline!T!. Those methods will be different for each \lstinline!T!.
+At the same time, the function body itself must have the same code
+for all types \lstinline!T!.
 
-{*}{*}{*}The code needs to specify that the type parameter must belong
-to a certain subset of allowed types. To simplify the task, assume
-that the allowed types are \lstinline!BigDecimal! and \lstinline!Double!.
-This type constraint can be implemented using a GADT \index{GADT}
-(see Section~\ref{subsec:Examples-of-non-functors}) \textemdash{}
-a type constructor whose type parameters are restricted to specific
-types. The constraint to \lstinline!BigDecimal! and \lstinline!Double!
-corresponds to this GADT:
+So, it seems we can implement \lstinline!average[T]! only if we have
+the information about the necessary methods for the given type \lstinline!T!.
+The solution is to pass that information to the function as an extra
+argument. What type should that argument have? It could be just a
+tuple containing all the necessary methods, or it could be a class
+with methods.
+
+To be specific, suppose the required methods are \lstinline!add!
+and \lstinline!intdiv! with these types:
 \begin{lstlisting}
-sealed trait Frac[A]          // GADT constructor.
-final case class FracBD() extends Frac[BigDecimal]
-final case class FracD()  extends Frac[Double]
+add: (T, T) => T
+intdiv: (T, Int) => T
 \end{lstlisting}
-Values of type \lstinline!Frac[A]! can be created only if \lstinline!A = BigDecimal!
-or \lstinline!A = Double!. The keywords \lstinline!sealed! and \lstinline!final!
-guarantee that no further code could extend this definition and allow
-us to create a value of type, say, \lstinline!Frac[String]! or \lstinline!Frac[Boolean]!. 
+With these methods we will be certainly able to implement \lstinline!average[T]!.
+So, let us define a case class that encapsulates these methods. The
+case class will need to have \lstinline!T! as a type parameter:
 
-Note that the Scala compiler will \emph{not} detect any errors in
-the following code:
-\begin{lstlisting}
-type T = Frac[String]
-type U = Frac[Boolean]
-\end{lstlisting}
-But we will never be able to create and use any values of types \lstinline!T!
-or \lstinline!U!. In other words, the types \lstinline!Frac[String]!
-and \lstinline!Frac[Boolean]! are \emph{void}\index{void type} types.
-Trying to create and use values of these types will result in type
-errors, as the following code shows:
-\begin{lstlisting}[numbers=left]
-def f[A]: Frac[A] = FracD()    // Type error.
-val x: U = FracD()             // Type error.
-val y: U = FracD().asInstanceOf[U]
-y match { case FracD() => }    // Type error.
-\end{lstlisting}
-In line~3, we disabled the type checker and forced the Scala compiler
-to ignore the type error in the definition of \lstinline!y!. However,
-line~4 shows that we are unable to use that value \lstinline!y!
-in further computations.
-
-The type \lstinline!Frac[A]! is non-void (i.e., has values) only
-for $A$ belonging to the set of types \{\lstinline!BigDecimal!,
-\lstinline!Double!\}. We need to define the function \lstinline!avg[T]!
-with a type parameter $T$ constrained to that set of types, which
-is called the \textbf{type domain}\index{type domain} of the PTVF
-\lstinline!avg[T]!. 
-
-The type constraint $T\negthickspace\in\,$\{\lstinline!BigDecimal!,
-\lstinline!Double!\} is equivalent to the requirement that a value
-of type \lstinline!Frac[T]! should exist. So, we will implement the
-type constraint if we include an \emph{additional argument} of type
-\lstinline!Frac[T]! into the type signature of \lstinline!avg!:
-\begin{lstlisting}
-def avg[T](s: Seq[T], frac: Frac[T]): T
-\end{lstlisting}
-We will be unable to use \lstinline!avg[T]! with types \lstinline!T!
-for which we have no values of type \lstinline!Frac[T]! because such
-a value needs to be passed to every call to \lstinline!avg[T]!. Such
-values are called \textsf{``}typeclass instance values\textsf{''} or, for brevity,
-just \textbf{typeclass instances}.\index{typeclass!instance value}
-
-A typeclass instance argument like \lstinline!frac: Frac[T]! is also
-called an \textbf{evidence parameter}\index{evidence value} \index{typeclass!evidence parameter}
-because it \textsf{``}provides evidence\textsf{''} that the type \lstinline!T! belongs
-to the type domain of the typeclass. 
-
-In this way, we implemented the typeclass constraint for the PTVF
-\lstinline!avg[T]!. The main steps were:
-\begin{enumerate}
-\item Define a type constructor \lstinline!Frac!.
-\item Make sure values of type \lstinline!Frac[A]! exist only when \lstinline!A = BigDecimal!
-or \lstinline!A = Double!.
-\item Pass a value of type \lstinline!Frac[T]! to the function \lstinline!avg[T]!
-as an additional argument.
-\end{enumerate}
-It is not necessary to define the type constructor \lstinline!Frac!
-via a GADT. The type constructor \lstinline!Frac! is only needed
-to define the type domain \{\lstinline!BigDecimal!, \lstinline!Double!\}.
-We may use a simple case class instead:
-\begin{lstlisting}
-final case class Frac[T]()
-val fracBD: Frac[BigDecimal] = Frac()
-val fracD: Frac[Double] = Frac()
-\end{lstlisting}
-
-\noindent This code creates a type constructor \lstinline!Frac! and
-makes values of type \lstinline!Frac[T]! available for chosen type
-parameters \lstinline!T!. In this way, we implemented the required
-type domain. (However, this code does not prevent us from adding more
-types to that type domain later.)
-
-To write the code for \lstinline!avg[T]!, we need to be able to add
-numeric values and to divide by an integer value. More precisely,
-the body of \lstinline!avg[T]! needs access to two PTVFs that we
-may call \lstinline!add! and \lstinline!intdiv!:
-\begin{lstlisting}
-def add[T](x: T, y: T): T
-def intdiv[T](x: T, n: Int): T
-\end{lstlisting}
-Since \lstinline!avg[T]! now has an additional argument \lstinline!frac!,
-we may use that argument to hold the required functions. So, we redefine
-\lstinline!Frac! as a case class containing the functions \lstinline!add!
-and \lstinline!intdiv!:
 \begin{lstlisting}
 final case class Frac[T](add: (T, T) => T, intdiv: (T, Int) => T)
 \end{lstlisting}
-Typeclass evidence values for \lstinline!BigDecimal! and \lstinline!Double!
-are then created by the following code:
+Now we add one more argument of type \lstinline!Frac[T]! to \lstinline!average[T]!.
+The code is:
+\begin{lstlisting}
+def average[T](s: Seq[T], methods: Frac[T]): T = { // Assuming s is non-empty.
+  val sum: T = s.reduce(methods.add)        // s.reduce() fails if s is empty!
+  methods.intdiv(sum, s.length)             // Compute sum / s.length.
+}
+\end{lstlisting}
+
+Now the function \lstinline!average[T]! can be called only with types
+\lstinline!T! for which we can provide a value of type \lstinline!Frac[T]!,
+which must contain the methods \lstinline!add! and \lstinline!intdiv!.
+Let us create those values for \lstinline!T = Double! and \lstinline!T = BigDecimal!:
 \begin{lstlisting}
 val fracBD = Frac[BigDecimal]( (x, y) => x + y,  (x, n) => x / n )
 val fracD = Frac[Double]( (x, y) => x + y,  (x, n) => x / n )
 \end{lstlisting}
-With these definitions, implementing \lstinline!avg[T]! becomes straightforward:
+Now we can use \lstinline!average[T]! with those types:
 \begin{lstlisting}
-def avg[T](s: Seq[T], frac: Frac[T]): T = {      // Assuming `s` is non-empty.
-  val sum = s.reduce(frac.add)            // `s.reduce` fails if `s` is empty!
-  frac.intdiv(sum, s.length)              // Compute `sum/s.length`.
-}
-\end{lstlisting}
-To use this function, we need to pass a typeclass instance for the
-type \lstinline!T!:
-\begin{lstlisting}
-scala> avg(Seq(1.0, 2.0, 3.0), fracD) // It will be a type error to use fracBD instead of fracD here.
+scala> average(Seq(1.0, 2.0, 3.0), fracD)
 res0: Double = 2.0
 
-scala> avg(Seq(BigDecimal(1.0), BigDecimal(2.0)), fracBD)
+scala> average(Seq(BigDecimal(1.0), BigDecimal(2.0)), fracBD)
 res1: BigDecimal = 1.5
 \end{lstlisting}
 
-This is a fully working implementation of the \lstinline!avg! function
-with a \lstinline!Frac! typeclass constraint. We have achieved compile-time
-safety since \lstinline!avg[T]! cannot be applied to values of unsupported
-types \lstinline!T!. We have also achieved extensibility: To create
-another function as a PTVF with the same type domain, we just write
-a function with an extra evidence argument of type \lstinline!Frac[T]!.
-To add another supported type \lstinline!T! to the type domain, we
-write one more line of code similar to \lstinline!val fracD = ...!
+We have achieved compile-time safety: \lstinline!average[T]! can
+be used only with supported types \lstinline!T!. We have also achieved
+extensibility: To add another supported type \lstinline!T! to the
+typeclass, just add one more line of code similar to \lstinline!val fracD = ...!,
+implementing a value of type \lstinline!Frac[T]!.
 
-An equivalent implementation of the \lstinline!Frac! typeclass can
-be written by using a \lstinline!trait! with methods:
+In effect, \lstinline!average[T]! now restricts the type \lstinline!T!
+to a certain subset of types for which a value of type \lstinline!Frac[T]!
+is available. That subset of types (together with the type signatures
+of the required functions) is called a \textbf{typeclass}.\index{typeclass}
+
+Let us use this example to explain the terminology conventionally
+used around typeclasses. The typeclass \lstinline!Frac! is defined
+as the subset of types for which two functions (\lstinline!add! and
+\lstinline!intdiv!) are available. Those functions are called the
+\textbf{methods} of the typeclass. We say that the types \lstinline!Double!
+and \lstinline!BigDecimal! are \textbf{instances} of the typeclass
+\lstinline!Frac!, or \textsf{``}belong to the typeclass \lstinline!Frac!\textsf{''}.
+A function argument of type \lstinline!Frac[T]! is called an \textbf{evidence
+parameter}\index{typeclass!evidence parameter} because it \textsf{``}provides
+evidence\textsf{''} that the type \lstinline!T! actually belongs to the typeclass
+\lstinline!Frac!. To \textsf{``}create a \lstinline!Frac! typeclass instance
+for type \lstinline!T!\textsf{''} means to write code that computes a value
+of type \lstinline!Frac[T]!. That value is called a \textsf{``}\lstinline!Frac!
+typeclass evidence value\textsf{''} or a \textsf{``}\lstinline!Frac! typeclass instance
+value\textsf{''} for \lstinline!T!.\index{typeclass!instance value}
+
+To summarize, the main steps in implementing the typeclass \lstinline!Frac!
+were:
+\begin{enumerate}
+\item Define a type constructor \lstinline!Frac!.
+\item Create values of type \lstinline!Frac[T]! for \lstinline!T = BigDecimal!
+and \lstinline!T = Double!.
+\item Pass a value of type \lstinline!Frac[T]! as an additional argument
+to \lstinline!average[T]!.
+\end{enumerate}
+The \lstinline!Frac! typeclass can be also implemented via a \lstinline!trait!
+with methods:
 \begin{lstlisting}
 trait Frac[T] {               // The trait should not be `sealed`.
   def add(x: T, y: T): T
@@ -250,8 +195,8 @@ val fracD = new Frac[Double] {
   def intdiv(x: Double, n: Int): Double = x / n
 }
 \end{lstlisting}
-The function \lstinline!avg[T]! works unchanged with this implementation
-of \lstinline!Frac!.
+The function \lstinline!average[T]! works unchanged with this new
+implementation of \lstinline!Frac!.
 
 The \lstinline!trait!-based code is longer than the code based on
 a case class. One advantage of the longer code is the ability to combine
@@ -259,15 +204,15 @@ typeclasses by inheriting from \lstinline!trait!s. We will look at
 that in more detail below. For now, we note that both implementations
 require the programmer to add a significant amount of new code:
 \begin{itemize}
-\item Calls to \lstinline!func[T](args)! need to be changed to \lstinline!func[T](args, ti)!
-with typeclass instances \lstinline!ti!.
+\item Calls to \lstinline!func[T](args)! need to be changed to \lstinline!func[T](args, ev)!
+with typeclass evidence \lstinline!ev!.
 \item For each supported type \lstinline!T!, a corresponding typeclass
-instance value needs to be created.
+evidence value needs to be created.
 \item All those values need to be passed to all places in the code where
-PTVFs are used.
+typeclass constraints are used.
 \end{itemize}
 The extra work can be reduced (and sometimes avoided) by using Scala\textsf{'}s
-\textsf{``}implicit value\textsf{''} feature. 
+\textsf{``}implicit values\textsf{''} feature. 
 
 \subsection{Scala\textsf{'}s \texttt{implicit} values}
 
@@ -357,9 +302,9 @@ scala> implicitly[MyType]
 
 The idea is to declare typeclass instance values as \lstinline!implicit!.
 Typeclass evidence arguments of functions are also declared as \lstinline!implicit!.
-As a result, typeclass instances will be passed to all PTVFs automatically
+As a result, typeclass instances will be passed to all functions automatically
 (as long as the appropriate implicits are visible in the scope of
-the PTVFs). This makes typeclasses easier to use because instance
+those functions). This makes typeclasses easier to use because instance
 values need to be written out less often.
 
 The example with the \lstinline!Frac! typeclass is implemented using
@@ -369,21 +314,21 @@ final case class Frac[T](add: (T, T) => T, intdiv: (T, Int) => T)
 implicit val fracBD = Frac[BigDecimal]( (x, y) => x + y,  (x, n) => x / n )
 implicit val fracD = Frac[Double]( (x, y) => x + y,  (x, n) => x / n )
 \end{lstlisting}
-To define the function \lstinline!avg[T]!, we declare an implicit
-argument as a \lstinline!Frac! typeclass evidence for \lstinline!T!:
+To define the function \lstinline!average[T]!, we add an implicit
+argument for a \lstinline!Frac! typeclass evidence for \lstinline!T!:
 \begin{lstlisting}
-def avg[T](s: Seq[T])(implicit frac: Frac[T]): T = {
-  val sum = s.reduce(frac.add)
-  frac.intdiv(sum, s.length)
+def average[T](s: Seq[T])(implicit ev: Frac[T]): T = {
+  val sum = s.reduce(ev.add)
+  ev.intdiv(sum, s.length)
 }
 \end{lstlisting}
-It is now easier to use the function \lstinline!avg! because evidence
-values are inserted automatically:
+It is now easier to use the function \lstinline!average! because
+evidence values are inserted automatically:
 \begin{lstlisting}
-scala> avg(Seq(1.0, 2.0, 3.0))
+scala> average(Seq(1.0, 2.0, 3.0))
 res0: Double = 2.0
 
-scala> avg(Seq(BigDecimal(1.0), BigDecimal(2.0)))
+scala> average(Seq(BigDecimal(1.0), BigDecimal(2.0)))
 res1: BigDecimal = 1.5
 \end{lstlisting}
 
@@ -402,9 +347,9 @@ available as implicit values in the scope of the function\textsf{'}s body.
 The code of \lstinline!avg[T]! can then be rewritten as:
 \begin{lstlisting}
 def avg[T: Frac](s: Seq[T]): T = {
-  val frac = implicitly[Frac[T]]
-  val sum = s.reduce(frac.add)
-  frac.intdiv(sum, s.length)
+  val ev = implicitly[Frac[T]]
+  val sum = s.reduce(ev.add)
+  ev.intdiv(sum, s.length)
 }
 \end{lstlisting}
 
@@ -433,7 +378,7 @@ any instances declared there. So, the programmer\textsf{'}s code will not need
 to \lstinline!import! those typeclass instances explicitly even if
 the companion object is in a different module:
 \begin{lstlisting}
-scala> avg(Seq(1.0, 2.0, 3.0))
+scala> average(Seq(1.0, 2.0, 3.0))
 res0: Double = 2.0
 \end{lstlisting}
 
@@ -485,34 +430,34 @@ and its typeclass constraint can be written in the constructor of
 the helper class:
 \begin{lstlisting}
 implicit class AvgSyntax[T: Frac](xs: Seq[T]) {
-  def average: T = avg(xs) // Use a different name, `average`, to avoid name clash with `avg`.
+  def mean: T = average(xs) // Use a different name, `mean`, to avoid name clash.
 }
 \end{lstlisting}
-We can now use the method \lstinline!average! on numeric sequences:
+We can now use the method \lstinline!mean! on numeric sequences:
 \begin{lstlisting}
-scala> Seq(1.0, 2.0, 3.0).average
+scala> Seq(1.0, 2.0, 3.0).mean
 res0: Double = 2.0
 \end{lstlisting}
-The Scala compiler automatically rewrites the syntax \lstinline!Seq(1.0, 2.0, 3.0).average!
+The Scala compiler automatically rewrites the syntax \lstinline!Seq(1.0, 2.0, 3.0).mean!
 as the expression:
 \begin{lstlisting}
-new AvgSyntax(Seq(1.0, 2.0, 3.0))(implicitly[Frac[Double]]).average
+new AvgSyntax(Seq(1.0, 2.0, 3.0))(implicitly[Frac[Double]]).mean
 \end{lstlisting}
-In this way, the method \lstinline!average! is actually invoked on
-a temporarily created value of type \lstinline!AvgSyntax!. That value
+In this way, the method \lstinline!mean! is actually invoked on a
+temporarily created value of type \lstinline!AvgSyntax!. That value
 will be created automatically because the class constructor of \lstinline!AvgSyntax!
 is declared as \lstinline!implicit!. Since the constructor of \lstinline!AvgSyntax!
 includes the typeclass constraint \lstinline![T: Frac]!, we will
 not be able to create values of type \lstinline!AvgSyntax[T]! for
-types \lstinline!T! not in the type domain of \lstinline!Frac!.
+types \lstinline!T! not in the \lstinline!Frac! typeclass.
 
-This example illustrates the convenience of implementing PTVFs as
-extension methods. An extension method is defined only once but automatically
-becomes available for all types in the domain of the typeclass. Because
-of the typeclass constraint, the new method will be available \emph{only}
-for supported types.
+This example illustrates the convenience of implementing typeclass
+methods as extension methods. An extension method is defined only
+once but automatically becomes available for all types in the typeclass.
+Because of the typeclass constraint, the new method will be available
+\emph{only} for supported types.
 
-This convenience comes at a cost: helper classes such as \lstinline!AvgSyntax!
+This convenience comes at a cost: Helper classes such as \lstinline!AvgSyntax!
 need to be explicitly imported into every scope where extension methods
 are used, with a declaration like this:
 \begin{lstlisting}
@@ -584,8 +529,8 @@ object HasMetadata {    // Extract metadata from each type as appropriate.
 }
 \end{lstlisting}
 Now we can define \lstinline!getName! and \lstinline!getCount! as
-PTVFs with typeclass constraints. First, let us write the code using
-an implicit argument to pass the typeclass instance:
+functions with typeclass constraints. First, let us write the code
+using an implicit argument to pass the typeclass instance:
 \begin{lstlisting}
 def getName[T](t: T)(implicit ti: HasMetadata[T]): String = ti.getName(t)
 def getCount[T](t: T)(implicit ti: HasMetadata[T]): Long = ti.getCount(t)
@@ -597,18 +542,18 @@ def getName[T: HasMetadata](t: T): String = implicitly[HasMetadata[T]].getName(t
 def getCount[T: HasMetadata](t: T): Long = implicitly[HasMetadata[T]].getCount(t)
 \end{lstlisting}
 
-This code defines PTVFs \lstinline!getName! and \lstinline!getCount!
-with the type domain that contains the three types \lstinline!Data1!,
+This code defines \lstinline!getName! and \lstinline!getCount! with
+the typeclass constraint that, so far, suppors the three types \lstinline!Data1!,
 \lstinline!Data2!, \lstinline!Data3!. In order to add a new type,
-say \lstinline!Data4!, to the type domain, we will need to create
-a new typeclass instance as an implicit value of type \lstinline!HasMetadata[Data4]!.
+say \lstinline!Data4!, to the typeclass, we will need to create a
+new typeclass instance as an implicit value of type \lstinline!HasMetadata[Data4]!.
 New implicit values can be defined anywhere in the code, not necessarily
 within the companion object \lstinline!HasMetadata!. To avoid extra
 \lstinline!import! statements, the implicit value may be defined
 within the companion object of \lstinline!Data4!:
 \begin{lstlisting}
 final case class Data4(x: Int, message: String)
-object Data4 {   // Add Data4 to the type domain of HasMetadata:
+object Data4 {        // Declare HasMetadata instance for Data4:
   implicit val data4 = HasMetadata[Data4](_.message, _.x.toLong)
 }
 
@@ -638,8 +583,8 @@ that the new methods were added \emph{without} any changes to the
 implementations of \lstinline!Data1!, \lstinline!Data2!, or \lstinline!Data3!.
 Those implementations may reside in external libraries whose code
 we do not need to modify. The typeclass pattern enables us to to add
-externally defined types to a type domain whenever necessary, and
-to implement new PTVFs for them.
+externally defined types to a typeclass whenever necessary. Existing
+functions with typeclass constraints will not have to change.
 
 \subsubsection{Example \label{subsec:tc-Example-observability}\ref{subsec:tc-Example-observability}
 (counters)}
@@ -667,10 +612,10 @@ bump(testCounter)   // Should call testCounter.incr()
 
 \subparagraph{Solution}
 
-We will implement a typeclass \lstinline!Bumpable! whose type domain
-contains the types \lstinline!Counter! and \lstinline!TestCounter!.
-Typeclass instances should allow us to increment a counter of any
-supported type. So, a typeclass instance value of type \lstinline!Bumpable[C]!
+We will implement a typeclass \lstinline!Bumpable! with instances
+for the types \lstinline!Counter! and \lstinline!TestCounter!. Typeclass
+constraints should allow us to increment a counter of any supported
+type. So, a typeclass instance value of type \lstinline!Bumpable[C]!
 needs to contain a function of type \lstinline!C => Unit! that will
 increment a counter of type \lstinline!C! appropriately:
 \begin{lstlisting}
@@ -714,11 +659,11 @@ res1: Double = 0.0
 
 \subparagraph{Solution}
 
-We need to define a PTVF \lstinline!default[T]! with a type domain
-that contains (at least) the types \lstinline!Int! and \lstinline!Double!.
-For every supported type \lstinline!T!, we need to store the known
-default value of that type. So, the typeclass instance can be defined
-as a simple wrapper for values of type \lstinline!T!:
+The type \lstinline!T! in \lstinline!default[T]! should belong to
+a typeclass that contains (at least) the types \lstinline!Int! and
+\lstinline!Double!. For every supported type \lstinline!T!, we need
+to store the known default value of that type. So, the typeclass constructor
+can be defined as a simple wrapper for values of type \lstinline!T!:
 \begin{lstlisting}
 final case class HasDefault[T](value: T)
 \end{lstlisting}
@@ -1142,8 +1087,8 @@ One way of checking the laws is to use the \texttt{scalacheck} library\index{sca
 that automatically runs random tests for the given properties, trying
 to discover a set of values for which some property fails to hold.
 Using the \lstinline!Functor! typeclass constraint, we can implement
-a function (in our terminology, a PTVF) that checks the functor laws
-for \emph{any} given type constructor \lstinline!F!:
+a function that checks the functor laws for \emph{any} given functor
+\lstinline!F!:
 \begin{lstlisting}
 import org.scalacheck.Arbitrary   // Necessary imports and definitions.
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
@@ -1257,19 +1202,29 @@ This is the style preferred by many Scala libraries.
 The code examples in this book will assume that typeclasses define
 non-extension methods in their companion objects in some way.
 
-\section{Deriving typeclass instances via structural analysis}
+\section{Typeclass derivation via structural analysis}
 
-In Chapter~\ref{chap:Functors,-contrafunctors,-and} we analyzed
-the structure of functors and contrafunctors by checking which of
-the six standard type constructions can make new functors or contrafunctors
-out of previous ones. We will now apply the same\index{structural analysis}
-\index{types!structural analysis}\textbf{structural analysis} to
-various typeclasses. Is a product of two monoids a monoid? Is a co-product
-of two semigroups a semigroup? Answers to such questions will enable
-us to:
+In Chapter~\ref{chap:Functors,-contrafunctors,-and} we performed
+structural analysis of functors and contrafunctors by finding whether
+each of the six standard type constructions can make new functors
+or contrafunctors out of previous ones. We found that the product
+of two functors is again a functor; the co-product of two functors
+is also a functor; and so on. In the language of typeclasses, this
+means we were able to derive, for example, a \lstinline!Functor!
+typeclass instance for $H^{A}\triangleq F^{A}\times G^{A}$ given
+\lstinline!Functor! instances for $F$ and $G$. This is called typeclass\index{typeclass!derivations}
+derivation: a mechanical procedure that creates typeclass evidence
+for a new type from previously given typeclass evidence for other
+types. With some tricks, one can write functions that derive new typeclass
+instances values automatically.
+
+We will now apply \index{structural analysis} structural analysis
+to various other typeclasses. Structural analysis asks questions such
+as: Is a product of two monoids a monoid? Is a co-product of two semigroups
+a semigroup? Answers to such questions will enable us to:
 \begin{itemize}
 \item Quickly decide whether a given type can have a typeclass instance
-of \lstinline!Monoid!, \lstinline!Semigroup!, etc.
+for \lstinline!Monoid!, \lstinline!Semigroup!, etc.
 \item If so, derive the code for the new typeclass instance without guessing.
 \item Assure that the required typeclass laws will hold for newly constructed
 instances.
@@ -1295,9 +1250,9 @@ shows that this type is equivalent to $T\rightarrow\text{String}\times\text{Long
 This motivates us to denote $\text{String}\times\text{Long}$ by $Z$
 and to consider a typeclass whose instances are values of type $T\rightarrow Z$.
 We may call this typeclass a \textsf{``}$Z$-extractor\index{extractor typeclass}\index{typeclass!Extractor@\texttt{Extractor}}\textsf{''}
-since types $T$ from its type domain permit us somehow to extract
-values of type $Z$. With a fixed type $Z$, we denote the typeclass
-by:
+since types $T$ belonging to that typeclass permit us somehow to
+extract values of type $Z$. With a fixed type $Z$, we denote the
+typeclass by:
 \[
 \text{Extractor}^{T}\triangleq T\rightarrow Z\quad.
 \]
@@ -1328,13 +1283,13 @@ implicit def extractorZ[Z] = Extractor[Z, Z](identity)
 
 \paragraph{Products}
 
-If the types $A$ and $B$ are known to be within the type domain
-of \lstinline!Extractor!, can we add the pair $A\times B$ to that
-domain? If we can extract a value of type $Z$ from each of two values
-$a^{:A}$ and $b^{:B}$, we can certainly extract a value of type
-$Z$ from the product $a\times b$ by choosing to extract only from
-$a$ or only from $b$. So, it appears that we have two possibilities
-for implementing the typeclass for $A\times B$. Reasoning more rigorously,
+If the types $A$ and $B$ are known to belong to the \lstinline!Extractor!
+typeclass, can we add the pair $A\times B$ to that typeclass? If
+we can extract a value of type $Z$ from each of two values $a^{:A}$
+and $b^{:B}$, we can certainly extract a value of type $Z$ from
+the product $a\times b$ by choosing to extract only from $a$ or
+only from $b$. So, it appears that we have two possibilities for
+implementing the typeclass for $A\times B$. Reasoning more rigorously,
 we see that computing a new typeclass instance from two previous ones
 requires implementing a conversion function with type signature:
 \begin{align*}
@@ -1446,9 +1401,9 @@ and instead substitute the default value when necessary.
 A recursive type is usually defined via the \textsf{``}type equation\textsf{''} $T\triangleq S^{T}$,
 where $S$ is some functor (called the \textbf{pattern functor}).\index{recursion pattern functor}
 When does such a type $T$ belong to the \lstinline!Extractor! typeclass?
-The functor $S$ may use $Z$ or other fixed types. A simple example
-is $S^{A}=Z+A$; the coresponding recursive type is $T\cong Z\times\text{List}^{\bbnum 1}$
-. Implementing an \lstinline!Extractor! evidence value for this $T$
+The functor $S$ may use $Z$ or other fixed types. An example is
+$S^{A}=Z+A$; the corresponding recursive type is $T\cong Z\times\text{List}^{\bbnum 1}$.
+Implementing an \lstinline!Extractor! evidence value for this $T$
 is simple: just extract the value of type $Z$.
 
 Can we generalize this to other recursively defined types? It turns
@@ -2697,7 +2652,7 @@ implicit val pointedList   = new Pointed[List]   { def pure[A]: A => List[A]   =
 implicit val pointedTry    = new Pointed[Try]    { def pure[A]: A => Try[A]    = x => Success(x) }
 implicit val pointedFuture = new Pointed[Future] { def pure[A]: A => Future[A] = x => Future.successful(x) }
 \end{lstlisting}
-We can also define a PTVF \lstinline!pure! like this:
+We can also define the function \lstinline!pure! like this:
 \begin{lstlisting}
 def pure[F[_]: Pointed, A](x: A): F[A] = implicitly[Pointed[F]].pure(x)
 
@@ -2923,8 +2878,8 @@ list represents a situation with only one possibility.
 
 To implement the \lstinline!Pointed! typeclass instances for the
 following constructions, we need to use some advanced syntax features
-of Scala. In the previous sections, we wrote PTVFs parameterized by
-a type built out of other types, for example:
+of Scala. In the previous sections, we wrote functions parameterized
+by a type built out of other types, for example:
 \begin{lstlisting}
 def monoidPair[A: Monoid, B: Monoid]: Monoid[(A, B)] = ???
 \end{lstlisting}
@@ -3779,7 +3734,7 @@ typeclass.\label{tab:Type-constructions-for-pointed-contrafunctor}}
 
 What problems can we solve now?
 \begin{itemize}
-\item Define arbitrary PTVFs using typeclass constraints on type parameters.
+\item Define functions with typeclass constraints on type parameters.
 \item Define typeclasses and instances for types and for type constructors.
 \item Implement \lstinline!Monoid!, \lstinline!Functor!, and other standard
 typeclasses; prove their laws.
@@ -3811,7 +3766,7 @@ below.
 
 \subsubsection{Example \label{subsec:tc-Example-1}\ref{subsec:tc-Example-1}}
 
-Define a PTVF with type signature \lstinline!def bitsize[T]: Int!
+Define a function with type signature \lstinline!def bitsize[T : HasBitsize]: Int!
 such that \lstinline!bitsize[Short]! returns $16$, \lstinline!bitsize[Int]!
 returns $32$, and \lstinline!bitsize[Long]! returns $64$. For all
 other types \lstinline!T!, the expression \lstinline!bitsize[T]!
@@ -3834,7 +3789,8 @@ object HasBitsize {
   implicit val bitsizeLong  = HasBitsize[Long] (64)
 }
 \end{lstlisting}
-Now we can define the function \lstinline!bitsize! as a PTVF:
+Now we can define the function \lstinline!bitsize! with a typeclass
+constraint:
 \begin{lstlisting}
 def bitsize[T](implicit ti: HasBitsize[T]): Int = ti.size
 \end{lstlisting}
@@ -3852,17 +3808,17 @@ scala> bitsize[String]
 \end{lstlisting}
 
 This implementation of \lstinline!HasBitsize! allows the programmer
-to add new types to its type domain whenever necessary. For example,
-the following code will add support for the \lstinline!Boolean! type
+to add support for new types whenever necessary. For example, the
+following code will add support for the \lstinline!Boolean! type,
 so that \lstinline!bitsize[Boolean]! will evaluate to \lstinline!1!:
 \begin{lstlisting}
 implicit val bitsizeBoolean = HasBitsize[Boolean](1)
 \end{lstlisting}
-In some applications, it is important that the type domain of a PTVF
-should remain fixed (e.g., as defined in a library). To prevent the
-programmer from creating any further values of type \lstinline!HasBitsize!,
-we could make it a non-case class whose constructor is declared as
-a \lstinline!private! function like this:
+In some applications, it is important that the typeclass should remain
+fixed (e.g., as defined in a library). To prevent the programmer from
+creating any further values of type \lstinline!HasBitsize!, we could
+make it a non-case class whose constructor is declared as a \lstinline!private!
+function like this:
 \begin{lstlisting}
 final class HasBitsize[T] private (val size: Int) // Not a case class; the constructor is private.
 object HasBitsize {            // The companion object is allowed to call the private constructor.
@@ -4498,10 +4454,11 @@ This completes the proof of the required laws.
 
 \subsubsection{Exercise \label{subsec:tc-Exercise-1}\ref{subsec:tc-Exercise-1}}
 
-Define a PTVF \lstinline!isLong[T]: Boolean! that returns \lstinline!true!
-for \lstinline!T = Long! or \lstinline!Double! and returns \lstinline!false!
-for \lstinline!T = Int!, \lstinline!Short!, or \lstinline!Float!.
-The function should remain undefined for other types \lstinline!T!.
+Define a function \lstinline!isLong[T : IsLong]: Boolean! that returns
+\lstinline!true! for \lstinline!T = Long! or \lstinline!Double!
+and returns \lstinline!false! for \lstinline!T = Int!, \lstinline!Short!,
+or \lstinline!Float!. The function should remain undefined for other
+types \lstinline!T!.
 
 \subsubsection{Exercise \label{subsec:tc-Exercise-2}\ref{subsec:tc-Exercise-2}}
 
@@ -5261,12 +5218,11 @@ val x2: X2 = Some((Some((1, 2)), Some((3, 4))))   // Types match for `x2`.
 \subsection{Typeclasses with several type parameters (type relations)\label{subsec:Typeclasses-type-relations}}
 
 A typeclass constraint in a function, such as \lstinline!func[A: Monoid]!,
-restricts a type parameter to a certain type domain. Sometimes it
-is necessary to restrict \emph{several} type parameters to satisfy
-some conditions together. A condition that constrains several type
-parameters at once is called a \index{type relation|textit}\textbf{type
-relation}. Let us look at two simple examples of using type relations
-in practice. 
+restricts a type parameter to a certain typeclass. Sometimes it is
+necessary to restrict \emph{several} type parameters to satisfy some
+conditions together. A condition that constrains several type parameters
+at once is called a \index{type relation|textit}\textbf{type relation}.
+Let us look at two simple examples of using type relations in practice. 
 
 The first example is converting integers to floating-point numbers.
 The ranges of the available types allow us to convert a \lstinline!Short!
