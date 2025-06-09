@@ -4559,7 +4559,8 @@ cannot be implemented for some functors $F$. (Functors admitting
 a function with that type signature are called \textsf{``}rigid\index{rigid functors}\textsf{''}
 in this book; see Section~\ref{subsec:Rigid-functors}.)
 
-\subsubsection{Exercise \label{subsec:tc-Exercise-9-1-1-1}\ref{subsec:tc-Exercise-9-1-1-1}\protect\footnote{This property is dual to O\textsf{'}Connor\textsf{'}s pointed functor property from
+\subsubsection{Exercise \label{subsec:tc-Exercise-9-1-1-1}\ref{subsec:tc-Exercise-9-1-1-1}
+\protect\footnote{This property is dual to O\textsf{'}Connor\textsf{'}s pointed functor property from
 Example~\ref{subsec:tc-Example-pointed-alternative}.}}
 
 \index{Russell O\textsf{'}Connor}Assume that a functor $F$ admits a function
@@ -4673,7 +4674,7 @@ final case class T(s: S[T])   // Type constructor S must be already defined.
 def fix:    S[T] => T   =   { s => T(s) }
 def unfix:  T => S[T]   =   { t => t.s }
 \end{lstlisting}
-We can generalize this code to a \textsf{``}fixpoint\footnote{Because of the eager evaluation in Scala, this is the least fixpoint
+We can generalize this code to a \textsf{``}fixpoint\footnote{Because of the eager evaluation in Scala, this is the \textsf{``}least fixpoint\textsf{''}
 of $S$. Chapter~\ref{chap:Free-type-constructions} will study fixpoints
 in more detail.} constructor\textsf{''} ($\text{Fix}^{S}$) \emph{parameterized} by $S$:
 \begin{lstlisting}
@@ -5746,6 +5747,290 @@ An example of a typeclass to which neither description applies is
 the \lstinline!Eq! typeclass. Its evidence values have type $A\times A\rightarrow\bbnum 2$,
 which is neither of the form $P^{A}\rightarrow A$ nor $A\rightarrow P^{A}$.
 
+\subsection{Typeclasses, object-oriented interfaces, and algebraic data types}
+
+Typeclasses can be viewed as a way of managing various sets of methods
+that a data type may support. Scala supports two other features for
+managing data methods: object-oriented interfaces\index{object-oriented interfaces}
+(OOIs) and algebraic data types\index{algebraic data types} (ADTs).
+We will now compare the expressive power of all those features. We
+will find that typeclasses can be seen as a generalization of both
+OOIs and ADTs, transcending their specific limitations.
+
+We begin by formulating typeclasses, OOIs, and ADTs purely in terms
+of types. 
+
+A typeclass is viewed as a set of type signatures involving a type
+$T$. We combine all those signatures into a single tuple type denoted
+by $\text{Sig}^{T}$. A type $T$ belongs to the typeclass if there
+is a value of type $\text{Sig}^{T}$ that satisfies appropriate typeclass
+laws. The type $\text{Sig}^{T}$ may be any type expression involving
+$T$ and possibly other (fixed) types. We call $\text{Sig}$ the \textsf{``}method
+signature\textsf{''} of the typeclass.
+
+For example, a type $T$ belongs to the \lstinline!Monoid! typeclass
+if there are two methods with type signatures \lstinline!empty! $:T$
+and \lstinline!combine! $:T\times T\rightarrow T$, satisfying the
+laws of a monoid. We combine those two type signatures into a single
+value denoted by $\text{Sig}_{\text{Monoid}}^{T}\triangleq T\times(T\times T\rightarrow T)$.
+So, we say that the \lstinline!Monoid! typeclass has the method signature
+$\text{Sig}_{\text{Monoid}}$.
+
+An object-oriented interface is defined in Scala via the \lstinline!trait!
+keyword. As an example, here is an interface describing data types
+that can be tested for \textsf{``}being small enough\textsf{''} or for \textsf{``}being empty\textsf{''}:
+\begin{lstlisting}
+trait CanBeSmallEnough {
+  def isEmpty: Boolean
+  def isSmallerThan(size: Int): Boolean
+}
+\end{lstlisting}
+To implement a specific instance of that interface, we may write code
+like this:
+\begin{lstlisting}
+final case class MyClass(x: Int, y: List[Int]) extends CanBeSmallEnough {
+  def isEmpty: Boolean = this.y.isEmpty
+  def isSmallerThan(size: Int): Boolean = this.x < size
+}
+val c = MyClass(123, Nil)
+c.isEmpty                        // Evaluates to true.
+c.isSmallerThan(100)             // Evaluates to false.
+\end{lstlisting}
+We have written more verbosely \lstinline!this.x! and \lstinline!this.y!
+instead of just \lstinline!x! and \lstinline!y!, in order to show
+that the methods \lstinline!isEmpty! and \lstinline!isSmallerThan!
+use the information from the value itself. So, the type-centric view
+must consider \lstinline!isSmallerThan! as a function of \emph{two}
+arguments: an argument denoted by \lstinline!this! and an argument
+\lstinline!size: Int!. To call that function, we use the syntax \lstinline!c.isSmallerThan(1000)!.
+Similarly, we must consider \lstinline!isEmpty! as a function of
+one argument (\lstinline!this!), even though it is declared without
+any arguments in the interface code.
+
+Methods in an OOI may use an automatically defined value denoted by
+the keyword \lstinline!this!. In some other object-oriented languages,
+method signatures must have an explicit first argument called \lstinline!self!,
+\lstinline!this!, or similar. When we analyze OOIs as types, we must
+make all argument types explicit, even though the Scala syntax does
+not do that. It will be convenient to assume that each method in an
+OOI definition has an additional first argument denoted by Scala\textsf{'}s
+\lstinline!this! keyword.
+
+Then the type of an interface is seen as a tuple of function types
+whose first argument is the type of a class that will later implement
+that interface. That type is unknown within the scope of an interface
+definition, and so we have to denote that type by a type parameter
+$T$. All functions in an interface will have types of the form $T\times(...)\rightarrow(...)$,
+with a first argument of type $T$. Using curried function types equivalent
+to those type signatures, we can make $T$ a curried first argument.
+Then we obtain a description of an OOI type as a tuple of types of
+the form $T\rightarrow U_{1}$, $T\rightarrow U_{2}$, ..., $T\rightarrow U_{n}$,
+where $U_{1}$, ..., $U_{n}$ are some type expressions that might
+also use $T$. Note that $U_{i}$ correspond to the type expressions
+as seen in the Scala interface definition, where the first argument
+of type $T$ is not written out.
+
+Using the standard type equivalence such as:
+\[
+(T\rightarrow U_{1})\times(T\rightarrow U_{2})\cong T\rightarrow U_{1}\times U_{2}\quad,
+\]
+and similarly for other $U_{i}$, we can simplify the type of an OOI
+to a single function type:
+\[
+(T\rightarrow U_{1})\times...\times(T\rightarrow U_{n})\cong T\rightarrow U_{1}\times...\times U_{n}=T\rightarrow U^{T}\quad,
+\]
+where $U^{T}$ is some type expression that may use $T$. 
+
+To clarify this description on an example interface \lstinline!CanBeSmallEnough!,
+first write that interface\textsf{'}s method signature as a tuple of functions:
+\[
+\text{CanBeSmallEnough}^{T}\triangleq(T\rightarrow\bbnum 2)\times(T\times\text{Int}\rightarrow\bbnum 2)\quad.
+\]
+(We omitted the method names and only wrote the types.) Then we curry
+the argument $T$ and simplify this type to:
+\[
+\text{CanBeSmallEnough}^{T}\cong(T\rightarrow\bbnum 2)\times(T\rightarrow\text{Int}\rightarrow\bbnum 2)\cong T\rightarrow\bbnum 2\times(\text{Int}\rightarrow\bbnum 2)\quad.
+\]
+The last type has the form $T\rightarrow U^{T}$ if we define $U^{T}\triangleq\bbnum 2\times(\text{Int}\rightarrow\bbnum 2)$.
+In this example, $U^{T}$ does not depend on $T$.
+
+Note that the types $\bbnum 2$ and $\text{Int}\rightarrow\bbnum 2$
+exactly correspond to the type signatures of the methods in the Scala
+syntax, where the first argument (of type $T$) is not written.
+
+Now we can see the similarity between OOIs and typeclasses. If a type
+$T$ belongs to a typeclass with method signature $\text{Sig}$ then
+we know there is a value of type $\text{Sig}^{T}$ available (that
+value is the typeclass evidence). Similarly, an OOI may be described
+as \textsf{``}an unknown type $T$ that has a value of type $T\rightarrow U^{T}$
+available\textsf{''}. The combined methods of a typeclass are a value of type
+$\text{Sig}^{T}$, while the combined methods of an OOI are a value
+of type $T\rightarrow U^{T}$. In this way, we find that an OOI is
+similar to a special case of a typeclass whose method signature has
+the form $\text{Sig}^{T}=T\rightarrow U^{T}$.
+
+Not all typeclasses have signatures of that form. As we have just
+seen, the \lstinline!Monoid! typeclass has this signature: 
+\[
+\text{Sig}_{\text{Monoid}}\triangleq T\times(T\times T\rightarrow T)\quad.
+\]
+This type is not equivalent to $T\rightarrow U^{T}$ for any definition
+of $U^{T}$. The problem is a monoid\textsf{'}s \lstinline!empty! method,
+which must produce a value of type $T$ without any previously given
+values of type $T$. In some object-oriented languages, such methods
+are implemented via a special feature called \textsf{``}static methods\textsf{''}.
+Static methods cannot be included in an interface definition. Typeclasses
+need no special features to support methods with arbitrary type signatures.
+
+We now turn to algebraic data types\index{algebraic data types} (ADTs).
+If a type $T$ is an ADT, it means $T$ is defined via a set of \textsf{``}constructors\textsf{''},
+which are functions that create values of type $T$ from other data
+(that data may include previous values of type $T$). In other words,
+constructors have type signatures of the form $P_{1}\rightarrow T$,
+$P_{2}\rightarrow T$, ..., $P_{n}\rightarrow T$, where $P_{i}$
+are some type expressions that may use $T$. Let us combine all constructors
+into a tuple and consider the type of that tuple, just as we did with
+typeclasses and OOIs. The tuple will have the type $(P_{1}\rightarrow T)\times...\times(P_{n}\rightarrow T)$.
+With the standard type equivalence such as:
+\[
+(P_{1}\rightarrow T)\times(P_{2}\rightarrow T)\cong P_{1}+P_{2}\rightarrow T\quad,
+\]
+we rewrite the tuple type $(P_{1}\rightarrow T)\times...\times(P_{n}\rightarrow T)$
+as a single function type:
+\[
+(P_{1}\rightarrow T)\times...\times(P_{n}\rightarrow T)\cong P_{1}+...+P_{n}\rightarrow T=P^{T}\rightarrow T\quad,
+\]
+where $P^{T}$ is some type expression that may use $T$. So, an ADT
+may be described as \textsf{``}a type $T$ that has a value of type $P^{T}\rightarrow T$
+available\textsf{''}. 
+
+As an example to clarify this description, consider $\text{List}^{\text{Int}}$
+as an ADT:
+\begin{lstlisting}
+sealed trait ListInt
+final case class NilInt() extends ListInt
+final case class ConsInt(head: Int, tail: ListInt) extends ListInt
+\end{lstlisting}
+This code defines \lstinline!ListInt! as a type with two constructors
+(\lstinline!NilInt! and \lstinline!ConsInt!). Those constructors
+are used in the code like this:
+\begin{lstlisting}
+val p = NilInt()                              // An empty list.
+val q = ConsInt(1, ConsInt(2, ConsInt(3, p))) // The list [1, 2, 3].
+\end{lstlisting}
+According to this code, \lstinline!NilInt! looks like a function
+with a \lstinline!Unit! argument, returning a value of type \lstinline!ListInt!.
+The constructor \lstinline!ConsInt! looks like a function with two
+arguments (of types \lstinline!Int! and \lstinline!ListInt!), again
+returning a value of type \lstinline!ListInt!. To analyze the type
+structure of ADTs, we must make all function types explicit, even
+if the Scala syntax does not show them. So, we view the type of \lstinline!NilInt!
+as the function type $\bbnum 1\rightarrow\text{ListInt}$ and the
+type of \lstinline!ConsInt! as the type $\text{Int}\times\text{ListInt}\rightarrow\text{ListInt}$.
+
+Then we combine \lstinline!NilInt! and \lstinline!ConsInt! into
+a tuple. The type of that tuple is:
+\begin{align*}
+ & (\bbnum 1\rightarrow\text{ListInt})\times(\text{Int}\times\text{ListInt}\rightarrow\text{ListInt})\\
+ & \cong\bbnum 1+\text{Int}\times\text{ListInt}\rightarrow\text{ListInt}\\
+ & \cong P^{\text{ListInt}}\rightarrow\text{ListInt}\quad,
+\end{align*}
+if we define the type constructor $P$ as $P^{A}\triangleq\bbnum 1+\text{Int}\times A$.
+In this way, we have shown that \lstinline!ListInt! is described
+as \textsf{``}a type $T$ that has methods of type $P^{T}\rightarrow T$ available\textsf{''}.
+
+We have achieved a description that presents every ADT as a special
+case of a typeclass whose method signature has the form $\text{Sig}^{T}=P^{T}\rightarrow T$.
+
+Not all typeclasses have signatures of this form. For example, the
+equality typeclass (\lstinline!Eq!) has the method signature $\text{Sig}_{\text{Eq}}^{T}=T\times T\rightarrow\bbnum 2$,
+which is not equivalent to $P^{T}\rightarrow T$ with any definition
+of $T$.
+
+\paragraph{Summary}
+
+Object-oriented interfaces and algebraic data types are particular
+cases of typeclasses, if we only consider the type signatures of the
+required methods.
+
+At this level of abstraction, we can also show that the inheritance
+of typeclasses is similar to the object-oriented inheritance of interfaces.
+Let us describe inheritance in the language of method signatures.
+A typeclass with signature $\text{Sig}_{1}$ inherits from a typeclass
+with signature $\text{Sig}_{2}$ if $\text{Sig}_{1}^{T}=\text{Sig}_{2}^{T}\times Q^{T}$
+for some $Q$. (The type constructor $Q$ describes the additional
+methods that the new typeclass has.) So, typeclass inheritance corresponds
+to taking products of method signatures. Object-oriented inheritance
+of interfaces turns out to be exactly of the same nature. To see that,
+consider a first OOI with method signature $T\rightarrow U^{T}$ that
+inherits from a second OOI with method signature $T\rightarrow V^{T}$.
+The first OOI may not change any type signatures that it inherited;
+it may only add new methods. Recall that the interface declarations
+$U^{T}$ and $V^{T}$ involve the type signatures without the hidden
+first argument. If we denote by $W^{T}$ the type signatures added
+by the first OOI then it follows that $U^{T}=V^{T}\times W^{T}$.
+So, we find:
+\[
+T\rightarrow U^{T}=T\rightarrow V^{T}\times W^{T}\cong(T\rightarrow V^{T})\times(T\rightarrow W^{T})\quad.
+\]
+We see that inheritance of OOIs involves products of method signatures,
+just as inheritance of typeclasses does.
+
+A similar situation exists when ADTs are extended by new constructors.
+Given an ADT with method signature $P^{T}\rightarrow T$, we may add
+new constructors with combined type signatures $Q^{T}\rightarrow T$.
+The result is the ADT with method signature $P^{T}+Q^{T}\rightarrow T$,
+or equivalently $(P^{T}\rightarrow T)\times(Q^{T}\rightarrow T)$.
+So, the ADTs expressed as typeclasses with signatures $P^{T}\rightarrow T$
+have the same inheritance behavior based on products of method signatures.
+
+Keep in mind that this description is only at the level of method
+types. There are other important differences in how the Scala compiler
+works with typeclasses, OOIs, and ADTs:
+\begin{itemize}
+\item For OOIs, the compiler provides automatic subtyping for interfaces,
+via the object-oriented inheritance mechanism. If a class $A$ inherits
+an interface $B$ (or if an interface $A$ inherits an interface $B$)
+then the compiler will automatically consider $A$ as a subtype of
+$B$. Subtyping and inheritance are transitive: if $A$ inherits from
+$B$ and $B$ inherits from $C$ then $A$ is considered automatically
+to inherit also from $C$ and to be a subtype of $C$. The compiler
+will construct an inheritance tree automatically. However, an inheritance
+tree cannot be changed. Once it is declared that $A$ inherits from
+$B$, $C$, etc.~(this needs to be declared together with the definition
+of $A$), then the programmer cannot declare in another scope that
+$A$ should inherit additionally from any other interface. Typeclasses
+are more flexible in this respect: evidence values for typeclass membership
+can be defined in any scope, not necessarily together with the declaration
+of a type. Typeclasses may be implemented via OOIs, which will enable
+features of inheritance and subtyping. This will make typeclass inheritance
+behave like object-oriented interface inheritance, with all its benefits
+and shortcomings. Typeclass inheritance may be also implemented without
+using any object-oriented inheritance.
+\item For typeclasses, the compiler provides rich features for automatic
+computation of typeclass evidence values, via the mechanism of implicit
+values and implicit functions. These features are known as \textsf{``}typeclass
+derivation\textsf{''} (this works independently of and in parallel with typeclass
+inheritance). The programmer can tell the compiler how to compute
+(via custom code) a typeclass evidence value for, say, any pair type
+\lstinline!(A, B)! whenever evidence values for \lstinline!A! and
+\lstinline!B! are available. The compiler will then automatically
+use that information and accept that the pair \lstinline!(A, B)!
+belongs to the typeclass whenever \lstinline!A! and \lstinline!B!
+do. Similarly, typeclass evidence could be derived for \lstinline!Either[A, B]!
+under appropriate conditions. In this way, typeclass membership can
+be decided by the compiler for a wide range of types, which reduces
+boilerplate code. There are no comparable facilities for \textsf{``}interface
+derivation\textsf{''} for OOIs. 
+\item The compiler\textsf{'}s treatment of ADTs in Scala and in other functional
+languages is radically different from the treatment of typeclasses
+or interfaces. An ADT is never interpreted as just any type $T$ that
+happens to have methods of type $P^{T}\rightarrow T$ (what this book
+calls a $P$-typeclass). Instead, the compiler defines an ADT as the
+\emph{unique} type generated by the given constructors while using
+no other information. Rigorous definitions and the necessary theory
+will be developed in Chapter~\ref{chap:Free-type-constructions}.
+\end{itemize}
 \begin{comment}
 this tutorial is about typeclasses and type level functions to motivate
 why we want to talk about this let\textsf{'}s consider what happens if we would
