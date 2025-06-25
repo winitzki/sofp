@@ -2697,8 +2697,8 @@ side equals $\text{frun}\,(\text{pu}_{M}\bef\phi)$, and the composition
 law for monad morphisms gives $\text{pu}_{M}\bef\phi=\text{pu}_{\text{Id}}=\text{id}$.
 \item \textbf{Base runner laws}:\index{monad transformers!base runner laws}
 There is a \textbf{base runner}, a monad morphism $\text{brun}_{L}^{M}:T_{L}^{M}\leadsto M$
-defined parametrically in the monad $M$. The base runner must also
-satisfy a \textbf{nondegeneracy law}:\index{nondegeneracy law!of base runners (brun)@of base runners (\texttt{brun})}
+defined parametrically in the monad $M$. We will show later that
+the base runner always satisfies a \textbf{nondegeneracy law}:\index{nondegeneracy law!of base runners (brun)@of base runners (\texttt{brun})}
 \[
 \text{flift}_{L}^{M}\bef\text{brun}_{L}^{M}=\text{id}\quad.
 \]
@@ -2772,13 +2772,14 @@ must be a type constructor that somehow combines the type constructors
 $L$ and $M$. Many such definitions are possible, but few will satisfy
 the monad transformer laws, as the next subsection shows.
 
-\subsection{Examples of failure to define a general monad transformer\label{subsec:Examples-of-failure-of-generic-monad-transformer}}
+\subsection{Examples of failing to define a general monad transformer\label{subsec:Examples-of-failure-of-generic-monad-transformer}}
 
 No type construction is known that works in the same way for all monad
 pairs $L$, $M$ and correctly combines the effects of both monads
-(i.e., satisfies the laws of monad transformers). We will now consider
-a few general ways of combining the type constructors $L$ and $M$.
-In all cases, we will find that some monad transformer laws are violated.
+(i.e., satisfies the laws of monad transformers). We will now enumerate
+some general ways of combining the type constructors $L$ and $M$.
+In all cases, we will find that some monad transformer laws are violated,
+or there are some other issues.
 
 
 \paragraph{Functor composition}
@@ -2964,6 +2965,73 @@ for the base monad $\forall X.\,(A\rightarrow X)\rightarrow M^{X}\cong M^{A}$
 is a lawful monad, it cannot serve as a monad transformer because
 the foreign lift $M^{A}\rightarrow\text{Cod}_{L}^{M,A}$ does not
 exist for some $L$ and $M$ (Exercise~\ref{subsec:Exercise-combined-codensity-monad}).
+
+\paragraph{Using a \textquotedblleft monad co-product\textquotedblright}
+
+Define $T_{L}^{M,A}$ as the following type expression:
+\[
+T_{L}^{M,A}\triangleq\forall F^{:\text{Monad}}.\,(\forall B.\,L^{B}\rightarrow F^{B})_{\text{monad morphism}}\times(\forall B.\,M^{B}\rightarrow F^{B})_{\text{monad morphism}}\rightarrow F^{A}\quad.
+\]
+This is quite a complicated type: it involves a universal quantifier
+$\forall F$ over type constructors $F$ restricted to be lawful monads;
+the natural transformations of types $L^{B}\rightarrow F^{B}$ and
+$M^{B}\rightarrow F^{B}$ are required to be monad morphisms. These
+restrictions on types cannot be correctly represented as a type signature
+in Scala (or in most other languages). We could try writing a Scala
+type signature for $T_{L}^{M,A}$:
+\begin{lstlisting}
+trait MonadMorphism[F[_], G[_]] { def run[A]: F[A] => G[A] }
+trait TMC[L[_], M[_], A] {
+  def run[F[_]: Monad](left: MonadMorphism[L, F], right: MonadMorphism[M, F]): F[A]
+}
+\end{lstlisting}
+However, these type signatures do not guarantee that the code will
+satisfy the laws of the monad and of the monad morphisms where necessary.
+Without those laws, the correctness of the monad transformer is not
+assured.
+
+If we could ignore all the law restrictions, we would rewrite $T_{L}^{M,A}$
+as:
+\begin{align*}
+ & \forall N^{\bullet}.\,(\forall B.\,\gunderline{L^{B}}\rightarrow F^{B})\times(\forall B.\,\gunderline{M^{B}}\rightarrow F^{B})\rightarrow F^{A}\\
+{\color{greenunder}\text{merge two }\forall B\text{ quantifiers into one}:}\quad & \cong\forall N^{\bullet}.\,(\forall B.\,(L^{B}+M^{B})\rightarrow F^{B})\rightarrow F^{A}\\
+{\color{greenunder}\text{Yoneda identity for functors}:}\quad & \cong L^{A}+M^{A}\quad.
+\end{align*}
+This is just the co-product of $L$ and $M$ as functors. However,
+as we know, the functor co-product of two monads is not necessarily
+a monad. The typeclass restrictions in the definition of $T_{L}^{M,A}$
+create a  complicated type (the co-product in the category of monads\footnote{The technique of combining monads via categorical co-products was
+explored in the 2002 paper by C.~Lüth and N.~Ghani (see \texttt{\href{https://dl.acm.org/doi/10.1145/583852.581492}{https://dl.acm.org/doi/10.1145/583852.581492}}).}) that cannot be simplified via Yoneda identities.
+
+Theoretically, $T_{L}^{M,A}$ has all the properties that a monad
+transformer needs. It is a monad because it has the structure $R\rightarrow F^{A}$,
+where $R$ is a type without parameters and $F$ is required to be
+a monad; we recognize the \lstinline!Reader! transformer here.
+
+Note that $T_{L}^{M,A}$ is completely symmetric and fully parametric
+with respect to the monads $L$, $M$. Also, the type $T_{L}^{M,A}$
+is covariant in its type parameters $L$, $M$. So, one can lift a
+monad morphism $M^{A}\rightarrow N^{A}$ to a monad morphism $T_{L}^{M,A}\rightarrow T_{L}^{N,A}$
+and similarly for $L$. This gives the foreign runner and the generalized
+base runner.
+
+One can prove that the identity law holds ($T_{L}^{\text{Id},A}\cong L^{A}$)
+by using a Yoneda identity in the category of monads. 
+
+All lifts and runners exist and satisfy the laws. For instance, the
+foreign lift has the type:
+\[
+\text{flift}_{T}:M^{A}\rightarrow\forall F^{:\text{Monad}}.\,(\forall B.\,L^{B}\rightarrow F^{B})_{\text{m.m.}}\times(\forall B.\,M^{B}\rightarrow F^{B})_{\text{m.m.}}\rightarrow F^{A}\quad.
+\]
+To implement $\text{flift}_{T}$, we just specialize the given monad
+morphism of type $\forall B.\,M^{B}\rightarrow F^{B}$ by setting
+the type parameter $B=A$ and obtain a monad morphism of type $M^{A}\rightarrow F^{A}$,
+which is then lifted to a monad morphism $M^{A}\rightarrow(R\rightarrow F^{A})$.
+The base lift of type $L^{A}\rightarrow T_{L}^{M,A}$ is defined similarly.
+
+The problem with $T_{L}^{M,A}$ is that its proper definition and
+use requires advanced features of the type system that most programming
+languages do not support.
 
 \subsection{Functor compositions of monads with their transformers}
 
