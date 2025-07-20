@@ -1407,7 +1407,7 @@ hides the type parameter \lstinline!A! from the rest of the code,
 although that type parameter will be needed when constructing a value
 \lstinline!q! of type \lstinline!Bind!. This usage of a type parameter
 is called an \textbf{existentially quantified} type and is denoted
-by $\exists A$.
+by $\exists A$ in the type notation.
 
 The other type parameters (\lstinline!F!, \lstinline!T!) in \lstinline!Bind[F, T, A]!
 are not existentially quantified because they appear both in the case
@@ -1423,6 +1423,15 @@ Adding the type notation for the case classes \lstinline!Val! and
  & =T+F^{T}+\exists A.\,\text{MonadDSL}^{F,A}\times(A\rightarrow\text{MonadDSL}^{F,T})\quad.
 \end{align*}
 
+In this formula, the existential quantifier $\exists A$ binds the
+type parameter $A$ throughout the scope of the entire expression
+that follows $\exists A$. For instance:
+\[
+\exists A.\,P^{A}\rightarrow Q^{A}\quad\text{means the same as }\exists A.\,(P^{A}\rightarrow Q^{A})\quad.
+\]
+This syntactic rule is similar to the rule for the universal quantifier;
+for example, $\forall A.\,A\rightarrow A$ means the same as $\forall A.\,(A\rightarrow A)$.
+
 To explain the name \textsf{``}existential\textsf{''}, we may imagine that the type
 parameter \lstinline!A! \textsf{``}still exists\textsf{''} inside values \lstinline!q: MonadDSL[F, T]!,
 since each \lstinline!q! must have been created as \lstinline!Bind[F, T, A](...)(...)!
@@ -1435,41 +1444,142 @@ code, but we need to treat \lstinline!A! as an unknown, arbitrarily
 chosen type.
 
 Scala gives two ways of defining types with existential quantifiers:
-via case classes with an extra type parameter, or via a class with
-a type member. To illustrate these techniques, consider a type expression
-$\exists C.\,L^{A,B,C}$ where $L$ is a type constructor with type
-parameters $A$, $B$, $C$ and an existential quantifier on $C$.
+via case classes with an extra type parameter, or via a trait (or
+a class) with a type member. The simplest case of an existential type
+is a type of the form $\exists A.\,P^{A}$, where $P$ is a given
+type constructor. A Scala implementation of $\exists A.\,P^{A}$ based
+on case classes looks like this:
+\begin{lstlisting}
+sealed trait ExistsP
+final case class ExistsP0[A](value: P[A])
+\end{lstlisting}
+An implementation based on type members is:
+\begin{lstlisting}
+trait ExistsPT {
+  type A
+  def value: P[A]
+}
+\end{lstlisting}
+
+Creating a value of type \lstinline!ExistsP! requires us to choose
+a specific type \lstinline!A! and to supply a value of type \lstinline!P[A]!
+wrapped inside the case class \lstinline!ExistsP0!. But the bound
+type parameter \lstinline!A! is not visible in the outside scope:
+\begin{lstlisting}
+val x: ExistsP = ExistsP0[Int](...)
+\end{lstlisting}
+
+Creating a value of type \lstinline!ExistsPT! requires us to define
+the type \lstinline!A! inside the trait:
+\begin{lstlisting}
+val y: ExistsPT = new ExistsPT {
+  type A = Int
+  def value: P[Int] = ...
+}
+\end{lstlisting}
+
+In both implementations, the specific choice of the type \lstinline!A!
+is not visible in the outside scope and cannot be examined by fully
+parametic code. To see why, consider that code working with values
+of type \lstinline!ExistsP! may pattern-match on \lstinline!ExistsP0(value)!
+but will not be able to determine the type parameter \lstinline!A!
+that \lstinline!value! uses. (Run-time reflection, type tags, and
+other such features of Scala are not allowed in fully parametric code.)
+Code working with values \lstinline!y! of type \lstinline!ExistsPT!
+may extract the type member \lstinline!A! as \lstinline!y.A! but
+must treat that type as an arbitrary and unknown type parameter:
+\begin{lstlisting}
+scala> val z: y.A = 123
+                    ^
+error: type mismatch;
+found   : Int(123)
+required: y.A
+\end{lstlisting}
+The code outside the definition of \lstinline!y! does not actually
+have the knowledge that the type \lstinline!y.A! is \lstinline!Int!.
+This works because Scala type members are not similar to types stored
+\textsf{``}as values\textsf{''} inside a data structure. Type members in a trait do
+not have a run-time representation and are treated similarly to type
+parameters that are visible only inside the scope of the trait. Type
+checking that involves a trait\textsf{'}s type members is performed at compile
+time. So, in the example just shown, the value \lstinline!y! is considered
+as given at run time (for instance, \lstinline!y! could be a function
+argument). Then Scala does not and cannot check that the value \lstinline!123!
+agrees with the type \lstinline!y.A!, where the value \lstinline!y!
+is given at run time.
+
+To give a more meaningful example that illustrates working with these
+implementations of existential types, let us consider a type expression
+$\exists C.\,L^{A,B,C}$, where $L$ is a type constructor with type
+parameters $A$, $B$, $C$ having an existential quantifier on $C$.
 The type parameter\index{bound type parameter} $C$ is \textbf{bound}
 by the quantifier and will not be visible outside the type expression
 $\exists C.\,L^{A,B,C}$. The type parameters $A$ and $B$ remain
 free in $\exists C.\,L^{A,B,C}$.
 
-An example of such a type expression is $\exists C.\,A\times C\times\left(C\rightarrow B\right)$.
+A Scala implementation of this type via a case class can be written
+as:
+\begin{lstlisting}
+type L[A, B, C] = ...  // Define L somehow.
+sealed trait ExistsL[A, B]
+final case class ExistsL0[A, B, C](value: L[A, B, C])
+\end{lstlisting}
+Creating a value of type \lstinline!ExistsL[A, B]! requires us to
+choose a specific type \lstinline!C! and to supply a value of type
+\lstinline!L[A, B, C]! wrapped inside the case class \lstinline!ExistsL0!.
+But the bound type parameter \lstinline!C! is not present in the
+type signature \lstinline!ExistsL[A, B]! that is visible in the outside
+scope:
+\begin{lstlisting}
+val x: ExistsL[Int, String] = ExistsL0[Int, String, Boolean](...)
+\end{lstlisting}
+
+An alternative implementation uses a trait with a type member:
+\begin{lstlisting}
+trait ExistsLT[A, B] {
+  type C
+  def value: L[A, B, C]
+}
+\end{lstlisting}
+Creating a value of type \lstinline!ExistsLT[A, B]! requires us to
+define the type \lstinline!C! inside the trait:
+\begin{lstlisting}
+val y: ExistsLT[Int, String] = new ExistsLT[Int, String] {
+  type C = Boolean
+  def value: L[Int, String, Boolean] = ...
+}
+\end{lstlisting}
+But the specific choice of \lstinline!C! is not visible in the outside
+scope.
+
+To get an example of a type expression of the form $\exists C.\,L^{A,B,C}$,
+let us assign $L^{A,B,C}\triangleq A\times C\times(C\rightarrow B)$
+and obtain the type $\exists C.\,A\times C\times(C\rightarrow B)$.
 Let us implement this type via case classes and via type members. 
 
-The code using case classes may look like this:
+An implementation via case classes may look like this:
 \begin{lstlisting}
 sealed trait L[A, B]
-final case class L1[A, B, C](a: A, c: C, p: C => B) extends L[A, B]
+final case class L0[A, B, C](a: A, c: C, p: C => B) extends L[A, B]
 \end{lstlisting}
 The type notation for \lstinline!L[A, B]! is:
 \[
-L^{A,B}\triangleq\exists C.\,\text{L1}^{A,B,C}=\exists C.\,A\times C\times(C\rightarrow B)\quad.
+L^{A,B}\triangleq\exists C.\,\text{L0}^{A,B,C}=\exists C.\,A\times C\times(C\rightarrow B)\quad.
 \]
 
 When we create a value of type \lstinline!L[A, B]!, we need to assign
 the type $C$:
 \begin{lstlisting}
-val q1: L[Int, Int] = L1[Int, Int, String](1, "abc", _.length)
+val q: L[Int, Int] = L0[Int, Int, String](1, "abc", _.length)
 \end{lstlisting}
 External code may use data of type \lstinline!L[A, B]! as long as
 it does not need to know the type assigned to $C$:
 \begin{lstlisting}
 def toInt: L[Int, Int] => Int = {
-  case L1(a, c, p) => a + p(c) // May apply p: C => B to c: C without knowing what C is.
+  case L0(a, c, p) => a + p(c) // May apply p: C => B to c: C without knowing what C is.
 }
 
-scala> toInt(q1)
+scala> toInt(q)
 res0: Int = 4
 \end{lstlisting}
 In this code, the expression \lstinline!p(c)! uses data of unknown
@@ -1478,37 +1588,37 @@ type \lstinline!C! but does not try to inspect that type.
 To implement the type $\exists C.\,A\times C\times\left(C\rightarrow B\right)$
 via a trait with a type member, we write:
 \begin{lstlisting}
-trait L2[A, B] {
+trait LT[A, B] {
   type C
   val a: A
   val c: C
   val p: C => B
 }
-val q2: L2[Int, Int] = new L2[Int, Int] {
+val r: LT[Int, Int] = new LT[Int, Int] {
   type C = String
   val a: Int = 1
   val c: String = "abc"
   val p: String => Int = _.length
 }
-def toInt(q: L2[Int, Int]): Int = q.a + q.p(q.c)
+def toInt(r: LT[Int, Int]): Int = r.a + r.p(r.c)
 
-scala> toInt(q2)
+scala> toInt(r)
 res1: Int = 4
 \end{lstlisting}
 The code is more verbose but has equivalent functionality to the code
 that uses a case class. Each time we create a value of type \lstinline!L[A, B]!
-or \lstinline!L2[A, B]!, we will have to specify some type for \lstinline!C!.
-Code external to the trait \lstinline!L2! will no longer know what
-type was chosen as $C$. It will be a type error if external code
-depends on the actual type assigned to \lstinline!C!:
+or \lstinline!LT[A, B]!, we will have to specify some type for \lstinline!C!.
+Code external to the trait \lstinline!LT! will no longer know what
+type was chosen as \lstinline!C!. It will be a type error if external
+code depends on the actual type assigned to \lstinline!C!:
 \begin{lstlisting}
-scala> val x: q2.C = "abc"        // The type q2.C is String but the code may not use that knowledge.
+scala> val x: r.C = "abc"        // The type r.C is String but the code may not use that knowledge!
                     ^
 error: type mismatch;
 found   : String("abc")
-required: q2.C
+required: r.C
 \end{lstlisting}
-External code must treat the type \lstinline!q2.C! as an unknown,
+External code must treat the type \lstinline!r.C! as an unknown,
 arbitrary type.
 
 We will use the existential quantifier notation for reasoning about
@@ -1598,19 +1708,22 @@ way for all types \lstinline!A!. We will use this formula only as
 a heuristic illustration.
 
 A value of an existentially quantified type, such as $\exists C.\,F^{C}$,
-must be created by using a specific type for $C$. So, we may view
-the type $\exists C.\,F^{C}$ as an \textsf{``}infinite disjunction\textsf{''} ranging
-over all possible types that could have been used for $C$:
+must be created by using a specific type for $C$. So, it may appear
+that the type $\exists C.\,F^{C}$ is an \textsf{``}infinite disjunction\textsf{''}
+ranging over all possible types that could have been used for $C$:
 \[
-\exists C.\,F^{C}=F^{\text{Int}}+F^{\text{String}}+F^{\text{List}^{\text{Int}}}+...
+\exists C.\,F^{C}\overset{?}{=}F^{\text{Int}}+F^{\text{String}}+F^{\text{List}^{\text{Int}}}+...
 \]
-Now look at the following type equivalence where a disjunctive type
-is in the function argument:
+This type formula is actually not rigorously true, because it does
+not describe the parametricity restrictions on the code that may work
+with the quantified type $\exists C.\,F^{C}$. So, we will only use
+that formula as heuristic motivation. Look at the following type equivalence
+where a disjunctive type is in the function argument:
 \[
 \left(A+B\right)\rightarrow D\cong\left(A\rightarrow D\right)\times\left(B\rightarrow D\right)\quad.
 \]
-Write the same type equivalence using the infinite product and the
-infinite disjunction:
+Extend this type equivalence to an infinite product and an infinite
+disjunction:
 \[
 (F^{\text{Int}}+F^{\text{String}}+F^{\text{List}^{\text{Int}}}+...)\rightarrow D\cong(F^{\text{Int}}\rightarrow D)\times(F^{\text{String}}\rightarrow D)\times(F^{\text{List}^{\text{Int}}}\rightarrow D)\times...
 \]
@@ -1620,6 +1733,12 @@ as:
 (\exists C.\,F^{C})\rightarrow D\cong\forall C.\,(F^{C}\rightarrow D)\quad.
 \]
 This is the same as Eq.~(\ref{eq:existential-via-universal}).
+
+It is important to keep in mind that the type $\forall C.\,F^{C}\rightarrow D$
+implies full parametricity with respect to $C$ and so is (in most
+cases) a much \textsf{``}smaller\textsf{''} type than the product of types $F^{C}\rightarrow D$
+for all possible $C$. Accordingly, $\exists C.\,F^{C}$ is \emph{not}
+equivalent to the co-product of types $F^{C}$ for all possible $C$.
 
 Another way to see why Eq.~(\ref{eq:existential-via-universal})
 works is to view the case class constructor \lstinline!L1[A, B, C]()!
@@ -1649,21 +1768,30 @@ it does not appear in \lstinline!L[A, B]!, while the two other parameters
 and are therefore universally quantified.
 
 Motivated by these considerations, we may \emph{define} the meaning
-of the symbol $\exists$ through Eq.~(\ref{eq:existential-via-universal}).
-It is sometimes convenient to use another, equivalent formula that
-expresses $\exists C$ via $\forall C$:
+of the symbol $\exists$ through Eq.~(\ref{eq:existential-via-universal}). 
+
+It is convenient to use an equivalent formula that expresses $\exists C$
+via $\forall C$:
 
 \subsubsection{Statement \label{subsec:Statement-type-equivalence-existential-universal-Yoneda}\ref{subsec:Statement-type-equivalence-existential-universal-Yoneda}}
 
 For any type constructor $F$ (not necessarily covariant or contravariant):
+
+\textbf{(a)} If Eq.~(\ref{eq:existential-via-universal}) holds then:
 \begin{equation}
 \exists C.\,F^{C}\cong\forall D.\,(\forall C.\,(F^{C}\rightarrow D))\rightarrow D\quad.\label{eq:existential-via-universal-Yoneda}
 \end{equation}
 
+\textbf{(b)} If we define $\exists C.\,F^{C}$ by Eq.~(\ref{eq:existential-via-universal-Yoneda})
+then Eq.~(\ref{eq:existential-via-universal}) will follow:
+\[
+(\exists C.\,F^{C})\rightarrow B\cong\forall C.\,F^{C}\rightarrow B\quad,
+\]
+where $B$ is considered to be a fixed type.
 
 \subparagraph{Proof}
 
-The covariant Yoneda identity (Statement~\ref{subsec:Statement-covariant-yoneda-identity-for-types})
+\textbf{(a)} The covariant Yoneda identity (Statement~\ref{subsec:Statement-covariant-yoneda-identity-for-types})
 shows that $Z\cong\forall D.\,(Z\rightarrow D)\rightarrow D$, where
 $Z$ is any fixed type (independent of $D$). Set $Z\triangleq\exists C.\,F^{C}$
 and find:
@@ -1672,13 +1800,19 @@ and find:
 {\color{greenunder}\text{by covariant Yoneda identity}:}\quad & \cong\forall D.\,(\gunderline{(\exists C.\,F^{C})\rightarrow D})\rightarrow D\\
 {\color{greenunder}\text{by Eq.~(\ref{eq:existential-via-universal})}:}\quad & \cong\forall D.\,(\gunderline{\forall C.\,(F^{C}\rightarrow D)})\rightarrow D\quad.
 \end{align*}
+
+\textbf{(b)} The required type equivalence looks like this:
+\[
+(\exists C.\,F^{C})\rightarrow B=\big(\forall D.\,(\forall C.\,(F^{C}\rightarrow D))\rightarrow D\big)\rightarrow B\quad.
+\]
+The proof turns out to take significant work; see Statement~\ref{subsec:Statement-function-extension-rule}.
 $\square$
 
 It is important that the function type $(\forall C.\,F^{C}\rightarrow D)\rightarrow D$
 has the universal quantifier $\forall C$ in the type expression $\forall C.\,F^{C}\rightarrow D$
 \emph{inside} the function argument. The type with both quantifiers
 outside ($\forall C.\,\forall D.\,(F^{C}\rightarrow D)\rightarrow D$)
-is \emph{not} equivalent to $\exists C.\,F^{C}$.
+is a different type and is \emph{not} equivalent to $\exists C.\,F^{C}$.
 
 \subsection{Free monad on a functor (\lstinline!Free1!)}
 
@@ -4424,7 +4558,7 @@ there is only one $P$-algebra morphism of type $E^{C}\rightarrow C$
 obeying the left identity law, namely $\text{eval}_{E}^{C}$. So,
 $\text{eval}_{E}^{\prime C}=\text{eval}_{E}^{C}$. $\square$
 
-\subsection{Imposing laws of $P$-typeclasses via monad algebras}
+\subsection{Imposing laws of $P$-typeclasses via monad algebras\label{subsec:Imposing-laws-of-P-typeclasses-via-monad-algebras}}
 
 We have shown in Statement~\ref{subsec:Statement-free-typeclass-encoding-is-a-monad}
 that any free $P$-typeclass encoding $E$ is always a monad. It turns
