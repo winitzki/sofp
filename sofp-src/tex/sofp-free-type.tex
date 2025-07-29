@@ -6170,21 +6170,63 @@ that has more than one solution.
 
 Some fixpoints represent \textsf{``}larger\textsf{''} types than other fixpoints.
 In the current example, \lstinline!ListC[A]! is \textsf{``}larger\textsf{''} than
-\lstinline!List[A]!. To see this formally, we need to find a function
-that embeds values of type \lstinline!List[A]! into the type \lstinline!ListC[A]!
-in a way that preserves the fixpoint structure of those types. 
+\lstinline!List[A]!. To see this formally, let us implement a function
+\lstinline!toLC! that embeds values of type \lstinline!List[A]!
+into the type \lstinline!ListC[A]! in the \textsf{``}natural\textsf{''} way. A reasonable
+implementation is:
+\begin{align*}
+ & \text{toLC}:\text{List}^{A}\rightarrow\text{LC}^{A}\quad,\\
+ & \text{toLC}\triangleq\,\begin{array}{|c||cc|}
+ & \bbnum 1 & \bbnum 1\rightarrow A\times\text{LC}^{A}\\
+\hline \bbnum 1 & \text{id} & \bbnum 0\\
+A\times\text{List}^{A} & \bbnum 0 & h\times t\rightarrow\_^{:\bbnum 1}\rightarrow h\times\overline{\text{toLC}}\,(t)
+\end{array}\quad.
+\end{align*}
+\begin{lstlisting}
+def toLC[A]: List[A] => ListC[A] = {
+  case Nil      => Empty() 
+  case h :: t   => Next(() => (h, toLC(t)))
+}
+\end{lstlisting}
 
-{*}{*}{*}
+We could also try implementing the inverse function \lstinline!fromLC!
+that converts \lstinline!ListC[A]! to \lstinline!List[A]!. The natural
+way of implementing that function is to collect each value of type
+\lstinline!A! as long as they keep appearing: 
+\begin{align*}
+ & \text{fromLC}:\text{LC}^{A}\rightarrow\text{List}^{A}\quad,\\
+ & \text{fromLC}\triangleq\,\begin{array}{|c||cc|}
+ & \bbnum 1 & A\times\text{List}^{A}\\
+\hline \bbnum 1 & \text{id} & \bbnum 0\\
+\bbnum 1\rightarrow A\times\text{LC}^{A} & \bbnum 0 & f\rightarrow f(1)\triangleright\big(\text{id}\boxtimes\overline{\text{fromLC}}\big)
+\end{array}\quad.
+\end{align*}
+\begin{lstlisting}
+def fromLC[A]: ListC[A] => List[A] = {
+  case Empty()      => Nil 
+  case Next(next)   => next() match { case (h, t) => h :: fromLC(t) }
+}
+\end{lstlisting}
+The function \lstinline!fromLC! is a left inverse for \lstinline!toLC!,
+showing that \lstinline!toLC! is injective:
+\begin{lstlisting}
+scala> fromLC(toLC(List(1, 2, 3, 4)))
+val res0: List[Int] = List(1, 2, 3, 4)
+\end{lstlisting}
+However, \lstinline!fromLC! will fail to terminate on \textsf{``}infinite
+sequence\textsf{''} values such as \lstinline!x!, \lstinline!y!, \lstinline!z!
+shown above, because \lstinline!fromLC! will keep calling the \lstinline!next()!
+function until it finds an \lstinline!Empty! tail value, which will
+never happen:
+\begin{lstlisting}
+scala> fromLC(x)
+java.lang.StackOverflowError
+\end{lstlisting}
+We conclude that \lstinline!ListC[A]! is a \textsf{``}larger\textsf{''} type: it
+cannot be embedded in \lstinline!List[A]!.
 
-transform $f_{1}:L_{\text{fin}}^{A}\rightarrow L^{A}$ and $f_{2}:L_{\text{inf}}^{A}\rightarrow L^{A}$.
-The function $f_{1}$ embeds values of type $L_{\text{fin}}^{A}$
-(finite lists) in the type $L^{A}$ that includes both finite and
-infinite lists. The functions $f_{1}$ and $f_{2}$ are injective
-because they are functions of type $P\rightarrow P+Q$ for some $P$
-and $Q$.
-
-The functions $f_{1}$ and $f_{2}$ are in a sense \textsf{``}well-adapted\textsf{''}
-to the fixpoint structure of the types. The following definition makes
+The function \lstinline!toLC! is in a sense \textsf{``}well-adapted\textsf{''} to
+the fixpoint structure of the types. The following definition makes
 this property precise:
 
 \subsubsection{Definition \label{subsec:Definition-fixpoint-preserving-function}\ref{subsec:Definition-fixpoint-preserving-function}}
@@ -6204,9 +6246,51 @@ T_{2}\ar[r]\sp(0.5){\text{unfix}_{2}} & F^{T_{2}}\ar[r]\sp(0.5){\text{fix}_{2}} 
  & \text{fix}_{1}\bef f=f^{\uparrow F}\bef\text{fix}_{2}\quad,\\
  & \text{unfix}_{1}\bef f^{\uparrow F}=f\bef\text{unfix}_{2}\quad.
 \end{align*}
+$\square$
 
-To show that both $f_{1}$ and $f_{2}$ are fixpoint-preserving, we
-note that {*}{*}{*}
+\subsubsection{Statement \label{subsec:Statement-fixpoint-preserving-fix}\ref{subsec:Statement-fixpoint-preserving-fix}}
+
+To verify that a function is fixpoint-preserving, it is sufficient
+to check the compatibility law with \lstinline!fix!; the law for
+\lstinline!unfix! follows automatically.
+
+\subparagraph{Proof}
+
+Assuming that $\text{fix}_{1}\bef f=f^{\uparrow F}\bef\text{fix}_{2}$
+holds, compose both sides with $\text{unfix}_{1}$ at left and then
+with $\text{unfix}_{2}$ at right, like this:
+\begin{align*}
+ & \text{fix}_{1}\bef f=f^{\uparrow F}\bef\text{fix}_{2}\quad,\\
+{\color{greenunder}\text{compose with }\text{unfix}_{1}:}\quad & \text{unfix}_{1}\bef\text{fix}_{1}\bef f=\text{unfix}_{1}\bef f^{\uparrow F}\bef\text{fix}_{2}\quad,\\
+{\color{greenunder}\text{compose with }\text{unfix}_{2}:}\quad & \gunderline{\text{unfix}_{1}\bef\text{fix}_{1}}\bef f\bef\text{unfix}_{2}=\text{unfix}_{1}\bef f^{\uparrow F}\bef\gunderline{\text{fix}_{2}\bef\text{unfix}_{2}}\quad,\\
+{\color{greenunder}\text{use inverse function laws}:}\quad & f\bef\text{unfix}_{2}=\text{unfix}_{1}\bef f^{\uparrow F}\quad.
+\end{align*}
+To derive the last line, we used the inverse function laws: $\text{unfix}_{1}\bef\text{fix}_{1}=\text{id}$
+and $\text{fix}_{2}\bef\text{unfix}_{2}=\text{id}$. $\square$
+
+Heuristically, a fixpoint-preserving function will map parts of $T_{1}$
+into parts of $T_{2}$ that are at the same places in the fixpoint
+equation. As an example, let us verify that \lstinline!toLC! is fixpoint-preserving
+with respect to the fixpoint equation~(\ref{eq:fixpoint-type-equation-for-oncall-list}).
+We begin by writing the code for the two \lstinline!fix! functions:
+\begin{align*}
+ & \text{fix}_{1}:\bbnum 1+A\times\text{List}^{A}\rightarrow\text{List}^{A}\quad,\\
+ & \text{fix}_{1}\triangleq\,\begin{array}{|c||cc|}
+ & \bbnum 1 & A\times\text{List}^{A}\\
+\hline \bbnum 1 & \text{id} & \bbnum 0\\
+A\times\text{List}^{A} & \bbnum 0 & h\times t\rightarrow h\times t
+\end{array}\quad,\\
+ & \text{fix}_{2}:\bbnum 1+A\times\text{LC}^{A}\rightarrow\text{LC}^{A}\quad,\\
+ & \text{fix}_{2}\triangleq\,\begin{array}{|c||cc|}
+ & \bbnum 1 & \bbnum 1\rightarrow A\times\text{LC}^{A}\\
+\hline \bbnum 1 & \text{id} & \bbnum 0\\
+A\times\text{LC}^{A} & \bbnum 0 & h\times t\rightarrow\_^{:\bbnum 1}\rightarrow h\times t
+\end{array}\quad.
+\end{align*}
+We also need the code for $\text{toLC}^{\uparrow F}$:
+\[
+\]
+ {*}{*}{*}
 
 As an example of a function that is \emph{not} fixpoint-preserving,
 consider truncating an infinite list at a fixed length of, say, $100$
