@@ -1099,79 +1099,77 @@ functors\index{perfect-shaped tree} $R$ defined by:
 
 \section{Laws and structure}
 
-\subsection{Simplifying the filtering laws: Motivation for \texttt{deflate\label{subsec:Simplifying-the-filtering-laws-deflate}}}
-
 The four laws of \lstinline!filter! (Section~\ref{subsec:Motivation-for-and-derivation-of-laws-of-filtering})
-require considerable work to verify directly. Is there a shorter reformulation
-of the laws that is easier to understand and to verify?
+require considerable work to verify directly. In this section, we
+will gradually derive a shorter formulation of the laws that is easier
+to understand and to verify. Throughout this section, we fix a functor
+$F$ and study the properties of $F$\textsf{'}s \lstinline!filter! method
+and other functions that work with types of the form \lstinline!F[A]!.
 
-To motivate that, begin by considering a heuristic picture of a filter
-operation ($\text{filt}_{F}(p):F^{A}\rightarrow F^{A}$) that may
-remove some values of type $A$ from a wrapper $F^{A}$. For example,
-if $F^{A}\triangleq\bbnum 1+A$ then the filtering operation will
-sometimes remove the value of type $A$ and return the result $1+\bbnum 0$.
-It appears that the filtering operation, at the type level, replaces
-the type $A$ by the void type\index{void type} $\bbnum 0$ whenever
-a value does not pass the filtering condition. In examples of non-filterable
-functors $F$, such as $F^{A}\triangleq A\times\left(\bbnum 1+A\right)$,
-the type expression for $F^{A}$ cannot accommodate replacing the
-type $A$ by $\bbnum 0$. (The resulting type $F^{\bbnum 0}$ is then
-void because $F^{\bbnum 0}\cong\bbnum 0$.)
+\subsection{Simplifying the filtering laws: Motivation for \texttt{deflate}\label{subsec:Simplifying-the-filtering-laws-deflate}}
 
-If we had the functor $F^{\bbnum 1+A}$ instead of $F^{A}$, we would
-be able to replace $A$ by $\bbnum 0$ whenever necessary:
+The first step towards making the filtering laws simpler is to pass
+from \lstinline!filter! to a function we will call \lstinline!deflate!
+with type signature \lstinline!F[Option[A]] => F[A]! (in the type
+notation, $F^{\bbnum 1+A}\rightarrow F^{A}$). It turns out that a
+function with that type signature describes the logic of the filtering
+operation in a way that is equivalent to the \lstinline!filter! method.
+
+To introduce \lstinline!deflate!, begin by considering a heuristic
+picture of a filter operation \lstinline!fa.filter(p)! that works
+with a value \lstinline!fa: F[A]! and a predicate \lstinline!p: A => Boolean!.
+The partial function law of \lstinline!filter! says that, at least,
+all stored values that fail the predicate $p$ should be removed.
+To implement that requirement, the \lstinline!filter! function will
+need to apply $p$ to the stored values. Applying a given function
+to each value stored in a functor is something every functor can do
+via its \lstinline!map! method. So, that part of the filtering operation
+is available to all functors and is not relevant to deciding whether
+a given functor is filterable. The important part is how some of the
+values are going to be removed from \lstinline!fa!.
+
+To separate out that part of the functionality of \lstinline!filter!,
+let us \textsf{``}refactor\textsf{''} the filtering computation \lstinline!fa.filter(p)!
+into two stages. First, we apply \lstinline!p! to all values \lstinline!x!
+stored in \lstinline!fa! and store all the results as values of type
+\lstinline!Option[A]! computed as \lstinline!None! when \lstinline!p(x) == false!
+and as \lstinline!Some(x)! when \lstinline!p(x) == true!. The code
+could look like this:
 \begin{lstlisting}
-def filter[F[_]: Functor, A](p: A => Boolean): F[Option[A]] => F[Option[A]] =
-    _.map(_.filter(p))    // Using the standard `filter` method of Option.
+val stage1: F[Option[A]] = fa.map { x => if (p(x)) Some(x) else None }
 \end{lstlisting}
-We can always convert a value of type $F^{A}$ back into a value of
-type $F^{\bbnum 1+A}$ when $F$ is a functor:
+To complete the filtering operation, we need to remove some values
+from \lstinline!stage1! (at least the \lstinline!None! values should
+be removed). Let us assume that the removal is done \emph{somehow}
+by a function called \lstinline!deflate!:
 \begin{lstlisting}
-def inflate[F[_]: Functor, A]: F[A] => F[Option[A]] = _.map(x => Some(x))
+val stage2: F[A] = deflate(stage1) // Assuming `deflate` is given:
+
+def deflate[A]: F[Option[A]] => F[A] = ???
 \end{lstlisting}
-The code notation for the function \lstinline!inflate! is:
+The code notation for the type signature of \lstinline!deflate! is:
 \[
-\text{inflate}^{F,A}\triangleq(x^{:A}\rightarrow\bbnum 0^{:\bbnum 1}+x)^{\uparrow F}\quad.
+\text{deflate}_{F}:F^{\bbnum 1+A}\rightarrow F^{A}\quad.
 \]
-It remains to convert $F^{\bbnum 1+A}$ to $F^{A}$. If we could \emph{somehow}
-do that, say, via a function we will call \lstinline!deflate!:
-\begin{lstlisting}
-def deflate[F[_], A]: F[Option[A]] => F[A] = ???
-\end{lstlisting}
-or, in the code notation:
-\[
-\text{deflate}_{F}^{A}:F^{\bbnum 1+A}\rightarrow F^{A}\quad,
-\]
-we would then be able to express \lstinline!filter! through \lstinline!map!
-and \lstinline!deflate! like this:
-\begin{align*}
- & \quad\quad\quad\quad\left(\text{filt}_{F}(p)\right)^{:F^{A}\rightarrow F^{A}}=\text{inflate}\bef\big(\text{filt}_{\text{Opt}}(p)\big)^{\uparrow F}\bef\text{deflate}\quad.\\
- & \xymatrix{\xyScaleX{5pc}\xyScaleY{0.8pc}F^{A}\ar[r]\sp(0.45){\text{inflate}} & F^{\bbnum 1+A}\ar[r]\sp(0.55){\big(\text{filt}_{\text{Opt}}(p)\big)^{\uparrow F}} & F^{\bbnum 1+A}\ar[r]\sp(0.55){\text{deflate}} & F^{A}}
-\end{align*}
-Here $\text{filt}_{\text{Opt}}$ is the standard \lstinline!filter!
-method of \lstinline!Option!. 
 
-We notice that both functions in the composition $\text{inflate}\bef(\text{filt}_{\text{Opt}}(p))^{\uparrow F}$
-are lifted to the functor $F$. So, we can simplify that composition
-to a single lifted function:
-\begin{align*}
- & \gunderline{\text{inflate}}\bef(\text{filt}_{\text{Opt}}(p))^{\uparrow F}\\
-{\color{greenunder}\text{definition of }\text{inflate}:}\quad & =(x^{:A}\rightarrow\bbnum 0^{:\bbnum 1}+x)^{\uparrow F}\bef(\text{filt}_{\text{Opt}}(p))^{\uparrow F}\\
-{\color{greenunder}\text{functor composition law of }F:}\quad & =\big(x\rightarrow\text{filt}_{\text{Opt}}(p)(\bbnum 0+x)\big)^{\uparrow F}\quad.
-\end{align*}
-We will often need to use the function shown in the last line, so
-let us call it $\psi(p)$ or even shorter, $\psi_{p}$, for convenience:
+In this way, we have expressed the filtering operation through \lstinline!map!
+and \lstinline!deflate!. To make that code more convenient, let us
+introduce the name \lstinline!psi! for the function that computes
+\lstinline!stage1! shown above. 
 \begin{lstlisting}
 def psi[A](p: A => Boolean): A => Option[A] = x => Some(x).filter(p)
+
+val stage1: F[Option[A]] = fa.map(psi(p))
 \end{lstlisting}
-In the code notation:
+We will often need to use the function \lstinline!psi! in derivations,
+so let us call it $\psi(p)$ or even shorter ($\psi_{p}$) in the
+code notation:
 \begin{align*}
  & \psi^{A}:(A\rightarrow\bbnum 2)\rightarrow A\rightarrow\bbnum 1+A\quad,\\
  & \psi_{p}\triangleq\psi(p^{:A\rightarrow\bbnum 2})\triangleq x^{:A}\rightarrow\text{filt}_{\text{Opt}}(p)(\bbnum 0+x)\quad.
 \end{align*}
-
-Using the function $\psi$, we can express the \lstinline!filter!
-operation as:
+We can then express \lstinline!filter! through \lstinline!map! and
+\lstinline!deflate! like this:
 \begin{align}
  & \xymatrix{\xyScaleX{4pc}F^{A}\ar[r]\sp(0.5){\psi_{p}^{\uparrow F}} & F^{\bbnum 1+A}\ar[r]\sp(0.55){\text{deflate}} & F^{A}}
 \quad\quad\quad\quad\quad\text{filt}_{F}(p)=\psi_{p}^{\uparrow F}\bef\text{deflate}\quad.\label{eq:def-filter-through-deflate}
@@ -1181,14 +1179,14 @@ def filter[A](p: A => Boolean)(fa: F[A]): F[A] = deflate(fa.map(psi(p)))
 \end{lstlisting}
 
 We derived the code for \lstinline!filter! assuming that a suitable
-function \lstinline!deflate! exists. Can we derive the code for \lstinline!deflate!
-for a given filterable functor $F$, e.g., for $F=~$\lstinline!Seq!?
-The required type signature is \lstinline!deflate: Seq[Option[T]] => Seq[T]!.
-The Scala library has a \lstinline!flatten! method for \lstinline!Seq!
-with exactly that type signature; it removes all empty \lstinline!Option!
-values from a sequence. This shows how to derive the \lstinline!deflate!
-method for any filterable $F$: just use $F$\textsf{'}s \lstinline!filter!
-to remove the empty \lstinline!Option! values from $F^{\bbnum 1+A}$.
+function \lstinline!deflate! exists. In other words, if we know nothing
+about a functor $F$ and someone gives us just a function \lstinline!deflate!,
+we can then implement \lstinline!filter! for $F$. 
+
+It is also possible to derive the code for \lstinline!deflate! if
+a \lstinline!filter! function is given. To implement \lstinline!deflate!,
+we use \lstinline!filter! to remove the empty \lstinline!Option!
+values from $F^{\bbnum 1+A}$.
 \begin{lstlisting}[mathescape=true]
 def deflate[F[_]: Filterable : Functor, A]: F[Option[A]] => F[A] =
     _.filter(_.nonEmpty).map(_.get)
@@ -1211,7 +1209,7 @@ by Eq.~(\ref{eq:def-deflate-via-filter}).
 The ability to express \lstinline!filter! via \lstinline!deflate!
 means that a functor\textsf{'}s filtering logic is fully described as long
 as we know how to exclude empty \lstinline!Option! values from $F^{\bbnum 1+A}$
-and convert the result to $F^{A}$. We can define the \lstinline!Filterable!
+and convert the result to $F^{A}$. We could define the \lstinline!Filterable!
 typeclass through \lstinline!deflate!, providing \lstinline!filter!
 and \lstinline!deflate! as extension methods:
 \begin{lstlisting}
@@ -2025,7 +2023,7 @@ As Eq.~(\ref{eq:filter-via-liftOpt}) shows, \lstinline!liftOpt!
 uses a predicate $p$ only through the function $\psi_{p}$. So, we
 will derive the composition law of \lstinline!liftOpt! if we somehow
 express $\psi_{p}$ as a combination of $\psi_{p_{1}}$ and $\psi_{p_{2}}$.
-Begin by writing:
+Begin by writing:{*}{*}{*}remove filt$_{\text{Opt}}$ everywhere!
 \begin{lstlisting}
 psi(p) == { x => Some(x).filter(p) } == { x => Some(x).filter(p1).filter(p2) }
 \end{lstlisting}
@@ -2299,13 +2297,10 @@ to the full law~(\ref{eq:composition-law-of-liftOpt}).
 \subsection{Constructions of filterable functors\label{subsec:Constructions-of-filterable-functors}}
 
 How can we recognize a filterable functor $F$ by its type expression,
-without having to prove laws? One intuition is that the type $F^{A}$
-must be able to accommodate replacing values of $A$ by unit values;
-this replacement is performed by the function \lstinline!deflate!.
-To make this intuition more precise, it helps to perform structural
-analysis that systematically looks for type constructions creating
-new filterable functors out of existing ones while preserving the
-laws. 
+without having to prove laws? To build up intuition, it helps to perform
+structural analysis that systematically looks for type constructions
+creating new filterable functors out of existing ones while preserving
+the laws. 
 
 To begin, we note that \lstinline!Option!, \lstinline!Either!, \lstinline!Try!,
 \lstinline!List!, \lstinline!Seq!, \lstinline!Set!, and \lstinline!Map!
@@ -4314,8 +4309,46 @@ to which those laws apply:
 \end{align*}
 We called all these laws \textsf{``}naturality laws\textsf{''}, although they were
 derived from different premises and do not look similar at first sight.
-Is there a common pattern for these laws? For a given function, can
-we guess the form of its naturality law? 
+Is there a common pattern and a common intuition for these laws?
+
+\paragraph{Intuition for naturality laws}
+
+All these equations describe properties of different functions and
+involve different types. But at an abstract level, they express the
+same property: that a function with a type parameter works in the
+same way for all types. As an example, write Eq.~(\ref{eq:naturality-law-of-pure})
+with full type annotations:
+\[
+\text{for all types }A,B,\text{ for all }x^{:F^{A}},f^{:A\rightarrow B}:\quad x\triangleright\text{pu}_{F}^{A}\triangleright f^{\uparrow F}=x\triangleright f\triangleright\text{pu}_{F}^{B}\quad.
+\]
+In Scala:
+\begin{lstlisting}
+(pure[A](x)).map(f) == pure[B](f(x))  // For all x: F[A] and f: A => B.
+\end{lstlisting}
+To be definite, let us set \lstinline!F = List!. The function \lstinline!pure[A]!
+for \lstinline!List! takes a value of type \lstinline!A! and returns
+a list of length $1$ containing just that value. This logic of \lstinline!pure!,
+as described, certainly does not depend on the choice of the type
+\lstinline!A!: it creates a one-element list for any \lstinline!A!.
+It is clear that \lstinline!pure[A]! works \textsf{``}in the same way\textsf{''}
+for all \lstinline!A!. Let us pause to think how one could write
+an equation for \lstinline!pure! that expresses that property. We
+would like to require that, for any two types \lstinline!A! and \lstinline!B!,
+the function \lstinline!pure[A]! should \textsf{``}work in the same way\textsf{''}
+as \lstinline!pure[B]!. But what exactly should be equal for the
+types \lstinline!A! and \lstinline!B!? The result of applying \lstinline!pure[A]!
+is not of the same type as when applying \lstinline!pure[B]!; so,
+the value \lstinline!pure[A](x)! could not possibly be \emph{equal}
+\lstinline!pure[B](y)!. Instead, the relation between the values
+\lstinline!pure[A](x)! and \lstinline!pure[B](y)! could be a function
+that converts \lstinline!F[A]! into \lstinline!F[B]!. A natural
+example of such a conversion is \lstinline!map(f)!, where \lstinline!f: A => B!
+is some function. 
+
+{*}{*}{*}
+
+Now we turn to a more practical question: how to guess or derive the
+form of a naturality law for a given function. 
 
 Looking at the examples shown above, we find that each law follows
 one of the four patterns shown in the following table, where we use
@@ -4588,7 +4621,7 @@ not of the form $F^{A}\rightarrow G^{A}$ where $F$ and $G$ are
 either functors or contrafunctors. So, the \textsf{``}the natural transformation
 recipe\textsf{''} will not be able to produce a naturality law for functions
 of that type. A more general procedure is needed, based on the parametricity
-theorem; this will be shown in Section~\ref{sec:Naturality-laws-for-fully-parametric-functions}. 
+theorem; this will be shown in Section~\ref{sec:Naturality-laws-for-fully-parametric-functions}.
 
 \subsection{Generalizing the laws of liftings. Kleisli functions\label{subsec:Generalizing-the-laws-of-liftings-kleisli-functions}}
 

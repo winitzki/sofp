@@ -1019,14 +1019,14 @@ As an example of a function parameterized by a type constructor, consider
 the following function \lstinline!inject! with a type parameter \lstinline!F!
 constrained to be a functor:
 \begin{lstlisting}
-def inject[F[_]: Functor, A, B](a: A, f: F[B]): F[(A, B)] = ???
+def inject[F[_]: Functor, A, B](a: A, fb: F[B]): F[(A, B)] = ???
 \end{lstlisting}
 The syntax \lstinline!F[_]! indicates that the type parameter \lstinline!F!
 is itself a type constructor. 
 
-What information needs to be wrapped by a typeclass instance? A functor
-\lstinline!F! must have a \lstinline!map! function with the standard
-type signature:
+What information needs to be wrapped by a \lstinline!Functor! typeclass
+instance? A functor \lstinline!F! must have a \lstinline!map! function
+with the standard type signature:
 \begin{lstlisting}
 def map[A, B](fa: F[A])(f: A => B): F[B]
 \end{lstlisting}
@@ -1060,6 +1060,25 @@ implicit val functorSeq = new Functor[Seq] {
 This is currently the most common way of defining such typeclasses
 in Scala.
 
+As an example, consider the functor \lstinline!F! defined by \lstinline!F[A] = Option[(A, A)]!:
+\begin{lstlisting}
+type F[A] = Option[(A, A)]
+\end{lstlisting}
+In the type notation: 
+\[
+F^{A}\triangleq\bbnum 1+A\times A\quad.
+\]
+The \lstinline!Functor! typeclass instance for this \lstinline!F!
+can be implemented as:
+\begin{lstlisting}
+implicit val functorF: Functor[F] = new Functor[F] {
+  def map[A, B](fa: F[A])(f: A => B): F[B] = fa match {
+    case None             => None
+    case Some((a1, a2))   => Some((f(a1), f(a2)))
+  }
+}
+\end{lstlisting}
+
 It is convenient to declare \lstinline!map! as an extension method
 on the \lstinline!Functor! type constructors:
 \begin{lstlisting}
@@ -1073,13 +1092,71 @@ becomes available for values of functor-wrapped types.
 Using the \lstinline!Functor! typeclass and the syntax helper, we
 can now implement the function \lstinline!inject!:
 \begin{lstlisting}
-def inject[F[_]: Functor, A, B](a: A, f: F[B]): F[(A, B)] =
-  f.map { b => (a, b) }
+def inject[F[_]: Functor, A, B](a: A, fb: F[B]): F[(A, B)] =
+  fb.map { b => (a, b) }
 
 scala> inject("abc", Seq(1, 2, 3))  // Need an implicit Functor[Seq] here.
 res0: Seq[(String, Int)] = List(("abc", 1), ("abc", 2), ("abc", 3))
 \end{lstlisting}
- Similarly to the \lstinline!Monoid! typeclass, the code of the \lstinline!Functor!
+
+Here are some more examples of using type constructor typeclasses.
+
+\subsubsection{Example \label{subsec:Example-inflate-function}\ref{subsec:Example-inflate-function}\index{examples}}
+
+Implement a function \lstinline!inflate! of type \lstinline!F[A] => F[Option[A]]!.
+Each value \lstinline!a: A! stored in \lstinline!fa: F[A]! should
+be replaced by \lstinline!Some(a)!. The function should work in this
+way for all functors \lstinline!F! and for all types \lstinline!A!.
+
+\subparagraph{Solution}
+
+Use the \lstinline!map! method of \lstinline!F! to replace all stored
+values:
+\begin{lstlisting}
+def inflate[F[_]: Functor, A](fa: F[A]): F[Option[A]] = fa.map(a => Some(a))
+\end{lstlisting}
+We can test this function by using a specific \lstinline!F!, such
+as the one showed above. Then \lstinline!inflate[F, A]! will transform
+a value of type \lstinline!Option[(A, A)]! into a value of type \lstinline!Option[(Option[A], Option[A])]!.
+\begin{lstlisting}
+scala> inflate[F, Int](Some((10, 20)))
+res0: F[Option[Int]] = Some((Some(10), Some(20)))
+\end{lstlisting}
+
+
+\subsubsection{Example \label{subsec:Example-inflate-function-1}\ref{subsec:Example-inflate-function-1}\index{examples}}
+
+Implement a function \lstinline!optMap! that converts \lstinline!F[Option[A]]!
+into \lstinline!F[B]! given a function of type \lstinline!A => B!
+and a default value of type \lstinline!B! (to be used for \lstinline!None!
+values). The function \lstinline!optMap! should work for all functors
+\lstinline!F!.
+
+\subparagraph{Solution}
+
+The type signature of \lstinline!optMap! will look like this:
+\begin{lstlisting}
+def optMap[F[_]: Functor, A, B](f: A => B, b: B, p: F[Option[A]]): F[B] = ???
+\end{lstlisting}
+
+As a first step, we might use the \lstinline!map! method of \lstinline!F!
+to replace all stored values of type \lstinline!Option[A]! by values
+of type \lstinline!Option[B]!:
+\begin{lstlisting}
+p.map(_.map(f)) // This has type F[Option[B]].
+\end{lstlisting}
+We still need to replace stored values of type \lstinline!Option[B]!
+by values of type \lstinline!B!, substituting a default value of
+type \lstinline!B! instead of \lstinline!None!. For that, the \lstinline!Option!
+class has the standard method \lstinline!getOrElse!. So, the complete
+code of \lstinline!optMap! becomes:
+\begin{lstlisting}
+def optMap[F[_]: Functor, A, B](f: A => B, b: B, p: F[Option[A]]): F[B] =
+  p.map(_.map(f).getOrElse(b))
+\end{lstlisting}
+$\square$
+
+Similarly to the \lstinline!Monoid! typeclass, the code of the \lstinline!Functor!
 typeclass does not enforce the functor laws on the implementation.
 It is the programmer\textsf{'}s responsibility to verify that the laws hold.
 
