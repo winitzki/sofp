@@ -6733,8 +6733,8 @@ most cases, we can avoid using the parametricity theorem directly.
 \subsubsection{Statement \label{subsec:Statement-isomorphism-under-type-constructor}\ref{subsec:Statement-isomorphism-under-type-constructor}}
 
 \textbf{(a)} Suppose $F$ is a fully parametric type constructor (but
-not necessarily covariant or contravariant), and $P$, $Q$ are two
-types having an isomorphism $P\cong Q$. Then $F^{P}\cong F^{Q}$.
+not necessarily covariant or contravariant). Let $P$, $Q$ be two
+types with a known isomorphism $P\cong Q$. Then $F^{P}\cong F^{Q}$.
 
 \textbf{(b)} Suppose $F$ and $G$ are type constructors such that
 $F^{A}\cong G^{A}$ for all types $A$. Then:
@@ -6840,7 +6840,7 @@ and assign $A=$ \lstinline![X]!. We need a new proof.
 
 \subparagraph{Proof}
 
-\textbf{(a)} This isomorphism is shown in Example~\ref{subsec:Example-simple-existential-derivation-1-1}(a).
+\textbf{(a)} This isomorphism is shown in Example~\ref{subsec:Example-undisjunctive-type-constructors}(e).
 It is a \textsf{``}non-constructive\textsf{''} isomorphism, in the following sense.
 We can define a function \lstinline!outS! that transforms the left-hand
 side into the right-hand side:
@@ -6858,11 +6858,11 @@ the converse type signature:
 \[
 \text{inS}:\big(\forall X.\,F^{X}+G^{X}\big)\rightarrow(\forall Y.\,F^{Y})+(\forall Z.\,G^{Z})\quad,\quad\quad\text{inS}=???
 \]
-Example~\ref{subsec:Example-simple-existential-derivation-1-1}(a)
+Example~\ref{subsec:Example-undisjunctive-type-constructors}(e)
 proves that there is a one-to-one correspondence between values of
 types $\forall X.\,F^{X}+G^{X}$ and $(\forall Y.\,F^{Y})+(\forall Z.\,G^{Z})$
-even though one cannot write fully parametric code for computing the
-corresponding values.
+even though one cannot write fully parametric code for the function
+\lstinline!inS!.
 
 \textbf{(b)} To prove the second isomorphism, define a pair of functions:
 \begin{align*}
@@ -7347,14 +7347,14 @@ It follows that the type \lstinline!FreeTC[T]! is equivalent to:
 \[
 \forall A.\,(T\rightarrow A)\rightarrow\text{TC}^{A}\rightarrow A\quad.
 \]
-To pass to any other $P$-typeclass, we need to replace the type $\text{TC}^{A}$
-by the type $P^{A}\rightarrow A$ that describes all the methods of
-the $P$-typeclass. Then the free $P$-typeclass instance constructor
-is given by:
+Let us generalize from \lstinline!TC! to an arbitrary $P$-typeclass,
+replacing the type $\text{TC}^{A}$ by the type $P^{A}\rightarrow A$
+that describes all the methods of the $P$-typeclass. Then the free
+$P$-typeclass instance constructor is given by:
 \[
 \forall A.\,(T\rightarrow A)\rightarrow(P^{A}\rightarrow A)\rightarrow A\quad.
 \]
-This type can be transformed to $\forall A.\,(T+P^{A}\rightarrow A)\rightarrow A$,
+This type can be rewritten as $\forall A.\,(T+P^{A}\rightarrow A)\rightarrow A$,
 which is the Church encoding of the recursive type $F\cong T+P^{F}$.
 We recognize that $F$ is the free monad on the functor $P$, applied
 to the type $T$. Indeed, we know from the theory of $P$-typeclasses
@@ -7364,7 +7364,7 @@ only available encoding.
 
 Most typeclasses do require some laws to hold. This technique will
 still give acceptable results even though Scala code cannot enforce
-the laws. 
+the laws through type signatures alone. 
 
 As an example, let us implement the free instance of the \lstinline!Monoid!
 typeclass. The theorem gives:
@@ -7377,9 +7377,53 @@ trait FreeMonoid[T] {
   def run[A: Monoid](f: T => A): A
 }
 \end{lstlisting}
-{*}{*}{*}
+An instance of the \lstinline!Monoid! typeclass is implemented by
+this code:
+\begin{lstlisting}
+def monoidFreeMonoid[T]: Monoid[FreeMonoid[T]] = Monoid[FreeMonoid[T]]( {
+  empty = new FreeMonoid[T] {
+    def run[A: Monoid](f: T => A): A = Monoid[A].empty
+  },
+  combine = (x: FreeMonoid[T], y: FreeMonoid[T]) => new FreeMonoid[T] {
+    def run[A: Monoid](f: T => A): A = Monoid[A].combine(x.run(f), y.run(f))
+  }
+)
+\end{lstlisting}
+We also have a function for converting from \lstinline!T! to \lstinline!FreeMonoid[T]!:
+\begin{lstlisting}
+def wrap[T](t: T): FreeMonoid[T] = new FreeMonoid[T] {
+  def run[A: Monoid](f: T => A): A = f(t)
+}
+\end{lstlisting}
 
-{*}{*}{*} Example for a type constructor class: free functor
+Does \lstinline!FreeMonoid[T]! satisfy the monoid laws? As an example,
+let us combine the empty \lstinline!FreeMonoid! value and a \lstinline!FreeMonoid!
+value \lstinline!wrap(t)! converted from some \lstinline!t: T!.
+By the monoid\textsf{'}s right identity law, the result should be the same
+as just \lstinline!wrap(t)!:
+\begin{lstlisting}
+combine(wrap(t), empty) == wrap(t)
+\end{lstlisting}
+ If we substitute the code just shown, we will get a new \lstinline!FreeMonoid!
+value defined by:
+\begin{lstlisting}
+new FreeMonoid[T] {
+  def run[A: Monoid](f: T => A): A = Monoid[A].combine(Monoid[A].empty, f(t))
+}
+\end{lstlisting}
+This will obey the right identity law only if:
+\begin{lstlisting}
+Monoid[A].combine(Monoid[A].empty, x) == x  // For any x: A.
+\end{lstlisting}
+So, it appears that the right identity law of monoids holds for \lstinline!FreeMonoid[T]!
+values only as long as their \lstinline!run[A]! method is used with
+a type \lstinline!A! whose \lstinline!Monoid! instance obeys that
+law. By itself, the code of \lstinline!FreeMonoid! does not enforce
+the monoid laws on the type \lstinline!A!. As long as lawful \lstinline!Monoid!
+instances are used (which is the programmer\textsf{'}s job to verify), the
+monoid laws will also hold for \lstinline!FreeMonoid[T]!. 
+
+{*}{*}{*}perhaps move this to chapter 13?
 
 What happens if we apply the same technique to a typeclass that is
 \emph{not} of the form of a $P$-typeclass? As it turns out, the construction
@@ -8285,8 +8329,8 @@ Use Eq.~(\ref{eq:existential-via-universal-Yoneda}) and write:
 \]
 Statement~\ref{subsec:Statement-application-full-relation} with
 $P^{A}\triangleq F^{A}\rightarrow A$ and $K\triangleq B$ shows that
-$\forall A.\,(F^{A}\rightarrow A)\rightarrow B\cong B$ (the type
-constructor $F^{A}\rightarrow A$ is \textsf{``}lifting-to-full\textsf{''} by Statement~\ref{subsec:Statement-undisjunctive-type-constructors-structural}c,
+$\forall A.\,(F^{A}\rightarrow A)\rightarrow B\cong B$ as the type
+constructor $F^{A}\rightarrow A$ is \textsf{``}lifting-to-full\textsf{''} by Statement~\ref{subsec:Statement-undisjunctive-type-constructors-structural}(c,
 d). So, we get:
 \[
 \exists A.\,F^{A}\rightarrow A=\forall B.\,B\rightarrow B\cong\bbnum 1\quad.
@@ -8297,21 +8341,43 @@ d). So, we get:
 
 Let $P$ and $Q$ be any type constructors.
 
-\textbf{(a)} Show that the following equivalence holds: 
+\textbf{(a)} If $P^{A}\cong Q^{A}$ for all $A$ then $\exists A.\,P^{A}\cong\exists A.\,Q^{A}$.
+
+\textbf{(b)} For arbitrary $P$ and $Q$: 
 \[
 \exists A.\,P^{A}+Q^{A}\cong(\exists A.\,P^{A})+(\exists A.\,Q^{A})\quad.
 \]
 
-\textbf{(b)} Show that there is \emph{no} analogous equivalence for
-the product types:
-\[
-\exists A.\,P^{A}\times Q^{A}\not\cong(\exists A.\,P^{A})\times(\exists A.\,Q^{A})\quad.
-\]
-
+\textbf{(c)} Show that following type identities do \emph{not} hold
+in general:
+\begin{align*}
+ & \exists A.\,P^{A}\times Q^{A}\not\cong(\exists A.\,P^{A})\times(\exists A.\,Q^{A})\quad,\\
+ & R\rightarrow(\exists A.\,P^{A})\not\cong\exists A.\,R\rightarrow P^{A}\quad.
+\end{align*}
+(Similar identities do hold for the universal quantifiers; see Statement~\ref{subsec:Statement-general-identities-forall}.)
 
 \subparagraph{Solution}
 
-\textbf{(a)} Use Eq.~(\ref{eq:existential-via-universal-Yoneda})
+\textbf{(a)} Suppose we have an isomorphism
+\[
+f^{A}:P^{A}\rightarrow Q^{A}\quad,\quad\quad g^{A}:Q^{A}\rightarrow P^{A}\quad.
+\]
+The types $\exists A.\,P^{A}$ and $\exists A.\,Q^{A}$ are equivalent
+to some type expressions involving only universal quantifiers and
+the type constructors $P$, $Q$.
+\begin{align*}
+ & \exists A.\,P^{A}\cong\exists A.\,Q^{A}\\
+{\color{greenunder}\text{is the same as}:}\quad & \forall D.\,(\forall A.\,P^{A}\rightarrow D)\rightarrow D\cong\forall D.\,(\forall A.\,Q^{A}\rightarrow D)\rightarrow D\quad.
+\end{align*}
+Then we can apply Statement~\ref{subsec:Statement-isomorphism-under-type-constructor}
+repeatedly to show that those type expressions are isomorphic as types:
+\begin{align*}
+ & \forall A.\,P^{A}\rightarrow D\cong\forall A.\,Q^{A}\rightarrow D\quad,\\
+ & (\forall A.\,P^{A}\rightarrow D)\rightarrow D\cong(\forall A.\,Q^{A}\rightarrow D)\rightarrow D\quad,\\
+ & \forall D.\,(\forall A.\,P^{A}\rightarrow D)\rightarrow D\cong\forall D.\,(\forall A.\,Q^{A}\rightarrow D)\rightarrow D\quad.
+\end{align*}
+
+\textbf{(b)} Use Eq.~(\ref{eq:existential-via-universal-Yoneda})
 and write:
 \begin{align*}
  & \exists A.\,P^{A}+Q^{A}=\forall B.\,(\forall A.\,\gunderline{P^{A}+Q^{A}\rightarrow B})\rightarrow B\\
@@ -8322,8 +8388,8 @@ and write:
 {\color{greenunder}\text{Yoneda identity}:}\quad & =(\exists A.\,P^{A})+(\exists A.\,Q^{A})\quad.
 \end{align*}
 
-\textbf{(b)} A counter-example is found via the co-Yoneda identity
-itself:
+\textbf{(c)} The first counter-example is found via the co-Yoneda
+identity itself:
 \[
 \exists A.\,(A\rightarrow R)\times F^{A}\cong F^{R}\quad.
 \]
@@ -8332,7 +8398,21 @@ we get:
 \[
 (\exists A.\,(A\rightarrow R))\times(\exists A.\,F^{A})\cong\bbnum 1\times F^{\bbnum 1}\cong F^{\bbnum 1}\quad.
 \]
-But the last type is not equivalent to $F^{R}$. $\square$
+But the last type is not equivalent to $F^{R}$.
+
+The second counter-example is with the following type:
+\[
+P^{A}\triangleq(A\rightarrow Q)\times A\quad.
+\]
+Here $Q$ is a fixed type. By the co-Yoneda identity, we have $\exists A.\,P^{A}\cong Q$
+and so $R\rightarrow(\exists A.\,P^{A})\cong R\rightarrow Q$. Now
+let us simplify the other side: 
+\begin{align*}
+ & \exists A.\,R\rightarrow P^{A}=\exists A.\,R\rightarrow(A\rightarrow Q)\times A\\
+ & \quad\cong\exists A.\,(R\rightarrow A\rightarrow Q)\times(R\rightarrow A)\\
+{\color{greenunder}\text{co-Yoneda identity}:}\quad & \quad\cong R\rightarrow R\rightarrow Q\quad.
+\end{align*}
+The last type is not equivalent to $R\rightarrow Q$. $\square$
 
 Finally, we will prove some more technical properties of existential
 types.
@@ -8511,14 +8591,48 @@ get:
 \exists B.\,\exists A.\,P^{A,B}\cong\forall D.\,\big(\forall B.\,\forall A.\,P^{A,B}\rightarrow D)\rightarrow D\quad.
 \]
 Statement~\ref{subsec:Statement-Fubini-theorem} gives $\forall A.\,\forall B.\,P^{A,B}\cong\forall B.\,\forall A.\,P^{A,B}$,
-completing the proof.
+completing the proof. 
 
 \subsection{The greatest fixpoints and the Church-co-Yoneda identity\label{subsec:The-greatest-fixpoints-and-Church-co-Yoneda}}
 
 We have seen that the least fixpoints of functors are expressed via
 the Church encoding type that involves a universally quantified higher-order
-function. An analogous encoding exists for greatest fixpoints; it
-involves an existentially quantified type.
+function. An analogous encoding (with an existentially quantified
+type) exists for greatest fixpoints. We will now prove some properties
+of that encoding.
+
+We work with a fixed covariant functor $F$. We denote by $C$ the
+greatest fixpoint of the equation $C\cong F^{C}$. 
+
+\subsubsection{Statement \label{subsec:Statement-greatest-fixpoint-church-encoding}\ref{subsec:Statement-greatest-fixpoint-church-encoding}}
+
+The Church encoding of the type $C$ can be written as:
+\[
+C\cong\exists A.\,(A\rightarrow F^{A})\times A\quad.
+\]
+The isomorphism $C\cong F^{C}$ is shown via two functions:
+\[
+\text{fix}:F^{C}\rightarrow C\quad,\quad\quad\text{unfix}:C\rightarrow F^{C}\quad,
+\]
+which are inverses to each other.
+
+\subparagraph{Proof}
+
+The code of \lstinline!fix! and \lstinline!unfix! is:
+\begin{align*}
+ & \text{unfix}\triangleq c^{:C}\rightarrow\quad.\\
+ & \text{fix}\triangleq p^{:F^{C}}\rightarrow\quad.
+\end{align*}
+{*}{*}{*}
+
+$\square$
+
+\subsubsection{Statement \label{subsec:Statement-Church-co-Yoneda}\ref{subsec:Statement-Church-co-Yoneda}}
+
+For any covariant functors $F$ and $G$:
+\[
+G^{C}\cong\exists A.\,(A\rightarrow F^{A})\times G^{A}\quad.
+\]
 
 {*}{*}{*} See\index{Church-co-Yoneda identity} the Dhall book\textsf{'}s appendix:
 \[
