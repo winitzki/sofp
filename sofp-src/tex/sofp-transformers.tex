@@ -79,7 +79,7 @@ final case class FutOpt[A](nested: Future[Option[A]]) {
   def map[B](f: A => B)(implicit ec: ExecutionContext): FutOpt[B] = FutOpt(nested.map(_.map(f)))
   def flatMap[B](f: A => FutOpt[B])(implicit ec: ExecutionContext): FutOpt[B] =
     FutOpt(nested.flatMap {      // Provide a function Option[A] => Future[Option[B]].
-      case None    => Future.successful(None) // Must return a Future[Option[B]] here.
+      case None    => Future.successful(None) // Must return Future[Option[B]].
       case Some(x) => f(x).nested
     })
 }
@@ -226,7 +226,7 @@ compositions of monads.}
 \par\end{center}
 
 When functor composition works, implementing the \lstinline!up! methods
-is straightforward:
+is quick:
 
 \subsubsection{Example \label{subsec:Example-lift-for-List-Try-composition}\ref{subsec:Example-lift-for-List-Try-composition}}
 
@@ -334,9 +334,9 @@ pure(x).flatMap(f)
 \end{lstlisting}
 The result always has the initial unmodified \lstinline!s! as the
 second element of the pair. However, $f$ is an arbitrary function
-of type \lstinline!A => StR[B]!, so \lstinline!f(x): StR[B]! could
-equal the function \lstinline!{ s => (..., p(x, s)) }!, where the
-value \lstinline!p(x, s)! is not necessarily equal to \lstinline!s!.
+of type \lstinline!A => StR[B]!; for instance, \lstinline!f(x): StR[B]!
+could equal the function \lstinline!{ s => (..., p(x, s)) }!, where
+the value \lstinline!p(x, s)! is not necessarily equal to \lstinline!s!.
 Therefore, \lstinline!pure(x).flatMap(f)! is not equal to \lstinline!f(x)!
 for arbitrary functions \lstinline!f!.
 
@@ -373,31 +373,33 @@ view \lstinline!Try! as the base monad and \lstinline!List! as the
 foreign monad. The goal is to replace \lstinline!List! by an arbitrary
 foreign monad $M$, so that the resulting code works in the same way
 for all monads $M$. Begin by commenting the code of Example~\ref{subsec:Example-lift-for-List-Try-composition}
-to indicate the usage of the \lstinline!List! monad\textsf{'}s methods \lstinline!pure!
-and \lstinline!flatMap!:
+to indicate the usage of the \lstinline!List! monad\textsf{'}s methods \lstinline!pure!,
+\lstinline!map!, and \lstinline!flatMap!:
 \begin{lstlisting}
 final case class ListTry[A](value: List[Try[A]]) { // We will use List.map, List.pure, List.flatMap.
-  def map[B](f: A => B): ListTry[B] = ListTry(value.map(_.map(f)))           // Using List.map here.
+  def map[B](f: A => B): ListTry[B] = ListTry(value.map(_.map(f))) // List.map.
   def flatMap[B](f: A => ListTry[B]): ListTry[B] = ListTry(
     value.flatMap {         // Using List.flatMap here.
-      case Failure(t)   => List(Failure(t)) // This is List.pure(Failure(t)).
+      case Failure(t)   => List(Failure(t))   // This is List.pure(Failure(t)).
       case Success(a)   => f(a).value
     })
 }
-def pure[A](a: A): ListTry[A] = ListTry(List(Success(a)))          // This is List.pure(Success(a)).
+def pure[A](a: A): ListTry[A] =
+  ListTry(List(Success(a)))                   // This is List.pure(Success(a)).
 \end{lstlisting}
 It is now straightforward to generalize that code to an arbitrary
 foreign monad $M$:
 \begin{lstlisting}[mathescape=true]
 final case class TryT[M[_]: Monad : Functor, A](value: M[Try[A]]) {
-  def map[B](f: A => B): TryT[M, B] = TryT(value.map(_.map(f)))         // Using M$\color{dkgreen}\texttt{'}$s `map` here.
+  def map[B](f: A => B): TryT[M, B] = TryT(value.map(_.map(f))) // M$\color{dkgreen}\texttt{'}$s `map`.
   def flatMap[B](f: A => TryT[M, B]): TryT[M, B] = TryT(
-    value.flatMap {                                                 // Using M$\color{dkgreen} \texttt{'}$s `flatMap` here.
+    value.flatMap {  // M$\color{dkgreen} \texttt{'}$s `flatMap`.
       case Failure(t)   => Monad[M].pure(Failure(t)) // Use Monad[M].pure(x) instead of List(x).
       case Success(a)   => f(a).value
     })
 }
-def pure[A](a: A): ListTry[A] = ListTry(Monad[M].pure(Success(a)))     // Using M$\color{dkgreen} \texttt{'}$s `pure` here.
+def pure[A](a: A): ListTry[A] =
+  ListTry(Monad[M].pure(Success(a)))     // M$\color{dkgreen} \texttt{'}$s `pure`.
 \end{lstlisting}
 The \textsf{``}foreign lift\textsf{''} and the \textsf{``}base lift\textsf{''} also use the methods
 of the foreign monad $M$:
@@ -425,26 +427,26 @@ res0: TryT[List, Int] = TryT(List(Success(101), Success(102), Success(103)))
 \end{lstlisting}
 
 This example defines a type constructor denoted by $T_{\text{Try}}^{M,\bullet}$
-that works parametrically in the foreign monad $M$. We can use $T_{\text{Try}}^{M,A}$
-as a monad with respect to the type parameter $A$. (The foreign monad
-$M$ is the first type parameter in the transformer.) We will later
-implement transformers for other monads, such as $T_{\text{Reader}}^{M}$,
-$T_{\text{Writer}}^{M}$, $T_{\text{State}}^{M}$, etc. The advantage
-of the transformer approach is that the code for $T_{L}^{M}$ needs
-to be written once for every base monad $L$, not for every pair of
-monads $L$, $M$.
+that works parametrically in the foreign monad $M$. (The foreign
+monad $M$ is the first type parameter in the transformer.) We can
+use $T_{\text{Try}}^{M,A}$ as a monad with respect to the type parameter
+$A$. We will later implement transformers for other monads, such
+as $T_{\text{Reader}}^{M}$, $T_{\text{Writer}}^{M}$, $T_{\text{State}}^{M}$,
+etc. The advantage of the transformer approach is that the code for
+$T_{L}^{M}$ is written once for every base monad $L$, not for every
+pair of monads $L$, $M$.
 
 \subsection{Monad transformers for standard monads\label{subsec:Monad-transformers-for-standard-monads}}
 
 While the code of \lstinline!TryT! works, it leads to more questions.
 The code of \lstinline!TryT! is specific to the \lstinline!Try!
 monad and uses its internal structure (the \lstinline!Failure! and
-\lstinline!Success! subtypes). It is not obvious how to implement
-a monad transformer $T_{L}^{M}$ for an arbitrary given base monad
-$L$. We expect the code for $T_{L}^{M}$\textsf{'}s methods to be parametric
-in $M$ but not in $L$. This is shown by the notation $T_{L}^{M}$
-where $L$ is a \emph{subscript}. Changing the base monad $L$ to
-another monad will require a complete rewrite of $T_{L}^{M}$\textsf{'}s code.
+\lstinline!Success! subtypes). The code for $T_{L}^{M}$\textsf{'}s methods
+to be parametric in $M$ but not in $L$. This is shown by the notation
+$T_{L}^{M}$ where $L$ is a \emph{subscript}. Changing the base monad
+$L$ to another monad will require a complete rewrite of $T_{L}^{M}$\textsf{'}s
+code. It is not obvious how to implement a monad transformer $T_{L}^{M}$
+for an arbitrary given base monad $L$. 
 
 There is no general recipe for implementing a monad transformer $T_{L}^{M}$
 given the code for a monad $L$. Nevertheless, monad transformers
@@ -785,22 +787,21 @@ Exercise~\ref{subsec:Exercise-monad-of-monoid-is-monoid}):
 implicit def monoidMA[M[_]: Functor : Monad, A: Monoid]: Monoid[M[A]] = ...
 \end{lstlisting}
 However, it remains unknown\footnote{This book does not have a proof. See Problem~\ref{par:Problem-monads-5-2-1}
-for more details.} whether \lstinline!brunE! is a lawful monad morphism $T_{\text{List}}^{M}\leadsto M$
-or even just a monoid morphism $T_{\text{List}}^{M,A}\rightarrow M^{A}$.
+for more details.} whether \lstinline!brunE! is a lawful monad morphism of type $T_{\text{List}}^{M}\leadsto M$,
+or even whether it is a monoid morphism $T_{\text{List}}^{M,A}\rightarrow M^{A}$.
 
 \paragraph{The \texttt{StateT} transformer}
 
-The formula for that transformer\textsf{'}s type, \lstinline!StateT[M, S, A] = S => M[(S, A)]!,
-puts the foreign monad $M$ at a specific place within the type of
-the \lstinline!State! monad. Let us implement the monad methods for
-\lstinline!StateT!:
+Its type is \lstinline!StateT[M, S, A] = S => M[(S, A)]!, which puts
+the foreign monad $M$ at a specific place within the type of the
+\lstinline!State! monad. Let us implement the monad methods for \lstinline!StateT!:
 \begin{lstlisting}
 final case class StateT[M[_]: Monad : Functor, S, A](run: S => M[(A, S)]) {
   def map[B](f: A => B): StateT[M, S, B] = StateT(s1 => run(s1).map { // Use the map method of M.
     case (a, s2) => (f(a), s2)
   })
   def flatMap[B](f: A => StateT[M, S, B]): StateT[M, S, B] = StateT(s1 => run(s1).flatMap {
-      case (a, s2) => f(a).run(s2)                // Use the updated intermediate state s2.
+      case (a, s2) => f(a).run(s2) // Use the updated intermediate state s2.
   })
 }
 def pure[M[_]: Monad, S, A](a: A): StateT[M, S, A] = StateT(s => Monad[M].pure((a, s)))

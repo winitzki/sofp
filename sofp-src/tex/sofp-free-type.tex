@@ -2331,13 +2331,13 @@ in \lstinline!Wrap!. Here is an example:
 scala> val t1 = (wrap(1) |+| wrap(2)) |+| wrap(3)
 t1: FSR[Int] = Combine(Combine(Wrap(1), Wrap(2)), Wrap(3))
 \end{lstlisting}
-The associativity law is violated in the raw tree encoding:
+The associativity law is violated by the raw tree encoding:
 \begin{lstlisting}
 scala> val t2 = wrap(1) |+| (wrap(2) |+| wrap(3))
 t2: FSR[Int] = Combine(Wrap(1), Combine(Wrap(2), Wrap(3)))
 \end{lstlisting}
 The values \lstinline!t1! and \lstinline!t2! are not equal. This
-is to be expected because the unevaluated expression trees $(1+2)+3$
+is to be expected, as the unevaluated expression trees $(1+2)+3$
 and $1+(2+3)$ are different (even though the results will be equal
 after evaluation).
 
@@ -2404,16 +2404,23 @@ of the form \lstinline!Combine(Wrap(x), Combine(Wrap(y), ...))!,
 and the associativity law will always hold. 
 
 The new data structure is equivalent to a non-empty list containing
-values of type \lstinline!Wrap[T]!. The resulting type (\lstinline!NEL[Wrap[T]]!)
-can be simplified to just \lstinline!NEL[T]! because the nested \lstinline!Wrap!
-is a trivial case class that carries no functionality by itself. 
+values of type \lstinline!Wrap[T]!; that is, to the type \lstinline!NEL[Wrap[T]]!.
+That type can be simplified to just \lstinline!NEL[T]! because the
+nested \lstinline!Wrap! is a trivial case class that carries no functionality
+by itself. Let us recall the definition of \lstinline!NEL[T]!:
+\[
+\text{NEL}^{T}\triangleq T+T\times\text{NEL}^{T}\quad.
+\]
+It is a list of one or more values of type $T$. The semigroup operation
+is just the concatenation of the lists.
 
 We conclude that the non-empty list type \lstinline!NEL[T]! and its
 \lstinline!concat! function (see Example~\ref{subsec:Disjunctive-Example-non-empty-list-foldLeft}
 and Exercise~\ref{subsec:Disjunctive-Exercise-non-empty-list-2})
 are a reduced encoding of the free semigroup on \lstinline!T!. This
 encoding produces a semigroup that satisfies the associativity law
-automatically. The free evaluator becomes:
+automatically, as the \lstinline!concat! function is associative.
+The code for the free evaluator is:
 \begin{lstlisting}
 def evalNEL[S: Semigroup)(n: NEL[S]): S = n match {
   case Last(x)         => x
@@ -2430,45 +2437,96 @@ the data in a new case class. However, \lstinline!NEL[T]!\textsf{'}s \lstinline!
 operation is a simple list traversal, while \lstinline!FSR[T]! is
 a binary tree whose traversal is more complicated.
 
-{*}{*}{*}Let us also consider how we could map \lstinline!FSR[T]!
-to \lstinline!NEL[T]!. The code can be written as:{*}{*}{*}Actually
-this is the only such function that preserves the semigroup operation.{*}{*}{*} 
-
-{*}{*}{*}What if we interpret $\text{FS}^{X}$ into \emph{another}
-free semigroup?
-
-Given $Y\rightarrow Z$, can we map $\text{FS}^{Y}\rightarrow\text{FS}^{Z}$?
-
-Need to map $\text{FS}^{Y}\triangleq Y+\text{FS}^{Y}\times\text{FS}^{Y}\rightarrow Z+\text{FS}^{Z}\times\text{FS}^{Z}$
-
-This is straightforward since $\text{FS}^{X}$ is a functor in $X$:
-
-\texttt{\textcolor{blue}{\footnotesize{}def fmap{[}Y, Z{]}(f: Y $\rightarrow$
-Z): FS{[}Y{]} $\rightarrow$ FS{[}Z{]} = \{}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}  case Wrap(y) $\rightarrow$
-Wrap(f(y))}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}  case Comb(a, b) $\rightarrow$
-Comb(fmap(f)(a), fmap(f)(b))}}{\footnotesize\par}
-
-\texttt{\textcolor{blue}{\footnotesize{}\}}}{\footnotesize\par}
-
-Now we can use \texttt{\textcolor{blue}{\footnotesize{}run}} to interpret
-$\text{FS}^{X}\rightarrow\text{FS}^{Y}\rightarrow\text{FS}^{Z}\rightarrow S$,
-etc.
-
-Functor laws hold for $\text{FS}^{X}$, so \texttt{\textcolor{blue}{\footnotesize{}fmap}}
-is composable as usual
-
-The \textsf{``}interpreter\textsf{''} commutes with \texttt{\textcolor{blue}{\footnotesize{}fmap}}
-as well (naturality law):{\footnotesize{}}{\footnotesize{}
-\[
-\xymatrix{\xyScaleY{0.2pc}\xyScaleX{3pc} & \text{FS}^{Y}\ar[rd]\sp(0.6){\ \text{run}^{S}g^{:Y\rightarrow S}}\\
-\text{FS}^{X}\ar[ru]\sp(0.45){\text{fmap}\,f^{:X\rightarrow Y}}\ar[rr]\sb(0.5){\text{run}^{S}(f\bef g)^{:X\rightarrow S}} &  & S
+It appears that the reduced encoding \lstinline!NEL[T]! is \textsf{``}smaller\textsf{''}
+than the raw tree encoding \lstinline!FSR[T]!. To make that intuition
+rigorous, we look for an injective function \lstinline!fromNEL! that
+maps from \lstinline!NEL[T]! to \lstinline!FSR[T]!. One way of implementing
+\lstinline!fromNEL! is to convert a list to a right-associated expression
+tree of type \lstinline!FSR[T]!:
+\begin{lstlisting}
+def fromNEL[T]: NEL[T] => FSR[T] = {
+  case Last(t)         => Wrap(t)
+  case More(t, tail)   => Combine(Wrap(t), fromNEL(tail))
 }
+\end{lstlisting}
+\begin{align*}
+ & \text{fromNEL}:\text{NEL}^{T}\rightarrow\text{FSR}^{T}\quad,\\
+ & \text{fromNEL}\triangleq\,\begin{array}{|c||cc|}
+ & T & \text{FSR}^{T}\times\text{FSR}^{T}\\
+\hline T & \text{id} & \bbnum 0\\
+T\times\text{NEL}^{T} & \bbnum 0 & t\times\text{tail}\rightarrow(t+\bbnum 0)\times\overline{\text{fromNEL}}(\text{tail})
+\end{array}\quad.
+\end{align*}
+To prove that \lstinline!fromNEL! is injective, we implement a function
+from \lstinline!FSR[T]! to \lstinline!NEL[T]!:
+\begin{lstlisting}
+def toNEL[T]: FSR[T] => NEL[T] = {
+  case Wrap(t)         => Last(t)
+  case Combine(a, b)   => toNEL(a) |+| toNEL(b)  // Operation |+| is for NEL.
+}
+\end{lstlisting}
+\begin{align*}
+ & \text{toNEL}:\text{FSR}^{T}\rightarrow\text{NEL}^{T}\quad,\\
+ & \text{toNEL}\triangleq\,\begin{array}{|c||c|}
+ & \text{NEL}^{T}\\
+\hline T & t^{:T}\rightarrow t^{:T}+\bbnum 0^{:T\times\text{NEL}^{T}}\\
+\text{FSR}^{T}\times\text{FSR}^{T} & a\times b\rightarrow\overline{\text{toNEL}}(a)\pplus\overline{\text{toNEL}}(b)
+\end{array}\quad.
+\end{align*}
+Now we need to show that \lstinline!toNEL! is a left inverse for
+\lstinline!fromNEL!: 
+\begin{equation}
+\text{fromNEL}\bef\text{toNEL}\overset{?}{=}\text{id}\quad.\label{eq:fromNEL-toNEL-id}
+\end{equation}
+Write out the code matrices:
+\begin{align*}
+ & \text{fromNEL}\bef\text{toNEL}\\
+ & =\,\begin{array}{||cc|}
+\text{id} & \bbnum 0\\
+\bbnum 0 & t\times\text{tail}\rightarrow(t+\bbnum 0)\times\overline{\text{fromNEL}}(\text{tail})
+\end{array}\,\bef\,\begin{array}{||c|}
+t^{:T}\rightarrow t^{:T}+\bbnum 0^{:T\times\text{NEL}^{T}}\\
+a\times b\rightarrow\overline{\text{toNEL}}(a)\pplus\overline{\text{toNEL}}(b)
+\end{array}\\
+ & =\,\,\begin{array}{|c||c|}
+ & T+T\times\text{NEL}^{T}\\
+\hline T & t^{:T}\rightarrow t^{:T}+\bbnum 0^{:T\times\text{NEL}^{T}}\\
+T\times\text{NEL}^{T} & t\times\text{tail}\rightarrow\overline{\text{toNEL}}(t+\bbnum 0)\pplus\overline{\text{toNEL}}\big(\overline{\text{fromNEL}}(\text{tail})\big)
+\end{array}\quad.
+\end{align*}
+It remains to show that both rows of the matrix are identity functions.
+The first row is an identity function because it takes a value of
+type $t+\bbnum 0$ and returns the same value. Turning now to the
+second row, we first substitute $\overline{\text{toNEL}}(t+\bbnum 0)$
+into the code of \lstinline!toNEL! and find:
+\[
+\overline{\text{toNEL}}(t^{:T}+\bbnum 0^{:\text{FSR}^{T}\times\text{FSR}^{T}})=t^{:T}+\bbnum 0^{:T\times\text{NEL}^{T}}\quad.
 \]
-}{\footnotesize\par}
+ By the inductive assumption, we have:
+\[
+\overline{\text{toNEL}}\big(\overline{\text{fromNEL}}(\text{tail})\big)=\text{tail}\quad.
+\]
+Finally, we compute:
+\begin{align*}
+ & \overline{\text{toNEL}}(t+\bbnum 0)\pplus\overline{\text{toNEL}}\big(\overline{\text{fromNEL}}(\text{tail})\big)\\
+ & =\big(t^{:T}+\bbnum 0^{:T\times\text{NEL}^{T}}\big)\pplus\text{tail}\\
+{\color{greenunder}\text{compute the operation }\pplus:}\quad & =\bbnum 0^{:T}+t^{:T}\times\text{tail}^{:\text{NEL}^{T}}\quad.
+\end{align*}
+So, the second row is also an identity function because it takes a
+value $\bbnum 0+t\times\text{tail}$ and returns again the same value.
+We have proved Eq.~(\ref{eq:fromNEL-toNEL-id}), which means that
+\lstinline!fromNEL! is injective (and that \lstinline!toNEL! is
+surjective).
+
+It is important to note that \lstinline!toNEL! preserves the semigroup
+operations (but \lstinline!fromNEL! does not!). It is a general property
+of free typeclass constructions that there is only one typeclass-preserving
+function of type \lstinline!SFR[T] => NEL[T]! (this is a property
+of the universal evaluator). However, there are several possible implementations
+of \lstinline!fromNEL!: we could have created a left-associated tree,
+or a tree with some mixed structure, such that Eq.~(\ref{eq:fromNEL-toNEL-id})
+still holds. But none of those alternative implementations could preserve
+the typeclass operations.
 
 \subsection{Free monoid and its partially lawful encodings\label{subsec:Free-monoids}}
 
