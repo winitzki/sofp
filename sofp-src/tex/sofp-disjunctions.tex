@@ -994,8 +994,8 @@ the result of that division is zero, we should return an empty \lstinline!Option
 def countryCode(phone: Option[Long]): Option[Long] = phone match {
   case None      => None
   case Some(n)   =>
-    val countryCode = n / 10000000000L
-    if (countryCode != 0L) Some(countryCode) else None 
+    val code = n / 10000000000L
+    if (code != 0L) Some(code) else None 
 }
 \end{lstlisting}
 Notice that we have reimplemented the code pattern similar to \lstinline!map!,
@@ -1004,8 +1004,8 @@ return \lstinline!Some(...)!\textsf{''}. So, we may try to rewrite the code
 as:
 \begin{lstlisting}
 def countryCode(phone: Option[Long]): Option[Long] = phone.map { n =>
-    val countryCode = n / 10000000000L
-    if (countryCode != 0L) Some(countryCode) else None 
+    val code = n / 10000000000L
+    if (code != 0L) Some(code) else None 
 } // Type error: the result is Option[Option[Long]], not Option[Long].
 \end{lstlisting}
 This code does not compile: we are returning an \lstinline!Option[Long]!
@@ -1014,16 +1014,16 @@ is \lstinline!Option[Option[Long]]!. Use \lstinline!flatten! to
 convert \lstinline!Option[Option[Long]]! to the required type \lstinline!Option[Long]!:
 \begin{lstlisting}
 def countryCode(phone: Option[Long]): Option[Long] = phone.map { n =>
-    val countryCode = n / 10000000000L
-    if (countryCode != 0L) Some(countryCode) else None 
+    val code = n / 10000000000L
+    if (code != 0L) Some(code) else None 
 }.flatten // Types are correct now.
 \end{lstlisting}
 Since the \lstinline!flatten! follows a \lstinline!map!, rewrite
 the code using \lstinline!flatMap!:
 \begin{lstlisting}
 def countryCode(phone: Option[Long]): Option[Long] = phone.flatMap { n =>
-    val countryCode = n / 10000000000L
-    if (countryCode != 0L) Some(countryCode) else None 
+    val code = n / 10000000000L
+    if (code != 0L) Some(code) else None 
 }
 \end{lstlisting}
 
@@ -1520,60 +1520,45 @@ def map[A, B](xs: List[A])(f: A => B): List[B] = xs match {
   case head :: tail  => f(head) :: map(tail)(f)
 \end{lstlisting}
 While this implementation is straightforward and concise, it is not
-tail-recursive. This will be a problem for large enough lists.
+tail-recursive. A stack overflow will occur if we use this code with
+large enough lists.
 
-To resolve this issue, let us implement a tail-recursive \lstinline!foldLeft!,
-because many methods can be expressed via \lstinline!foldLeft!. The
-required type signature is:
-\begin{lstlisting}
-def foldLeft[A, R](xs: List[A])(init: R)(f: (R, A) => R): R = ???
-\end{lstlisting}
-Reasoning by induction, we start with the base case \lstinline!xs == Nil!,
-where the only possibility is to return the value \lstinline!init!:
-\begin{lstlisting}
-def foldLeft[A, R](xs: List[A])(init: R)(f: (R, A) => R): R = xs match {
-    case Nil            => init
-    ...
-\end{lstlisting}
-The inductive step for \lstinline!foldLeft! says that, given the
-values \lstinline!head: A! and \lstinline!tail: List[A]!, we need
-to apply the updater function to the previous accumulator value. That
-value is \lstinline!init!. So, we apply \lstinline!foldLeft! recursively
-to the tail of the list once we have the updated accumulator value:
-\begin{lstlisting}
-@tailrec def foldLeft[A, R](xs: List[A])(init: R)(f: (R, A) => R): R =
-  xs match {
-    case Nil            => init
-    case head :: tail   => 
-      val newInit = f(init, head) // Update the accumulator.
-      foldLeft(tail)(newInit)(f)  // Recursive call to `foldLeft`.
-  }
-\end{lstlisting}
-This implementation is tail-recursive because the recursive call to
-\lstinline!foldLeft! is the last expression returned in a \lstinline!case!
-branch.
+To avoid that, we could try rewriting \lstinline!map! via the accumulator
+technique. But it is easier instead to use the standard method \lstinline!foldLeft!
+for \lstinline!List!, which is tail-recursive (see Section~\ref{subsec:implementing-general-aggregation-foldleft}).
+Many iterative operations, such as \lstinline!map!, can be implemented
+as a call to \lstinline!foldLeft!.
 
-Another example is a function for reversing a list. The Scala library
-defines the \lstinline!reverse! method for this task, but we will
-show an implementation using \lstinline!foldLeft!. The updater function
-\emph{prepends} an element to a previous list:
+Implementing \lstinline!map! via \lstinline!foldLeft! is easier
+to understand if we begin by writing a function for reversing a list.
+(The Scala library defines the \lstinline!reverse! method for this
+task, but it is helpful to see how that method is implemented via
+\lstinline!foldLeft!.) We chose the accumulator type as \lstinline!List[A]!,
+the same as as the type of the original list. The initial accumulator
+value is an empty list, and the updater function \emph{prepends} the
+next element of the list to a previous accumulator value. So, \lstinline!List(1, 2, 3)!
+will be transformed step by step into \lstinline!1 :: Nil!, \lstinline!2 :: 1 :: Nil!,
+and finally \lstinline!3 :: 2 :: 1 :: Nil!, which is the same as
+\lstinline!List(3, 2, 1)!. The code is:
 \begin{lstlisting}
 def reverse[A](xs: List[A]): List[A] =
-  xs.foldLeft(Nil: List[A])((prev, x) => x :: prev)
+  xs.foldLeft(Nil: List[A])((acc, x) => x :: acc)
 
 scala> reverse(List(1, 2, 3))
 res0: List[Int] = List(3, 2, 1) 
 \end{lstlisting}
-Without the explicit type annotation (\lstinline!Nil: List[A]!),
-the Scala compiler will decide that \lstinline!Nil! has type \lstinline!List[Nothing]!,
+Without an explicit type annotation (\lstinline!Nil: List[A]!), the
+Scala compiler will decide that \lstinline!Nil! has type \lstinline!List[Nothing]!,
 and the types will not match later in the code. In Scala, the initial
-value for \lstinline!foldLeft! often needs an explicit type annotation.
+value for \lstinline!foldLeft! often needs a type annotation.
 
 The \lstinline!reverse! function can be used to obtain a tail-recursive
 implementation of \lstinline!map! for \lstinline!List!. The idea
-is to first use \lstinline!foldLeft! to accumulate transformed elements:
+is to first use \lstinline!foldLeft! to accumulate transformed elements,
+similarly to the code for \lstinline!reverse! just shown. For example,
+suppose we need to compute \lstinline!map(f)! where \lstinline!f(x) = x * x!:
 \begin{lstlisting}
-scala> Seq(1, 2, 3).foldLeft(Nil:List[Int])((prev, x) => (x * x) :: prev)
+scala> Seq(1, 2, 3).foldLeft(Nil: List[Int])((prev, x) => (x * x) :: prev)
 res0: List[Int] = List(9, 4, 1)
 \end{lstlisting}
 To obtain the correct result (\lstinline!List(1, 4, 9)!), it remains
@@ -1586,7 +1571,7 @@ scala> map(List(1, 2, 3))(x => x * x)
 res2: List[Int] = List(1, 4, 9)
 \end{lstlisting}
 This achieves stack safety at the cost of traversing the list twice.
-(This code is shown only as an example. The Scala library implements
+(This code is shown only for illustration. The Scala library implements
 \lstinline!List!\textsf{'}s \lstinline!map! using mutable variables to improve
 performance.)
 
@@ -1668,16 +1653,17 @@ the accumulator value. It remains to choose the initial value of the
 accumulator and the updater function. We have already seen the code
 for reversing the ordinary list via the \lstinline!foldLeft! method:
 \begin{lstlisting}
-def reverse[A](xs: List[A]): List[A] = xs.foldLeft(Nil: List[A])((prev,x) => x :: prev)
+def reverse[A](xs: List[A]): List[A] = xs.foldLeft(Nil: List[A]) {
+  (acc, x) => x :: acc) }
 \end{lstlisting}
 However, we cannot reuse the same code for non-empty lists by writing
-\lstinline!More(x, prev)! instead of \lstinline!x :: prev!, because
+\lstinline!More(x, acc)! instead of \lstinline!x :: acc!, because
 the \lstinline!foldLeft! operation works with non-empty lists differently.
 Since lists are always non-empty, the updater function is always applied
 to an initial value, and the code works incorrectly:
 \begin{lstlisting}
 def reverse[A](xs: NEL[A]): NEL[A] =
-  foldLeft(xs)(Last(head(xs)): NEL[A])((prev,x) => More(x, prev))
+  foldLeft(xs)(Last(head(xs)): NEL[A])((acc, x) => More(x, acc))
 
 scala> reverse(toNEL(10, List(20, 30))) // The result is [30, 20, 10, 10].
 res4: NEL[Int] = More(30,More(20,More(10,Last(10))))
@@ -1694,7 +1680,7 @@ begin by matching on the argument of \lstinline!reverse!, and apply
 def reverse[A]: NEL[A] => NEL[A] = {
   case Last(x)         => Last(x)    // `reverse` is a no-op.
   case More(x, tail)   =>            // Use foldLeft on `tail`.
-    foldLeft(tail)(Last(x): NEL[A])((prev, x) => More(x, prev))
+    foldLeft(tail)(Last(x): NEL[A])((acc, x) => More(x, acc))
 }
 
 scala> reverse(toNEL(10, List(20, 30))) // The result is [30, 20, 10].
@@ -1717,8 +1703,7 @@ res6: List[Int] = List(1, 2, 3)
 
 \subsubsection{Exercise \label{subsec:Disjunctive-Exercise-map-for-NEL}\ref{subsec:Disjunctive-Exercise-map-for-NEL}}
 
-Implement a \lstinline!map! function for the type \lstinline!NEL!.
-Type signature and a sample test:
+Implement a \lstinline!map! function for the type \lstinline!NEL!:
 \begin{lstlisting}
 def mapNEL[A,B](xs: NEL[A])(f: A => B): NEL[B] = ???
 
@@ -1729,7 +1714,8 @@ res7: NEL[Int] = More(15,More(25,Last(35)))
 
 \subsubsection{Exercise \label{subsec:Disjunctive-Exercise-non-empty-list-2}\ref{subsec:Disjunctive-Exercise-non-empty-list-2}}
 
-Implement a function that concatenates two non-empty lists:
+Implement a function that concatenates two non-empty lists. Type signature
+and a sample test:
 \begin{lstlisting}
 def concatNEL[A](xs: NEL[A], ys: NEL[A]): NEL[A] = ???
 
@@ -1742,7 +1728,7 @@ res8: NEL[Int] = More(1,More(2,More(3,More(4,Last(5)))))
 
 Implement \lstinline!flatten! for non-empty lists:
 \begin{lstlisting}
-def flattenNEL[A](xs: NEL[Nel[A]]): NEL[A] = ???
+def flattenNEL[A](xs: NEL[NEL[A]]): NEL[A] = ???
 
 scala> flattenNEL(More(More(1, Last(2)), More(More(3, Last(4)), Last(More(5, Last(6))))))
 res9: NEL[Int] = More(1,More(2,More(3,More(4,More(5,Last(6))))))
@@ -1896,8 +1882,7 @@ final case class Branch2[A](xs: Branch1[(A, A)])   extends PTree[A]
 \end{lstlisting}
 We can now apply the type recursion trick: replace the type \lstinline!Branch!$_{n-1}$\lstinline![(A, A)]!
 in the definition of \lstinline!Branch!$_{n}$ by the recursively
-used type \lstinline!PTree[(A, A)]!. Now we can define a perfect-shaped
-binary tree:
+used type \lstinline!PTree[(A, A)]!:
 \begin{lstlisting}
 sealed trait PTree[A]
 final case class Leaf[A](x: A)                  extends PTree[A]
@@ -1906,21 +1891,22 @@ final case class Branch[A](xs: PTree[(A, A)])   extends PTree[A]
 
 Since we used some tricks to figure out the definition of \lstinline!PTree[A]!,
 let us verify that this definition actually describes the recursive
-disjunctive type we wanted. The only way to create a structure of
-type \lstinline!PTree[A]! is to create a \lstinline!Leaf[A]! or
-a \lstinline!Branch[A]!. A value of type \lstinline!Leaf[A]! is
-itself a perfect-shaped tree. It remains to consider the case of \lstinline!Branch[A]!.
-Creating a \lstinline!Branch[A]! requires a previously created \lstinline!PTree!
-with values of type \lstinline!(A, A)! instead of \lstinline!A!.
-By the inductive assumption, the previously created \lstinline!PTree[A]!
-would have the correct shape. Now, it is clear that if we replace
-the type parameter \lstinline!A! by the pair \lstinline!(A, A)!,
-a perfect-shaped tree such as {\tiny{} \Tree[ [ [ $a_1$ ] [ $a_2$ ] ] [ [ $a_3$ ] [ $a_4$ ] ] ] }
-is replaced by {\tiny{}\Tree[ [ [ [ $a_1^{'}$ ] [ $a_1^{"}$ ] ] [ [ $a_2^{'}$ ] [ $a_2^{"}$ ] ] ] [ [ [ $a_3^{'}$ ] [ $a_3^{"}$ ] ] [ [ $a_4^{'}$ ] [ $a_4^{"}$ ] ] ] ] }
-(each leaf value $a_{i}$ became a pair $a_{i}^{'},a_{i}^{"}$). That
-tree is again perfect-shaped but is one level deeper. We see that
-\lstinline!PTree[A]! is a correct definition of a perfect-shaped
-binary tree. 
+disjunctive type we wanted. Because we defined \lstinline!PTree!
+as a \lstinline!sealed trait!, the only way to create a value of
+type \lstinline!PTree[A]! is to create either a \lstinline!Leaf[A]!
+or a \lstinline!Branch[A]!. A value of type \lstinline!Leaf[A]!
+is already a perfect-shaped tree. It remains to consider the case
+of \lstinline!Branch[A]!. Creating a \lstinline!Branch[A]! requires
+a previously created \lstinline!PTree! with values of type \lstinline!(A, A)!
+instead of \lstinline!A!. By the inductive assumption, the previously
+created \lstinline!PTree[A]! already has a perfect shape. Now, it
+is clear that if we replace the type parameter \lstinline!A! by the
+pair \lstinline!(A, A)!, a perfect-shaped tree such as {\tiny{} \Tree[ [ [ $a_1$ ] [ $a_2$ ] ] [ [ $a_3$ ] [ $a_4$ ] ] ] }
+will be replaced by the tree {\tiny{}\Tree[ [ [ [ $a_1^{'}$ ] [ $a_1^{"}$ ] ] [ [ $a_2^{'}$ ] [ $a_2^{"}$ ] ] ] [ [ [ $a_3^{'}$ ] [ $a_3^{"}$ ] ] [ [ $a_4^{'}$ ] [ $a_4^{"}$ ] ] ] ] }
+(each leaf value $a_{i}$ is replaced by a pair $a_{i}^{'},a_{i}^{"}$).
+The new tree is again perfect-shaped (but has one more level). So,
+in both cases the new tree has perfect shape. We see that \lstinline!PTree[A]!
+is a correct definition of a perfect-shaped binary tree. 
 
 \subsubsection{Example \label{subsec:Disjunctive-Example-map-regular-tree}\ref{subsec:Disjunctive-Example-map-regular-tree}\index{examples}}
 
@@ -2044,11 +2030,10 @@ the \textsf{``}safe arithmetic\textsf{''} operations \lstinline!Sqrt!, \lstinlin
 sub-language are $\sqrt{16}*(1+2)=12$; $20+1/0=\text{error}$; and
 $10+\sqrt{-1}=\text{error}$. 
 
-We can implement this sub-language in two stages. The first stage
-will create a data structure (an AST) that represents an unevaluated
-expression\index{unevaluated expression} in the sub-language. The
-second stage will evaluate that AST to obtain either a number or an
-error message.
+We implement this sub-language in two stages. First, we create a data
+structure (an AST) that represents an unevaluated expression\index{unevaluated expression}
+in the sub-language. Then we will evaluate that AST to obtain either
+a number or an error message.
 
 A straightforward way of defining the data structure for the AST is
 to use a disjunctive type whose parts describe all the possible operations
@@ -2131,6 +2116,19 @@ def add(x: Either[String, Int], y: Either[String, Int]):
 def mul(x: Either[String, Int], y: Either[String, Int]):
     Either[String, Int] = x.flatMap { r1 => y.map(r2 => r1 * r2) }
 \end{lstlisting}
+In this code, we use \lstinline!flatMap! for the first argument (\lstinline!x!)
+but \lstinline!map! for the second argument (\lstinline!y!). This
+is required by the types. To figure this out, imagine that we just
+wrote \lstinline!map! everywhere. Then the code \lstinline!x.map(r => y.map(...))!
+would produce a result of type \lstinline!Either[String, Either[String, Int]]!.
+We would need to \textsf{``}flatten\textsf{''} this nested \lstinline!Either! type;
+for that, we could just use \lstinline!flatten! and write code like
+this:
+\begin{lstlisting}
+x.map { r1 => y.map(r2 => r1 + r2) }.flatten
+\end{lstlisting}
+It is shorter to write \lstinline!x.flatMap(...)! instead \lstinline!x.map(...).flatten!.
+
 The code for the \textsf{``}safe division\textsf{''} is:
 \begin{lstlisting}
 def div(x: Either[String, Int], y: Either[String, Int]): Either[String, Int] =
@@ -2139,6 +2137,13 @@ def div(x: Either[String, Int], y: Either[String, Int]): Either[String, Int] =
     }
   }
 \end{lstlisting}
+Now we use \lstinline!flatMap! twice. This is again required by the
+types: each nested function returns a value of type \lstinline!Either[String, Int]!
+is produced. If we wrote map everywhere, the result would have the
+type of triple-nested \lstinline!Either!. So, we need to \textsf{``}flatten\textsf{''}
+the nested \lstinline!Either! types \emph{twice}. We accomplish that
+by using \lstinline!flatMap! twice.
+
 With this code, we can implement the runner as a recursive function:
 \begin{lstlisting}
 def run: Arith => Either[String, Int] = {
@@ -2300,8 +2305,7 @@ signature is:
 \begin{lstlisting}
 val rootAverage: RootsOfQ2 => Option[Double] = ???
 \end{lstlisting}
-Return \lstinline!None! if the average is undefined (no roots or
-all values are roots).
+Return \lstinline!None! if the average is undefined.
 
 \subparagraph{Solution}
 
@@ -2347,8 +2351,7 @@ the mean of the largest real roots from all these equations.
 
 Use the type \lstinline!QEqu! and the \lstinline!solve! function
 from Example~\ref{subsec:disj-Example-rootsofq-1}. A sequence of
-equations with random coefficients is created by applying the method
-\lstinline!Seq.fill!:
+equations with random coefficients is created via \lstinline!Seq.fill!:
 \begin{lstlisting}
 def random(): Double = scala.util.Random.nextDouble() * 2 - 1
 val coeffs: Seq[QEqu] = Seq.fill(100)(QEqu(random(), random()))
@@ -2428,7 +2431,8 @@ code must be:
   case None => Right(None) // No other choice here.
 \end{lstlisting}
 
-In the next scope, we can perform pattern matching on the value \lstinline!eab!:
+In the next scope (line~3 in the code block shown above), we perform
+pattern matching on the value \lstinline!eab!:
 \begin{lstlisting}
   case Some(eab: Either[A, B]) = eab match {
     case Left(a)   => ???
@@ -2559,14 +2563,16 @@ implementing a function with type signature \lstinline!Seq[Seq[CellState]] => In
 \subsubsection{Exercise \label{subsec:Exercise-disjunctive-3}\ref{subsec:Exercise-disjunctive-3}}
 
 Define a disjunctive type \lstinline!RootOfLinear! representing all
-possibilities for the solution of the equation $ax+b=0$ for arbitrary
+possibilities for the solutions of the equation $ax+b=0$ for arbitrary
 real $a$, $b$. (The possibilities are: no roots; one root; all $x$
-are roots.) Implement the solution as a function \lstinline!solve1!
-with type signature: 
+are roots.) Implement a solver as a function \lstinline!solve1! with
+type signature: 
 \begin{lstlisting}
 def solve1: ((Double, Double)) => RootOfLinear = ???
 \end{lstlisting}
-
+What additional cases would be needed in the type \lstinline!RootOfLinear!
+if we wanted to describe the overflow and underflow conditions that
+could occur in the solutions?
 
 \subsubsection{Exercise \label{subsec:Exercise-disjunctive-4}\ref{subsec:Exercise-disjunctive-4}}
 
@@ -2680,7 +2686,7 @@ line, and the plane do not intersect (i.e., have no common points).
 Together, they form the set of the possible roots of the quadratic
 equation $x^{2}+bx+c=0$.
 
-\begin{figure}
+\begin{figure}[h]
 \begin{centering}
 \hspace{-1cm}\includegraphics[scale=1.2]{chapter3-picture}
 \par\end{centering}
@@ -2712,26 +2718,25 @@ For instance, this representation has no distinction between the cases
 In Scala code, each part of a disjunctive type must be distinguished
 by a unique name such as \lstinline!NoRoots!, \lstinline!OneRoot!,
 and \lstinline!TwoRoots!. To represent this mathematically, we need
-to attach a distinct label to each part of the union. Labels are symbols
-without any special meaning, and we can assume that labels are names
-of Scala case classes. Parts of the union are then represented by
-sets of pairs such as $(\text{\texttt{OneRoot}},x)_{x\in\mathbb{R}^{1}}$.
+to attach a distinct label, or \textsf{``}tag\textsf{''}, to each part of the union.
+Tags are symbols without any special meaning in mathematics. In Scala,
+tags are names of case classes. Parts of the union are then represented
+by sets of pairs such as $(\text{\texttt{OneRoot}},x)_{x\in\mathbb{R}^{1}}$.
 Then the domain \lstinline!RootsOfQ! is expressed as:
 \[
 \text{\texttt{RootsOfQ}}=(\text{\texttt{NoRoots}},u)_{u\in\mathbb{R}^{0}}\cup(\text{\texttt{OneRoot}},x)_{x\in\mathbb{R}^{1}}\cup(\text{\texttt{TwoRoots}},\left(x,y\right))_{\left(x,y\right)\in\mathbb{R}^{2}}\quad.
 \]
 This is an ordinary union of mathematical sets, but each of the sets
-has a unique label, so no two values from different parts of the union
-could possibly be equal. This kind of set is called a \index{labeled union}\textbf{labeled
-union} (also a tagged union or a disjoint union\index{disjoint union!see \textsf{``}labeled union\textsf{''}}).
-Each element of a labeled union is a pair of the form \lstinline!(label, data)!,
-where the label uniquely identifies the part of the union, and the
-data can have any chosen type such as $\mathbb{R}^{1}$. If we use
-labeled unions, we cannot confuse different parts of the union even
-if their data have the same type, because labels are required to be
-distinct.
+has a unique tag, so no two values from different parts of the union
+could possibly be equal. This kind of set is called a \index{tagged union!see \textsf{``}disjunctive type\textsf{''}}\textbf{tagged
+union} (also a \textsf{``}disjoint union\textsf{''}\index{disjoint union!see \textsf{``}disjunctive type\textsf{''}}).
+Each element of a tagged union is a pair of the form \lstinline!(tag, data)!,
+where the tag uniquely identifies the part of the union, and the data
+can have any chosen type such as $\mathbb{R}^{1}$. If we use tagged
+unions, we cannot confuse different parts of the union even if their
+data have the same type, because tags are required to be distinct.
 
-Labeled unions are not often used in mathematics, but they are needed
+Tagged unions are not often used in mathematics, but they are needed
 in software engineering because real-life data is often described
 by sets having several disjoint parts.
 
@@ -2772,12 +2777,6 @@ for functional programming do not support these features, while OCaml,
 Haskell, F\#, Scala, Swift, and Rust support disjunctive types and
 pattern matching as part of the language design. 
 
-It is remarkable that named tuple types (also called \textsf{``}structs\textsf{''}
-or \textsf{``}records\textsf{''}) are provided in almost every programming language,
-while disjunctive types are almost never present except in languages
-designed for the FP paradigm.\footnote{The programming languages Ada and Pascal support disjunctive types
-but no other FP features.}
-
 The \lstinline!union! types in C and C++ are not disjunctive types
 because it is not possible to determine which part of the union is
 represented by a given value. A \lstinline!union! declaration in
@@ -2785,14 +2784,41 @@ C looks like this:
 \begin{lstlisting}[language=C]
 union { int x; double y; long z; } i_d_l;
 \end{lstlisting}
-This type does not include any labels telling us which of the values
-is present. Without a label, we (and the compiler) will not know whether
+This type does not include any tags telling us which of the values
+is present. Without tags, we (and the compiler) will not know whether
 a given value of type \lstinline!i_d_l! represents an \lstinline!int!,
 a \lstinline!double!, or a \lstinline!long!. This will lead to errors
 that are hard to detect.
 
-Programming languages of the C family (C, C++, Objective C, Java)
-support \textbf{enumeration} (\lstinline!enum!) types\index{enumeration type},
+It is remarkable that named tuple types (also called \textsf{``}structs\textsf{''}
+or \textsf{``}records\textsf{''}) are provided in almost every programming language,
+while disjunctive types are usually not supported except in languages
+designed for the FP paradigm. The reason why disjunctive types are
+absent from C++ appears to be a decision by \index{Bjarne Stroustrup}B.~Stroustrup\footnote{See the 2025 talk by C.~Muratori (\texttt{\href{https://news.ycombinator.com/item?id=44596554}{https://news.ycombinator.com/item?id=44596554}})
+at 0:48.} who perceived disjunctive types solely as a set of classes that inherit
+from a common parent class. In that OOP-centric view, pattern matching
+is just the ability to distinguish at run time between specific child
+classes that implement a given interface. Stroustrup did not include
+that ability in C++ because he viewed it as a violation of the interface
+encapsulation principle: code working with an interface type should
+not have access to implementation details.\footnote{The programming languages Simula, Ada, and Pascal support disjunctive
+types but no other FP features. Languages such as C\#, Java, Go and
+others continue the legacy of C++ and do not have direct support for
+disjunctive types and pattern matching.} 
+
+It is true that disjunctive types are represented in Scala by case
+classes that inherit from a common \textsf{``}\lstinline!sealed trait!\textsf{''}.
+But the OOP analogy stops here. The keyword \textsf{``}\lstinline!sealed!\textsf{''}
+guarantees that no more inheritance is possible: values of the trait\textsf{'}s
+type can be created only through the given set of case classes. In
+that situation, the case classes are not implementations of a common
+interface but a representation of the application\textsf{'}s data model. The
+application code \emph{must} be able to distinguish between the case
+classes. The implementation detail is the fact that Scala\textsf{'}s disjunctive
+types are JVM classes inheriting from an interface.
+
+Programming languages of the C family (C, C++, Objective C, Java,
+C\#) support \textbf{enumeration} (\lstinline!enum!) types\index{enumeration type},
 which are a limited form of disjunctive types, and a \lstinline!switch!
 operation, which is a limited form of pattern matching. An \lstinline!enum!
 type declaration in Java looks like this:
@@ -2836,8 +2862,10 @@ type RootsOfQ = NoRoots | OneRoot of float | TwoRoots of float * float
 -- Haskell
 data RootsOfQ = NoRoots | OneRoot Double | TwoRoots (Double, Double)
 \end{lstlisting}
-This is more concise than the Scala syntax. When reasoning about disjunctive
-types, it is inconvenient to write out long type definitions. Chapter~\ref{chap:5-Curry-Howard}
+This is more concise than the Scala syntax. 
+
+When reasoning about disjunctive types, it is inconvenient to write
+out the type definitions and to use the tag names. Chapter~\ref{chap:5-Curry-Howard}
 will introduce a mathematical notation designed for efficient reasoning
 about types. That notation is even more concise than the syntax of
 Haskell or OCaml.
@@ -2889,20 +2917,24 @@ For this type, we will have the formula:
 {\cal CH}(\text{\texttt{Data3}})={\cal CH}(\text{\texttt{Int}})\wedge{\cal CH}(\text{\texttt{String}})\wedge{\cal CH}(\text{\texttt{Double}})\quad.\label{eq:curry-howard-example-case-class}
 \end{equation}
 
-We find that tuples are related to logical conjunctions in the same
-way as disjunctive types are related to logical disjunctions. This
-is the main reason for choosing the name \textsf{``}disjunctive types\textsf{''}.\footnote{Disjunctive types are also called sum types, co-product types, variants,
-and tagged unions. This book uses the terms \textsf{``}disjunctive types\textsf{''}
-and \textsf{``}co-product types\textsf{''} interchangeably.}
+We find that tuple types are related to logical conjunctions in the
+same way as disjunctive types are related to logical disjunctions.
+This is the main reason for choosing the name \textsf{``}disjunctive types\textsf{''}.
+The functional programming community also calls them sum types,\index{sum type!see \textsf{``}disjunctive type\textsf{''}}
+co-product types,\index{co-product type!see \textsf{``}disjunctive type\textsf{''}}
+variants, disjoint unions,\index{disjoint union!see \textsf{``}disjunctive type\textsf{''}}
+and tagged unions.\index{tagged union!see \textsf{``}disjunctive type\textsf{''}}\index{disjunctive type}
+This book uses the terms \textsf{``}disjunctive types\textsf{''} and \textsf{``}co-product
+types\textsf{''} (meaning the same thing).
 
-The correspondence between disjunctions, conjunctions, and data types
-is explained in more detail in Chapter~\ref{chap:5-Curry-Howard}.
-For now, we note that the operations of conjunction and disjunction
+The correspondence between logical operations and data types will
+be explained in more detail in Chapter~\ref{chap:5-Curry-Howard}.
+For now, we note that the logical operations of conjunction and disjunction
 are not sufficient to produce all possible logical expressions. To
 obtain a complete logic, it is also necessary to have the logical
 implication $A\rightarrow B$ (\textsf{``}if $A$ is true than $B$ is true\textsf{''}).
 It turns out that the implication $A\rightarrow B$ is related to
 the function type \lstinline!A => B! in the same way as the disjunction
-operation is related to disjunctive types and the conjunction to tuples.
+is related to disjunctive types and the conjunction to tuple types.
 In Chapter~\ref{chap:Higher-order-functions}, we will study function
 types in depth.
