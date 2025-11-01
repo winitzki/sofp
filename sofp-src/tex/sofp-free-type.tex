@@ -154,13 +154,13 @@ in a test-only sandbox environment, with logging or benchmarking.
 
 \subsection{Stage 2: implementing type safety in the DSLs}
 
-The two DSLs defined in the previous section are not fully type-checked\index{type checking}
-at compile time. This becomes clear by looking at the DSL program
-\lstinline!prgFile! shown in the previous section. The code of \lstinline!runFile!
-assumes that the \lstinline!Read! operation is always applied to
-a \lstinline!Path!. However, this assumption is not enforced by the
-DSL. When composing a larger DSL program from separately defined parts,
-one could by mistake create an invalid DSL program such as \lstinline!Read(Read(Val("file")))!
+The two DSLs defined in the previous section are not type-safe.\index{type safety}
+This becomes clear by looking at the DSL program \lstinline!prgFile!
+shown in the previous section. The code of \lstinline!runFile! assumes
+that the \lstinline!Read! operation is always applied to a \lstinline!Path!.
+However, this assumption is not enforced by the DSL. When composing
+a larger DSL program from separately defined parts, one could by mistake
+create an invalid DSL program such as \lstinline!Read(Read(Val("file")))!
 where the \lstinline!Read! operation is used incorrectly. Running
 this program causes a run-time error:
 \begin{lstlisting}
@@ -169,12 +169,11 @@ java.lang.Exception: Illegal PrgFile operation: Read(Read(Val(file)))
 \end{lstlisting}
 The Scala compiler cannot verify that we are using the DSL correctly.
 It would be better if the invalid DSL program \lstinline!Read(Read(Val("file")))!
-failed to compile. To achieve that, it would help to have different
-Scala types for DSL programs returning a \lstinline!String! and a
-\lstinline!Path!. So, let us replace the type \lstinline!PrgFile!
-by a type constructor \lstinline!PrgFile[A]!, representing a DSL
-program that will return a value of type \lstinline!A! when we run
-it:
+failed to compile. To achieve that, we need to have different Scala
+types for DSL programs returning a \lstinline!String! or a \lstinline!Path!.
+So, we replace the type \lstinline!PrgFile! by a type constructor
+\lstinline!PrgFile[A]!, which means a DSL program that will return
+a value of type \lstinline!A! when we run it:
 \begin{lstlisting}
 import java.nio.file.{Path => JPath}
 import java.nio.file.{Files, Paths}
@@ -212,11 +211,11 @@ is always applied to a \lstinline!Phase!, but the DSL does not enforce
 that assumption. Both arguments of the \lstinline!Rotate! operation
 are values of type \lstinline!PrgComplex!, and so the Scala compiler
 is unable to verify that the DSL is being used correctly. If the programmer
-uses a plain complex number (\lstinline!Val!) instead of a \lstinline!Phase!
-value, the program will return an incorrect result \emph{without}
-any indication of error:
+uses \lstinline!Rotate! with a \lstinline!Val! instead of a \lstinline!Phase!,
+the program will return an incorrect result \emph{without} any indication
+of error:
 \begin{lstlisting}
-val prgComplex3: PrgComplex = Rotate(prgComplex1, Val(Complex(0, 1)))     // Forgot Phase()!
+val prgComplex3: PrgComplex = Rotate(prgComplex1, Val(Complex(0, 1)))
 
 scala> runComplex(prgComplex3)    // The result is incorrect, but there is no error message!
 res5: Complex = Complex(11.0, -2.0)
@@ -230,11 +229,11 @@ type, not only of type \lstinline!Complex!.) The new definitions
 of the case classes are:
 \begin{lstlisting}
 sealed trait PrgComplex[A]
-final case class Val(c: Complex)                                       extends PrgComplex[Complex]
+final case class Val(c: Complex)                extends PrgComplex[Complex]
 final case class Add(p1: PrgComplex[Complex], p2: PrgComplex[Complex]) extends PrgComplex[Complex]
 final case class Mul(p1: PrgComplex[Complex], p2: PrgComplex[Complex]) extends PrgComplex[Complex]
-final case class Conj(p: PrgComplex[Complex])                          extends PrgComplex[Complex]
-final case class Phase(p: PrgComplex[Complex])                         extends PrgComplex[Double]
+final case class Conj(p: PrgComplex[Complex])   extends PrgComplex[Complex]
+final case class Phase(p: PrgComplex[Complex])  extends PrgComplex[Double]
 final case class Rotate(p: PrgComplex[Complex], a: Phase)              extends PrgComplex[Complex]
 \end{lstlisting}
 The revised code of \lstinline!runComplex! is clearer because phases
@@ -249,8 +248,8 @@ def runComplex[A]: PrgComplex[A] => A = {
   case Rotate(p, alpha)   => runComplex(p).rotate(runComplex(alpha))
 }
 \end{lstlisting}
-The example programs, \lstinline!prgComplex1! and \lstinline!prgComplex2!,
-do not change except for their type:
+The example programs (\lstinline!prgComplex1! and \lstinline!prgComplex2!)
+remain unchanged except for their types:
 \begin{lstlisting}
 val prgComplex1: PrgComplex[Complex] = Conj(Mul(Val(Complex(1, 2)), Val(Complex(3, -4))))
 
@@ -262,13 +261,13 @@ res6: Complex = Complex(x = 11.0, y = -2.0)
 scala> runComplex(prgComplex2)
 res7: Complex = Complex(x = 2.000000000000001, y = 11.0)
 \end{lstlisting}
-Since \lstinline!Rotate! now requires a \lstinline!PrgComplex[Double]!,
-forgetting to use \lstinline!Phase! will cause a type error:
+Since \lstinline!Rotate! now requires a \lstinline!Phase!, forgetting
+to use \lstinline!Phase! will be a type error:
 \begin{lstlisting}
 scala> val prgComplex3 = Rotate(prgComplex1, Val(Complex(0, 1)))
 <console>:1: type mismatch;
  found   : Val
- required: PrgComplex[Double]                                                              
+ required: Phase                                                              
   case Phase(p)           => runComplex(p)
                                        ^ 
 Compilation Failed
@@ -295,17 +294,17 @@ val p = Paths.get("config_location.txt")
 val result = if (Files.exists(p)) new String(Files.readAllBytes(p)) else "No file."
 \end{lstlisting}
 Trying to translate the above code to the \lstinline!PrgFile! DSL,
-we find that we need to set the Scala variable \lstinline!p! to the
-path computed by a previous operation. Here is a first attempt:
+we find that we need to set the variable \lstinline!p! to the path
+computed by a previous operation. A first attempt is:
 \begin{lstlisting}
 val p: JPath = runFile(Path(Val("config_location.txt")))
 val prg: PrgFile[String] = if (Files.exists(p)) Read(p) else Val("No file.")
 \end{lstlisting}
-There are two problems with this code. The first problem is that \lstinline!Read(p)!
-does not compile because the argument of \lstinline!Read! should
-be a \lstinline!PrgFile[JPath]! rather than just a \lstinline!JPath!.
-To solve this problem, we generalize the \lstinline!Val! class to
-hold values of arbitrary type:
+There are two problems with this code. First, \lstinline!Read(p)!
+does not compile: the argument of \lstinline!Read! should be a \lstinline!PrgFile[JPath]!
+rather than just a \lstinline!JPath!. To fix this, we add a type
+parameter to the \lstinline!Val! case class, now supporting values
+of any type:
 \begin{lstlisting}
 final case class Val[A](a: A) extends PrgFile[A]
 \end{lstlisting}
@@ -321,8 +320,8 @@ being able to apply a different runner to the entire DSL program later.
 To solve this problem, we introduce a new DSL operation that binds
 Scala variables to values returned by other DSL operations. A standard
 way of creating \index{bound variable}bound variables is by using
-those variables as arguments of nameless functions. So, let us consider
-the nameless function:
+arguments of nameless functions. So, let us consider the following
+nameless function:
 \begin{lstlisting}
 { p => if (Files.exists(p)) Read(Val(p)) else Val("No file.") }
 \end{lstlisting}
@@ -353,8 +352,8 @@ The declaration of the class \lstinline!Bind! becomes:
 final case class Bind[A, B](pa: PrgFile[B])(f: B => PrgFile[A]) extends PrgFile[A]
 \end{lstlisting}
 
-After adding the \lstinline!Bind!-handling code to the runner, the
-implementation of the DSL is:
+After adding the \lstinline!Bind!-handling code to the runner, we
+get:
 \begin{lstlisting}
 sealed trait PrgFile[A]
 final case class Val[A](a: A)                                       extends PrgFile[A]
@@ -382,7 +381,7 @@ val prg: PrgFile[String] = Bind(prg2){ p => if (Files.exists(p)) Read(Val(p)) el
 \end{lstlisting}
 Because the type parameter \lstinline!B! is already fixed, the argument
 \lstinline!p! may be written without a type annotation (in this case,
-it would have been \lstinline!p:JPath!). This makes the DSL easier
+it would have been \lstinline!p: JPath!). This makes the DSL easier
 to use. However, the underlying implementation becomes more complicated.
 Scala\textsf{'}s pattern matching syntax is limited to the first curried argument.
 So, the second curried argument of \lstinline!Bind! needs a \lstinline!val!
@@ -397,7 +396,7 @@ The new \lstinline!Bind! operation allows one part of a DSL program
 to use values computed by other parts. Since a \lstinline!Bind! value
 contains a \emph{Scala function} (of type \lstinline!B => PrgFile[A]!),
 that function may run arbitrary Scala code, not limited to DSL operations,
-in order to compute a result of type \lstinline!PrgFile[A]!. All
+as it computes its result value of type \lstinline!PrgFile[A]!. All
 non-DSL code is enclosed inside a \lstinline!Bind! and will be evaluated
 only when the DSL program is run:
 \begin{lstlisting}
@@ -405,7 +404,7 @@ scala> runFile(prg)
 res8: String = "version = 1"
 \end{lstlisting}
  As before, a value of type \lstinline!PrgFile[A]! describes a computation
-but does not execute it.
+but does not run it.
 
 \subsection{Stage 4: refactoring to a monadic DSL}
 
@@ -418,10 +417,10 @@ sealed trait PrgFile[A] {
   def flatMap[B](f: A => PrgFile[B]): PrgFile[B] = Bind(this)(f)
   def map[B](f: A => B): PrgFile[B] = flatMap(f andThen PrgFile.pure)
 }
-final case class Val[A](a: A)                                       extends PrgFile[A]
+final case class Val[A](a: A)             extends PrgFile[A]
 final case class Bind[A, B](pa: PrgFile[B])(val f: B => PrgFile[A]) extends PrgFile[A]
-final case class Path(p: PrgFile[String])                           extends PrgFile[JPath]
-final case class Read(p: PrgFile[JPath])                            extends PrgFile[String]
+final case class Path(p: PrgFile[String]) extends PrgFile[JPath]
+final case class Read(p: PrgFile[JPath])  extends PrgFile[String]
 
 object PrgFile {
   def pure[A](a: A): PrgFile[A] = Val(a) 
@@ -488,13 +487,12 @@ the \lstinline!Bind! case class (of type \lstinline!B => PrgFile[A]!);
 but that argument is a function that in any case cannot be meaningfully
 printed. 
 
-Typically, a monadic DSL program is a nested case class containing
-some function that, when called, will return further nested case classes
-and functions, etc. All those functions are waiting to be called;
-no side effects have been run yet. The actual business logic and side
-effects will be executed only when the \lstinline!run! method is
-applied. At that time, the entire DSL program will be converted into
-a result value.
+Typically, a monadic DSL program is a case class containing some functions
+that, when called, will return further nested case classes or functions.
+All those functions are waiting to be called; no side effects have
+been run yet. The actual business logic and side effects will be executed
+only when the \lstinline!run! method is applied. After that, we will
+get the result value of the entire DSL program.
 
 \subsection{Stage 5: refactoring to reuse common code\label{subsec:Stage-5:-refactoring-monadDSL}}
 
@@ -509,13 +507,13 @@ object PrgComplex {
   def pure[A](a: A): PrgComplex[A] = Val(a)
 }
 
-final case class Val[A](a: A)                                             extends PrgComplex[A]
+final case class Val[A](a: A)                 extends PrgComplex[A]
 final case class Bind[A, B](pa: PrgComplex[B])(val f: B => PrgComplex[A]) extends PrgComplex[A]
-final case class Add(x: Complex, y: Complex)                              extends PrgComplex[Complex]
-final case class Mul(x: Complex, y: Complex)                              extends PrgComplex[Complex]
-final case class Conj(x: Complex)                                         extends PrgComplex[Complex]
-final case class Phase(p: Complex)                                        extends PrgComplex[Double]
-final case class Rotate(p: Complex, p: Phase)                             extends PrgComplex[Complex]
+final case class Add(x: Complex, y: Complex)  extends PrgComplex[Complex]
+final case class Mul(x: Complex, y: Complex)  extends PrgComplex[Complex]
+final case class Conj(x: Complex)             extends PrgComplex[Complex]
+final case class Phase(p: Complex)            extends PrgComplex[Double]
+final case class Rotate(p: Complex, p: Phase) extends PrgComplex[Complex]
 
 def runComplex[A]: PrgComplex[A] => A = {
   case Val(a)                => a
@@ -562,12 +560,12 @@ some code out of it:
 // The case classes are changed to:
 final case class Val[A](a: A) extends PrgFile[A]
 final case class Bind[A, B](pa: PrgFile[B])(val f: B => PrgFile[A]) extends PrgFile[A]
-final case class Op[A](op: PrgFileC[A]) extends PrgFile[A]  // Wrap custom operations.
+final case class Op[A](op: PrgFileC[A]) extends PrgFile[A] // Custom operation.
 
 def runFile[A]: PrgFile[A] => A = {
   case Val(a)          => a
   case bind@Bind(pa)   => runFile(bind.f(runFile(pa)))
-  case Op(op)          => runFileC(op) // Run the custom operation and get the result.
+  case Op(op)          => runFileC(op)               // Run a custom operation.
 }
 \end{lstlisting}
 
@@ -577,18 +575,18 @@ The code of \lstinline!PrgComplex! is refactored in a similar way:
 // The case classes are changed to:
 final case class Val[A](a: A) extends PrgComplex[A]
 final case class Bind[A, B](pa: PrgComplex[B])(val f: B => PrgComplex[A]) extends PrgComplex[A]
-final case class Op[A](op: PrgComplexC[A]) extends PrgComplex[A]     // Wrap custom operations.
+final case class Op[A](op: PrgComplexC[A]) extends PrgComplex[A]  // Custom operation.
 
 def runComplex[A]: PrgComplex[A] => A = {
   case Val(a)             => a
   case bind@Bind(pa)      => runComplex(bind.f(runComplex(pa)))
-  case Op(op)             => runComplexC(op)    // Run the custom operation and get the result.
+  case Op(op)             => runComplexC(op)     // Run a custom operation.
 }
 sealed trait PrgComplexC[A]
-final case class Add(x: Complex, y: Complex)      extends PrgComplexC[Complex]
-final case class Mul(x: Complex, y: Complex)      extends PrgComplexC[Complex]
-final case class Conj(x: Complex)                 extends PrgComplexC[Complex]
-final case class Phase(p: Complex)                extends PrgComplexC[Double]
+final case class Add(x: Complex, y: Complex) extends PrgComplexC[Complex]
+final case class Mul(x: Complex, y: Complex) extends PrgComplexC[Complex]
+final case class Conj(x: Complex)            extends PrgComplexC[Complex]
+final case class Phase(p: Complex)           extends PrgComplexC[Double]
 final case class Rotate(p: Complex, alpha: Phase) extends PrgComplexC[Complex]
  
 def runComplexC[A]: PrgComplexC[A] => A = {
@@ -607,11 +605,11 @@ corresponding runner (\lstinline!runComplexC! instead of \lstinline!runFileC!).
 The effect constructor and its runner encapsulate the entire domain-specific
 logic. The code in the classes \lstinline!PrgComplex! and \lstinline!PrgFile!
 is only concerned with providing the monadic functionality to the
-DSL. We can replace those two classes by a single class (called, say,
-\lstinline!MonadDSL!) that takes the effect constructor as a \emph{type
-parameter} \lstinline!F!. Since the type parameter \lstinline!F!
-is itself a type constructor, we must declare it via the Scala syntax
-\lstinline!F[_]!. The code is:
+DSL. We can replace those two classes by a single class (called \lstinline!MonadDSL!)
+that takes the effect constructor as a \emph{type parameter} \lstinline!F!.
+Since the type parameter \lstinline!F! is itself a type constructor,
+we must declare it via the Scala syntax \lstinline!F[_]!. The code
+is:
 \begin{lstlisting}
 sealed trait MonadDSL[F[_], A] {
   def flatMap[B](f: A => MonadDSL[F, B]): MonadDSL[F, B] = Bind(this)(f)
@@ -717,10 +715,9 @@ res0: Complex = Complex(x = 2.000000000000001, y = 11.0)
 
 \subsection{A first recipe for monadic DSLs\label{subsec:A-first-recipe-monadic-dsl}}
 
-The previous section gave motivation for defining the type constructor
-\lstinline!MonadDSL[F[_], A]!. That type constructor is called the
-\textsf{``}free monad on \lstinline!F!\textsf{''}, for reasons explained later in
-this chapter. The full code is:
+The previous section motivated defining the type constructor \lstinline!MonadDSL[F[_], A]!.
+That type constructor is known as the \textsf{``}free monad on \lstinline!F!\textsf{''},
+for reasons explained later in this chapter. The full code is:
 \begin{lstlisting}
 sealed trait MonadDSL[F[_], A] {
   def flatMap[B](f: A => MonadDSL[F, B]): MonadDSL[F, B] = Bind(this)(f)
@@ -795,8 +792,8 @@ be a GADT\index{GADT}. In the example shown above, \lstinline!PrgFileC!
 cannot be a functor because it is impossible to create values of type
 \lstinline!PrgFileC[A]! with an arbitrary type \lstinline!A! (the
 type \lstinline!A! must be either \lstinline!JPath! or \lstinline!String!).
-However, in some cases the effect constructor \lstinline!F! could
-be itself a lawful functor.
+However, in other cases the effect constructor \lstinline!F! could
+be a lawful functor.
 
 Next, we implement an \textsf{``}effect runner\textsf{''} \index{effect runner}for
 \lstinline!F!. An \textbf{effect runner} for an effect constructor
@@ -1284,11 +1281,11 @@ case classes (\lstinline!Return! and \lstinline!Bind!) by \lstinline!Free3!\text
 case classes (\lstinline!Pure3!, \lstinline!Suspend!, and \lstinline!FlatMap!).
 The \lstinline!Return! case class corresponds to \lstinline!Pure3!.
 Trying to replace \lstinline!Bind! by \lstinline!FlatMap!, we find
-that the type of their data are not the same: the first part of \lstinline!Bind!
+that the types of their data are not the same: the first part of \lstinline!Bind!
 has type \lstinline!F[A]! while the first part of \lstinline!FlatMap!
 has type \lstinline!Free3[F, A]!. We note that \lstinline!Suspend!
-converts \lstinline!F[A]! into \lstinline!Free3[F, A]!. So, we write
-the code of \lstinline!free2toFree3! like this:
+converts \lstinline!F[A]! into \lstinline!Free3[F, A]!. So, the
+code of \lstinline!free2toFree3! becomes:
 \begin{lstlisting}
 def free2toFree3[F[_], A]: Free2[F, A] => Free3[F, A] = {
   case Return(a)    => Pure3(a)
@@ -1297,8 +1294,8 @@ def free2toFree3[F[_], A]: Free2[F, A] => Free3[F, A] = {
 \end{lstlisting}
 
 The inverse conversion function (\lstinline!free3toFree2!) is more
-complicated because \lstinline!Suspend! and \lstinline!FlatMap!
-are not straightforwardly mapped into \lstinline!Free2!\textsf{'}s case classes.
+complicated because the case classes \lstinline!Suspend! and \lstinline!FlatMap!
+are not directly mapped into \lstinline!Free2!\textsf{'}s case classes.
 \begin{lstlisting}
 def free3toFree2[F[_], A]: Free3[F, A] => Free2[F, A] = {
   case Pure3(a)        => Return(a)
