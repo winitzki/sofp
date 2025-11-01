@@ -5648,7 +5648,1444 @@ noprefix "false"
 \end_layout
 
 \begin_layout Standard
-***
+This chapter is an in-depth study of monad transformers.
+\end_layout
+
+\begin_layout Standard
+To motivate monad transformers, we begin by trying to use two different
+ monads in a single functor block and we find that the code becomes hard
+ to work with.
+ The code can be simplified if we manage to combine two monads into a single
+ larger monad.
+ One way of combining monads is by functor composition, for example as 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Future[Option[A]]
+\end_layout
+
+\end_inset
+
+.
+ Table
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "tab:Correct-and-incorrect-compositions"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+ shows some examples of working and non-working functor composition of monads.
+ In some cases (such as Future and State), functor composition completely
+ fails.
+\end_layout
+
+\begin_layout Standard
+This suggests a different approach where one monad is fixed (the 
+\begin_inset Quotes eld
+\end_inset
+
+base monad
+\begin_inset Quotes erd
+\end_inset
+
+ 
+\begin_inset Formula $L$
+\end_inset
+
+) and the other (
+\begin_inset Quotes eld
+\end_inset
+
+foreign
+\begin_inset Quotes erd
+\end_inset
+
+) monad 
+\begin_inset Formula $M$
+\end_inset
+
+ is considered as a parameter.
+ This is known as the 
+\begin_inset Quotes eld
+\end_inset
+
+monad transformer
+\begin_inset Quotes erd
+\end_inset
+
+ approach.
+ The result of combining 
+\begin_inset Formula $L$
+\end_inset
+
+ and 
+\begin_inset Formula $M$
+\end_inset
+
+ is a 
+\begin_inset Quotes eld
+\end_inset
+
+larger
+\begin_inset Quotes erd
+\end_inset
+
+ monad (denoted by 
+\begin_inset Formula $L\varangle M$
+\end_inset
+
+ in this book) that can express the effects of both monads 
+\begin_inset Formula $L$
+\end_inset
+
+, 
+\begin_inset Formula $M$
+\end_inset
+
+.
+ The 
+\begin_inset Quotes eld
+\end_inset
+
+monad transformer
+\begin_inset Quotes erd
+\end_inset
+
+ of the base monad 
+\begin_inset Formula $L$
+\end_inset
+
+ is the operation 
+\begin_inset Formula $L\varangle$
+\end_inset
+
+ that can be applied to any foreign monad 
+\begin_inset Formula $M$
+\end_inset
+
+ to obtain the new monad 
+\begin_inset Formula $L\varangle M$
+\end_inset
+
+.
+ The code of 
+\begin_inset Formula $L\varangle$
+\end_inset
+
+ is written once for every base monad 
+\begin_inset Formula $L$
+\end_inset
+
+; the same code will then work for all foreign monads 
+\begin_inset Formula $M$
+\end_inset
+
+.
+ This avoids the need for writing custom code that combines every pair of
+ monads.
+ Monad transformer code is written only once per base monad.
+ 
+\end_layout
+
+\begin_layout Standard
+Table
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "tab:Known-monad-transformers"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+ shows the types of monad transformers for a number of known monads.
+ Then we go through some examples, showing how monad transformers are implemente
+d in practice.
+\end_layout
+
+\begin_layout Standard
+In addition to having the code for the transformed monad 
+\begin_inset Formula $L\varangle M$
+\end_inset
+
+, in practice one needs to be able to use the effects of each of the two
+ monads (
+\begin_inset Formula $L$
+\end_inset
+
+, 
+\begin_inset Formula $M$
+\end_inset
+
+) within a functor block of type 
+\begin_inset Formula $L\varangle M$
+\end_inset
+
+.
+ For that, we need functions that transform values of types 
+\begin_inset Formula $L^{A}$
+\end_inset
+
+ and 
+\begin_inset Formula $M^{A}$
+\end_inset
+
+ into values of type 
+\begin_inset Formula $(L\varangle M)^{A}$
+\end_inset
+
+.
+ Those functions are called the 
+\begin_inset Quotes eld
+\end_inset
+
+base lift
+\begin_inset Quotes erd
+\end_inset
+
+ (
+\begin_inset Formula $L\leadsto L\varangle M$
+\end_inset
+
+) and the 
+\begin_inset Quotes eld
+\end_inset
+
+foreign lift
+\begin_inset Quotes erd
+\end_inset
+
+ (
+\begin_inset Formula $M\leadsto L\varangle M$
+\end_inset
+
+).
+ 
+\end_layout
+
+\begin_layout Standard
+In order to extract final results from monadic programs, one uses functions
+ called 
+\begin_inset Quotes eld
+\end_inset
+
+runners
+\begin_inset Quotes erd
+\end_inset
+
+.
+ Those functions execute a monad's effects and deliver resulting values,
+ sometimes wrapped in another, simpler monad.
+ If we have runners for 
+\begin_inset Formula $L$
+\end_inset
+
+ and 
+\begin_inset Formula $M$
+\end_inset
+
+, we would need a way to obtain the corresponding runners for the combined
+ monad 
+\begin_inset Formula $L\varangle M$
+\end_inset
+
+.
+ Showing examples with the 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Reader
+\end_layout
+
+\end_inset
+
+, 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+List
+\end_layout
+
+\end_inset
+
+, 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+State
+\end_layout
+
+\end_inset
+
+, and some other monad transformers, we motivate introducing a 
+\begin_inset Quotes eld
+\end_inset
+
+base runner
+\begin_inset Quotes erd
+\end_inset
+
+ (
+\begin_inset Formula $L\varangle M\leadsto M$
+\end_inset
+
+) and a 
+\begin_inset Quotes eld
+\end_inset
+
+foreign runner
+\begin_inset Quotes erd
+\end_inset
+
+ (
+\begin_inset Formula $L\varangle M\leadsto L\varangle N$
+\end_inset
+
+).
+ Those runners execute the effects of one monad while keeping the effects
+ of another.
+ 
+\end_layout
+
+\begin_layout Standard
+Not all transformers support both lifts and both runners.
+ For instance, we show that the continuation monad's transformer does not
+ allow us to implement a base lift or any runners.
+\end_layout
+
+\begin_layout Standard
+The properties required for a monad transformer can be formulated by defining
+ a typeclass we denote 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+MTrans
+\end_layout
+
+\end_inset
+
+ (Section
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "subsec:A-typeclass-for-monad-transformers"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+).
+\end_layout
+
+\begin_layout Standard
+We turn to combining more than two monads, noticing that monad transformers
+ can be applied one after another; for example, as 
+\begin_inset Formula $K\varangle(L\varangle M)$
+\end_inset
+
+ or as 
+\begin_inset Formula $K\varangle(L\varangle(M\varangle N))$
+\end_inset
+
+.
+ The resulting combined monad is called a 
+\begin_inset Quotes eld
+\end_inset
+
+monad stack
+\begin_inset Quotes erd
+\end_inset
+
+.
+ It is a new, 
+\begin_inset Quotes eld
+\end_inset
+
+larger
+\begin_inset Quotes erd
+\end_inset
+
+ monad that can describe the effects of all its constituent monads (
+\begin_inset Formula $K$
+\end_inset
+
+, 
+\begin_inset Formula $L$
+\end_inset
+
+, 
+\begin_inset Formula $M$
+\end_inset
+
+, ...).
+\end_layout
+
+\begin_layout Standard
+We define monad transformer for the monad 
+\begin_inset Formula $K\varangle L$
+\end_inset
+
+ by 
+\begin_inset Formula $(K\varangle L)\varangle M\triangleq K\varangle(L\varangle M)$
+\end_inset
+
+.
+ This makes the operation 
+\begin_inset Formula $\varangle$
+\end_inset
+
+ associative, meaning that we may write 
+\begin_inset Formula $K\varangle L\varangle M$
+\end_inset
+
+ without ambiguity.
+ We also motivate the properties 
+\begin_inset Formula $\text{Id}\varangle M\cong M$
+\end_inset
+
+ and 
+\begin_inset Formula $M\varangle\text{Id}\cong M$
+\end_inset
+
+.
+ Later in this chapter we will rigorously prove those properties for all
+ known monad transformers.
+\end_layout
+
+\begin_layout Standard
+Building a monad stack in a different order (
+\begin_inset Formula $K\varangle L$
+\end_inset
+
+ or 
+\begin_inset Formula $L\varangle K$
+\end_inset
+
+) will, as a rule, produce inequivalent monads.
+ Table
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "tab:Examples-of-monad-stacks"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+ shows some examples where transformers are applied in different orders.
+\end_layout
+
+\begin_layout Standard
+To write code in a large monad stack 
+\begin_inset Formula $P\triangleq M_{1}\varangle M_{2}\varangle...\varangle M_{k}$
+\end_inset
+
+, we need functions that can lift any of the monads 
+\begin_inset Formula $M_{i}$
+\end_inset
+
+ to the stack, as well as functions that run the effects of a certain monad
+ 
+\begin_inset Formula $M_{i}$
+\end_inset
+
+ while keeping all other effects.
+ We can construct the necessary lifts if all monads in the stack (except
+ possibly the last one, 
+\begin_inset Formula $M_{k}$
+\end_inset
+
+) have transformers supporting their individual lift functions.
+ However, the resulting code is difficult to write because it is a composition
+ of up to 
+\begin_inset Formula $k$
+\end_inset
+
+ individual lifts that have to be combined in exactly correct way.
+ 
+\end_layout
+
+\begin_layout Standard
+To make working with monad stacks easier, there are several techniques that
+ generate the necessary lifts automatically.
+ The first of these techniques (Section
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "subsec:Constructing-lifts-via-type-relations"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+) obtains lifts from a type relation constructed automatically via typeclass
+ derivation.
+ The second of these techniques is known as MTL-style programming (
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "subsec:Combining-monads-via-mtl-style"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+).
+ It requires the programmer to define a typeclass for each monad, encapsulating
+ the 
+\begin_inset Quotes eld
+\end_inset
+
+operations
+\begin_inset Quotes erd
+\end_inset
+
+ that characterize working with that monad.
+ (Table
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "tab:effectful-operations-for-some-monads"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+ shows what those 
+\begin_inset Quotes eld
+\end_inset
+
+operations
+\begin_inset Quotes erd
+\end_inset
+
+ are for a few well-known monads.) The programmer needs to write all code
+ in terms of those typeclasses and operations, rather than in terms of specific
+ monads.
+\end_layout
+
+\begin_layout Standard
+We turn to formulating the laws required of monad transformers.
+ We motivate those laws via examples of practical use.
+ Having obtained a large number of laws, we simplify and streamline their
+ formulations, using inspiration from category theory.
+ The result is a quip: 
+\begin_inset Quotes eld
+\end_inset
+
+a monad transformer is a pointed endofunctor in the category of monads
+\begin_inset Quotes erd
+\end_inset
+
+ (Section
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "subsec:Category-theoretic-properties-of-lifts-and-runners-functors-in-category-of-monads"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+).
+ This formula expresses concisely the 18 laws of monad transformers that
+ we summarize in more detail in Section
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "subsec:Laws-of-monad-transformers"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+The formulated laws can be verified for any given construction that is claimed
+ to give a monad transformer.
+ To illustrate that a law violation means failing to provide a required
+ functionality, we show a number of examples that do not satisfy the laws
+ of monad transformers.
+ In Section
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "subsec:Examples-of-failure-of-generic-monad-transformer"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+ we list several failing attempts to construct a general monad transformer
+ that could work for all monads at once.
+ Only one construction (the Church-encoded co-product in the category of
+ monads) satisfies all laws of a general transformer, but is unfortunately
+ unusable in mainstream programming languages due to lack of first-class
+ support for typeclass laws.
+\end_layout
+
+\begin_layout Standard
+In Sections
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "subsec:Stacking-two-monads"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+–
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "subsec:Stacking-any-number-of-monads"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+ we prove that all laws hold for monad stacks involving any number of monads,
+ assuming that all the constituent monad transformers are lawful.
+\end_layout
+
+\begin_layout Standard
+The next sections embark on proving the laws for monad transformers of the
+ individual monads.
+ We begin with the 
+\begin_inset Quotes eld
+\end_inset
+
+compositional
+\begin_inset Quotes erd
+\end_inset
+
+ transformers that work by composing the foreign monad as a functor either
+ inside or outside the base monad.
+ Both kinds of compositional transformers have common properties that we
+ begin to study in Section
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "sec:Monad-transformers-that-use-composition"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+.
+ The key to simplifying the proofs for compositional transformers is to
+ consider the special 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+swap
+\end_layout
+
+\end_inset
+
+ function (Section
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "subsec:Motivation-for-the-swap-function"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+).
+ The required laws of 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+swap
+\end_layout
+
+\end_inset
+
+ are motivated and derived in Section
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "subsec:Deriving-the-necessary-laws-for-swap"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+.
+ The laws of 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+swap
+\end_layout
+
+\end_inset
+
+ are easier to verify for specific monads.
+ We show in Section
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "subsec:Deriving-swap-from-flatten"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+ that the 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+swap
+\end_layout
+
+\end_inset
+
+ function is type-isomorphic to the 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+flatten
+\end_layout
+
+\end_inset
+
+ method of the composed monad (either 
+\begin_inset Formula $L\circ M$
+\end_inset
+
+ or 
+\begin_inset Formula $M\circ L$
+\end_inset
+
+), assuming that their respective laws hold.
+ 
+\end_layout
+
+\begin_layout Standard
+We proceed to prove the laws of compositional monad transformers by assuming
+ that the laws of 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+swap
+\end_layout
+
+\end_inset
+
+ already hold.
+ This proves at once the validity of all composed-inside and composed-outside
+ monad transformers.
+ It remains to verify the laws of 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+swap
+\end_layout
+
+\end_inset
+
+ for specific monads.
+ 
+\end_layout
+
+\begin_layout Standard
+Section
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "sec:transformers-linear-monads"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+ considers 
+\begin_inset Quotes eld
+\end_inset
+
+linear monads
+\begin_inset Quotes erd
+\end_inset
+
+ (in the sense of being linear polynomials as functors) and proves that
+ the laws of 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+swap
+\end_layout
+
+\end_inset
+
+ hold for those monads.
+ This covers 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Option
+\end_layout
+
+\end_inset
+
+, 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Either
+\end_layout
+
+\end_inset
+
+, 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Writer
+\end_layout
+
+\end_inset
+
+, and their compositions.
+\end_layout
+
+\begin_layout Standard
+Section
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "sec:transformers-rigid-monads"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+ turns to monads whose transformers compose the foreign monad outside the
+ base monad.
+ Those monads are called 
+\begin_inset Quotes eld
+\end_inset
+
+rigid
+\begin_inset Quotes erd
+\end_inset
+
+ in this book.
+\begin_inset Foot
+status open
+
+\begin_layout Plain Layout
+See the discussion here: 
+\family typewriter
+
+\begin_inset CommandInset href
+LatexCommand href
+target "https://stackoverflow.com/questions/39649497/"
+literal "false"
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+ The only well-known example of a rigid monad is 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+Reader
+\end_layout
+
+\end_inset
+
+.
+ To build up intuition, we show some type constructions that create new
+ rigid monads and obtain further examples.
+ Then we prove that the laws of 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+swap
+\end_layout
+
+\end_inset
+
+ hold for all rigid monads.
+ This ensures the correctness of their monad transformers.
+\end_layout
+
+\begin_layout Standard
+Apart from functor composition, transformers for other monads do not follow
+ any general patterns.
+ The rest of the chapter goes over various known constructions that work
+ for specific kinds of monads.
+ The known patterns will be summarized in Section
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "subsec:Summary-of-monad-transformer-constructions"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+Section
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "sec:Transformers-for-products-and-free-pointed"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+ proves the laws for transformers of product monads (see Statement
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "subsec:Statement-monad-semimonad-product"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+) and the 
+\begin_inset Quotes eld
+\end_inset
+
+free pointed
+\begin_inset Quotes erd
+\end_inset
+
+ monads (see Statement
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "subsec:Statement-co-product-with-identity-monad"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+).
+ 
+\end_layout
+
+\begin_layout Standard
+Section
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "sec:Transformers-for-recursive-monads"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+ proves the laws for transformers of two recursively defined monads.
+ One such monad is the 
+\begin_inset Quotes eld
+\end_inset
+
+free monad
+\begin_inset Quotes erd
+\end_inset
+
+ on a given functor (see Statement
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "subsec:Statement-monad-construction-4-free-monad"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+).
+ We also prove (Statement
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "subsec:Statement-free-monad-transformer-coproduct"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+) that two free monads combine via their transformers to a free monad on
+ a co-product of functors.
+ This is an important property that makes free monads easier to combine.
+\end_layout
+
+\begin_layout Standard
+The other recursive monad is the standard 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+List
+\end_layout
+
+\end_inset
+
+ monad whose associativity law was verified in Statement
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "subsec:Example-flatten-verify-for-monad-1-1"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+.
+ The 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+List
+\end_layout
+
+\end_inset
+
+ monad's transformer is complicated, and a proof of its laws takes some
+ work (Section
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "subsec:Transformer-for-the-List-monad"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+).
+\end_layout
+
+\begin_layout Standard
+We now turn to 
+\begin_inset Quotes eld
+\end_inset
+
+incomplete
+\begin_inset Quotes erd
+\end_inset
+
+ monad transformers that lack certain features.
+ 
+\end_layout
+
+\begin_layout Standard
+The first of those is the transformer for the 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+State
+\end_layout
+
+\end_inset
+
+ monad (Statement
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "subsec:Statement-state-monad-transformer"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+).
+ The only deficiency of the 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+StateT
+\end_layout
+
+\end_inset
+
+ transformer is the violation of monad morphism laws by the base runner.
+ (This means that the 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+StateT
+\end_layout
+
+\end_inset
+
+ transformer is a pointed but 
+\emph on
+not
+\emph default
+ a co-pointed endofunctor in the category of monads.) Accordingly, running
+ a monadic program involving a 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+StateT
+\end_layout
+
+\end_inset
+
+ must run all 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+State
+\end_layout
+
+\end_inset
+
+ effects at once; it is incorrect to run the 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+State
+\end_layout
+
+\end_inset
+
+ effects for parts of a program and then compose the results.
+\end_layout
+
+\begin_layout Standard
+The next sections prove the laws of the monad transformers for the continuation,
+ search, and codensity monads.
+ Those transformers do not support base runners or foreign runners at all;
+ they are not endofunctors in the category of monads.
+ Accordingly, programmers can use those monads only in the deepest position
+ in monad stacks; in that case, all effects can be still lifted to the stack.
+\end_layout
+
+\begin_layout Standard
+The chapter concludes by considering several directions of developing the
+ theory further:
+\end_layout
+
+\begin_layout Itemize
+Show examples of monads that have more than one transformer.
+ As a rule, one transformer is complete and all others are incomplete.
+\end_layout
+
+\begin_layout Itemize
+Prove some general properties of monad morphisms that are useful for proofs
+ of laws of monad transformers.
+\end_layout
+
+\begin_layout Itemize
+\begin_inset Quotes eld
+\end_inset
+
+Rigid
+\begin_inset Quotes erd
+\end_inset
+
+ monad transformers are built via 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+swap
+\end_layout
+
+\end_inset
+
+ functions.
+ Do compositions of arbitrary rigid monads always have a corresponding 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+swap
+\end_layout
+
+\end_inset
+
+ function? This question is not yet fully answered (Problem
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "par:Problem-monads-5-1"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+).
+\end_layout
+
+\begin_layout Itemize
+The requirements for 
+\begin_inset Quotes eld
+\end_inset
+
+rigid
+\begin_inset Quotes erd
+\end_inset
+
+ monads can be relaxed to yield 
+\begin_inset Quotes eld
+\end_inset
+
+rigid
+\begin_inset Quotes erd
+\end_inset
+
+ functors.
+ We outline their properties and show some applications: the 
+\begin_inset Quotes eld
+\end_inset
+
+functor-valued 
+\begin_inset listings
+inline true
+status open
+
+\begin_layout Plain Layout
+
+flatMap
+\end_layout
+
+\end_inset
+
+
+\begin_inset Quotes erd
+\end_inset
+
+ and the 
+\begin_inset Quotes eld
+\end_inset
+
+refactor-to-monad
+\begin_inset Quotes erd
+\end_inset
+
+ transformation.
+\end_layout
+
+\begin_layout Itemize
+The 
+\begin_inset Quotes eld
+\end_inset
+
+MTL-style
+\begin_inset Quotes erd
+\end_inset
+
+ monadic programming can be made more general via the 
+\begin_inset Quotes eld
+\end_inset
+
+monadically natural lifting
+\begin_inset Quotes erd
+\end_inset
+
+ of monad operations to monad stacks.
+ We prove the theoretical results underlying this technique.
 \end_layout
 
 \begin_layout Subsection
@@ -5689,13 +7126,13 @@ in the same way
 \end_inset
 
  for all types.
- This appendix develops the necessary theory and technique to prove a number
- of results used in other parts of the book.
+ This appendix develops the necessary theory and technique to show how one
+ can prove a number of results used in other parts of the book.
 \end_layout
 
 \begin_layout Standard
-We show that a given type constructor may have at most one fully parametric
- and lawful implementation of the 
+First, we show that a given type constructor may have at most one fully
+ parametric and lawful implementation of the 
 \begin_inset listings
 inline true
 status open
@@ -5778,8 +7215,8 @@ noprefix "false"
 \end_layout
 
 \begin_layout Standard
-The lifting methods of any fully parametric bifunctor or profunctor obey
- the commutativity law such as Eq.
+We show that the lifting methods of any fully parametric bifunctor or profunctor
+ will automatically obey the commutativity law such as Eq.
 \begin_inset space ~
 \end_inset
 
@@ -5798,12 +7235,35 @@ noprefix "false"
 \end_layout
 
 \begin_layout Standard
-The a central theorem from which all applications of parametricity will
- follow says that any fully parametric expression 
+Section
+\begin_inset space ~
+\end_inset
+
+
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "sec:Parametricity-theorem-for-relations"
+plural "false"
+caps "false"
+noprefix "false"
+
+\end_inset
+
+ begins the study of the central theorem from which all applications of
+ parametricity will follow.
+ This theorem (the 
+\begin_inset Quotes eld
+\end_inset
+
+parametricity theorem
+\begin_inset Quotes erd
+\end_inset
+
+) says that any fully parametric expression 
 \begin_inset Formula $t:\forall A.\,Q^{A}$
 \end_inset
 
- satisfies a relational naturality law
+ will automatically obey a certain relational naturality law, shown in Eq.
 \begin_inset space ~
 \end_inset
 
@@ -5818,19 +7278,13 @@ noprefix "false"
 \end_inset
 
 ).
- In general, the relational naturality law expresses a property of 
-\emph on
-relations
-\emph default
- rather than functions and is not equivalent to any equation satisfied by
  
-\begin_inset Formula $t$
-\end_inset
+\end_layout
 
-.
- The chapter explains how relations are defined and introduces certain combinato
-rs that manipulate relations: the relational product, co-product, and the
- 
+\begin_layout Standard
+We explain how relations are defined and introduce certain combinators that
+ manipulate relations: the relational product, the relational co-product,
+ and the 
 \begin_inset Quotes eld
 \end_inset
 
@@ -5861,7 +7315,7 @@ noprefix "false"
 
 \end_inset
 
-), we obtain an inductive proof of the relational naturality law (Section
+), Section
 \begin_inset space ~
 \end_inset
 
@@ -5875,13 +7329,22 @@ noprefix "false"
 
 \end_inset
 
-).
+ arrives at an inductive proof of the relational naturality law.
  
 \end_layout
 
 \begin_layout Standard
-Because the relational naturality law is formulated in terms of relations
- rather than functions, it is often hard to use directly.
+The relational naturality law expresses a property of 
+\emph on
+relations
+\emph default
+ (rather than functions) and is not always equivalent to any equation satisfied
+ by 
+\begin_inset Formula $t$
+\end_inset
+
+.
+ Because of that, the relational naturality law is often hard to use directly.
  Programmers are more interested in proving that a fully parametric function
  satisfies some equation (a 
 \begin_inset Quotes eld
@@ -5892,8 +7355,8 @@ law
 \end_inset
 
 ).
- Several shortcuts are available that, in most cases, straightforwardly
- give such equations.
+ Several shortcuts are available that, in most cases, quickly produce equational
+ laws automatically satisfied by fully parametric expressions.
 \end_layout
 
 \begin_layout Standard
@@ -6005,26 +7468,12 @@ noprefix "false"
 
 .
  Strong dinaturality gives more information than the ordinary dinaturality
- law and is simpler to use than the general relational naturality law
-\begin_inset space ~
-\end_inset
-
-(
-\begin_inset CommandInset ref
-LatexCommand ref
-reference "eq:relational-naturality-law-1"
-plural "false"
-caps "false"
-noprefix "false"
-
-\end_inset
-
-).
+ law.
 \end_layout
 
 \begin_layout Standard
 The strong dinaturality law is the first of the parametricity techniques
- that go beyond Yoneda identities.
+ that go beyond naturality laws and Yoneda identities.
  Section
 \begin_inset space ~
 \end_inset
@@ -6098,7 +7547,7 @@ noprefix "false"
 \end_layout
 
 \begin_layout Standard
-Category theory proves abstract version of the Yoneda identity (the 
+Category theory proves an abstract version of the Yoneda identity (the 
 \begin_inset Quotes eld
 \end_inset
 
@@ -6108,7 +7557,8 @@ Yoneda lemma
 
 ) for all categories.
  The two Yoneda identities involving covariant and contravariant functors
- are the most important practical application of the Yoneda lemma to programming.
+ are the most important practical applications of the Yoneda lemma to programmin
+g.
  Other applications used in this book are Yoneda identities for type constructor
 s (see Section
 \begin_inset space ~
@@ -6332,19 +7782,19 @@ noprefix "false"
 
 \end_inset
 
-can be generalized to the following isomorphism,
+can be generalized to the following isomorphism:
 \begin_inset Formula 
 \[
-\forall A.\,P^{A}\rightarrow F^{A}+G^{A}\cong(\forall A.\,P^{A}\rightarrow F^{A})+(\forall A.\,P^{A}\rightarrow G^{A})\quad,
+\forall A.\,P^{A}\rightarrow F^{A}+G^{A}\cong(\forall A.\,P^{A}\rightarrow F^{A})+(\forall A.\,P^{A}\rightarrow G^{A})\quad.
 \]
 
 \end_inset
 
-as long as the type constructor 
+This holds for type constructors 
 \begin_inset Formula $P$
 \end_inset
 
- is, in our terminology, 
+ that are, in our terminology, 
 \begin_inset Quotes eld
 \end_inset
 
@@ -6368,7 +7818,7 @@ noprefix "false"
 \end_inset
 
  gives a formal definition of that property and goes through structural
- analysis, discovering various type constructors that are non-disjunctive.
+ analysis, discovering various non-disjunctive type constructors.
  Some recipes for building non-disjunctive type constructors are shown in
  Example
 \begin_inset space ~
@@ -6573,8 +8023,8 @@ Trampolines and stack-safe recursion in functor blocks
 \end_layout
 
 \begin_layout Standard
-Recursion with applicative and monadic functors (say, a loop with the free
- monad) can lead to stack overflows when the nesting of 
+Recursion with applicative and monadic functors (say, a loop within the
+ free monad) can lead to stack overflows when the nesting of 
 \begin_inset listings
 inline true
 status open
@@ -7212,7 +8662,38 @@ Effect systems
 
 \begin_layout Standard
 Algebraic effects are currently an active topic of research and experimentation.
- The basic idea of an effect system is to use type signatures that indicate
+ Programming with 
+\begin_inset Quotes eld
+\end_inset
+
+effects
+\begin_inset Quotes erd
+\end_inset
+
+ and 
+\begin_inset Quotes eld
+\end_inset
+
+handlers
+\begin_inset Quotes erd
+\end_inset
+
+ is intended to replace the monad-based design patterns and in particular
+ avoid the need for monad transformers, which have proved to be complicated
+ and hard to use.
+ Effect systems can be viewed also as a way of incorporating the 
+\begin_inset Quotes eld
+\end_inset
+
+free monad
+\begin_inset Quotes erd
+\end_inset
+
+ design pattern more directly into a programming language.
+\end_layout
+
+\begin_layout Standard
+The basic idea of an effect system is to use type signatures that indicate
  precisely what side effects a function may execute when it is evaluated.
  For instance, there is one effect type for printing to the console, another
  effect type for querying a database, yet another for running code via parallel
@@ -7395,13 +8876,53 @@ Proving that evaluating an expression will always give the same results
 \end_layout
 
 \begin_layout Itemize
-Proving that composition of functions is associative by a rigorous description
- of what it means for functions to be equal without involving an evaluation
- of those functions.
+Proving that composition of functions is associative by using a rigorous
+ definition of what it means for functions to be equal.
+\end_layout
+
+\begin_layout Itemize
+Defining a rigorous mathematical semantics for each construction of a programmin
+g language and proving its properties (for example, that it is equivalent,
+ or not equivalent, to the semantics of some other language).
 \end_layout
 
 \begin_layout Standard
 This book does not pursue those topics.
+\end_layout
+
+\begin_layout Subsection
+Bibliography
+\end_layout
+
+\begin_layout Standard
+This book does not include a list of references at the end.
+ Instead, throughout the book there are footnote references to books, papers,
+ video presentations, and blog posts that have some relevance to the material
+ being discussed.
+ 
+\end_layout
+
+\begin_layout Standard
+The lack of bibliography is appropriate because this book is a pedagogical
+ tutorial, not an academic treatise.
+ One of the purposes of an academic treatise is to demonstrate ample continuity
+ with previously published research.
+ An academic bibliography helps reviewers understand in what new direction
+ the presented research goes, without having to read the text itself.
+ It also helps other academic authors whose career depends on increased
+ citation counts.
+ For those purposes, it is convenient to see a bibliography showing tens
+ or hundreds of references to established academic literature.
+\end_layout
+
+\begin_layout Standard
+In contrast, the vision of this book is to present a sequence of pedagogically
+ accessible steps that will help readers to learn the theoretical material
+ relevant for the practice of functional programming.
+ All explanations are self-contained; it is not assumed that the reader
+ will first learn from some other books or papers on FP before embarking
+ on this book.
+ So, a bibliography section will not help the readers.
 \end_layout
 
 \begin_layout Section
@@ -12067,8 +13588,16 @@ For certain monads
 \begin_inset Formula $L$
 \end_inset
 
-, the monad transformers 
-\begin_inset Formula $T_{L}$
+ (such as the 
+\begin_inset Quotes eld
+\end_inset
+
+rigid
+\begin_inset Quotes erd
+\end_inset
+
+ monads), the corresponding monad transformers 
+\begin_inset Formula $L\varangle$
 \end_inset
 
  can be defined using a suitable 

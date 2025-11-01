@@ -753,6 +753,204 @@ lists.
 
 \subsection{Chapter~\ref{chap:monad-transformers}}
 
+This chapter is an in-depth study of monad transformers.
+
+To motivate monad transformers, we begin by trying to use two different
+monads in a single functor block and we find that the code becomes
+hard to work with. The code can be simplified if we manage to combine
+two monads into a single larger monad. One way of combining monads
+is by functor composition, for example as \lstinline!Future[Option[A]]!.
+Table~\ref{tab:Correct-and-incorrect-compositions} shows some examples
+of working and non-working functor composition of monads. In some
+cases (such as Future and State), functor composition completely fails.
+
+This suggests a different approach where one monad is fixed (the \textsf{``}base
+monad\textsf{''} $L$) and the other (\textsf{``}foreign\textsf{''}) monad $M$ is considered
+as a parameter. This is known as the \textsf{``}monad transformer\textsf{''} approach.
+The result of combining $L$ and $M$ is a \textsf{``}larger\textsf{''} monad (denoted
+by $L\varangle M$ in this book) that can express the effects of both
+monads $L$, $M$. The \textsf{``}monad transformer\textsf{''} of the base monad $L$
+is the operation $L\varangle$ that can be applied to any foreign
+monad $M$ to obtain the new monad $L\varangle M$. The code of $L\varangle$
+is written once for every base monad $L$; the same code will then
+work for all foreign monads $M$. This avoids the need for writing
+custom code that combines every pair of monads. Monad transformer
+code is written only once per base monad. 
+
+Table~\ref{tab:Known-monad-transformers} shows the types of monad
+transformers for a number of known monads. Then we go through some
+examples, showing how monad transformers are implemented in practice.
+
+In addition to having the code for the transformed monad $L\varangle M$,
+in practice one needs to be able to use the effects of each of the
+two monads ($L$, $M$) within a functor block of type $L\varangle M$.
+For that, we need functions that transform values of types $L^{A}$
+and $M^{A}$ into values of type $(L\varangle M)^{A}$. Those functions
+are called the \textsf{``}base lift\textsf{''} ($L\leadsto L\varangle M$) and the
+\textsf{``}foreign lift\textsf{''} ($M\leadsto L\varangle M$). 
+
+In order to extract final results from monadic programs, one uses
+functions called \textsf{``}runners\textsf{''}. Those functions execute a monad\textsf{'}s
+effects and deliver resulting values, sometimes wrapped in another,
+simpler monad. If we have runners for $L$ and $M$, we would need
+a way to obtain the corresponding runners for the combined monad $L\varangle M$.
+Showing examples with the \lstinline!Reader!, \lstinline!List!,
+\lstinline!State!, and some other monad transformers, we motivate
+introducing a \textsf{``}base runner\textsf{''} ($L\varangle M\leadsto M$) and a
+\textsf{``}foreign runner\textsf{''} ($L\varangle M\leadsto L\varangle N$). Those
+runners execute the effects of one monad while keeping the effects
+of another. 
+
+Not all transformers support both lifts and both runners. For instance,
+we show that the continuation monad\textsf{'}s transformer does not allow us
+to implement a base lift or any runners.
+
+The properties required for a monad transformer can be formulated
+by defining a typeclass we denote \lstinline!MTrans! (Section~\ref{subsec:A-typeclass-for-monad-transformers}).
+
+We turn to combining more than two monads, noticing that monad transformers
+can be applied one after another; for example, as $K\varangle(L\varangle M)$
+or as $K\varangle(L\varangle(M\varangle N))$. The resulting combined
+monad is called a \textsf{``}monad stack\textsf{''}. It is a new, \textsf{``}larger\textsf{''} monad
+that can describe the effects of all its constituent monads ($K$,
+$L$, $M$, ...).
+
+We define monad transformer for the monad $K\varangle L$ by $(K\varangle L)\varangle M\triangleq K\varangle(L\varangle M)$.
+This makes the operation $\varangle$ associative, meaning that we
+may write $K\varangle L\varangle M$ without ambiguity. We also motivate
+the properties $\text{Id}\varangle M\cong M$ and $M\varangle\text{Id}\cong M$.
+Later in this chapter we will rigorously prove those properties for
+all known monad transformers.
+
+Building a monad stack in a different order ($K\varangle L$ or $L\varangle K$)
+will, as a rule, produce inequivalent monads. Table~\ref{tab:Examples-of-monad-stacks}
+shows some examples where transformers are applied in different orders.
+
+To write code in a large monad stack $P\triangleq M_{1}\varangle M_{2}\varangle...\varangle M_{k}$,
+we need functions that can lift any of the monads $M_{i}$ to the
+stack, as well as functions that run the effects of a certain monad
+$M_{i}$ while keeping all other effects. We can construct the necessary
+lifts if all monads in the stack (except possibly the last one, $M_{k}$)
+have transformers supporting their individual lift functions. However,
+the resulting code is difficult to write because it is a composition
+of up to $k$ individual lifts that have to be combined in exactly
+correct way. 
+
+To make working with monad stacks easier, there are several techniques
+that generate the necessary lifts automatically. The first of these
+techniques (Section~\ref{subsec:Constructing-lifts-via-type-relations})
+obtains lifts from a type relation constructed automatically via typeclass
+derivation. The second of these techniques is known as MTL-style programming
+(\ref{subsec:Combining-monads-via-mtl-style}). It requires the programmer
+to define a typeclass for each monad, encapsulating the \textsf{``}operations\textsf{''}
+that characterize working with that monad. (Table~\ref{tab:effectful-operations-for-some-monads}
+shows what those \textsf{``}operations\textsf{''} are for a few well-known monads.)
+The programmer needs to write all code in terms of those typeclasses
+and operations, rather than in terms of specific monads.
+
+We turn to formulating the laws required of monad transformers. We
+motivate those laws via examples of practical use. Having obtained
+a large number of laws, we simplify and streamline their formulations,
+using inspiration from category theory. The result is a quip: \textsf{``}a
+monad transformer is a pointed endofunctor in the category of monads\textsf{''}
+(Section~\ref{subsec:Category-theoretic-properties-of-lifts-and-runners-functors-in-category-of-monads}).
+This formula expresses concisely the 18 laws of monad transformers
+that we summarize in more detail in Section~\ref{subsec:Laws-of-monad-transformers}.
+
+The formulated laws can be verified for any given construction that
+is claimed to give a monad transformer. To illustrate that a law violation
+means failing to provide a required functionality, we show a number
+of examples that do not satisfy the laws of monad transformers. In
+Section~\ref{subsec:Examples-of-failure-of-generic-monad-transformer}
+we list several failing attempts to construct a general monad transformer
+that could work for all monads at once. Only one construction (the
+Church-encoded co-product in the category of monads) satisfies all
+laws of a general transformer, but is unfortunately unusable in mainstream
+programming languages due to lack of first-class support for typeclass
+laws.
+
+In Sections~\ref{subsec:Stacking-two-monads}\textendash \ref{subsec:Stacking-any-number-of-monads}
+we prove that all laws hold for monad stacks involving any number
+of monads, assuming that all the constituent monad transformers are
+lawful.
+
+The next sections embark on proving the laws for monad transformers
+of the individual monads. We begin with the \textsf{``}compositional\textsf{''} transformers
+that work by composing the foreign monad as a functor either inside
+or outside the base monad. Both kinds of compositional transformers
+have common properties that we begin to study in Section~\ref{sec:Monad-transformers-that-use-composition}.
+The key to simplifying the proofs for compositional transformers is
+to consider the special \lstinline!swap! function (Section~\ref{subsec:Motivation-for-the-swap-function}).
+The required laws of \lstinline!swap! are motivated and derived in
+Section~\ref{subsec:Deriving-the-necessary-laws-for-swap}. The laws
+of \lstinline!swap! are easier to verify for specific monads. We
+show in Section~\ref{subsec:Deriving-swap-from-flatten} that the
+\lstinline!swap! function is type-isomorphic to the \lstinline!flatten!
+method of the composed monad (either $L\circ M$ or $M\circ L$),
+assuming that their respective laws hold. 
+
+We proceed to prove the laws of compositional monad transformers by
+assuming that the laws of \lstinline!swap! already hold. This proves
+at once the validity of all composed-inside and composed-outside monad
+transformers. It remains to verify the laws of \lstinline!swap! for
+specific monads. 
+
+Section~\ref{sec:transformers-linear-monads} considers \textsf{``}linear
+monads\textsf{''} (in the sense of being linear polynomials as functors) and
+proves that the laws of \lstinline!swap! hold for those monads. This
+covers \lstinline!Option!, \lstinline!Either!, \lstinline!Writer!,
+and their compositions.
+
+Section~\ref{sec:transformers-rigid-monads} turns to monads whose
+transformers compose the foreign monad outside the base monad. Those
+monads are called \textsf{``}rigid\textsf{''} in this book.\footnote{See the discussion here: \texttt{\href{https://stackoverflow.com/questions/39649497/}{https://stackoverflow.com/questions/39649497/}}}
+The only well-known example of a rigid monad is \lstinline!Reader!.
+To build up intuition, we show some type constructions that create
+new rigid monads and obtain further examples. Then we prove that the
+laws of \lstinline!swap! hold for all rigid monads. This ensures
+the correctness of their monad transformers.
+
+Apart from functor composition, transformers for other monads do not
+follow any general patterns. The rest of the chapter goes over various
+known constructions that work for specific kinds of monads.
+
+Section~\ref{sec:Transformers-for-products-and-free-pointed} proves
+the laws for transformers of product monads (see Statement~\ref{subsec:Statement-monad-semimonad-product})
+and the \textsf{``}free pointed\textsf{''} monads (see Statement~\ref{subsec:Statement-co-product-with-identity-monad}). 
+
+Section~\ref{sec:Transformers-for-recursive-monads} proves the laws
+for transformers of two recursively defined monads. One such monad
+is the \textsf{``}free monad\textsf{''} on a given functor (see Statement~\ref{subsec:Statement-monad-construction-4-free-monad}).
+We also prove (Statement~\ref{subsec:Statement-free-monad-transformer-coproduct})
+that two free monads combine via their transformers to a free monad
+on a co-product of functors. This is an important property that makes
+free monads easier to combine.
+
+The other recursive monad is the standard \lstinline!List! monad
+whose associativity law was verified in Statement~\ref{subsec:Example-flatten-verify-for-monad-1-1}.
+The \lstinline!List! monad\textsf{'}s transformer is complicated, and a proof
+of its laws takes some work (Section~\ref{subsec:Transformer-for-the-List-monad}).
+
+We now turn to \textsf{``}incomplete\textsf{''} monad transformers that lack certain
+features. 
+
+The first of those is the transformer for the \lstinline!State! monad
+(Statement~\ref{subsec:Statement-state-monad-transformer}). The
+only deficiency of the \lstinline!StateT! transformer is the violation
+of monad morphism laws by the base runner. (This means that the \lstinline!StateT!
+transformer is a pointed but \emph{not} a co-pointed endofunctor in
+the category of monads.) Accordingly, running a monadic program involving
+a \lstinline!StateT! must run all \lstinline!State! effects at once;
+it is incorrect to run the \lstinline!State! effects for parts of
+a program and then compose the results.
+
+The next sections describe the monad transformers for the continuation,
+search, and codensity monads. Those transformers do not support base
+runners or foreign runners at all; they are not endofunctors in the
+category of monads. Accordingly, programmers can use those monads
+only in the deepest position in monad stacks; in that case, all effects
+can be still lifted to the stack. 
+
 {*}{*}{*}
 
 \subsection{Appendix~\ref{app:Proofs-of-naturality-parametricity}}
@@ -761,37 +959,43 @@ This appendix studies \textsf{``}parametricity properties\textsf{''} that apply 
 all fully parametric code. Those properties are a mathematical expression
 of the idea that a fully parametric function works \textsf{``}in the same
 way\textsf{''} for all types. This appendix develops the necessary theory
-and technique to prove a number of results used in other parts of
-the book.
+and technique to show how one can prove a number of results used in
+other parts of the book.
 
-We show that a given type constructor may have at most one fully parametric
-and lawful implementation of the \lstinline!Functor! or \lstinline!Contrafunctor!
-typeclass instance. (For most other typeclasses, such as \lstinline!Filterable!
-or \lstinline!Monad!, type constructors often have several inequivalent
-and lawful typeclass instances.) The unique implementations are used
-in the type constructions shown in Sections~\ref{subsec:f-Functor-constructions}
-and~\ref{subsec:f-Contrafunctor-constructions}.
+First, we show that a given type constructor may have at most one
+fully parametric and lawful implementation of the \lstinline!Functor!
+or \lstinline!Contrafunctor! typeclass instance. (For most other
+typeclasses, such as \lstinline!Filterable! or \lstinline!Monad!,
+type constructors often have several inequivalent and lawful typeclass
+instances.) The unique implementations are used in the type constructions
+shown in Sections~\ref{subsec:f-Functor-constructions} and~\ref{subsec:f-Contrafunctor-constructions}.
 
-The lifting methods of any fully parametric bifunctor or profunctor
-obey the commutativity law such as Eq.~(\ref{eq:f-fmap-fmap-bifunctor-commutativity}). 
+We show that the lifting methods of any fully parametric bifunctor
+or profunctor will automatically obey the commutativity law such as
+Eq.~(\ref{eq:f-fmap-fmap-bifunctor-commutativity}). 
 
-The a central theorem from which all applications of parametricity
-will follow says that any fully parametric expression $t:\forall A.\,Q^{A}$
-satisfies a relational naturality law~(\ref{eq:relational-naturality-law-1}).
-In general, the relational naturality law expresses a property of
-\emph{relations} rather than functions and is not equivalent to any
-equation satisfied by $t$. The chapter explains how relations are
-defined and introduces certain combinators that manipulate relations:
-the relational product, co-product, and the \textsf{``}pair mapper\textsf{''} combinators.
-Using those combinators and an important technical tool we call \textsf{``}simultaneous
-relational lifting\textsf{''} (Definition~\ref{subsec:Definition-simultaneous-relational-lifting}),
-we obtain an inductive proof of the relational naturality law (Section~\ref{subsec:Relational-parametricity-theorem}). 
+Section~\ref{sec:Parametricity-theorem-for-relations} begins the
+study of the central theorem from which all applications of parametricity
+will follow. This theorem (the \textsf{``}parametricity theorem\textsf{''}) says that
+any fully parametric expression $t:\forall A.\,Q^{A}$ will automatically
+obey a certain relational naturality law, shown in Eq.~(\ref{eq:relational-naturality-law-1}). 
 
-Because the relational naturality law is formulated in terms of relations
-rather than functions, it is often hard to use directly. Programmers
-are more interested in proving that a fully parametric function satisfies
-some equation (a \textsf{``}law\textsf{''}). Several shortcuts are available that,
-in most cases, straightforwardly give such equations.
+We explain how relations are defined and introduce certain combinators
+that manipulate relations: the relational product, the relational
+co-product, and the \textsf{``}pair mapper\textsf{''} combinators. Using those combinators
+and an important technical tool we call \textsf{``}simultaneous relational
+lifting\textsf{''} (Definition~\ref{subsec:Definition-simultaneous-relational-lifting}),
+Section~\ref{subsec:Relational-parametricity-theorem} arrives at
+an inductive proof of the relational naturality law. 
+
+The relational naturality law expresses a property of \emph{relations}
+(rather than functions) and is not always equivalent to any equation
+satisfied by $t$. Because of that, the relational naturality law
+is often hard to use directly. Programmers are more interested in
+proving that a fully parametric function satisfies some equation (a
+\textsf{``}law\textsf{''}). Several shortcuts are available that, in most cases, quickly
+produce equational laws automatically satisfied by fully parametric
+expressions.
 
 One shortcut is the dinaturality law~(\ref{eq:dinaturality-law-for-profunctors})
 obeyed by all fully parametric functions of type $P^{A,A}\rightarrow Q^{A,A}$
@@ -806,11 +1010,10 @@ Another useful shortcut the \textsf{``}strong dinaturality\textsf{''} law~(\ref{
 That law holds whenever the type signature of $t$ satisfies the conditions
 of Statements~\ref{subsec:Statement-post-wedge-entails-strong-dinaturality}
 or~\ref{subsec:Statement-functor-post-pre-wedge}. Strong dinaturality
-gives more information than the ordinary dinaturality law and is simpler
-to use than the general relational naturality law~(\ref{eq:relational-naturality-law-1}).
+gives more information than the ordinary dinaturality law.
 
 The strong dinaturality law is the first of the parametricity techniques
-that go beyond Yoneda identities. Section~\ref{subsec:Strong-dinaturality.-General-properties}
+that go beyond naturality laws and Yoneda identities. Section~\ref{subsec:Strong-dinaturality.-General-properties}
 is an in-depth study of strongly dinatural transformations. We use
 structural analysis to look for possible function types $P^{A,A}\rightarrow Q^{A,A}$
 for which the strong dinaturality law will hold. The results of this
@@ -827,12 +1030,12 @@ the function types can encode other type constructions (void type,
 unit type, products, co-products, existentially quantified types,
 and recursive types).
 
-The Yoneda identities are an important application of category theory,
-where an abstract version of the Yoneda identity (the \textsf{``}Yoneda lemma\textsf{''})
-is proved for all categories. The most important applications of the
-Yoneda lemma to programming are the two Yoneda identities involving
-covariant and contravariant functors. Other applications used in this
-book are Yoneda identities for type constructors (see Section~\ref{subsec:The-Yoneda-identities-for-type-constructors})
+Category theory proves an abstract version of the Yoneda identity
+(the \textsf{``}Yoneda lemma\textsf{''}) for all categories. The two Yoneda identities
+involving covariant and contravariant functors are the most important
+practical applications of the Yoneda lemma to programming. Other applications
+used in this book are Yoneda identities for type constructors (see
+Section~\ref{subsec:The-Yoneda-identities-for-type-constructors})
 and for lawful $P$-typeclasses (used in Section~\ref{subsec:The-Jaskelioff-OConnor-theorem}
 in the proof of the Jaskelioff-O\textsf{'}Connor theorem).
 
@@ -867,14 +1070,14 @@ Distributivity with respect to co-products,
 \[
 \forall A.\,F^{A}+G^{A}\cong(\forall A.\,F^{A})+(\forall A.\,G^{A})\quad,
 \]
-can be generalized to the following isomorphism,
+can be generalized to the following isomorphism:
 \[
-\forall A.\,P^{A}\rightarrow F^{A}+G^{A}\cong(\forall A.\,P^{A}\rightarrow F^{A})+(\forall A.\,P^{A}\rightarrow G^{A})\quad,
+\forall A.\,P^{A}\rightarrow F^{A}+G^{A}\cong(\forall A.\,P^{A}\rightarrow F^{A})+(\forall A.\,P^{A}\rightarrow G^{A})\quad.
 \]
-as long as the type constructor $P$ is, in our terminology, \textsf{``}non-disjunctive\textsf{''}.
-Section~\ref{subsec:Non-disjunctive-type-constructors} gives a formal
-definition of that property and goes through structural analysis,
-discovering various type constructors that are non-disjunctive. Some
+This holds for type constructors $P$ that are, in our terminology,
+\textsf{``}non-disjunctive\textsf{''}. Section~\ref{subsec:Non-disjunctive-type-constructors}
+gives a formal definition of that property and goes through structural
+analysis, discovering various non-disjunctive type constructors. Some
 recipes for building non-disjunctive type constructors are shown in
 Example~\ref{subsec:Example-undisjunctive-type-constructors} and
 are generalized in Table~\ref{tab:Non-disjunctive-type-constructions}.
@@ -924,7 +1127,7 @@ why.
 
 \subsection{Trampolines and stack-safe recursion in functor blocks}
 
-Recursion with applicative and monadic functors (say, a loop with
+Recursion with applicative and monadic functors (say, a loop within
 the free monad) can lead to stack overflows when the nesting of \lstinline!flatMap!
 methods becomes too deep. There are certain tricks that can be used
 to ensure stack safety. One of those tricks is known as \textsf{``}trampolines\textsf{''}.
@@ -1052,6 +1255,12 @@ used and well-understood.
 \subsection{Effect systems}
 
 Algebraic effects are currently an active topic of research and experimentation.
+Programming with \textsf{``}effects\textsf{''} and \textsf{``}handlers\textsf{''} is intended to replace
+the monad-based design patterns and in particular avoid the need for
+monad transformers, which have proved to be complicated and hard to
+use. Effect systems can be viewed also as a way of incorporating the
+\textsf{``}free monad\textsf{''} design pattern more directly into a programming language.
+
 The basic idea of an effect system is to use type signatures that
 indicate precisely what side effects a function may execute when it
 is evaluated. For instance, there is one effect type for printing
@@ -1082,11 +1291,38 @@ has been type-checked. (\textsf{``}Soundness\textsf{''} of the type system.)
 \item Proving that evaluating an expression will always give the same results
 regardless of which part of the expression is evaluated first; or
 providing precise conditions for that to be true.
-\item Proving that composition of functions is associative by a rigorous
-description of what it means for functions to be equal without involving
-an evaluation of those functions.
+\item Proving that composition of functions is associative by using a rigorous
+definition of what it means for functions to be equal.
+\item Defining a rigorous mathematical semantics for each construction of
+a programming language and proving its properties (for example, that
+it is equivalent, or not equivalent, to the semantics of some other
+language).
 \end{itemize}
 This book does not pursue those topics.
+
+\subsection{Bibliography}
+
+This book does not include a list of references at the end. Instead,
+throughout the book there are footnote references to books, papers,
+video presentations, and blog posts that have some relevance to the
+material being discussed. 
+
+The lack of bibliography is appropriate because this book is a pedagogical
+tutorial, not an academic treatise. One of the purposes of an academic
+treatise is to demonstrate ample continuity with previously published
+research. An academic bibliography helps reviewers understand in what
+new direction the presented research goes, without having to read
+the text itself. It also helps other academic authors whose career
+depends on increased citation counts. For those purposes, it is convenient
+to see a bibliography showing tens or hundreds of references to established
+academic literature.
+
+In contrast, the vision of this book is to present a sequence of pedagogically
+accessible steps that will help readers to learn the theoretical material
+relevant for the practice of functional programming. All explanations
+are self-contained; it is not assumed that the reader will first learn
+from some other books or papers on FP before embarking on this book.
+So, a bibliography section will not help the readers.
 
 \section{Additional exercises and open problems\label{chap:Exercises-in-AFTT}}
 
