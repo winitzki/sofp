@@ -2536,7 +2536,7 @@ or a tree with some mixed structure, such that Eq.~(\ref{eq:fromNEL-toNEL-id})
 still holds. But none of those alternative implementations could preserve
 the typeclass operations.
 
-\subsection{Free monoid and its partially lawful encodings\label{subsec:Free-monoids}}
+\subsection{Free monoid and its reduced encodings\label{subsec:Free-monoids}}
 
 A monoid (see Example~\ref{subsec:tc-Example-Monoids}) is a typeclass
 with a two methods: \lstinline!combine! and \lstinline!empty!. The
@@ -2698,7 +2698,6 @@ object NEL {
 satisfies only the identity laws. The code is:
 \begin{lstlisting}
 type F3[T] = Option[Tree2[T]]
-def wrapF3[T](t: T): F3[T] = Some(Leaf(t))
 def concatF3[T]: (F3[T], F3[T]) => F3[T] = {
   case (None, x)            => x
   case (x, None)            => x
@@ -2710,7 +2709,7 @@ def runnerTree2[M: Monoid, T](runT: T => M)(tree2: Tree2[T]): M = tree2 match {
   case Leaf(a)               => runT(a)
   case Branch(left, right)   => runnerTree2(runT)(left) |+| runnerTree2(runT)(right)
 }
-def runnerF3[M: Monoid, T](runT: T => M)(fmr: F3[T]): M = fmr match {
+def runnerF3[M: Monoid, T](runT: T => M): F3[T] => M = {
   case Some(t)   => runnerTree2(runT)(t)
   case None      => Monoid[M].empty
 }
@@ -2798,6 +2797,146 @@ It turns out that these observations are valid generally for \emph{all}
 encodings of any free typeclass. This will be shown in Section~\ref{subsec:Free--typeclasses-that-satisfy-laws},
 which develops a rigorous theory of free typeclass encodings that
 satisfy only a subset of the laws of a given typeclass.
+
+Are there any other encodings of the free monoid? Heuristically, we
+expect to find a reduced encoding satisfying any given subset of the
+monoid laws. The four encodings shown above correspond to four specific
+subsets of the laws; as there are three laws, one has 8 different
+encodings corresponding to all different subsets of the 3 laws that
+could be chosen. The following examples show how to implement the
+remaining encodings.
+
+\subsubsection{Example \label{subsec:Example-reduced-monoid-encoding-one-law}\ref{subsec:Example-reduced-monoid-encoding-one-law}\index{examples}}
+
+Find a reduced encoding of the free monoid that satisfies the left
+identity law and the associativity law, but \emph{not} the right identity
+law.
+
+\subparagraph{Solution}
+
+We start with the encoding \lstinline!F2!, which satisfies the associativity
+law. This encoding represents expressions built up from values of
+type $T$ and the special empty value $e$ via the operation $\oplus$.
+An example expression is:
+\[
+t_{1}\oplus t_{2}\oplus e\oplus t_{3}\oplus e\oplus e\quad.
+\]
+Here, we do not need parentheses since the operation $\oplus$ is
+associative and our encoding obeys the associativity law. This expression
+is represented by the non-empty list $\left[t_{1},t_{2},e,t_{3},e,e\right]$.
+
+To make the left identity law hold, we replace any expression of the
+form $e\oplus t$ by just $t$. This will eliminate entries equal
+to $e$ to the left of any entries of type $T$. For the example just
+shown, the result will be:
+\[
+t_{1}\oplus t_{2}\oplus t_{3}\oplus e\oplus e\quad.
+\]
+This corresponds to a non-empty list of the form $\left[t_{1},t_{2},t_{3},e,e\right]$
+where all non-empty values appear before all empty ones.
+
+How can we represent this data? A simple solution would be a pair
+of two lists, one being a list of values of type $T$ and the other
+a list of empty values. However, this type cannot guarantee at the
+level of types that at least one of the lists is non-empty.
+
+To derive a correct data type, we begin by first defining the required
+sequence structure by induction:
+\begin{itemize}
+\item Base cases:
+\begin{itemize}
+\item We may have a single value of type $T$ or a single empty value ($e$). 
+\end{itemize}
+\item Inductive steps:
+\begin{itemize}
+\item If a sequence begins with a $t:T$ then it may continue to any other
+sequence of the same type (beginning either with another $t':T$ or
+with the empty value). 
+\item If a sequence begins with an $e$, it may continue to another sequence
+that begins with $e$. 
+\end{itemize}
+\end{itemize}
+The inductive steps guarantee that once an empty value occurs, all
+further values will also be empty. To describe this logic, we need
+two case classes for the base cases and two more case classes to describe
+the two different types of induction steps. The empty values will
+be represented by the \lstinline!Unit! type:
+\begin{lstlisting}
+sealed trait F5[T]
+final case class OneT[T](single: T) extends F5[T]
+final case class OneE[T]() extends F5[T]
+final case class NELT[T](head: T, tail: F5[T]) extends F5[T]
+final case class NELE[T](head: Unit, tail: NELE[T]) extends F5[T]
+\end{lstlisting}
+If the case classes \lstinline!OneE! and \lstinline!NELE! are considered
+separately, they are equivalent to a recursive definition of the non-empty
+list of \lstinline!Unit! values (\lstinline!NEL[Unit]!). So, we
+may rewrite the recursive definition of $F_{5}$ as: 
+\[
+F_{5}^{T}\triangleq T+T\times F_{5}^{T}+\text{NEL}^{\bbnum 1}\quad.
+\]
+The \textsf{``}unrolling trick\textsf{''} \index{unrolling trick for recursive types}(Statement~\ref{Statement-unrolling-trick})
+simplifies this recursive definition to:
+\[
+F_{5}^{T}\cong\text{List}^{T}\times(T+\text{NEL}^{\bbnum 1})\quad.
+\]
+\begin{lstlisting}
+final case class F5[T](start: List[T], end: Either[T, NEL[Unit]])
+\end{lstlisting}
+The \lstinline!Monoid! typeclass instance and the runner code for
+\lstinline!F5! are written as:
+\begin{lstlisting}
+def wrapF5[T](t: T): F3[T] = F5(Nil, Left(t))
+def concatF5[T]: (F5[T], F5[T]) => F5[T] = {
+  case (F5(start1, Left(t)), F5(start2, end))  => F5(start1 ++ List(t) ++ start2, end)
+  case (F5(start1, Right(_)), F5(start2, end)) => F5(start1 ++ start2, end)
+}
+def emptyF5[T]: F5[T] = F5(Nil, Right(((), Nil)))
+implicit def monoidF5[T]: Monoid[F5[T]] = Monoid(concatF5[T], emptyF5[T])
+def runnerF5[M: Monoid, T](runT: T => M)(fm: F5[T]): M = {
+  val last: M = fm.end match {
+    case Left(t) => runT(t)
+    case Right(e) => Monoid[M].empty
+  }
+  (fm.start.map(runT) :+ last).reduce(Monoid[M].combine)
+}***test this code
+\end{lstlisting}
+
+
+\subsubsection{Example \label{subsec:Example-reduced-monoid-encoding-one-law-1}\ref{subsec:Example-reduced-monoid-encoding-one-law-1}}
+
+Find a reduced encoding of the free monoid that satisfies the left
+identity law but \emph{no} other laws of monoids.
+
+\subparagraph{Solution}
+
+Start with the raw tree encoding, which is a binary tree with leaves
+of type $\bbnum 1+T$. The left identity law ($e\oplus x=x$) means
+that in any branching of the tree, the left branch cannot be an \textsf{``}empty\textsf{''}
+leaf (a leaf carrying the value $e$). The right branch remains unrestricted.
+To implement the restriction on the left branches, we introduce two
+types of trees: a tree that cannot be an empty leaf value, and a tree
+that can. (\emph{Both} trees will disallow empty leaves as left sub-trees.)
+\begin{lstlisting}
+sealed trait TreeLeftNonEmpty[T]
+final case class LeafNE[T](t: T) extends TreeLeftNonEmpty[T]
+final case class BranchNE[T](left: TreeLeftNonEmpty[T], right: TreeLeftAny[T]) extends TreeLeftNonEmpty[T]
+
+sealed trait TreeLeftAny[T]
+final case class Leaf1[T](t: T) extends TreeLeftAny[T]
+final case class Leaf2[T]() extends TreeLeftAny[T]
+final case class BranchAny[T](left: TreeLeftNonEmpty[T], right: TreeLeftAny[T]) extends TreeLeftNonEmpty[T]
+
+type F6[T] = TreeLeftNonEmpty[T]
+\end{lstlisting}
+In the type notation, the encoding \lstinline!F6! is expressed via
+two \textbf{mutually recursive types}\index{mutually recursive types}:
+\begin{align*}
+ & F_{6}^{T}\triangleq T+F_{6}^{T}\times G^{T}\quad,\\
+ & G^{T}\triangleq\bbnum 1+T+F_{6}^{T}\times G^{T}\quad.
+\end{align*}
+\textsf{''}Mutually recursive\textsf{''} means that each the definitions of $F_{6}^{T}$
+and $G$ uses both these types. {*}{*}{*}
 
 \subsection{Free functors}
 
