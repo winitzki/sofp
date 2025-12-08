@@ -2527,14 +2527,21 @@ We have proved Eq.~(\ref{eq:fromNEL-toNEL-id}), which means that
 surjective).
 
 It is important to note that \lstinline!toNEL! preserves the semigroup
-operations (but \lstinline!fromNEL! does not!). It is a general property
-of free typeclass constructions that there is only one typeclass-preserving
+operations (but \lstinline!fromNEL! does \emph{not}). It is a general
+property of free typeclass constructions that there is only one typeclass-preserving
 function of type \lstinline!SFR[T] => NEL[T]! (this is a property
 of the universal evaluator). However, there are several possible implementations
 of \lstinline!fromNEL!: we could have created a left-associated tree,
 or a tree with some mixed structure, such that Eq.~(\ref{eq:fromNEL-toNEL-id})
 still holds. But none of those alternative implementations could preserve
 the typeclass operations.
+
+{*}{*}{*} There are also alternative implementations of the universal
+runner that correspond to those functions. When the universal runner
+is applied with a lawful semigroup, the results are the same. But
+when we use SFR instead of a lawful semigroup, the results are \emph{not}
+the same. We see that it is important to take into account which laws
+hold when using the universal runner.{*}{*}{*}
 
 \subsection{Free monoid and its reduced encodings\label{subsec:Free-monoids}}
 
@@ -2826,82 +2833,114 @@ associative and our encoding obeys the associativity law. This expression
 is represented by the non-empty list $\left[t_{1},t_{2},e,t_{3},e,e\right]$.
 
 To make the left identity law hold, we replace any expression of the
-form $e\oplus t$ by just $t$. This will eliminate entries equal
-to $e$ to the left of any entries of type $T$. For the example just
-shown, the result will be:
+form $e\oplus x$ by just $x$. This will eliminate \textsf{``}empty\textsf{''} list
+elements ($e$) to the left of any other elements (empty or not).
+For the example just shown, the result will be:
 \[
-t_{1}\oplus t_{2}\oplus t_{3}\oplus e\oplus e\quad.
+t_{1}\oplus t_{2}\oplus t_{3}\oplus e\quad.
 \]
-This corresponds to a non-empty list of the form $\left[t_{1},t_{2},t_{3},e,e\right]$
-where all non-empty values appear before all empty ones.
+This corresponds to a non-empty list of the form $\left[t_{1},t_{2},t_{3},e\right]$
+where all non-empty values appear before the empty one. The last empty
+element cannot be removed, since we do not impose the right identity
+law.
 
-How can we represent this data? A simple solution would be a pair
-of two lists, one being a list of values of type $T$ and the other
-a list of empty values. However, this type cannot guarantee at the
-level of types that at least one of the lists is non-empty.
+What type can represent this data? A simple attempt would be a pair
+\lstinline!(List[T], Boolean)!, where the boolean value is \lstinline!true!
+when an empty value is present at the end. However, this type cannot
+guarantee that either the list of type \lstinline!List[T]! is non-empty
+or the boolean value is \lstinline!true!.
 
 To derive a correct data type, we begin by first defining the required
-sequence structure by induction:
+structure by induction:
 \begin{itemize}
 \item Base cases:
-\begin{itemize}
-\item We may have a single value of type $T$ or a single empty value ($e$). 
-\end{itemize}
+\begin{enumerate}
+\item We may have a single value of type $T$.
+\item We may have  a single empty value ($e$). 
+\end{enumerate}
 \item Inductive steps:
 \begin{itemize}
 \item If a sequence begins with a $t:T$ then it may continue to any other
 sequence of the same type (beginning either with another $t':T$ or
 with the empty value). 
-\item If a sequence begins with an $e$, it may continue to another sequence
-that begins with $e$. 
 \end{itemize}
 \end{itemize}
-The inductive steps guarantee that once an empty value occurs, all
-further values will also be empty. To describe this logic, we need
-two case classes for the base cases and two more case classes to describe
-the two different types of induction steps. The empty values will
-be represented by the \lstinline!Unit! type:
+If a sequence begins with an $e$, it must end at that point. So,
+there is no induction step following the second base case.
+
+To describe this logic, we need two case classes for the base cases
+and two more case classes to describe the two different types of induction
+steps. The empty value will be represented by a named \lstinline!Unit!
+type (\lstinline!OneE!):
 \begin{lstlisting}
 sealed trait F5[T]
-final case class OneT[T](single: T) extends F5[T]
-final case class OneE[T]() extends F5[T]
+final case class OneT[T](single: T) extends F5[T] // Base case 1.
+final case class OneE[T]() extends F5[T]          // Base case 2.
 final case class NELT[T](head: T, tail: F5[T]) extends F5[T]
-final case class NELE[T](head: Unit, tail: NELE[T]) extends F5[T]
 \end{lstlisting}
-If the case classes \lstinline!OneE! and \lstinline!NELE! are considered
-separately, they are equivalent to a recursive definition of the non-empty
-list of \lstinline!Unit! values (\lstinline!NEL[Unit]!). So, we
-may rewrite the recursive definition of $F_{5}$ as: 
+In the type notation, we may write the recursive definition of $F_{5}$
+as: 
 \[
-F_{5}^{T}\triangleq T+T\times F_{5}^{T}+\text{NEL}^{\bbnum 1}\quad.
+F_{5}^{T}\triangleq\bbnum 1+T+T\times F_{5}^{T}\quad.
 \]
 The \textsf{``}unrolling trick\textsf{''} \index{unrolling trick for recursive types}(Statement~\ref{Statement-unrolling-trick})
 simplifies this recursive definition to:
 \[
-F_{5}^{T}\cong\text{List}^{T}\times(T+\text{NEL}^{\bbnum 1})\quad.
+F_{5}^{T}\cong\text{List}^{T}\times(\bbnum 1+T)\quad.
 \]
 \begin{lstlisting}
-final case class F5[T](start: List[T], end: Either[T, NEL[Unit]])
+final case class F5[T](start: List[T], end: Option[T])
 \end{lstlisting}
 The \lstinline!Monoid! typeclass instance and the runner code for
 \lstinline!F5! are written as:
 \begin{lstlisting}
-def wrapF5[T](t: T): F3[T] = F5(Nil, Left(t))
+def wrapF5[T](t: T): F5[T] = F5(Nil, Some(t))
 def concatF5[T]: (F5[T], F5[T]) => F5[T] = {
-  case (F5(start1, Left(t)), F5(start2, end))  => F5(start1 ++ List(t) ++ start2, end)
-  case (F5(start1, Right(_)), F5(start2, end)) => F5(start1 ++ start2, end)
+  case (F5(start1, Some(t)), F5(start2, end))  => F5(start1 ++ List(t) ++ start2, end)
+  case (F5(start1, None), F5(start2, end)) => F5(start1 ++ start2, end)
 }
-def emptyF5[T]: F5[T] = F5(Nil, Right(((), Nil)))
+def emptyF5[T]: F5[T] = F5(Nil, None)
 implicit def monoidF5[T]: Monoid[F5[T]] = Monoid(concatF5[T], emptyF5[T])
 def runnerF5[M: Monoid, T](runT: T => M)(fm: F5[T]): M = {
   val last: M = fm.end match {
-    case Left(t) => runT(t)
-    case Right(e) => Monoid[M].empty
+    case Some(t) => runT(t)
+    case None => Monoid[M].empty
   }
-  (fm.start.map(runT) :+ last).reduce(Monoid[M].combine)
-}***test this code
+  fm.start.map(runT).reduce(Monoid[M].combine) |+| last
+}
 \end{lstlisting}
 
+To test this code, let us set $T=\text{Int}$ and create a free monoid
+value of type $F_{5}^{\text{Int}}$ corresponding to the expression
+$e\oplus1\oplus e\oplus2\oplus e$:
+\begin{lstlisting}
+scala> val testF5 = emptyF5[Int] |+| wrapF5(1) |+| emptyF5 |+| wrapF5(2) |+| emptyF5
+val testF5: F5[Int] = F5(List(1, 2),None)
+\end{lstlisting}
+We see that the free monoid $F_{5}$ simplifies this expression to
+$1\oplus2\oplus e$, although the expression should be equivalent
+to just $1\oplus2$ if we were able to use all the monoid laws.
+
+To evaluate the \textsf{``}free monoid program\textsf{''} \lstinline!testF5!, choose
+the target monoid $M=\text{String}$ (with the monoidal operation
+being the concatenation of strings). For the purposes of this example,
+define the function \lstinline!runT! that prints integers with up
+to 5 leading zeros. Then run the program and expect the concatenation
+of \lstinline!"00001"! and \lstinline!"00002"!:
+\begin{lstlisting}
+implicit val monoidString: Monoid[String] = Monoid(_ + _, "")
+
+val runT: Int => String = (x: Int) => f"${x}%05d"
+
+scala> runT(123)
+val res0: String = 00123
+
+scala> runnerF5(runT)(testF5)
+val res1: String = 0000100002
+\end{lstlisting}
+The result of the evaluation is the same as if the monoid program
+were just $1\oplus2$. The monoid laws appear to hold after applying
+the runner.
 
 \subsubsection{Example \label{subsec:Example-reduced-monoid-encoding-one-law-1}\ref{subsec:Example-reduced-monoid-encoding-one-law-1}}
 
@@ -2910,33 +2949,98 @@ identity law but \emph{no} other laws of monoids.
 
 \subparagraph{Solution}
 
+Our goal is to define a recursive type \lstinline!F6! with the required
+properties.
+
 Start with the raw tree encoding, which is a binary tree with leaves
-of type $\bbnum 1+T$. The left identity law ($e\oplus x=x$) means
-that in any branching of the tree, the left branch cannot be an \textsf{``}empty\textsf{''}
-leaf (a leaf carrying the value $e$). The right branch remains unrestricted.
-To implement the restriction on the left branches, we introduce two
-types of trees: a tree that cannot be an empty leaf value, and a tree
-that can. (\emph{Both} trees will disallow empty leaves as left sub-trees.)
+of type $\bbnum 1+T$. The type \lstinline!F6[T]! must be similarly
+a binary tree with leaves of that type. However, the left identity
+law ($e\oplus x=x$) means that in any branching of the tree, the
+left branch cannot be an \textsf{``}empty\textsf{''} leaf (a leaf carrying the value
+$e$). The right branch remains unrestricted. To implement the restriction
+on the left branches, we introduce a special type (\lstinline!TreeNonEmpty!)
+for a tree that cannot be an empty leaf value. The left branches of
+\lstinline!TreeNonEmpty! must also have type \lstinline!TreeNonEmpty!
+(cannot be empty leaves), while the right branches are unrestricted
+(have type \lstinline!F6!). Finally, we define the type \lstinline!F6!
+as a tree that can itself be an empty leaf, but whose left branches
+have type \lstinline!TreeNonEmpty! (cannot be empty leaves). The
+right branches of \lstinline!F6! have again type \lstinline!F6!.
 \begin{lstlisting}
-sealed trait TreeLeftNonEmpty[T]
-final case class LeafNE[T](t: T) extends TreeLeftNonEmpty[T]
-final case class BranchNE[T](left: TreeLeftNonEmpty[T], right: TreeLeftAny[T]) extends TreeLeftNonEmpty[T]
+sealed trait TreeNE[T] // Cannot be an empty leaf.
+final case class LeafNE[T](t: T) extends TreeNE[T]
+final case class BranchNE[T](left: TreeNE[T], right: F6[T]) extends TreeNE[T]
 
-sealed trait TreeLeftAny[T]
-final case class Leaf1[T](t: T) extends TreeLeftAny[T]
-final case class Leaf2[T]() extends TreeLeftAny[T]
-final case class BranchAny[T](left: TreeLeftNonEmpty[T], right: TreeLeftAny[T]) extends TreeLeftNonEmpty[T]
-
-type F6[T] = TreeLeftNonEmpty[T]
+sealed trait F6[T] // This tree can be an empty leaf, but its left branch.
+final case class LeafT[T](t: T) extends F6[T]
+final case class LeafE[T]() extends F6[T]
+final case class BranchF6[T](left: TreeNE[T], right: F6[T]) extends F6[T]
 \end{lstlisting}
 In the type notation, the encoding \lstinline!F6! is expressed via
 two \textbf{mutually recursive types}\index{mutually recursive types}:
 \begin{align*}
- & F_{6}^{T}\triangleq T+F_{6}^{T}\times G^{T}\quad,\\
- & G^{T}\triangleq\bbnum 1+T+F_{6}^{T}\times G^{T}\quad.
+{\color{greenunder}\text{\texttt{F6[T]} in the code}:}\quad & F_{6}^{T}\triangleq\bbnum 1+T+G^{T}\times F_{6}^{T}\quad,\\
+{\color{greenunder}\text{\texttt{TreeNE[T]} in the code}:}\quad & G^{T}\triangleq T+G^{T}\times F_{6}^{T}\quad.
 \end{align*}
 \textsf{''}Mutually recursive\textsf{''} means that each the definitions of $F_{6}^{T}$
-and $G$ uses both these types. {*}{*}{*}
+and $G$ uses both these types.
+
+Let us implement the \lstinline!Monoid! instance and a universal
+runner for \lstinline!F6!, which we write via two mutually recursive
+functions (\lstinline!runnerF6NE! and \lstinline!runnerF6!):
+\begin{lstlisting}
+def wrapF6[T](t: T): F6[T] = LeafT(t)
+
+def toTreeNE[T]: F6[T] => TreeNE[T] = {
+  case LeafE() => ??? // This case will never be used.
+  case LeafT(t) => LeafNE(t)
+  case BranchF6(left, right) => BranchNE(left, right)
+}
+def concatF6[T]: (F6[T], F6[T]) => F6[T] = {
+  case (LeafE(), x) => x // Left identity law holds automatically.
+  case (first, second) => BranchF6(toTreeNE(first), second) // `first` is guaranteed to be non-empty.
+  }
+def emptyF6[T]: F6[T] = LeafE()
+
+implicit def monoidF6[T]: Monoid[F6[T]] = Monoid(concatF6[T], emptyF6[T])
+
+def runnerF6NE[M: Monoid, T](runT: T => M)(tree: TreeNE[T]): M = tree match {
+  case LeafNE(t) => runT(t)
+  case BranchNE(left, LeafE()) => runnerF6NE(runT)(left)
+  case BranchNE(left, right) => runnerF6NE(runT)(left) |+| runnerF6(runT)(right)
+}
+def runnerF6[M: Monoid, T](runT: T => M)(tree: F6[T]): M = tree match {
+  case LeafE() => Monoid[M].empty
+  case LeafT(t) => runT(t)
+  case BranchF6(left, right) => runnerF6NE(runT)(left) |+| runnerF6(runT)(right)
+}
+\end{lstlisting}
+
+We test this code with the same data as in the previous example.
+\begin{lstlisting}
+scala> val testF6 = emptyF6[Int] |+| wrapF6(1) |+| emptyF6 |+| wrapF6(2) |+| emptyF6
+val testF6: F6[Int] = BranchF6(BranchNE(BranchNE(LeafNE(1),LeafE()),LeafT(2)),LeafE())
+\end{lstlisting}
+We see that the monoid program $(((e\oplus1)\oplus e)\oplus2)\oplus e$
+is simplified to the expression tree $((1\oplus e)\oplus2)\oplus e$
+because the free monoid $F_{6}$ only respects the left identity law
+but not the associativity law.
+
+Apply \lstinline!runnerF6! to \lstinline!testF6! using the same
+function \lstinline!runT! as before:
+\begin{lstlisting}
+scala> runnerF6(runT)(testF6)
+val res1: String = 0000100002
+\end{lstlisting}
+This is the same result as in the previous example.
+
+{*}{*}{*}Exercises: free monoids that satisfy the right identity law
+and the associativity law; or just the right identity law. Find a
+map between free monoids that satisfy the right identity law and that
+satisfy the left; show that operations are not preserved and that
+maps are not injective. Use a sorted list to implement commutativity
+law for semigroups and for monoids. Find a free semigroup that is
+commutative but not associative. 
 
 \subsection{Free functors}
 
@@ -2944,11 +3048,12 @@ Consider the \lstinline!Functor! typeclass whose only method is \lstinline!fmap!
 \[
 \text{fmap}:\left(A\rightarrow B\right)\rightarrow F^{A}\rightarrow F^{B}\quad.
 \]
-The \lstinline!fmap! method is not available for some type constructors
-$F$, such as contrafunctors or GADTs. (See Section~\ref{subsec:Examples-of-non-functors}
-for more examples.) Let us now apply the raw tree encoding recipe
-to the \lstinline!Functor! typeclass. The result will be a new type
-constructor that we call a \textbf{free functor on} $F$.\index{free functor} 
+The \lstinline!fmap! method is supported by all covariant type constructors,
+but is not available when $F$ is a contrafunctor or a GADT. (See
+Section~\ref{subsec:Examples-of-non-functors} for more examples.)
+Let us now apply the raw tree encoding recipe to the \lstinline!Functor!
+typeclass. The result will be a new type constructor that we call
+a \textbf{free functor on} $F$.\index{free functor} 
 
 The recipe tells us to define a case class for the \lstinline!fmap!
 method and another case class to wrap the given type constructor $F$.
@@ -2963,14 +3068,14 @@ final case class Op[F[_], A](op: F[A]) extends FFR[F, A]
 
 This code corresponds to the following notation for the lifting $f^{\uparrow\text{FFR}}$:
 \begin{align}
- & \text{FFR}^{F^{\bullet},A}\triangleq F^{A}+\exists X.\,(X\rightarrow A)\times\text{FFR}^{F^{\bullet},X}\quad,\label{eq:definition-FFR-existential-type}\\
- & p^{:\text{FFR}^{F^{\bullet},A}}\triangleright(f^{:A\rightarrow B})^{\uparrow\text{FFR}^{F^{\bullet},\bullet}}\triangleq\bbnum 0^{:F^{B}}+\exists^{A}.\,f^{:A\rightarrow B}\times p^{:\text{FFR}^{F^{\bullet},A}}\quad.\nonumber 
+ & \text{FFR}^{F,A}\triangleq F^{A}+\exists X.\,(X\rightarrow A)\times\text{FFR}^{F,X}\quad,\label{eq:definition-FFR-existential-type}\\
+ & p^{:\text{FFR}^{F,A}}\triangleright(f^{:A\rightarrow B})^{\uparrow\text{FFR}^{F,\bullet}}\triangleq\bbnum 0^{:F^{B}}+\exists^{A}.\,f^{:A\rightarrow B}\times p^{:\text{FFR}^{F,A}}\quad.\nonumber 
 \end{align}
 The notation $\exists^{A}$ means that we bind the type $A$ to the
 existentially quantified type $X$ in the definition~(\ref{eq:definition-FFR-existential-type})
-of $\text{FFR}^{F^{\bullet},B}$. This notation expresses the requirement
-that the existentially quantified type must be assigned to a specific
-type every time we create a specific value.
+of $\text{FFR}^{F,B}$. This notation expresses the requirement that
+the existentially quantified type must be assigned to a specific type
+every time we create a specific value.
 
 A \textsf{``}free functor program\textsf{''} is a value of type \lstinline!FFR[F, A]!.
 To construct such values, we must begin with a wrapped \lstinline!F!-operation
@@ -2984,37 +3089,41 @@ constructor $F$. That information is given by a function of type
 $\forall C.\,F^{C}\rightarrow C$ (an \index{effect runner}effect
 runner for $F$). To implement such functions, we use the trait \lstinline!Runner!
 defined in Section~\ref{subsec:A-first-recipe-monadic-dsl}. Now
-we can write the code of the runner for $\text{FFR}^{F,A}$:
+we can write the code of the universal runner for $\text{FFR}^{F,A}$:
 \begin{lstlisting}
 def runFFR[F[_], A](runner: Runner[F]): FFR[F, A] => A = {
   case FMap(f, p)   => f(runFFR(runner)(p))
   case Op(op)       => runner.apply(op)
-}*** check if this works
+}
 \end{lstlisting}
 The code notation for this function is:
 \begin{align*}
- & \text{runFFR}^{F^{\bullet},A}:(\forall C.\,F^{C}\rightarrow C)\rightarrow\text{FFR}^{F^{\bullet},A}\rightarrow A\quad,\\
+ & \text{runFFR}^{F,A}:(\forall C.\,F^{C}\rightarrow C)\rightarrow\text{FFR}^{F,A}\rightarrow A\quad,\\
  & \text{runFFR}(\text{run}:\forall C.\,F^{C}\rightarrow C)\triangleq\forall B.\,\,\begin{array}{|c||c|}
  & A\\
 \hline F^{A} & \text{run}\\
-(B\rightarrow A)\times\text{FFR}^{F^{\bullet},B} & f^{:B\rightarrow A}\times p^{:FFR^{F^{\bullet},B}}\rightarrow p\triangleright\big(\overline{\text{runFFR}}(\text{run})\big)\triangleright f
+(B\rightarrow A)\times\text{FFR}^{F,B} & f^{:B\rightarrow A}\times p^{:FFR^{F,B}}\rightarrow p\triangleright\big(\overline{\text{runFFR}}(\text{run})\big)\triangleright f
 \end{array}\quad.
 \end{align*}
-The outside universal quantifier $\forall B$ replaces $\exists B$
-in the function argument, according to Eq.~(\ref{eq:existential-via-universal}).
+The outside quantifier $\forall B$ replaces $\exists B$ in the function
+argument, according to Eq.~(\ref{eq:existential-via-universal}).
 
-More generally, we may want to run the effects of $F$ into the effects
+More generally, we may need to run the effects of $F$ into the effects
 of a given functor $G$. (The functor $G$ could, for example, describe
-errors or asynchronous execution.) The corresponding runner will have
-type $\forall C.\,F^{C}\rightarrow G^{C}$, and the code is: 
+errors or asynchronous execution.) The corresponding effect runner
+will have type $\forall C.\,F^{C}\rightarrow G^{C}$ instead of $\forall C.\,F^{C}\rightarrow C$.
+The code for the universal runner is: 
 \begin{align*}
- & \text{runFFR}^{F^{\bullet},G^{\bullet},A}:(\forall C.\,F^{C}\rightarrow G^{C})\rightarrow\text{FFR}^{F^{\bullet},A}\rightarrow G^{A}\quad,\\
+ & \text{runFFR}^{F,G,A}:(\forall C.\,F^{C}\rightarrow G^{C})\rightarrow\text{FFR}^{F,A}\rightarrow G^{A}\quad,\\
  & \text{runFFR}\,(\text{run})\triangleq\forall B.\,\,\begin{array}{|c||c|}
  & G^{A}\\
 \hline F^{A} & \text{run}\\
-(B\rightarrow A)\times\text{FFR}^{F^{\bullet},B} & f^{:B\rightarrow A}\times p^{:FFR^{F^{\bullet},B}}\rightarrow p\triangleright\big(\overline{\text{runFFR}}\,(\text{run})\big)\triangleright f^{\uparrow G}
+(B\rightarrow A)\times\text{FFR}^{F,B} & f^{:B\rightarrow A}\times p^{:FFR^{F,B}}\rightarrow p\triangleright\big(\overline{\text{runFFR}}\,(\text{run})\big)\triangleright f^{\uparrow G}
 \end{array}\quad.
 \end{align*}
+
+{*}{*}{*} example code: what if $\forall C.\,F^{C}\rightarrow C$
+cannot be implemented? What is sufficient
 
 The type constructor \lstinline!FFR! is a \index{free functor!raw tree encoding}raw
 tree encoding of the free functor and does not satisfy the functor
@@ -3024,10 +3133,9 @@ lawful functor $G$:
 
 \subsubsection{Statement \label{subsec:Statement-free-functor-raw-tree-encoding-satisfies-laws}\ref{subsec:Statement-free-functor-raw-tree-encoding-satisfies-laws}}
 
-Take any free functor ($\text{FFR}^{F^{\bullet},A}$) and any runner
-($\text{run}:\forall C.\,F^{C}\rightarrow G^{C}$), where $G$ is
-a lawful functor. Denote for brevity $f^{\uparrow\text{FFR}}\triangleq f^{\uparrow\text{FFR}^{F^{\bullet},\bullet}}$.
-The functor laws will hold if we apply the runner function, denoted
+Take any free functor ($\text{FFR}^{F,A}$) and any runner ($\text{run}:\forall C.\,F^{C}\rightarrow G^{C}$),
+where $G$ is a lawful functor. Denote for brevity $f^{\uparrow\text{FFR}}\triangleq f^{\uparrow\text{FFR}^{F,\bullet}}$.
+The functor laws will hold after applying the runner function, denoted
 for brevity by $\rho\triangleq\text{runFFR}\,(\text{run})$,{*}{*}{*}replace
 $\rho$ with some other letter{*}{*}{*} to both sides of the laws:
 \begin{align*}
@@ -3075,7 +3183,7 @@ $\square$
 To transform the raw tree encoding of the free functor into a reduced
 encoding, we require that all functor laws should hold even before
 applying a runner. We begin by finding out in detail why the functor
-laws fail to hold for \lstinline!FFR[F, A]!.
+laws fail for \lstinline!FFR[F, A]!.
 
 The type \lstinline!FFR[F, A]! is a disjunction of two case classes,
 \lstinline!FMap! and \lstinline!Op!. The functor\textsf{'}s composition law
@@ -3105,40 +3213,42 @@ $\text{id}^{\uparrow\text{FFR}}$ to a value \lstinline!Op(op)! does
 not return \lstinline!Op(op)! but instead gives \lstinline!FMap(identity, Op(op))!.
 Values of the form \lstinline!Op(op)! represent \lstinline!F!-effects.
 The functor identity law would hold if we instead represented $F$-effects
-by the \lstinline!FMap! case class as \lstinline!FMap(identity, Op(op))!.
+by the expression \lstinline!FMap(identity, Op(op))!.
 
 Any \lstinline!FFR!-program must have the form \lstinline!Op(x).map(y).map(z)...!,
 having zero or more \lstinline!map! methods. If we represent \lstinline!F!-effects
 by \lstinline!FMap(identity, Op(op))! and implement the \lstinline!map!
 methods for \lstinline!FMap! as shown above, it will follow that
 \emph{all} \lstinline!FFR!-programs always have the form \lstinline!FMap(f, Op(op))!
-for some function \lstinline!f!. So, we may remove the \lstinline!Op!
-case class altogether.
-
-The result is a simplified definition of the free functor. The complete
+for some function \lstinline!f!. It means we may remove the \lstinline!Op!
+case class altogether. Only one case class (\lstinline!FMap!) remains.
+However, we still need to implement the free functor as a trait \lstinline!FF[F, A]!
+containing a single case class \lstinline!FMap[F, C, A]!. This is
+because \lstinline!FMap[F, C, A]! has an extra type parameter (\lstinline!C!)
+that does not appear in \lstinline!FF[F, A]!. (In other words, the
+type parameter \lstinline!X! is existentially quantified.) The complete
 code is:
 \begin{lstlisting}
 sealed trait FF[F[_], A] {
   def map[B](f: A => B): FF[F, B]
 }
-final case class FMap[F[_], X, Y](f: X => Y, p: F[X]) extends FF[F, Y] {
-  def map[Z](g: Y => Z): FF[F, Z] = FMap[F, X, Z](f andThen g, p)
+final case class FMap[F[_], C, A](f: C => A, p: F[C]) extends FF[F, A] {
+  def map[B](g: A => B): FF[F, B] = FMap[F, C, B](f andThen g, p)
 }
 def runFF[F[_], A](runner: Runner[F]): FF[F, A] => A = {
   case FMap(f, p)   => f(runner.apply(p))
-}*** check if this works
+}
 \end{lstlisting}
 
-The code notation for this code and a general runner is:
+The code notation for this code is:
 \begin{align*}
- & \text{FF}^{F^{\bullet},A}\triangleq\exists C.\,\left(C\rightarrow A\right)\times F^{C}\quad,\quad\quad(\exists C.\,f^{:C\rightarrow A}\times p^{:F^{C}})\triangleright(g^{:A\rightarrow B})^{\uparrow\text{FR}}\triangleq\exists^{C}.\,(f\bef g)\times p\quad,\\
- & \text{runFF}:(\forall C.\,F^{C}\rightarrow G^{C})\rightarrow\text{FF}^{F^{\bullet},A}\rightarrow G^{A}\quad,\\
+ & \text{FF}^{F,A}\triangleq\exists C.\,\left(C\rightarrow A\right)\times F^{C}\quad,\quad\quad(\exists C.\,f^{:C\rightarrow A}\times p^{:F^{C}})\triangleright(g^{:A\rightarrow B})^{\uparrow\text{FR}}\triangleq\exists^{C}.\,(f\bef g)\times p\quad,\\
+ & \text{runFF}:(\forall C.\,F^{C}\rightarrow G^{C})\rightarrow\text{FF}^{F,A}\rightarrow G^{A}\quad,\\
  & \text{runFF}\,(\text{run})\triangleq(\exists C.\,f^{:C\rightarrow A}\times p^{:F^{C}})\rightarrow p\triangleright\text{run}\triangleright f^{\uparrow G}\quad.
 \end{align*}
 This is the \textbf{reduced encoding}\index{free functor!reduced encoding}
 of the free functor on $F$. This encoding was derived by imposing
-the functor laws, so those laws will hold for values of type \lstinline!FF[F, A]!
-even before applying a runner.
+the functor laws, so those laws will hold for values of type \lstinline!FF[F, A]!.
 
 The free functor construction \lstinline!FF[F, A]! converts \emph{any}
 type constructor \lstinline!F[_]! into a lawful functor. What if
@@ -3150,7 +3260,7 @@ identity}\index{co-Yoneda identity}:
 \begin{align*}
 {\color{greenunder}\text{covariant co-Yoneda identity}:}\quad & \exists C.\,\left(C\rightarrow A\right)\times F^{C}\cong F^{A}\quad\text{for any functor }F\quad.
 \end{align*}
-We will prove this type equivalence in Statement~\ref{subsec:Statement-co-Yoneda-two-identities}
+We will prove this type identity in Statement~\ref{subsec:Statement-co-Yoneda-two-identities}
 (Appendix~\ref{app:Proofs-of-naturality-parametricity}). 
 
 We conclude that the reduced encoding of the free functor (\lstinline!FF[F, A]!)
@@ -3163,57 +3273,98 @@ reduced encoding of a free functor on $F$ is equivalent to $F$.
 A disadvantage of the reduced encoding is that the function composition
 is done in the code \lstinline!FMap(f andThen g, p)!. The Scala compiler
 cannot directly handle the composition of a large number of functions
-without causing a stack overflow. This problem can be resolved if
-we postpone the function composition and instead create a list of
-functions that need to be composed. The runner can evaluate the list
-of functions without running into a stack overflow.
-
-This gives us an idea for another encoding of the stack-safe free
-functor, which we will call \lstinline!FFS!. First, we implement
-a data structure called \lstinline!FuncSeq! for storing a list of
-functions with matching types. A value of type \lstinline!FuncSeq[A, B]!
-holds a list of functions with types $A\rightarrow C_{1}$, $C_{1}\rightarrow C_{2}$,
-..., $C_{n-1}\rightarrow C_{n}$, $C_{n}\rightarrow B$, where $C_{i}$
-are some chosen types. A list of with those types can be composed
-to yield a function of type $A\rightarrow B$. To simplify code, we
-will cast all intermediate types to \lstinline!Any! and back. Our
-code will take care to construct \lstinline!FuncSeq! values with
-correct types.\lstinline!final case class FuncSeq[X, Y](first: X => Any, funcs: Vector[Any => Any]) {  def append[Z](g: Y => Z): FuncSeq[X, Z] = FuncSeq(first, funcs :+ g.asInstanceOf[Any => Any])}!
-
-To ensure stack safety when working with \lstinline!FuncSeq!, we
-implement a tail-recursive function \lstinline!runSeq! that composes
-all functions stored in the sequence and applies them to a given value.
-
+without causing a stack overflow:
 \begin{lstlisting}
-@tailrec def runSeq[X, Y](x: X, p: FuncSeq[X, Y]): Y = p.funcs.headOption match {
-  case None => p.first(x).asInstanceOf[Y]
-  case Some(second) => runSeq(p.first(x), FuncSeq(second, p.funcs.tail))
+def composed(n: Int): Long => Long = (1 to n).foldLeft[Long => Long](x => x){ (prev, i) => prev andThen (x => x + i) }
+
+scala> composed(100)(0) // OK to compose 100 functions.
+res0: Long = 5050
+
+scala> composed(100000)(0) // Cannot compose 100000 functions.
+java.lang.StackOverflowError
+\end{lstlisting}
+This code causes a stack overflow because each function composition
+creates a new stack frame when functions are applied.
+
+Stack overflows can be avoided if we postpone the function compositions.
+Instead, we just store all the functions that need to be composed
+as a sequence of functions with types $A\rightarrow C_{1}$, $C_{1}\rightarrow C_{2}$,
+..., $C_{n-1}\rightarrow C_{n}$, $C_{n}\rightarrow B$, where $C_{i}$
+are some fixed types. Then we write a \textsf{``}runner\textsf{''} that applies the
+functions one by one to a given initial value of type $A$. The result
+is as if we have evaluated a single function of type $A\rightarrow B$.
+
+Here is an example implementation of this idea. Define a helper class
+\lstinline!SafeFunction! as a subclass of \lstinline!A => B! that
+overrides the composition methods (\lstinline!compose!, \lstinline!andThen!).
+Instead of composing the functions immediately, the new function bodies
+are added to a sequence of already stored functions. The \lstinline!apply!
+method is the \textsf{``}runner\textsf{''} for computing the final result in constant
+stack space.
+
+To simplify code, we will store functions in a sequence of type \lstinline!Vector[Any => Any]!;;
+type safety will be guaranteed when constructing values of type \lstinline!SafeFunction!.
+The choice of the \lstinline!Vector! container type allows us efficient
+appending and prepending to the sequence. 
+\begin{lstlisting}
+final case class SafeFunction[A, B](funcs: Vector[Any => Any]) extends (A => B) {
+  def apply(a: A): B = funcs.foldLeft[Any](a){ (prev, func) => func(prev) }.asInstanceOf[B]
+  override def andThen[C](g: B => C): A => C =
+    SafeFunction(funcs :+ g.asInstanceOf[Any => Any])
+  override def compose[C](g: C => A): C => B =
+    SafeFunction(g.asInstanceOf[Any => Any] +: funcs)
 }
 \end{lstlisting}
-Now we can write the code of the free functor \lstinline!FFS!:
+
+Converting an ordinary function to a \lstinline!SafeFunction! is
+straightforward:
+\begin{lstlisting}
+def toSafeFunction[A, B](f: A => B): SafeFunction[A, B] = f match {
+  case SafeFunction(_) => f.asInstanceOf[SafeFunction[A, B]]
+  case _ => SafeFunction(Vector(f.asInstanceOf[Any => Any]))
+}
+\end{lstlisting}
+For convenience, we also define the corresponding extension methods
+(\lstinline!safeAndThen!, \lstinline!safeCompose!) on ordinary functions:
+\begin{lstlisting}
+implicit class SafeCompose[A, B](f: A => B) {
+  def safeAndThen[C](g: B => C): A => C = toSafeFunction(f).andThen(g)
+  def safeCompose[C](g: C => A): C => B = toSafeFunction(f).compose(g)
+}
+\end{lstlisting}
+
+Millions of functions can be now composed with no stack overflow:
+\begin{lstlisting}
+def safeComposed(n: Int): Long => Long = (1 to n).foldLeft[Long => Long](x => x){ (prev, i) => prev.safeAndThen(x => x + i) }
+
+scala> safeComposed(10000000)(0) // Compose 10 million functions.
+res1: Long = 50000005000000
+\end{lstlisting}
+
+We use \lstinline!safeAndThen! to obtain a stack-safe encoding of
+the free functor (\lstinline!FFS!) with no changes in the runner:
 \begin{lstlisting}
 sealed trait FFS[F[_], A] {
   def map[B](f: A => B): FFS[F, B]
 }
-final case class FMap[F[_], X, Y](f: FuncSeq[X, Y], p: F[X]) extends FFS[F, Y] {
-  def map[Z](g: Y => Z): FFS[F, Z] = FMap[F, X, Z](f append g, p)
+final case class FMap[F[_], X, Y](f: X => Y, p: F[X]) extends FFS[F, Y] {
+  def map[Z](g: Y => Z): FFS[F, Z] = FMap[F, X, Z](f.safeAndThen(g), p)
 }
 def runFF[F[_], A](runner: Runner[F]): FFS[F, A] => A = {
- case FMap(f, p) => runSeq(runner.apply(p), f)
-}*** check if this works
+ case FMap(f, p) => f(runner.apply(p))
+}
 \end{lstlisting}
-
+Test this code: {*}{*}{*}
 
 \subsection{Free contrafunctors}
 
 Method $\text{contramap}:C^{A}\times\left(B\rightarrow A\right)\rightarrow C^{B}$ 
 
-Tree encoding: $\text{FreeCF}^{F^{\bullet},B}\triangleq F^{B}+\exists A.\text{FreeCF}^{F^{\bullet},A}\times\left(B\rightarrow A\right)$
+Tree encoding: $\text{FreeCF}^{F,B}\triangleq F^{B}+\exists A.\text{FreeCF}^{F,A}\times\left(B\rightarrow A\right)$
 
-Reduced encoding: $\text{FreeCF}^{F^{\bullet},B}\triangleq\exists A.F^{A}\times\left(B\rightarrow A\right)$ 
+Reduced encoding: $\text{FreeCF}^{F,B}\triangleq\exists A.F^{A}\times\left(B\rightarrow A\right)$ 
 
-A value of type $\text{FreeCF}^{F^{\bullet},B}$ must be of the form
-{\footnotesize{}
+A value of type $\text{FreeCF}^{F,B}$ must be of the form {\footnotesize{}
 \[
 \exists Z_{1}.\exists Z_{2}...\exists Z_{n}.F^{Z_{1}}\times\left(B\rightarrow Z_{n}\right)\times\left(Z_{n}\rightarrow Z_{n-1}\right)\times...\times\left(Z_{2}\rightarrow Z_{1}\right)
 \]
@@ -3232,7 +3383,7 @@ $C^{A}\triangleq A\rightarrow\text{String}$
 \texttt{\textcolor{blue}{\footnotesize{}def prefixLog{[}A{]}(p: A): A
 $\rightarrow$ String = a $\rightarrow$ p.toString + a.toString}}{\footnotesize\par}
 
-If $F^{\bullet}$ is already a contrafunctor then $\text{FreeCF}^{F^{\bullet},A}\cong F^{A}$
+If $F$ is already a contrafunctor then $\text{FreeCF}^{F,A}\cong F^{A}$
 
 \subsection{Free constructions that assume other typeclasses}
 
