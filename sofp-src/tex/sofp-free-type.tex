@@ -1900,16 +1900,34 @@ type is again \lstinline!S!. A monad \lstinline!M!\textsf{'}s \lstinline!flatMap
 and \lstinline!pure! methods have type signatures of the form \lstinline!... => M[A]!,
 where the last return type uses the same monad \lstinline!M!.
 
-The second step is to implement the universal runner and/or the free
-evaluator that transform a free typeclass value into a value of an
-arbitrary other type belonging to the same typeclass. For instance,
-the universal runner for the free monad \lstinline!MonadDSL! takes
-any other monad $M$ and a polymorphic function of type $\forall T.\,F^{T}\rightarrow M^{T}$
+To illustrate the recipe, suppose a typeclass operation has type $A_{1}\rightarrow...\rightarrow A_{n}\rightarrow T$,
+where $T$ is the type of the typeclass member and $A_{1}$, ...,
+$A_{n}$ are some type expressions (possibly depending on $T$ as
+well). Then we uncurry the function type to $A_{1}\times...\times A_{n}\rightarrow T$
+and define a new case class holding data of type $A_{1}\times...\times A_{n}$
+like this:
+\begin{lstlisting}
+sealed trait FreeTC[T]
+final case class C1[T](a1: A1, ..., aN: AN) extends FreeTC[T]
+\end{lstlisting}
+
+In case of type constructors, suppose a typeclass operation has type
+$A_{1}\rightarrow...\rightarrow A_{n}\rightarrow T^{A_{0}}$, where
+$T$ is the type constructor that belongs to the typeclass. Then we
+uncurry this type and define a case class like this:
+\begin{lstlisting}
+sealed trait FreeTC[T[_], A]
+case class C1[T[_], A](a1: A1, ..., aN: AN) extends FreeTC[T, A0]
+\end{lstlisting}
+ In this way, we define a new case class for each typeclass operation.
+
+The second step is to implement the universal runner that transforms
+a free typeclass value into a value of an arbitrary other type belonging
+to the same typeclass. For instance, the universal runner for the
+free monad \lstinline!MonadDSL! takes any other monad $M$ and a
+polymorphic function of type $\forall T.\,F^{T}\rightarrow M^{T}$
 and converts a value of type \lstinline!MonadDSL[F, A]! into a result
-value of type \lstinline!M[A]!. The free evaluator is a simpler function
-that converts \lstinline!MonadDSL[M, A]! into \lstinline!M[A]!.
-The universal runner can be expressed through the free evaluator and
-vice versa.
+value of type \lstinline!M[A]!. 
 
 Typically, the raw tree encoding will not satisfy the laws of the
 typeclass. (However, the laws will hold after applying a runner whose
@@ -2055,10 +2073,10 @@ and Eq.~(\ref{eq:monad-morphism-composition-law-using-flatMap})
 in Chapter~\ref{chap:Semimonads-and-monads}. We find that the monad
 morphism laws express the property of preserving the operations of
 the \lstinline!Monad! typeclass. (Strictly speaking, the functions
-of the form \lstinline!emap4(runner)! are \emph{not} monad morphisms:
-Those functions do satisfy the monad morphism laws, but they are not
-maps between lawful monads, as $\text{Free}_{4}^{F,A}$ violates the
-monad laws.)
+of the form \lstinline!emap4(runner)! are \emph{not} themselves monad
+morphisms: Those functions do satisfy the monad morphism laws, but
+they are not maps between lawful monads, as $\text{Free}_{4}^{F,A}$
+violates the monad laws.)
 
 We have derived the code of \lstinline!emap4! by applying \lstinline!run4M!
 to a specific runner of type $\forall T.\,F^{T}\rightarrow\text{Free}_{4}^{G,T}$.
@@ -2077,10 +2095,9 @@ operations of \lstinline!Free4!. So, \lstinline!run4M(runnerM)!
 will obey the monad morphism laws for any given \lstinline!runner: RunnerM[F, M]!. 
 
 The same holds for \lstinline!eval4!: an unevaluated expression tree
-represented by \lstinline!Free4[M, A]! is converted into specific
-operations of the given monad $M$ and is evaluated to a specific
-value of type $M^{A}$ by translating \lstinline!Free4!\textsf{'}s operations
-into the corresponding operations of the monad $M$.
+represented by \lstinline!Free4[M, A]! is converted into a value
+of type $M^{A}$ by translating \lstinline!Free4!\textsf{'}s operations into
+the corresponding operations of the monad $M$.
 
 It turns out that the laws of the runner and the free evaluator have
 far-reaching consequences for the theory of typeclasses with laws.
@@ -2098,8 +2115,8 @@ that preserves the monad operations. The free evaluator \lstinline!eval4!
 is the \emph{only} function of type $\text{Free}_{4}^{M,A}\rightarrow M^{A}$
 that preserves the monad operations.
 \item For any two effect constructors $F$ and $G$ and a map $f:\forall A.\ F^{A}\rightarrow G^{A}$
-between them, there is a unique function (found as \lstinline!emap4(f)!)
-of type $\text{Free}_{4}^{F,A}\rightarrow\text{Free}_{4}^{G,A}$ that
+between them, there is a unique function (\lstinline!emap4(f)!) of
+type $\text{Free}_{4}^{F,A}\rightarrow\text{Free}_{4}^{G,A}$ that
 preserves the monad operations.
 \item Any violations of the monad laws in a \lstinline!Free4! program will
 disappear once a runner is applied and a final value of type $M^{A}$
@@ -2168,7 +2185,7 @@ val result1_refactored: M[C] = for { // Using monad M\textsf{'}s operations.
 The value \lstinline!result1_refactored! will be equal to \lstinline!result1!
 as long as the runner preserves the monad\textsf{'}s operations (that is, obeys
 the laws of monad morphisms). If this property does not hold for some
-runner, a programmer would regard that runner as incorrectly written.
+runner, a programmer would view that runner as incorrectly written.
 
 The uniqueness property says that there is only one correct logic
 for executing the effects of the free monad, and that the runner \lstinline!run4M!
@@ -2209,10 +2226,11 @@ law; so, those two values of type $M^{A}$ will be equal. More examples
 illustrating this property are in Sections~\ref{subsec:Free-semigroup}\textendash \ref{subsec:Free-monoids}
 below.
 
-We can now generalize the properties 1\textendash 4 to an arbitrary
-typeclass. Let $T$ be any type and denote a free typeclass instance
-constructed on $T$ by $\text{Free}^{T}$ (in any encoding). We formulate
-the expected properties in terms of the free evaluator (\lstinline!eval!)
+We can now generalize the properties 1\textendash 4 to other typeclasses. 
+
+Let $T$ be any type; denote a free typeclass instance constructed
+on $T$ by $\text{Free}^{T}$ (in any encoding). We formulate the
+expected properties in terms of the free evaluator (\lstinline!eval!)
 as its type signature is simpler than that of the universal runner:
 \begin{enumerate}
 \item The type $\text{Free}^{T}$ is covariant with respect to $T$. For
@@ -2221,28 +2239,30 @@ any $T$, the type $\text{Free}^{T}$ supports the typeclass operations
 $T\rightarrow\text{Free}^{T}$. For any $T$, $U$ and any $f:T\rightarrow U$,
 the function $f^{\uparrow\text{Free}}$ of type $\text{Free}^{T}\rightarrow\text{Free}^{U}$
 preserves the typeclass operations.
-\item For a given type $M$ that belongs to a typeclass, the free evaluator
-function (\lstinline!eval!) of type $\text{Free}^{M}\rightarrow M$
-preserves the typeclass operations.
-\item The free evaluator \lstinline!eval! is the \emph{only} possible function
-of type $\text{Free}^{M}\rightarrow M$ that preserves the typeclass
-operations.
+\item For a given type $M$ that belongs to a typeclass, there is a unique
+\textsf{``}free evaluator\textsf{''} function (\lstinline!eval!) of type $\text{Free}^{M}\rightarrow M$
+that preserves the typeclass operations. 
 \item The universal runner is defined through \lstinline!eval! as:
 \begin{align*}
  & \text{run}:(T\rightarrow M)\rightarrow\text{Free}^{T}\rightarrow M\quad,\\
  & \text{run}\,(f^{:T\rightarrow M})\triangleq f^{\uparrow\text{Free}}\bef\text{eval}\quad.
 \end{align*}
-For any $f$, the function $\text{run}\left(f\right)$ preserves the
-typeclass operations.
+For a fixed $f^{:T\rightarrow M}$, the function $\text{run}\left(f\right)$
+is the only function of type $\text{Free}^{T}\rightarrow M$ that
+preserves the typeclass operations.
 \item Any violations of the typeclass laws in a $\text{Free}^{T}$ program
 will disappear once a runner is applied and a final value of type
 $M$ is computed (as long as $M$ is a lawful typeclass instance).
 \end{enumerate}
+It turns out that free instances exist for a range of typeclasses
+that we will call $FM$\textbf{-typeclasses} below.\index{$FM$-typeclass}
 The following sections will show various free typeclass constructions.
-We will not prove that those properties hold for those constructions.
-Instead, Section~\ref{sec:Laws-of-free-constructions} will show
-general proofs that apply to all FM-typeclasses and to all possible
-choices of typeclass laws.
+We will not prove separately for each of the free constructions that
+the listed properties hold. The properties of all $FM$-typeclasses
+are similar and can be treated abstractly, once the required techniques
+are developed. Section~\ref{sec:Laws-of-free-constructions} will
+show more general proofs that apply to all $FM$-typeclasses and to
+all possible choices of typeclass laws.
 
 \subsection{Free pointed type\label{subsec:Free-pointed-type}}
 
@@ -2255,13 +2275,12 @@ arbitrary type \lstinline!T! and has a \lstinline!HasDefault! type
 instance.
 
 The first step is to formulate the required methods of the typeclass
-as functions with known type signatures. The \lstinline!HasDefault!
-typeclass for a pointed type \lstinline!P! has only one operation:
-obtaining a value \lstinline!default! of type \lstinline!P!. This
-operation is equivalent to a function of type $\bbnum 1\rightarrow P$.
-The free typeclass will model this operation via a case class containing
-a value of unit type (equivalently, a named unit). We may write the
-code like this:
+as functions. The \lstinline!HasDefault! typeclass for a pointed
+type \lstinline!P! has only one operation: obtaining a value \lstinline!default!
+of type \lstinline!P!. This operation is equivalent to a function
+of type $\bbnum 1\rightarrow P$. The free typeclass will model this
+operation via a case class containing a value of a named unit type.
+We may write the code like this:
 \begin{lstlisting}
 sealed trait FreeDefault[T]
 final case class Default[T](unit: Unit) extends FreeDefault[T]
@@ -2285,10 +2304,10 @@ type $T$ is the type $\bbnum 1+T$. $\square$
 
 The \lstinline!HasDefault! typeclass has no laws, so the raw tree
 encoding ($\bbnum 1+T$) cannot be reduced by imposing any typeclass
-laws. There is only one encoding of the free pointed typeclass.
+laws. This is the only encoding of the free pointed typeclass.
 
 Let us implement the free evaluator. It is a function of type \lstinline!FreeDefault[P] => P!,
-where $P$ is a chosen pointed type:
+where $P$ is a pointed type:
 \begin{lstlisting}
 def evalP[P: HasDefault]: Option[P] => P = {
   case Some(p)   => p
@@ -2311,8 +2330,8 @@ is the standard method \lstinline!flatten! defined on \lstinline!Option!
 types.
 
 In this way, \lstinline!Option!\textsf{'}s standard methods \lstinline!getOrElse!
-and \lstinline!flatten! are seen as consequences of the basic properties
-of the free pointed type construction.
+and \lstinline!flatten! express the basic properties of the free
+pointed type construction.
 
 \subsection{Free semigroup\label{subsec:Free-semigroup}}
 
@@ -2357,14 +2376,15 @@ def wrap[T](t: T): FSR[T] = Wrap(t)
 As usual for a raw tree encoding, the free semigroup\textsf{'}s binary operation
 \lstinline!|+|! does not perform any computations but simply wraps
 its arguments into the case class \lstinline!Combine!. A \textsf{``}free
-semigroup program\textsf{''} (a value of type \lstinline!FSR[T]!) corresponds
-to an unevaluated expression tree containing a number of nested \lstinline!Combine!
+semigroup program\textsf{''} (a value of type \lstinline!FSR[T]!) represents
+an unevaluated expression tree containing a number of nested \lstinline!Combine!
 case classes as well as some values of type \lstinline!T! wrapped
 in \lstinline!Wrap!. Here is an example:
 \begin{lstlisting}
 scala> val t1 = (wrap(1) |+| wrap(2)) |+| wrap(3)
 t1: FSR[Int] = Combine(Combine(Wrap(1), Wrap(2)), Wrap(3))
 \end{lstlisting}
+
 The associativity law is violated by the raw tree encoding:
 \begin{lstlisting}
 scala> val t2 = wrap(1) |+| (wrap(2) |+| wrap(3))
@@ -2372,8 +2392,8 @@ t2: FSR[Int] = Combine(Wrap(1), Combine(Wrap(2), Wrap(3)))
 \end{lstlisting}
 The values \lstinline!t1! and \lstinline!t2! are not equal. This
 is to be expected, as the unevaluated expression trees $(1+2)+3$
-and $1+(2+3)$ are different (even though the results will be equal
-after evaluation).
+and $1+(2+3)$ are different as trees (even though the results will
+be equal after evaluation).
 
 The next step is to implement the free evaluator for \lstinline!FSR!.
 Given any semigroup \lstinline!S!, we can evaluate \lstinline!FSR[S]!
@@ -2393,9 +2413,15 @@ def runnerFSR[S: Semigroup, T](runT: T => S): FSR[T] => S =
   fsr => evalFSR(fsr.map(runT))
 \end{lstlisting}
 Substituting the code of \lstinline!FSR!\textsf{'}s \lstinline!map! method,
-we obtain:\lstinline!def runnerFSR[S: Semigroup, T](runT: T => S): FSR[T] => S = {  case Combine(left, right)   => runnerFSR(runT)(left) |+| runnerFSR(runT)(right)  case Wrap(value)            => runT(value)}!This
-code is analogous to the code of \lstinline!foldMap! \index{foldMap function@\texttt{foldMap} function}for
-aggregating tree-like data (Section~\subsecref{Aggregating-tree-like-data-bfs}).
+we obtain:
+\begin{lstlisting}
+def runnerFSR[S: Semigroup, T](runT: T => S): FSR[T] => S = {
+  case Combine(left, right)   => runnerFSR(runT)(left) |+| runnerFSR(runT)(right)
+  case Wrap(value)            => runT(value)
+}
+\end{lstlisting}
+This code is analogous to the code of \lstinline!foldMap! \index{foldMap function@\texttt{foldMap} function}for
+aggregating tree-like data (Section~\ref{subsec:Aggregating-tree-like-data-bfs}).
 
 Let us see an example of an \lstinline!FSR!-program for a free semigroup
 on \lstinline!String!:
@@ -2554,20 +2580,13 @@ surjective).
 
 It is important to note that \lstinline!toNEL! preserves the semigroup
 operations (but \lstinline!fromNEL! does \emph{not}). It is a general
-property of free typeclass constructions that there is only one typeclass-preserving
+property of free typeclass constructions that there is only one semigroup-preserving
 function of type \lstinline!SFR[T] => NEL[T]! (this is a property
 of the universal evaluator). However, there are several possible implementations
 of \lstinline!fromNEL!: we could have created a left-associated tree,
 or a tree with some mixed structure, such that Eq.~(\ref{eq:fromNEL-toNEL-id})
-still holds. But none of those alternative implementations could preserve
+still holds. But none of those alternative implementations would preserve
 the typeclass operations.
-
-{*}{*}{*} There are also alternative implementations of the universal
-runner that correspond to those functions. When the universal runner
-is applied with a lawful semigroup, the results are the same. But
-when we use SFR instead of a lawful semigroup, the results are \emph{not}
-the same. We see that it is important to take into account which laws
-hold when using the universal runner.{*}{*}{*}
 
 \subsection{Free monoid and its reduced encodings\label{subsec:Free-monoids}}
 
